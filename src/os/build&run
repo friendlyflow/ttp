@@ -1,0 +1,18 @@
+make
+make test # qemu
+
+myos/
+├── boot.asm          ; stage 1 — 16-bit bootloader
+├── kernel32.asm      ; stage 2 — bridge to 64-bit
+├── kernel_entry.asm  ; stage 3 — 64-bit entry, calls kernel_main
+├── kernel_main.c     ; ★ YOUR KERNEL CODE GOES HERE
+├── vga.c             ; kernel helper — VGA text output
+├── vga.h
+├── tss.c             ; kernel — TSS setup
+├── tss.h
+├── syscall.c         ; kernel — syscall handler
+├── syscall.h
+├── userspace.c       ; kernel — jump to ring 3
+├── user_program.c    ; ★ YOUR USERSPACE CODE GOES HERE
+├── linker.ld
+└── Makefile

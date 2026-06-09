@@ -1,0 +1,709 @@
+##############################################################################
+# BOOT FLOW  16-bit -> 32-bit -> 64-bit   (generated 2026-05-28T11:04:16+02:00)
+#
+# Each stage runs in a different CPU mode, so each region below is
+# disassembled in the mode the CPU is actually in at that point.
+# Format: address (load VMA)  |  raw bytes  |  assembly (Intel syntax)
+#
+# EXECUTION ORDER:
+#   1. boot.bin       @0x07C00  16-bit  -> jmp 0x1000:0x0000  (=phys 0x10000)
+#   2. kernel32.bin   @0x10000  16-bit  -> enable PE, jmp pmode32
+#                     @0x1001A  32-bit  -> paging+long mode,  jmp long_mode
+#                     @0x1008D  DATA    -> GDT32 + GDT64 descriptor tables
+#                     @0x100ED  64-bit  -> jmp rax (=0x11000)
+#   3. kernel.elf     @0x11000  64-bit  -> kernel_entry -> kernel_main ...
+#   *  kernel .rodata @0x116B8  DATA    -> string literals the code above prints
+#                                          (passed by address in rdi/rdx, never
+#                                           inline in the instruction stream)
+##############################################################################
+
+============================================================================
+[1] boot.bin  --  16-bit real mode, loaded by BIOS @ 0x7C00
+    Reads 50 sectors from disk to 0x10000, then far-jumps into stage 2.
+============================================================================
+00007c00 <.data>:
+    7c00:	31 c0                	xor    ax,ax
+    7c02:	8e d8                	mov    ds,ax
+    7c04:	8e c0                	mov    es,ax
+    7c06:	8e d0                	mov    ss,ax
+    7c08:	bc 00 7c             	mov    sp,0x7c00
+    7c0b:	b4 02                	mov    ah,0x2
+    7c0d:	b0 32                	mov    al,0x32
+    7c0f:	b5 00                	mov    ch,0x0
+    7c11:	b1 02                	mov    cl,0x2
+    7c13:	b6 00                	mov    dh,0x0
+    7c15:	b2 80                	mov    dl,0x80
+    7c17:	bb 00 10             	mov    bx,0x1000
+    7c1a:	8e c3                	mov    es,bx
+    7c1c:	bb 00 00             	mov    bx,0x0
+    7c1f:	cd 13                	int    0x13
+    7c21:	72 05                	jb     0x7c28
+    7c23:	ea 00 00 00 10       	jmp    0x1000:0x0
+    7c28:	f4                   	hlt
+    ... (offsets 0x7C29..0x7DFD are zero padding) ...
+    0x7DFE: 55 AA            ; boot-sector signature (0xAA55)
+
+  >>> 'jmp 0x1000:0x0000' transfers to physical 0x10000 = start of kernel32.bin
+
+============================================================================
+[2a] kernel32.bin  --  16-bit, @ 0x10000   (still real mode)
+     Loads GDT32, sets CR0.PE, far-jumps to the 32-bit entry 'pmode32'.
+============================================================================
+00010000 <.data>:
+   10000:	fa                   	cli
+   10001:	0e                   	push   cs
+   10002:	1f                   	pop    ds
+   10003:	0f 01 16 a5 00       	lgdtw  ds:0xa5
+   10008:	0f 20 c0             	mov    eax,cr0
+   1000b:	66 83 c8 01          	or     eax,0x1
+   1000f:	0f 22 c0             	mov    cr0,eax
+   10012:	66 ea 1a 00 01 00 08 	jmp    0x8:0x1001a
+   10019:	00 
+
+  >>> 'jmp dword 0x08:0x1001A' enters 32-bit protected mode
+
+============================================================================
+[2b] kernel32.bin  --  32-bit protected mode, @ 0x1001A  ('pmode32')
+     Identity-maps first 2MB (PML4/PDPT/PD @ 0x1000), sets PAE+LME+PG,
+     loads GDT64, far-jumps to the 64-bit entry 'long_mode'.
+============================================================================
+0001001a <.data>:
+   1001a:	66 b8 10 00          	mov    ax,0x10
+   1001e:	8e d8                	mov    ds,eax
+   10020:	8e c0                	mov    es,eax
+   10022:	8e d0                	mov    ss,eax
+   10024:	bc 00 00 09 00       	mov    esp,0x90000
+   10029:	bf 00 10 00 00       	mov    edi,0x1000
+   1002e:	b9 00 30 00 00       	mov    ecx,0x3000
+   10033:	31 c0                	xor    eax,eax
+   10035:	f3 ab                	rep stos DWORD PTR es:[edi],eax
+   10037:	c7 05 00 10 00 00 07 	mov    DWORD PTR ds:0x1000,0x2007
+   1003e:	20 00 00 
+   10041:	c7 05 00 20 00 00 07 	mov    DWORD PTR ds:0x2000,0x3007
+   10048:	30 00 00 
+   1004b:	c7 05 00 30 00 00 87 	mov    DWORD PTR ds:0x3000,0x87
+   10052:	00 00 00 
+   10055:	b8 00 10 00 00       	mov    eax,0x1000
+   1005a:	0f 22 d8             	mov    cr3,eax
+   1005d:	0f 20 e0             	mov    eax,cr4
+   10060:	83 c8 20             	or     eax,0x20
+   10063:	0f 22 e0             	mov    cr4,eax
+   10066:	b9 80 00 00 c0       	mov    ecx,0xc0000080
+   1006b:	0f 32                	rdmsr
+   1006d:	0d 00 01 00 00       	or     eax,0x100
+   10072:	0f 30                	wrmsr
+   10074:	0f 20 c0             	mov    eax,cr0
+   10077:	0d 01 00 00 80       	or     eax,0x80000001
+   1007c:	0f 22 c0             	mov    cr0,eax
+   1007f:	0f 01 15 e3 00 01 00 	lgdtd  ds:0x100e3
+   10086:	ea ed 00 01 00 08 00 	jmp    0x8:0x100ed
+
+  >>> 'jmp 0x08:0x100ED' enters 64-bit long mode
+
+============================================================================
+[2c] kernel32.bin  --  DATA, @ 0x1008D   (NOT code: GDT descriptor tables)
+     gdt32 (null,code,data) then gdt64 (null,kcode,kdata,ucode,udata,TSS).
+     Shown as raw bytes because disassembling it would be meaningless.
+============================================================================
+Contents of section .data:
+ 1008d 00000000 00000000 ffff0000 009acf00  ................
+ 1009d ffff0000 0092cf00 17008d00 01000000  ................
+ 100ad 00000000 00000000 0000009a a0000000  ................
+ 100bd 00000092 00000000 000000f2 00000000  ................
+ 100cd 000000fa a0006800 00000089 00000000  ......h.........
+ 100dd 00000000 00003700 ab000100 00000000  ......7.........
+
+============================================================================
+[2d] kernel32.bin  --  64-bit long mode, @ 0x100ED  ('long_mode')
+     Reloads data segments, sets RSP, jumps to the kernel at 0x11000.
+============================================================================
+00000000000100ed <.data>:
+   100ed:	66 b8 10 00          	mov    ax,0x10
+   100f1:	8e d8                	mov    ds,eax
+   100f3:	8e c0                	mov    es,eax
+   100f5:	8e d0                	mov    ss,eax
+   100f7:	bc 00 00 09 00       	mov    esp,0x90000
+   100fc:	b8 00 10 01 00       	mov    eax,0x11000
+   10101:	ff e0                	jmp    rax
+
+  >>> 'jmp rax'  (rax = 0x11000) transfers to kernel_entry
+
+============================================================================
+[3] kernel.bin / kernel.elf  --  64-bit long mode, linked @ 0x11000
+    The C kernel, with symbols. Entry is kernel_entry, which calls kernel_main.
+============================================================================
+Disassembly of section .text:
+
+0000000000011000 <kernel_entry>:
+   11000:	48 83 e4 f0          	and    rsp,0xfffffffffffffff0
+   11004:	e8 07 00 00 00       	call   11010 <kernel_main>
+
+0000000000011009 <kernel_entry.hang>:
+   11009:	f4                   	hlt
+   1100a:	eb fd                	jmp    11009 <kernel_entry.hang>
+   1100c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+
+0000000000011010 <kernel_main>:
+   11010:	48 b8 80 11 01 00 00 	movabs rax,0x11180
+   11017:	00 00 00 
+   1101a:	55                   	push   rbp
+   1101b:	31 ff                	xor    edi,edi
+   1101d:	48 89 e5             	mov    rbp,rsp
+   11020:	53                   	push   rbx
+   11021:	48 bb a0 12 01 00 00 	movabs rbx,0x112a0
+   11028:	00 00 00 
+   1102b:	48 83 ec 08          	sub    rsp,0x8
+   1102f:	ff d0                	call   rax
+   11031:	31 d2                	xor    edx,edx
+   11033:	be 0e 00 00 00       	mov    esi,0xe
+   11038:	48 bf b8 16 01 00 00 	movabs rdi,0x116b8
+   1103f:	00 00 00 
+   11042:	ff d3                	call   rbx
+   11044:	31 d2                	xor    edx,edx
+   11046:	be 0a 00 00 00       	mov    esi,0xa
+   1104b:	48 bf e0 16 01 00 00 	movabs rdi,0x116e0
+   11052:	00 00 00 
+   11055:	ff d3                	call   rbx
+   11057:	31 d2                	xor    edx,edx
+   11059:	be 0f 00 00 00       	mov    esi,0xf
+   1105e:	48 bf d6 17 01 00 00 	movabs rdi,0x117d6
+   11065:	00 00 00 
+   11068:	ff d3                	call   rbx
+   1106a:	bf 00 00 09 00       	mov    edi,0x90000
+   1106f:	48 b8 f0 14 01 00 00 	movabs rax,0x114f0
+   11076:	00 00 00 
+   11079:	ff d0                	call   rax
+   1107b:	31 d2                	xor    edx,edx
+   1107d:	be 07 00 00 00       	mov    esi,0x7
+   11082:	48 bf 4a 17 01 00 00 	movabs rdi,0x1174a
+   11089:	00 00 00 
+   1108c:	ff d3                	call   rbx
+   1108e:	48 b8 70 15 01 00 00 	movabs rax,0x11570
+   11095:	00 00 00 
+   11098:	ff d0                	call   rax
+   1109a:	31 d2                	xor    edx,edx
+   1109c:	be 07 00 00 00       	mov    esi,0x7
+   110a1:	48 bf 60 17 01 00 00 	movabs rdi,0x11760
+   110a8:	00 00 00 
+   110ab:	ff d3                	call   rbx
+   110ad:	31 d2                	xor    edx,edx
+   110af:	be 0f 00 00 00       	mov    esi,0xf
+   110b4:	48 bf d6 17 01 00 00 	movabs rdi,0x117d6
+   110bb:	00 00 00 
+   110be:	ff d3                	call   rbx
+   110c0:	31 d2                	xor    edx,edx
+   110c2:	be 03 00 00 00       	mov    esi,0x3
+   110c7:	48 bf 7c 17 01 00 00 	movabs rdi,0x1177c
+   110ce:	00 00 00 
+   110d1:	ff d3                	call   rbx
+   110d3:	31 d2                	xor    edx,edx
+   110d5:	be 0f 00 00 00       	mov    esi,0xf
+   110da:	48 bf d6 17 01 00 00 	movabs rdi,0x117d6
+   110e1:	00 00 00 
+   110e4:	ff d3                	call   rbx
+   110e6:	48 b8 30 16 01 00 00 	movabs rax,0x11630
+   110ed:	00 00 00 
+   110f0:	ff d0                	call   rax
+   110f2:	eb fe                	jmp    110f2 <kernel_main+0xe2>
+   110f4:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
+   110fb:	00 00 00 
+   110fe:	66 90                	xchg   ax,ax
+
+0000000000011100 <putchar>:
+   11100:	48 b8 00 20 01 00 00 	movabs rax,0x12000
+   11107:	00 00 00 
+   1110a:	41 89 f0             	mov    r8d,esi
+   1110d:	8b 30                	mov    esi,DWORD PTR [rax]
+   1110f:	40 80 ff 0a          	cmp    dil,0xa
+   11113:	74 3f                	je     11154 <putchar+0x54>
+   11115:	a1 04 20 01 00 00 00 	movabs eax,ds:0x12004
+   1111c:	00 00 
+   1111e:	8d 0c b6             	lea    ecx,[rsi+rsi*4]
+   11121:	c1 e2 04             	shl    edx,0x4
+   11124:	66 40 0f be ff       	movsx  di,dil
+   11129:	c1 e1 04             	shl    ecx,0x4
+   1112c:	44 09 c2             	or     edx,r8d
+   1112f:	01 c1                	add    ecx,eax
+   11131:	c1 e2 08             	shl    edx,0x8
+   11134:	83 c0 01             	add    eax,0x1
+   11137:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+   1113e:	00 00 
+   11140:	48 63 c9             	movsxd rcx,ecx
+   11143:	09 fa                	or     edx,edi
+   11145:	48 01 c9             	add    rcx,rcx
+   11148:	66 89 91 00 80 0b 00 	mov    WORD PTR [rcx+0xb8000],dx
+   1114f:	83 f8 4f             	cmp    eax,0x4f
+   11152:	7e 1c                	jle    11170 <putchar+0x70>
+   11154:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+   1115b:	00 00 00 
+   1115e:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
+   11164:	8d 46 01             	lea    eax,[rsi+0x1]
+   11167:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+   1116e:	00 00 
+   11170:	31 c0                	xor    eax,eax
+   11172:	31 d2                	xor    edx,edx
+   11174:	31 c9                	xor    ecx,ecx
+   11176:	31 f6                	xor    esi,esi
+   11178:	31 ff                	xor    edi,edi
+   1117a:	45 31 c0             	xor    r8d,r8d
+   1117d:	c3                   	ret
+   1117e:	66 90                	xchg   ax,ax
+
+0000000000011180 <vga_clear>:
+   11180:	89 fa                	mov    edx,edi
+   11182:	b9 a0 80 0b 00       	mov    ecx,0xb80a0
+   11187:	c1 e2 0c             	shl    edx,0xc
+   1118a:	66 81 ca 20 0f       	or     dx,0xf20
+   1118f:	90                   	nop
+   11190:	48 8d 81 60 ff ff ff 	lea    rax,[rcx-0xa0]
+   11197:	66 0f 1f 84 00 00 00 	nop    WORD PTR [rax+rax*1+0x0]
+   1119e:	00 00 
+   111a0:	66 89 10             	mov    WORD PTR [rax],dx
+   111a3:	48 83 c0 04          	add    rax,0x4
+   111a7:	66 89 50 fe          	mov    WORD PTR [rax-0x2],dx
+   111ab:	48 39 c8             	cmp    rax,rcx
+   111ae:	75 f0                	jne    111a0 <vga_clear+0x20>
+   111b0:	48 8d 88 a0 00 00 00 	lea    rcx,[rax+0xa0]
+   111b7:	48 3d a0 8f 0b 00    	cmp    rax,0xb8fa0
+   111bd:	75 d1                	jne    11190 <vga_clear+0x10>
+   111bf:	48 b8 00 20 01 00 00 	movabs rax,0x12000
+   111c6:	00 00 00 
+   111c9:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
+   111cf:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+   111d6:	00 00 00 
+   111d9:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
+   111df:	31 c0                	xor    eax,eax
+   111e1:	31 d2                	xor    edx,edx
+   111e3:	31 c9                	xor    ecx,ecx
+   111e5:	31 ff                	xor    edi,edi
+   111e7:	c3                   	ret
+   111e8:	0f 1f 84 00 00 00 00 	nop    DWORD PTR [rax+rax*1+0x0]
+   111ef:	00 
+
+00000000000111f0 <vga_print>:
+   111f0:	89 f1                	mov    ecx,esi
+   111f2:	66 0f be 37          	movsx  si,BYTE PTR [rdi]
+   111f6:	49 89 f9             	mov    r9,rdi
+   111f9:	40 84 f6             	test   sil,sil
+   111fc:	0f 84 89 00 00 00    	je     1128b <vga_print+0x9b>
+   11202:	c1 e2 04             	shl    edx,0x4
+   11205:	45 31 d2             	xor    r10d,r10d
+   11208:	45 31 c0             	xor    r8d,r8d
+   1120b:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+   11212:	00 00 00 
+   11215:	09 ca                	or     edx,ecx
+   11217:	8b 38                	mov    edi,DWORD PTR [rax]
+   11219:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
+   11220:	00 00 
+   11222:	c1 e2 08             	shl    edx,0x8
+   11225:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+   1122c:	00 00 00 00 
+   11230:	40 80 fe 0a          	cmp    sil,0xa
+   11234:	74 1f                	je     11255 <vga_print+0x65>
+   11236:	8d 0c 80             	lea    ecx,[rax+rax*4]
+   11239:	09 d6                	or     esi,edx
+   1123b:	c1 e1 04             	shl    ecx,0x4
+   1123e:	01 f9                	add    ecx,edi
+   11240:	83 c7 01             	add    edi,0x1
+   11243:	48 63 c9             	movsxd rcx,ecx
+   11246:	48 01 c9             	add    rcx,rcx
+   11249:	66 89 b1 00 80 0b 00 	mov    WORD PTR [rcx+0xb8000],si
+   11250:	83 ff 4f             	cmp    edi,0x4f
+   11253:	7e 0b                	jle    11260 <vga_print+0x70>
+   11255:	83 c0 01             	add    eax,0x1
+   11258:	41 ba 01 00 00 00    	mov    r10d,0x1
+   1125e:	31 ff                	xor    edi,edi
+   11260:	41 83 c0 01          	add    r8d,0x1
+   11264:	49 63 c8             	movsxd rcx,r8d
+   11267:	66 41 0f be 34 09    	movsx  si,BYTE PTR [r9+rcx*1]
+   1126d:	40 84 f6             	test   sil,sil
+   11270:	75 be                	jne    11230 <vga_print+0x40>
+   11272:	45 84 d2             	test   r10b,r10b
+   11275:	74 09                	je     11280 <vga_print+0x90>
+   11277:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+   1127e:	00 00 
+   11280:	89 f8                	mov    eax,edi
+   11282:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+   11289:	00 00 
+   1128b:	31 c0                	xor    eax,eax
+   1128d:	31 d2                	xor    edx,edx
+   1128f:	31 c9                	xor    ecx,ecx
+   11291:	31 f6                	xor    esi,esi
+   11293:	31 ff                	xor    edi,edi
+   11295:	45 31 c0             	xor    r8d,r8d
+   11298:	45 31 c9             	xor    r9d,r9d
+   1129b:	45 31 d2             	xor    r10d,r10d
+   1129e:	c3                   	ret
+   1129f:	90                   	nop
+
+00000000000112a0 <vga_println>:
+   112a0:	55                   	push   rbp
+   112a1:	41 89 f2             	mov    r10d,esi
+   112a4:	41 89 d3             	mov    r11d,edx
+   112a7:	48 89 e5             	mov    rbp,rsp
+   112aa:	53                   	push   rbx
+   112ab:	66 0f be 0f          	movsx  cx,BYTE PTR [rdi]
+   112af:	84 c9                	test   cl,cl
+   112b1:	0f 84 90 00 00 00    	je     11347 <vga_println+0xa7>
+   112b7:	41 89 d0             	mov    r8d,edx
+   112ba:	49 89 f9             	mov    r9,rdi
+   112bd:	31 db                	xor    ebx,ebx
+   112bf:	31 ff                	xor    edi,edi
+   112c1:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+   112c8:	00 00 00 
+   112cb:	41 c1 e0 04          	shl    r8d,0x4
+   112cf:	8b 30                	mov    esi,DWORD PTR [rax]
+   112d1:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
+   112d8:	00 00 
+   112da:	45 09 d0             	or     r8d,r10d
+   112dd:	41 c1 e0 08          	shl    r8d,0x8
+   112e1:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+   112e5:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+   112ec:	00 00 00 00 
+   112f0:	80 f9 0a             	cmp    cl,0xa
+   112f3:	74 20                	je     11315 <vga_println+0x75>
+   112f5:	8d 14 80             	lea    edx,[rax+rax*4]
+   112f8:	44 09 c1             	or     ecx,r8d
+   112fb:	c1 e2 04             	shl    edx,0x4
+   112fe:	01 f2                	add    edx,esi
+   11300:	83 c6 01             	add    esi,0x1
+   11303:	48 63 d2             	movsxd rdx,edx
+   11306:	48 01 d2             	add    rdx,rdx
+   11309:	66 89 8a 00 80 0b 00 	mov    WORD PTR [rdx+0xb8000],cx
+   11310:	83 fe 4f             	cmp    esi,0x4f
+   11313:	7e 0a                	jle    1131f <vga_println+0x7f>
+   11315:	83 c0 01             	add    eax,0x1
+   11318:	bb 01 00 00 00       	mov    ebx,0x1
+   1131d:	31 f6                	xor    esi,esi
+   1131f:	83 c7 01             	add    edi,0x1
+   11322:	48 63 d7             	movsxd rdx,edi
+   11325:	66 41 0f be 0c 11    	movsx  cx,BYTE PTR [r9+rdx*1]
+   1132b:	84 c9                	test   cl,cl
+   1132d:	75 c1                	jne    112f0 <vga_println+0x50>
+   1132f:	84 db                	test   bl,bl
+   11331:	74 09                	je     1133c <vga_println+0x9c>
+   11333:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+   1133a:	00 00 
+   1133c:	89 f0                	mov    eax,esi
+   1133e:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+   11345:	00 00 
+   11347:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
+   1134b:	44 89 da             	mov    edx,r11d
+   1134e:	44 89 d6             	mov    esi,r10d
+   11351:	bf 0a 00 00 00       	mov    edi,0xa
+   11356:	c9                   	leave
+   11357:	48 b8 00 11 01 00 00 	movabs rax,0x11100
+   1135e:	00 00 00 
+   11361:	ff e0                	jmp    rax
+   11363:	66 90                	xchg   ax,ax
+   11365:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+   1136c:	00 00 00 00 
+
+0000000000011370 <vga_print_int>:
+   11370:	55                   	push   rbp
+   11371:	41 89 f9             	mov    r9d,edi
+   11374:	41 89 f2             	mov    r10d,esi
+   11377:	48 89 e5             	mov    rbp,rsp
+   1137a:	53                   	push   rbx
+   1137b:	48 83 ec 38          	sub    rsp,0x38
+   1137f:	85 ff                	test   edi,edi
+   11381:	0f 88 21 01 00 00    	js     114a8 <vga_print_int+0x138>
+   11387:	0f 84 43 01 00 00    	je     114d0 <vga_print_int+0x160>
+   1138d:	4c 8d 5d d0          	lea    r11,[rbp-0x30]
+   11391:	31 ff                	xor    edi,edi
+   11393:	bb cd cc cc cc       	mov    ebx,0xcccccccd
+   11398:	0f 1f 80 00 00 00 00 	nop    DWORD PTR [rax+0x0]
+   1139f:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+   113a6:	00 00 00 00 
+   113aa:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+   113b1:	00 00 00 00 
+   113b5:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+   113bc:	00 00 00 00 
+   113c0:	44 89 c8             	mov    eax,r9d
+   113c3:	44 89 c9             	mov    ecx,r9d
+   113c6:	41 89 f8             	mov    r8d,edi
+   113c9:	49 83 c3 01          	add    r11,0x1
+   113cd:	48 0f af c3          	imul   rax,rbx
+   113d1:	83 c7 01             	add    edi,0x1
+   113d4:	48 c1 e8 23          	shr    rax,0x23
+   113d8:	8d 34 80             	lea    esi,[rax+rax*4]
+   113db:	01 f6                	add    esi,esi
+   113dd:	29 f1                	sub    ecx,esi
+   113df:	83 c1 30             	add    ecx,0x30
+   113e2:	41 88 4b ff          	mov    BYTE PTR [r11-0x1],cl
+   113e6:	44 89 c9             	mov    ecx,r9d
+   113e9:	41 89 c1             	mov    r9d,eax
+   113ec:	83 f9 09             	cmp    ecx,0x9
+   113ef:	7f cf                	jg     113c0 <vga_print_int+0x50>
+   113f1:	c1 e2 04             	shl    edx,0x4
+   113f4:	49 63 c8             	movsxd rcx,r8d
+   113f7:	4c 8d 45 cf          	lea    r8,[rbp-0x31]
+   113fb:	45 31 c9             	xor    r9d,r9d
+   113fe:	44 09 d2             	or     edx,r10d
+   11401:	48 8d 74 0d d0       	lea    rsi,[rbp+rcx*1-0x30]
+   11406:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+   1140d:	00 00 00 
+   11410:	8b 38                	mov    edi,DWORD PTR [rax]
+   11412:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
+   11419:	00 00 
+   1141b:	c1 e2 08             	shl    edx,0x8
+   1141e:	41 89 d2             	mov    r10d,edx
+   11421:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+   11425:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+   1142c:	00 00 00 00 
+   11430:	66 0f be 0e          	movsx  cx,BYTE PTR [rsi]
+   11434:	80 f9 0a             	cmp    cl,0xa
+   11437:	74 20                	je     11459 <vga_print_int+0xe9>
+   11439:	8d 14 80             	lea    edx,[rax+rax*4]
+   1143c:	44 09 d1             	or     ecx,r10d
+   1143f:	c1 e2 04             	shl    edx,0x4
+   11442:	01 fa                	add    edx,edi
+   11444:	83 c7 01             	add    edi,0x1
+   11447:	48 63 d2             	movsxd rdx,edx
+   1144a:	48 01 d2             	add    rdx,rdx
+   1144d:	66 89 8a 00 80 0b 00 	mov    WORD PTR [rdx+0xb8000],cx
+   11454:	83 ff 4f             	cmp    edi,0x4f
+   11457:	7e 0b                	jle    11464 <vga_print_int+0xf4>
+   11459:	83 c0 01             	add    eax,0x1
+   1145c:	41 b9 01 00 00 00    	mov    r9d,0x1
+   11462:	31 ff                	xor    edi,edi
+   11464:	48 83 ee 01          	sub    rsi,0x1
+   11468:	49 39 f0             	cmp    r8,rsi
+   1146b:	75 c3                	jne    11430 <vga_print_int+0xc0>
+   1146d:	45 84 c9             	test   r9b,r9b
+   11470:	74 09                	je     1147b <vga_print_int+0x10b>
+   11472:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+   11479:	00 00 
+   1147b:	89 f8                	mov    eax,edi
+   1147d:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+   11484:	00 00 
+   11486:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
+   1148a:	c9                   	leave
+   1148b:	31 c0                	xor    eax,eax
+   1148d:	31 d2                	xor    edx,edx
+   1148f:	31 c9                	xor    ecx,ecx
+   11491:	31 f6                	xor    esi,esi
+   11493:	31 ff                	xor    edi,edi
+   11495:	45 31 c0             	xor    r8d,r8d
+   11498:	45 31 c9             	xor    r9d,r9d
+   1149b:	45 31 d2             	xor    r10d,r10d
+   1149e:	45 31 db             	xor    r11d,r11d
+   114a1:	c3                   	ret
+   114a2:	66 0f 1f 44 00 00    	nop    WORD PTR [rax+rax*1+0x0]
+   114a8:	41 f7 d9             	neg    r9d
+   114ab:	89 55 cc             	mov    DWORD PTR [rbp-0x34],edx
+   114ae:	bf 2d 00 00 00       	mov    edi,0x2d
+   114b3:	48 b8 00 11 01 00 00 	movabs rax,0x11100
+   114ba:	00 00 00 
+   114bd:	ff d0                	call   rax
+   114bf:	45 85 c9             	test   r9d,r9d
+   114c2:	8b 55 cc             	mov    edx,DWORD PTR [rbp-0x34]
+   114c5:	0f 8f c2 fe ff ff    	jg     1138d <vga_print_int+0x1d>
+   114cb:	eb b9                	jmp    11486 <vga_print_int+0x116>
+   114cd:	0f 1f 00             	nop    DWORD PTR [rax]
+   114d0:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
+   114d4:	bf 30 00 00 00       	mov    edi,0x30
+   114d9:	48 b8 00 11 01 00 00 	movabs rax,0x11100
+   114e0:	00 00 00 
+   114e3:	c9                   	leave
+   114e4:	ff e0                	jmp    rax
+   114e6:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
+   114ed:	00 00 00 
+
+00000000000114f0 <tss_init>:
+   114f0:	48 b8 10 20 01 00 00 	movabs rax,0x12010
+   114f7:	00 00 00 
+   114fa:	55                   	push   rbp
+   114fb:	ba 68 00 00 00       	mov    edx,0x68
+   11500:	48 89 e5             	mov    rbp,rsp
+   11503:	48 83 ec 10          	sub    rsp,0x10
+   11507:	48 89 78 04          	mov    QWORD PTR [rax+0x4],rdi
+   1150b:	66 89 50 66          	mov    WORD PTR [rax+0x66],dx
+   1150f:	0f 01 45 f6          	sgdt   [rbp-0xa]
+   11513:	48 8b 75 f8          	mov    rsi,QWORD PTR [rbp-0x8]
+   11517:	48 89 c1             	mov    rcx,rax
+   1151a:	48 c1 e9 10          	shr    rcx,0x10
+   1151e:	88 4e 2c             	mov    BYTE PTR [rsi+0x2c],cl
+   11521:	48 89 c1             	mov    rcx,rax
+   11524:	66 89 46 2a          	mov    WORD PTR [rsi+0x2a],ax
+   11528:	48 c1 e9 18          	shr    rcx,0x18
+   1152c:	48 c1 e8 20          	shr    rax,0x20
+   11530:	89 46 30             	mov    DWORD PTR [rsi+0x30],eax
+   11533:	b8 28 00 00 00       	mov    eax,0x28
+   11538:	88 4e 2f             	mov    BYTE PTR [rsi+0x2f],cl
+   1153b:	0f 00 d8             	ltr    eax
+   1153e:	c9                   	leave
+   1153f:	31 c0                	xor    eax,eax
+   11541:	31 d2                	xor    edx,edx
+   11543:	31 c9                	xor    ecx,ecx
+   11545:	31 f6                	xor    esi,esi
+   11547:	31 ff                	xor    edi,edi
+   11549:	c3                   	ret
+   1154a:	66 0f 1f 44 00 00    	nop    WORD PTR [rax+rax*1+0x0]
+
+0000000000011550 <syscall_entry>:
+   11550:	0f 01 f8             	swapgs
+   11553:	51                   	push   rcx
+   11554:	41 53                	push   r11
+   11556:	48 89 fe             	mov    rsi,rdi
+   11559:	48 89 c7             	mov    rdi,rax
+   1155c:	e8 4f 00 00 00       	call   115b0 <syscall_handler>
+   11561:	41 5b                	pop    r11
+   11563:	59                   	pop    rcx
+   11564:	0f 01 f8             	swapgs
+   11567:	48 0f 07             	sysretq
+   1156a:	0f 0b                	ud2
+   1156c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+
+0000000000011570 <syscall_init>:
+   11570:	48 b8 00 00 00 00 08 	movabs rax,0x10000800000000
+   11577:	00 10 00 
+   1157a:	b9 81 00 00 c0       	mov    ecx,0xc0000081
+   1157f:	0f 30                	wrmsr
+   11581:	48 b8 50 15 01 00 00 	movabs rax,0x11550
+   11588:	00 00 00 
+   1158b:	48 83 c1 01          	add    rcx,0x1
+   1158f:	0f 30                	wrmsr
+   11591:	b8 00 02 00 00       	mov    eax,0x200
+   11596:	48 83 c1 02          	add    rcx,0x2
+   1159a:	0f 30                	wrmsr
+   1159c:	48 83 e9 04          	sub    rcx,0x4
+   115a0:	0f 32                	rdmsr
+   115a2:	83 c8 01             	or     eax,0x1
+   115a5:	0f 30                	wrmsr
+   115a7:	31 c0                	xor    eax,eax
+   115a9:	31 d2                	xor    edx,edx
+   115ab:	31 c9                	xor    ecx,ecx
+   115ad:	c3                   	ret
+   115ae:	66 90                	xchg   ax,ax
+
+00000000000115b0 <syscall_handler>:
+   115b0:	48 85 ff             	test   rdi,rdi
+   115b3:	74 5b                	je     11610 <syscall_handler+0x60>
+   115b5:	48 83 ff 01          	cmp    rdi,0x1
+   115b9:	74 25                	je     115e0 <syscall_handler+0x30>
+   115bb:	31 d2                	xor    edx,edx
+   115bd:	be 0c 00 00 00       	mov    esi,0xc
+   115c2:	48 bf a9 17 01 00 00 	movabs rdi,0x117a9
+   115c9:	00 00 00 
+   115cc:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
+   115d3:	00 00 00 
+   115d6:	ff e0                	jmp    rax
+   115d8:	0f 1f 84 00 00 00 00 	nop    DWORD PTR [rax+rax*1+0x0]
+   115df:	00 
+   115e0:	55                   	push   rbp
+   115e1:	31 d2                	xor    edx,edx
+   115e3:	be 0e 00 00 00       	mov    esi,0xe
+   115e8:	48 bf 94 17 01 00 00 	movabs rdi,0x11794
+   115ef:	00 00 00 
+   115f2:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
+   115f9:	00 00 00 
+   115fc:	48 89 e5             	mov    rbp,rsp
+   115ff:	ff d0                	call   rax
+   11601:	f4                   	hlt
+   11602:	5d                   	pop    rbp
+   11603:	31 c0                	xor    eax,eax
+   11605:	31 d2                	xor    edx,edx
+   11607:	31 f6                	xor    esi,esi
+   11609:	31 ff                	xor    edi,edi
+   1160b:	c3                   	ret
+   1160c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+   11610:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
+   11617:	00 00 00 
+   1161a:	48 89 f7             	mov    rdi,rsi
+   1161d:	31 d2                	xor    edx,edx
+   1161f:	be 0a 00 00 00       	mov    esi,0xa
+   11624:	ff e0                	jmp    rax
+   11626:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
+   1162d:	00 00 00 
+
+0000000000011630 <jump_to_userspace>:
+   11630:	48 b9 60 16 01 00 00 	movabs rcx,0x11660
+   11637:	00 00 00 
+   1163a:	ba 00 00 07 00       	mov    edx,0x70000
+   1163f:	66 b8 1b 00          	mov    ax,0x1b
+   11643:	8e d8                	mov    ds,eax
+   11645:	8e c0                	mov    es,eax
+   11647:	8e e0                	mov    fs,eax
+   11649:	8e e8                	mov    gs,eax
+   1164b:	6a 1b                	push   0x1b
+   1164d:	52                   	push   rdx
+   1164e:	68 02 02 00 00       	push   0x202
+   11653:	6a 23                	push   0x23
+   11655:	51                   	push   rcx
+   11656:	48 cf                	iretq
+   11658:	31 c0                	xor    eax,eax
+   1165a:	31 d2                	xor    edx,edx
+   1165c:	31 c9                	xor    ecx,ecx
+   1165e:	c3                   	ret
+   1165f:	90                   	nop
+
+0000000000011660 <user_program>:
+   11660:	48 ba ba 17 01 00 00 	movabs rdx,0x117ba
+   11667:	00 00 00 
+   1166a:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+   11671:	48 89 d7             	mov    rdi,rdx
+   11674:	0f 05                	syscall
+   11676:	48 ba 00 17 01 00 00 	movabs rdx,0x11700
+   1167d:	00 00 00 
+   11680:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+   11687:	48 89 d7             	mov    rdi,rdx
+   1168a:	0f 05                	syscall
+   1168c:	48 ba 28 17 01 00 00 	movabs rdx,0x11728
+   11693:	00 00 00 
+   11696:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+   1169d:	48 89 d7             	mov    rdi,rdx
+   116a0:	0f 05                	syscall
+   116a2:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+   116a9:	0f 05                	syscall
+   116ab:	31 c0                	xor    eax,eax
+   116ad:	31 d2                	xor    edx,edx
+   116af:	31 c9                	xor    ecx,ecx
+   116b1:	31 ff                	xor    edi,edi
+   116b3:	45 31 db             	xor    r11d,r11d
+   116b6:	c3                   	ret
+
+============================================================================
+[4] kernel.elf  --  .rodata string literals  (DATA, not code)  @ 0x116B8
+    The text printed by vga_println / syscalls. It is laid out right after
+    .text (.text ends at 0x116B7; 8-byte aligned -> strings begin 0x116B8).
+    The code never stores characters inline -- every call site loads a
+    POINTER to a byte sequence that lives here:
+        kernel_main:   movabs rdi,0x116B8   ; -> call vga_println
+        user_program:  movabs rdx,0x117BA   ; -> syscall
+    GCC merges duplicate literals into .rodata.str1.8 / .rodata.str1.1.
+============================================================================
+Contents of section .rodata.str1.8:
+ 116b8 4b65726e 656c2062 6f6f7465 6420696e  Kernel booted in
+ 116c8 2036342d 62697420 6c6f6e67 206d6f64   64-bit long mod
+ 116d8 652e0000 00000000 52696e67 203020e2  e.......Ring 0 .
+ 116e8 8094206b 65726e65 6c207370 61636520  .. kernel space 
+ 116f8 61637469 76652e00 49206361 6e6e6f74  active..I cannot
+ 11708 20746f75 63682068 61726477 61726520   touch hardware 
+ 11718 64697265 63746c79 2e000000 00000000  directly........
+ 11728 49207461 6c6b2074 6f207468 65206b65  I talk to the ke
+ 11738 726e656c 20766961 20737973 63616c6c  rnel via syscall
+ 11748 2e00                                 ..              
+Contents of section .rodata.str1.1:
+ 1174a 5b4f4b5d 20545353 20696e69 7469616c  [OK] TSS initial
+ 1175a 697a6564 2e005b4f 4b5d2053 79736361  ized..[OK] Sysca
+ 1176a 6c6c2068 616e646c 65722072 65616479  ll handler ready
+ 1177a 2e004a75 6d70696e 6720746f 20757365  ..Jumping to use
+ 1178a 72737061 63652e2e 2e005573 65722070  rspace....User p
+ 1179a 726f6772 616d2065 78697465 642e0055  rogram exited..U
+ 117aa 6e6b6e6f 776e2073 79736361 6c6c2100  nknown syscall!.
+ 117ba 48656c6c 6f206672 6f6d2072 696e6720  Hello from ring 
+ 117ca 33207573 65727370 61636521 00        3 userspace!.   
+
+  >>> address -> string map (rdi/rdx value at each call site):
+  >>>   0x116B8  "Kernel booted in 64-bit long mode."   (kernel_main, YELLOW)
+  >>>   0x116E0  "Ring 0 — kernel space active."        (kernel_main, GREEN)
+  >>>   0x11700  "I cannot touch hardware directly."    (user_program syscall)
+  >>>   0x11728  "I talk to the kernel via syscall."     (user_program syscall)
+  >>>   0x1174A  "[OK] TSS initialized."                 (kernel_main, GREY)
+  >>>   0x11760  "[OK] Syscall handler ready."           (kernel_main, GREY)
+  >>>   0x1177C  "Jumping to userspace..."               (kernel_main, CYAN)
+  >>>   0x11794  "User program exited."                  (syscall_handler)
+  >>>   0x117AA  "Unknown syscall!"                      (syscall_handler)
+  >>>   0x117BA  "Hello from ring 3 userspace!"          (user_program syscall)
+  >>>   0x117D6  ""  (empty string: reuses the final NUL of the 0x117BA string)
