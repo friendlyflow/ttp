@@ -19,10 +19,25 @@ KERNEL_OBJS = $(addprefix $(BUILD)/, \
               userspace.o    \
               user_program.o)
 
+# Host tool: builds the node program `ttpc -a` assembles. Uses the host cc and
+# the shared node format in the repo-root include/, not the cross toolchain.
+HOSTCC  ?= cc
+INCLUDE := ../../include
+
 all: $(BUILD)/ttpos.img
 
 $(BUILD):
 	mkdir -p $(BUILD)
+
+$(BUILD)/gen_program: gen_program.c $(INCLUDE)/node.h | $(BUILD)
+	$(HOSTCC) -O2 -Wall -Wextra -I$(INCLUDE) gen_program.c -o $@
+
+# The node program is committed source (the "new asm"), regenerated here.
+program.nodes: $(BUILD)/gen_program
+	$(BUILD)/gen_program $@
+
+.PHONY: nodes
+nodes: program.nodes
 
 $(BUILD)/boot.bin: boot.asm | $(BUILD)
 	$(NASM) -f bin $< -o $@

@@ -79,3 +79,26 @@ dd if=build/compiler/ttpos.img bs=1 skip=0 count=6 2>/dev/null \
 
 `ndisasm` ships with `nasm` (already used by the OS build). Alternative:
 `objdump -D -b binary -m i8086 --adjust-vma=0x7c00 build/compiler/ttpos.img`
+
+## Assembler mode (`-a`): node tree -> machine code
+
+The inverse direction. Code is written as a **node tree** (the "new asm", see
+`include/node.h`): an instruction is a node whose content is the mnemonic and
+whose children are its operands — `xor rax, rax` is the node `xor` with children
+`rax` and `rax`. Operands are register/immediate leaves, or a `mem` node
+(`size seg base index scale disp`); a `bits` node switches CPU mode.
+
+`ttpc -a` reads a serialized node program and prints each instruction's machine
+code as hex, covering the broad common integer x86-64 ISA. It reuses the
+decoder's `struct insn` + `assemble()`, so the encoder and decoder agree on
+instruction shape. The node format lives in the repo-root `include/`; the node
+program is authored (until a node editor exists) by `src/os/gen_program.c`.
+
+```sh
+make compiler                                # build ttpc (-I../../include)
+make -C src/os nodes                         # gen_program -> src/os/program.nodes
+./build/compiler/ttpc -a src/os/program.nodes        # hex, one insn per line
+./build/compiler/ttpc -a -v src/os/program.nodes     # + mnemonic/operands
+
+# Cross-check against nasm (non-branch subset round-trips byte-for-byte).
+```

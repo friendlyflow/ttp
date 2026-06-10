@@ -1,6 +1,9 @@
 CC     ?= cc
 CFLAGS ?= -O2 -Wall -Wextra
 
+# Shared headers (the node format lives in the repo-root include/).
+CPPFLAGS ?= -I../../include
+
 BUILD ?= build
 
 SRCS := $(wildcard *.c)
@@ -16,7 +19,7 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BIN): $(SRCS) | $(BUILD)
-	$(CC) $(CFLAGS) $(SRCS) -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(SRCS) -o $@
 
 # Re-assemble the boot-flow disassembly into a bootable disk image.
 $(IMG): $(BIN) $(BOOT_FLOW) | $(BUILD)
