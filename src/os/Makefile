@@ -17,7 +17,7 @@ KERNEL_OBJS = $(addprefix $(BUILD)/, \
               userspace.o    \
               user_program.o)
 
-all: $(BUILD)/myos.img
+all: $(BUILD)/ttpos.img
 
 $(BUILD):
 	mkdir -p $(BUILD)
@@ -37,14 +37,14 @@ $(BUILD)/%.o: %.c | $(BUILD)
 $(BUILD)/kernel.bin: $(KERNEL_OBJS) linker.ld | $(BUILD)
 	$(LD) -T linker.ld --oformat binary -o $@ $(KERNEL_OBJS)
 
-$(BUILD)/myos.img: $(BUILD)/boot.bin $(BUILD)/kernel32.bin $(BUILD)/kernel.bin | $(BUILD)
+$(BUILD)/ttpos.img: $(BUILD)/boot.bin $(BUILD)/kernel32.bin $(BUILD)/kernel.bin | $(BUILD)
 	dd if=/dev/zero              of=$@ bs=512 count=2048
 	dd if=$(BUILD)/boot.bin      of=$@ bs=512 seek=0  conv=notrunc
 	dd if=$(BUILD)/kernel32.bin  of=$@ bs=512 seek=1  conv=notrunc
 	dd if=$(BUILD)/kernel.bin    of=$@ bs=512 seek=9  conv=notrunc
 
-test: $(BUILD)/myos.img
-	qemu-system-x86_64 -drive format=raw,file=$(BUILD)/myos.img
+test: $(BUILD)/ttpos.img
+	qemu-system-x86_64 -drive format=raw,file=$(BUILD)/ttpos.img
 
 clean:
 	rm -rf $(BUILD)

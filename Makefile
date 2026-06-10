@@ -2,7 +2,7 @@
 # artifacts under ./build.
 #
 #   make            build everything (compiler + os)
-#   make os         build the bare-metal x86_64 OS image -> build/os/myos.img
+#   make os         build the bare-metal x86_64 OS image -> build/os/ttpos.img
 #   make compiler   build the host compiler            -> build/compiler/ttpc
 #   make test       boot the OS image in qemu
 #   make clean      remove ./build

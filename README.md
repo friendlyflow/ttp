@@ -12,7 +12,7 @@ A [Nix](https://nixos.org) flake provides the cross toolchain
 ```sh
 nix develop          # enter a shell with the toolchain
 make                 # build everything  -> build/
-make os              # build the OS image -> build/os/myos.img
+make os              # build the OS image -> build/os/ttpos.img
 make compiler        # build the compiler -> build/compiler/ttpc
 make test            # boot the OS image in qemu
 make clean           # remove build/

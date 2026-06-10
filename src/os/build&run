@@ -1,7 +1,7 @@
 make
 make test # qemu
 
-myos/
+ttpos/
 ├── boot.asm          ; stage 1 — 16-bit bootloader
 ├── kernel32.asm      ; stage 2 — bridge to 64-bit
 ├── kernel_entry.asm  ; stage 3 — 64-bit entry, calls kernel_main

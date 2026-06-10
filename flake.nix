@@ -47,7 +47,7 @@
 
           installPhase = ''
             mkdir -p $out
-            cp build/myos.img $out/
+            cp build/ttpos.img $out/
           '';
         };
       });
