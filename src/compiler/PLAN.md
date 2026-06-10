@@ -41,3 +41,33 @@ RAM NODE:
   // optional runtime-only: NODE *parent, hash, dirty flag
 
 id = hash(content + child_ids_in_order)
+
+## Build / run / verify
+
+The bootstrap compiler reads `src/os/boot_flow.txt`, breaks each instruction
+into its fields (opcode in its own variable, plus prefix/modrm/sib/disp/imm),
+reassembles the bytes, and writes them into a binary image at each
+instruction's memory address. Currently the first 3 instructions only.
+
+```sh
+# Build the compiler
+make compiler
+
+# Run it: reads boot_flow.txt, writes the binary, prints the field breakdown
+./build/compiler/ttpc src/os/boot_flow.txt build/compiler/ttpos.img
+
+# 1) Confirm the bytes landed at memory-address offset 0x7c00
+xxd -s 0x7c00 -l 6 build/compiler/ttpos.img
+#   expected: 00007c00: 31c0 8ed8 8ec0   1.......
+
+# 2) Disassemble those bytes and confirm they round-trip to the original asm
+dd if=build/compiler/ttpos.img bs=1 skip=$((0x7c00)) count=6 2>/dev/null \
+  | ndisasm -b16 -o 0x7c00 -
+#   expected:
+#     00007C00  31C0   xor ax,ax
+#     00007C02  8ED8   mov ds,ax
+#     00007C04  8EC0   mov es,ax
+```
+
+`ndisasm` ships with `nasm` (already used by the OS build). Alternative:
+`objdump -D -b binary -m i8086 --start-address=0x7c00 --adjust-vma=0x7c00 build/compiler/ttpos.img`
