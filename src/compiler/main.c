@@ -28,13 +28,17 @@
  * to where the bytes live in the image, not their runtime load address). The
  * result is a faithful copy of the OS disk image that boots in QEMU.
  *
- * Where ttpc can already break an instruction into its component fields (the
- * opcode in its own variable, plus prefix / modrm / sib / disp / imm), it
- * reassembles from those fields and verifies the bytes match (PASS). That is
- * currently only the simple 2-byte register/register forms (byte[0] = opcode,
- * byte[1] = modrm). Every other shape is passed through verbatim — its raw
- * bytes go straight into the image — so the whole disk is reproduced today
- * while real decoding for the rest of the ISA comes later (see PLAN.md).
+ * ttpc breaks each instruction into its component fields — legacy prefixes, the
+ * REX byte, the opcode (with its 0F / 0F 38 / 0F 3A escapes), ModRM, SIB,
+ * displacement and immediate — using hard-coded x86-64 opcode-attribute tables
+ * (see ONEBYTE / TWOBYTE below). It then reassembles the bytes from those
+ * fields and verifies they match the originals (PASS). Field lengths depend on
+ * the CPU mode (16/32/64-bit), which is tracked from the region banners in the
+ * file, plus the 66/67 size prefixes and REX.W. An instruction whose bytes the
+ * decoder cannot fully account for on its line (an unknown encoding, or one
+ * objdump wrapped past what was merged) is passed through verbatim — its raw
+ * bytes go straight into the image — so the whole disk is always reproduced
+ * even where decoding falls short.
  */
 #define DEFAULT_INPUT  "src/os/boot_flow.txt"
 #define DEFAULT_OUTPUT "build/compiler/ttpos.img"
@@ -47,8 +51,11 @@
 struct insn {
 	unsigned long addr;             /* memory address (load VMA) from file  */
 
-	int           has_prefix;
-	unsigned char prefix;
+	unsigned char legacy[4];        /* legacy prefixes, in original order   */
+	int           n_legacy;
+	int           has_rex;          /* REX prefix (64-bit mode only)        */
+	unsigned char rex;
+	int           opmap;            /* 0=1-byte 1=0F 2=0F38 3=0F3A          */
 	unsigned char opcode;           /* the opcode number — its own variable */
 	int           has_modrm;
 	unsigned char modrm;
@@ -66,12 +73,72 @@ struct insn {
 };
 
 /*
+ * Per-opcode attribute: the high bit marks a ModRM byte, the low 3 bits select
+ * the immediate's size class. The class is resolved against the operand/address
+ * size at decode time (16/32/64-bit), so e.g. IZ is 2 bytes with a 16-bit
+ * operand size and 4 otherwise.
+ */
+#define M  0x80   /* instruction has a ModRM byte                            */
+#define IB 1      /* imm8                                                    */
+#define IW 2      /* imm16                                                   */
+#define ID 3      /* imm32 (fixed)                                           */
+#define IZ 4      /* imm16/imm32 by operand size (never 64)                  */
+#define IV 5      /* imm16/imm32/imm64 by operand size                       */
+#define IA 6      /* moffs: 2/4/8 by address size                            */
+#define IP 7      /* far pointer: operand-size offset (2/4) + 2-byte selector */
+
+/* One-byte opcode map (rows of 16). Segment/size/REX/escape bytes are consumed
+ * as prefixes before this lookup, so their slots here are inert. */
+static const unsigned char ONEBYTE[256] = {
+/* 0 */ M,M,M,M,IB,IZ,0,0,        M,M,M,M,IB,IZ,0,0,
+/* 1 */ M,M,M,M,IB,IZ,0,0,        M,M,M,M,IB,IZ,0,0,
+/* 2 */ M,M,M,M,IB,IZ,0,0,        M,M,M,M,IB,IZ,0,0,
+/* 3 */ M,M,M,M,IB,IZ,0,0,        M,M,M,M,IB,IZ,0,0,
+/* 4 */ 0,0,0,0,0,0,0,0,          0,0,0,0,0,0,0,0,
+/* 5 */ 0,0,0,0,0,0,0,0,          0,0,0,0,0,0,0,0,
+/* 6 */ 0,0,M,M,0,0,0,0,          IZ,M|IZ,IB,M|IB,0,0,0,0,
+/* 7 */ IB,IB,IB,IB,IB,IB,IB,IB,  IB,IB,IB,IB,IB,IB,IB,IB,
+/* 8 */ M|IB,M|IZ,M|IB,M|IB,M,M,M,M, M,M,M,M,M,M,M,M,
+/* 9 */ 0,0,0,0,0,0,0,0,          0,0,IP,0,0,0,0,0,
+/* A */ IA,IA,IA,IA,0,0,0,0,      IB,IZ,0,0,0,0,0,0,
+/* B */ IB,IB,IB,IB,IB,IB,IB,IB,  IV,IV,IV,IV,IV,IV,IV,IV,
+/* C */ M|IB,M|IB,IW,0,M,M,M|IB,M|IZ, 0,0,IW,0,0,IB,0,0,
+/* D */ M,M,M,M,IB,IB,0,0,        M,M,M,M,M,M,M,M,
+/* E */ IB,IB,IB,IB,IB,IB,IB,IB,  IZ,IZ,IP,IB,0,0,0,0,
+/* F */ 0,0,0,0,0,0,M,M,          0,0,0,0,0,0,M,M,
+};
+
+/* Two-byte (0F) opcode map. 0F 38 / 0F 3A escapes are handled before lookup. */
+static const unsigned char TWOBYTE[256] = {
+/* 0 */ M,M,M,M,0,0,0,0,          0,0,0,0,0,M,0,M|IB,
+/* 1 */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+/* 2 */ M,M,M,M,0,0,0,0,          M,M,M,M,M,M,M,M,
+/* 3 */ 0,0,0,0,0,0,0,0,          0,0,0,0,0,0,0,0,
+/* 4 */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+/* 5 */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+/* 6 */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+/* 7 */ M|IB,M|IB,M|IB,M|IB,M,M,M,0, M,M,M,M,M,M,M,M,
+/* 8 */ IZ,IZ,IZ,IZ,IZ,IZ,IZ,IZ,  IZ,IZ,IZ,IZ,IZ,IZ,IZ,IZ,
+/* 9 */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+/* A */ 0,0,0,M,M|IB,M,0,0,        0,0,0,M,M|IB,M,M,M,
+/* B */ M,M,M,M,M,M,M,M,          M,M,M|IB,M,M,M,M,M,
+/* C */ M,M,M|IB,M,M|IB,M|IB,M|IB,M, 0,0,0,0,0,0,0,0,
+/* D */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+/* E */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+/* F */ M,M,M,M,M,M,M,M,          M,M,M,M,M,M,M,M,
+};
+
+/*
  * Parse one disassembly line into *out. Returns 1 if the line held an
  * instruction, 0 for headers / comments / labels / blanks.
  *
  * Instruction lines look like (leading whitespace, then):
  *   "7c00:\t31 c0                \txor    ax,ax"
  * i.e. <hexaddr> ':' TAB <space-separated hex bytes> TAB <mnem> <operands>.
+ *
+ * objdump wraps instructions longer than 7 bytes onto extra lines that carry an
+ * address and bytes but no mnemonic; those parse as instructions here with an
+ * empty mnem[], and the caller stitches them onto the preceding instruction.
  */
 static int parse_line(const char *line, struct insn *out)
 {
@@ -114,7 +181,8 @@ static int parse_line(const char *line, struct insn *out)
 	if (out->raw_len == 0)
 		return 0;
 
-	/* Mnemonic and operands (best-effort; purely informational here). */
+	/* Mnemonic and operands (best-effort; purely informational here). A
+	 * continuation line has no text past the bytes, so mnem stays empty. */
 	while (*p == '\t' || *p == ' ')
 		p++;
 	sscanf(p, "%15s %47[^\n]", out->mnem, out->ops);
@@ -122,18 +190,195 @@ static int parse_line(const char *line, struct insn *out)
 	return 1;
 }
 
-/*
- * Decode the raw bytes into fields. Bootstrap rule for the first 3 (2-byte
- * reg/reg) instructions: opcode = raw[0], modrm = raw[1]; no prefix/sib/disp/
- * imm. Returns 0 if the instruction isn't in the supported shape.
- */
-static int decode(struct insn *in)
+/* Scan a region banner for its mode keyword and update *mode. Only banner lines
+ * carry "16-bit" / "32-bit" / "64-bit", so this is a no-op on everything else. */
+static void update_mode(const char *line, int *mode)
 {
-	if (in->raw_len != 2)
+	if (strstr(line, "64-bit"))
+		*mode = 64;
+	else if (strstr(line, "32-bit"))
+		*mode = 32;
+	else if (strstr(line, "16-bit"))
+		*mode = 16;
+}
+
+/*
+ * Decode the raw bytes into fields for the given CPU mode (16/32/64). Walks the
+ * bytes left-to-right — legacy prefixes, REX, opcode (+escapes), ModRM, SIB,
+ * displacement, immediate — capturing each field's actual bytes. Returns 1 when
+ * the fields account for exactly raw_len bytes, 0 otherwise (unknown encoding
+ * or a wrapped line), in which case the caller passes the raw bytes through.
+ */
+static int decode(struct insn *in, int mode)
+{
+	const unsigned char *b = in->raw;
+	int len = in->raw_len;
+	int i = 0;
+	int o66 = 0, a67 = 0;
+
+	in->n_legacy = 0;
+	in->has_rex = 0;
+	in->rex = 0;
+	in->opmap = 0;
+	in->has_modrm = 0;
+	in->has_sib = 0;
+	in->disp_len = 0;
+	in->imm_len = 0;
+
+	/* Legacy prefixes (segment, operand/address size, lock/rep). */
+	while (i < len) {
+		unsigned char c = b[i];
+		if (c == 0x66 || c == 0x67 || c == 0xF0 || c == 0xF2 || c == 0xF3 ||
+		    c == 0x26 || c == 0x2E || c == 0x36 || c == 0x3E ||
+		    c == 0x64 || c == 0x65) {
+			if (in->n_legacy < (int)sizeof in->legacy)
+				in->legacy[in->n_legacy++] = c;
+			if (c == 0x66)
+				o66 = 1;
+			if (c == 0x67)
+				a67 = 1;
+			i++;
+		} else {
+			break;
+		}
+	}
+	if (i >= len)
 		return 0;
-	in->opcode    = in->raw[0];
-	in->has_modrm = 1;
-	in->modrm     = in->raw[1];
+
+	/* REX prefix: a 0x40–0x4F byte, last before the opcode, in 64-bit mode. */
+	if (mode == 64 && b[i] >= 0x40 && b[i] <= 0x4F) {
+		in->has_rex = 1;
+		in->rex = b[i];
+		i++;
+	}
+	if (i >= len)
+		return 0;
+
+	/* Opcode, possibly behind a 0F / 0F 38 / 0F 3A escape. */
+	unsigned char attr;
+	if (b[i] == 0x0F) {
+		i++;
+		if (i >= len)
+			return 0;
+		if (b[i] == 0x38) {
+			in->opmap = 2;
+			i++;
+			if (i >= len)
+				return 0;
+			in->opcode = b[i++];
+			attr = M;               /* 0F 38: ModRM, no immediate */
+		} else if (b[i] == 0x3A) {
+			in->opmap = 3;
+			i++;
+			if (i >= len)
+				return 0;
+			in->opcode = b[i++];
+			attr = M | IB;          /* 0F 3A: ModRM + imm8 */
+		} else {
+			in->opmap = 1;
+			in->opcode = b[i++];
+			attr = TWOBYTE[in->opcode];
+		}
+	} else {
+		in->opmap = 0;
+		in->opcode = b[i++];
+		attr = ONEBYTE[in->opcode];
+	}
+
+	int cls = attr & 7;
+	int has_modrm = attr & M;
+
+	/* Resolve operand and address size from mode + prefixes + REX.W. */
+	int osize = (mode == 16) ? 16 : 32;
+	if (o66)
+		osize = (osize == 16) ? 32 : 16;
+	if (in->has_rex && (in->rex & 0x08))
+		osize = 64;
+	int asize = (mode == 16) ? 16 : (mode == 64 ? 64 : 32);
+	if (a67)
+		asize = (mode == 16) ? 32 : (mode == 64 ? 32 : 16);
+
+	/* ModRM, SIB and displacement. */
+	if (has_modrm) {
+		if (i >= len)
+			return 0;
+		in->has_modrm = 1;
+		in->modrm = b[i++];
+		int mod = (in->modrm >> 6) & 3;
+		int rm  = in->modrm & 7;
+
+		if (mod != 3) {
+			int base = -1;
+			if (asize != 16 && rm == 4) {
+				if (i >= len)
+					return 0;
+				in->has_sib = 1;
+				in->sib = b[i++];
+				base = in->sib & 7;
+			}
+
+			int dl = 0;
+			if (asize == 16) {
+				if (mod == 0 && rm == 6)
+					dl = 2;
+				else if (mod == 1)
+					dl = 1;
+				else if (mod == 2)
+					dl = 2;
+			} else {
+				if (mod == 0 && rm == 5)
+					dl = 4;                 /* disp32 / RIP-relative */
+				else if (mod == 0 && rm == 4 && base == 5)
+					dl = 4;
+				else if (mod == 1)
+					dl = 1;
+				else if (mod == 2)
+					dl = 4;
+			}
+			for (int k = 0; k < dl; k++) {
+				if (i >= len)
+					return 0;
+				in->disp[k] = b[i++];
+			}
+			in->disp_len = dl;
+		}
+
+		/* F6/F7 carry an immediate only for their TEST forms (/0, /1). */
+		if (in->opmap == 0 && (in->opcode == 0xF6 || in->opcode == 0xF7)) {
+			int reg = (in->modrm >> 3) & 7;
+			if (reg <= 1)
+				cls = (in->opcode == 0xF6) ? IB : IZ;
+			else
+				cls = 0;
+		}
+	}
+
+	/* Immediate. */
+	int il = 0;
+	if (in->opmap == 0 && in->opcode == 0xC8) {
+		il = 3;                                 /* ENTER iw, ib */
+	} else {
+		switch (cls) {
+		case IB: il = 1; break;
+		case IW: il = 2; break;
+		case ID: il = 4; break;
+		case IZ: il = (osize == 16) ? 2 : 4; break;
+		case IV: il = (osize == 16) ? 2 : (osize == 64 ? 8 : 4); break;
+		case IA: il = (asize == 16) ? 2 : (asize == 64 ? 8 : 4); break;
+		case IP: il = (osize == 16 ? 2 : 4) + 2; break;
+		default: il = 0; break;
+		}
+	}
+	for (int k = 0; k < il; k++) {
+		if (i >= len)
+			return 0;
+		in->imm[k] = b[i++];
+	}
+	in->imm_len = il;
+
+	/* The fields must account for exactly the bytes on the line. */
+	if (i != len)
+		return 0;
 	return 1;
 }
 
@@ -141,8 +386,16 @@ static int decode(struct insn *in)
 static int assemble(const struct insn *in, unsigned char *buf)
 {
 	int n = 0;
-	if (in->has_prefix)
-		buf[n++] = in->prefix;
+	for (int i = 0; i < in->n_legacy; i++)
+		buf[n++] = in->legacy[i];
+	if (in->has_rex)
+		buf[n++] = in->rex;
+	if (in->opmap >= 1)
+		buf[n++] = 0x0F;
+	if (in->opmap == 2)
+		buf[n++] = 0x38;
+	else if (in->opmap == 3)
+		buf[n++] = 0x3A;
 	buf[n++] = in->opcode;
 	if (in->has_modrm)
 		buf[n++] = in->modrm;
@@ -161,6 +414,73 @@ static void print_byte(const char *label, int present, unsigned char val)
 		printf("%s=0x%02x  ", label, val);
 	else
 		printf("%s=--  ", label);
+}
+
+/*
+ * Decode one (possibly line-wrap-merged) instruction, emit its bytes at the
+ * instruction's disk offset, and bump the counters. Emits the reassembled-from-
+ * fields bytes when ttpc decodes the instruction and they match, otherwise the
+ * raw bytes verbatim — either way the image byte is correct. Returns -1 on a
+ * write error, 0 otherwise.
+ */
+static int emit_insn(struct insn *ins, int mode, FILE *out, int verbose,
+		     int *count, int *decoded, int *passthru, int *fails)
+{
+	unsigned char        asm_buf[16];
+	const unsigned char *emit     = ins->raw;
+	int                  emit_len  = ins->raw_len;
+
+	if (decode(ins, mode)) {
+		int asm_len = assemble(ins, asm_buf);
+		int pass = (asm_len == ins->raw_len &&
+			memcmp(asm_buf, ins->raw, asm_len) == 0);
+
+		if (pass) {
+			emit     = asm_buf;
+			emit_len = asm_len;
+			(*decoded)++;
+		} else {
+			/* Decoder and raw bytes disagree: keep the image
+			 * faithful (emit raw) but flag the bug. */
+			(*fails)++;
+		}
+
+		if (verbose) {
+			printf("addr=0x%lx  mode=%d  mnem=%s ops=%s\n",
+				ins->addr, mode, ins->mnem, ins->ops);
+			printf("  legacy=");
+			if (ins->n_legacy == 0)
+				printf("--  ");
+			else
+				for (int i = 0; i < ins->n_legacy; i++)
+					printf("%02x ", ins->legacy[i]);
+			print_byte("rex", ins->has_rex, ins->rex);
+			printf("opmap=%d  opcode=0x%02x\n", ins->opmap, ins->opcode);
+			printf("  ");
+			print_byte("modrm", ins->has_modrm, ins->modrm);
+			print_byte("sib", ins->has_sib, ins->sib);
+			printf("disp=%dB  imm=%dB\n", ins->disp_len, ins->imm_len);
+			printf("  reassembled:");
+			for (int i = 0; i < asm_len; i++)
+				printf(" %02x", asm_buf[i]);
+			printf("   original:");
+			for (int i = 0; i < ins->raw_len; i++)
+				printf(" %02x", ins->raw[i]);
+			printf("   %s\n\n", pass ? "PASS" : "FAIL");
+		}
+	} else {
+		/* Not an encoding ttpc can fully account for on this line —
+		 * pass the raw bytes through unchanged. */
+		(*passthru)++;
+	}
+
+	if (fseek(out, (long)ins->addr, SEEK_SET) != 0 ||
+	    fwrite(emit, 1, emit_len, out) != (size_t)emit_len) {
+		fprintf(stderr, "ttpc: write error at 0x%lx\n", ins->addr);
+		return -1;
+	}
+	(*count)++;
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -197,68 +517,47 @@ int main(int argc, char **argv)
 
 	char line[512];
 	int  count = 0, decoded = 0, passthru = 0, fails = 0;
+	int  mode = 16;                  /* current CPU mode (from banners)      */
+
+	struct insn cur;                 /* instruction being assembled          */
+	int         have     = 0;        /* cur holds a pending instruction      */
+	int         cur_mode = 16;       /* mode when cur's primary line was read */
 
 	while (fgets(line, sizeof line, in)) {
-		struct insn ins;
-		if (!parse_line(line, &ins))
+		update_mode(line, &mode);
+
+		struct insn tmp;
+		if (!parse_line(line, &tmp))
 			continue;
 
-		/* Bytes that go into the image: the reassembled-from-fields
-		 * bytes when ttpc can decode the instruction and they match,
-		 * otherwise the raw bytes verbatim. Either way the image byte
-		 * is correct. */
-		unsigned char        asm_buf[16];
-		const unsigned char *emit     = ins.raw;
-		int                  emit_len = ins.raw_len;
-
-		if (decode(&ins)) {
-			int asm_len = assemble(&ins, asm_buf);
-			int pass = (asm_len == ins.raw_len &&
-				memcmp(asm_buf, ins.raw, asm_len) == 0);
-
-			if (pass) {
-				emit     = asm_buf;
-				emit_len = asm_len;
-				decoded++;
-			} else {
-				/* Decoder and raw bytes disagree: keep the image
-				 * faithful (emit raw) but flag the bug. */
-				fails++;
-			}
-
-			if (verbose) {
-				printf("addr=0x%lx  mnem=%s ops=%s\n",
-					ins.addr, ins.mnem, ins.ops);
-				printf("  ");
-				print_byte("prefix", ins.has_prefix, ins.prefix);
-				printf("opcode=0x%02x  ", ins.opcode);
-				print_byte("modrm", ins.has_modrm, ins.modrm);
-				print_byte("sib", ins.has_sib, ins.sib);
-				printf("disp=0x0(%dB)  imm=0x0(%dB)\n",
-					ins.disp_len, ins.imm_len);
-				printf("  reassembled:");
-				for (int i = 0; i < asm_len; i++)
-					printf(" %02x", asm_buf[i]);
-				printf("   original:");
-				for (int i = 0; i < ins.raw_len; i++)
-					printf(" %02x", ins.raw[i]);
-				printf("   %s\n\n", pass ? "PASS" : "FAIL");
-			}
-		} else {
-			/* Not a shape ttpc can break into fields yet — pass the
-			 * raw bytes through (full ISA decode is future work). */
-			passthru++;
+		/* A mnemonic-less line whose address continues the pending
+		 * instruction is an objdump line-wrap: append its bytes. */
+		if (have && tmp.mnem[0] == '\0' &&
+		    tmp.addr == cur.addr + (unsigned long)cur.raw_len) {
+			for (int k = 0; k < tmp.raw_len; k++)
+				if (cur.raw_len < (int)sizeof cur.raw)
+					cur.raw[cur.raw_len++] = tmp.raw[k];
+			continue;
 		}
 
-		/* Emit the bytes at the instruction's disk offset. */
-		if (fseek(out, (long)ins.addr, SEEK_SET) != 0 ||
-		    fwrite(emit, 1, emit_len, out) != (size_t)emit_len) {
-			fprintf(stderr, "ttpc: write error at 0x%lx\n", ins.addr);
+		if (have &&
+		    emit_insn(&cur, cur_mode, out, verbose,
+			      &count, &decoded, &passthru, &fails) < 0) {
 			fclose(in);
 			fclose(out);
 			return EXIT_FAILURE;
 		}
-		count++;
+
+		cur      = tmp;
+		cur_mode = mode;
+		have     = 1;
+	}
+	if (have &&
+	    emit_insn(&cur, cur_mode, out, verbose,
+		      &count, &decoded, &passthru, &fails) < 0) {
+		fclose(in);
+		fclose(out);
+		return EXIT_FAILURE;
 	}
 
 	/* Pad to a full disk; the gaps left by objdump's collapsed zero runs
