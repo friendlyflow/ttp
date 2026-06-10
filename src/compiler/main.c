@@ -21,18 +21,28 @@
 #include <string.h>
 
 /*
- * Bootstrap stage: the "compiler" reads the OS boot-flow disassembly, breaks
- * each instruction into its component fields (the opcode in its own variable,
- * plus prefix / modrm / sib / disp / imm), reassembles the machine-code bytes,
- * and writes them into a binary image at each instruction's memory address.
+ * Bootstrap stage: the "compiler" reads the OS boot-flow disassembly and, for
+ * every instruction line, places its machine-code bytes into a binary image at
+ * the line's *disk offset* (the address column in boot_flow.txt — see
+ * src/os/DISASSEMBLY.md, which dumps each region with objdump --adjust-vma set
+ * to where the bytes live in the image, not their runtime load address). The
+ * result is a faithful copy of the OS disk image that boots in QEMU.
  *
- * For now we assemble the first 3 instructions only. They are all simple 2-byte
- * register/register forms (byte[0] = opcode, byte[1] = modrm), so the decode is
- * trivial; real decoding for the rest of the ISA comes later (see PLAN.md).
+ * Where ttpc can already break an instruction into its component fields (the
+ * opcode in its own variable, plus prefix / modrm / sib / disp / imm), it
+ * reassembles from those fields and verifies the bytes match (PASS). That is
+ * currently only the simple 2-byte register/register forms (byte[0] = opcode,
+ * byte[1] = modrm). Every other shape is passed through verbatim — its raw
+ * bytes go straight into the image — so the whole disk is reproduced today
+ * while real decoding for the rest of the ISA comes later (see PLAN.md).
  */
 #define DEFAULT_INPUT  "src/os/boot_flow.txt"
 #define DEFAULT_OUTPUT "build/compiler/ttpos.img"
-#define INSN_LIMIT     3
+
+/* Pad the output to a full disk so BIOS/QEMU can read every sector the boot
+ * code loads (boot.bin pulls in 50 sectors). Matches the 2048-sector (1 MiB)
+ * image src/os/Makefile builds with dd. */
+#define IMG_SECTORS    2048
 
 struct insn {
 	unsigned long addr;             /* memory address (load VMA) from file  */
@@ -155,8 +165,22 @@ static void print_byte(const char *label, int present, unsigned char val)
 
 int main(int argc, char **argv)
 {
-	const char *in_path  = (argc > 1) ? argv[1] : DEFAULT_INPUT;
-	const char *out_path = (argc > 2) ? argv[2] : DEFAULT_OUTPUT;
+	const char *in_path  = NULL;
+	const char *out_path = NULL;
+	int         verbose  = 0;        /* -v: print the field breakdown */
+
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-v") == 0)
+			verbose = 1;
+		else if (!in_path)
+			in_path = argv[i];
+		else if (!out_path)
+			out_path = argv[i];
+	}
+	if (!in_path)
+		in_path = DEFAULT_INPUT;
+	if (!out_path)
+		out_path = DEFAULT_OUTPUT;
 
 	FILE *in = fopen(in_path, "rb");
 	if (!in) {
@@ -172,63 +196,89 @@ int main(int argc, char **argv)
 	}
 
 	char line[512];
-	int  count = 0, fails = 0;
+	int  count = 0, decoded = 0, passthru = 0, fails = 0;
 
-	while (count < INSN_LIMIT && fgets(line, sizeof line, in)) {
+	while (fgets(line, sizeof line, in)) {
 		struct insn ins;
 		if (!parse_line(line, &ins))
 			continue;
 
-		if (!decode(&ins)) {
-			fprintf(stderr, "ttpc: cannot decode insn at 0x%lx "
-				"(%d raw bytes)\n", ins.addr, ins.raw_len);
-			fails++;
-			count++;
-			continue;
+		/* Bytes that go into the image: the reassembled-from-fields
+		 * bytes when ttpc can decode the instruction and they match,
+		 * otherwise the raw bytes verbatim. Either way the image byte
+		 * is correct. */
+		unsigned char        asm_buf[16];
+		const unsigned char *emit     = ins.raw;
+		int                  emit_len = ins.raw_len;
+
+		if (decode(&ins)) {
+			int asm_len = assemble(&ins, asm_buf);
+			int pass = (asm_len == ins.raw_len &&
+				memcmp(asm_buf, ins.raw, asm_len) == 0);
+
+			if (pass) {
+				emit     = asm_buf;
+				emit_len = asm_len;
+				decoded++;
+			} else {
+				/* Decoder and raw bytes disagree: keep the image
+				 * faithful (emit raw) but flag the bug. */
+				fails++;
+			}
+
+			if (verbose) {
+				printf("addr=0x%lx  mnem=%s ops=%s\n",
+					ins.addr, ins.mnem, ins.ops);
+				printf("  ");
+				print_byte("prefix", ins.has_prefix, ins.prefix);
+				printf("opcode=0x%02x  ", ins.opcode);
+				print_byte("modrm", ins.has_modrm, ins.modrm);
+				print_byte("sib", ins.has_sib, ins.sib);
+				printf("disp=0x0(%dB)  imm=0x0(%dB)\n",
+					ins.disp_len, ins.imm_len);
+				printf("  reassembled:");
+				for (int i = 0; i < asm_len; i++)
+					printf(" %02x", asm_buf[i]);
+				printf("   original:");
+				for (int i = 0; i < ins.raw_len; i++)
+					printf(" %02x", ins.raw[i]);
+				printf("   %s\n\n", pass ? "PASS" : "FAIL");
+			}
+		} else {
+			/* Not a shape ttpc can break into fields yet — pass the
+			 * raw bytes through (full ISA decode is future work). */
+			passthru++;
 		}
 
-		unsigned char asm_buf[16];
-		int asm_len = assemble(&ins, asm_buf);
-
-		int pass = (asm_len == ins.raw_len &&
-			memcmp(asm_buf, ins.raw, asm_len) == 0);
-
-		/* Field breakdown, matching build/compiler/assembled.txt. */
-		printf("addr=0x%lx  mnem=%s ops=%s\n", ins.addr, ins.mnem, ins.ops);
-		printf("  ");
-		print_byte("prefix", ins.has_prefix, ins.prefix);
-		printf("opcode=0x%02x  ", ins.opcode);
-		print_byte("modrm", ins.has_modrm, ins.modrm);
-		print_byte("sib", ins.has_sib, ins.sib);
-		printf("disp=0x0(%dB)  imm=0x0(%dB)\n", ins.disp_len, ins.imm_len);
-
-		printf("  reassembled:");
-		for (int i = 0; i < asm_len; i++)
-			printf(" %02x", asm_buf[i]);
-		printf("   original:");
-		for (int i = 0; i < ins.raw_len; i++)
-			printf(" %02x", ins.raw[i]);
-		printf("   %s\n\n", pass ? "PASS" : "FAIL");
-
-		/* Emit the bytes at the instruction's memory address. */
+		/* Emit the bytes at the instruction's disk offset. */
 		if (fseek(out, (long)ins.addr, SEEK_SET) != 0 ||
-		    fwrite(asm_buf, 1, asm_len, out) != (size_t)asm_len) {
+		    fwrite(emit, 1, emit_len, out) != (size_t)emit_len) {
 			fprintf(stderr, "ttpc: write error at 0x%lx\n", ins.addr);
 			fclose(in);
 			fclose(out);
 			return EXIT_FAILURE;
 		}
-
-		if (!pass)
-			fails++;
 		count++;
+	}
+
+	/* Pad to a full disk; the gaps left by objdump's collapsed zero runs
+	 * become zero holes, exactly the padding the image needs. */
+	if (fseek(out, (long)IMG_SECTORS * 512 - 1, SEEK_SET) != 0 ||
+	    fputc(0, out) == EOF) {
+		fprintf(stderr, "ttpc: cannot pad image to %d sectors\n",
+			IMG_SECTORS);
+		fclose(in);
+		fclose(out);
+		return EXIT_FAILURE;
 	}
 
 	fclose(in);
 	fclose(out);
 
-	fprintf(stderr, "ttpc: assembled %d instruction(s) into '%s' (%d failed)\n",
-		count, out_path, fails);
+	fprintf(stderr,
+		"ttpc: assembled %d instruction(s) into '%s' "
+		"(%d decoded, %d passed through, %d failed)\n",
+		count, out_path, decoded, passthru, fails);
 
 	return fails ? EXIT_FAILURE : EXIT_SUCCESS;
 }

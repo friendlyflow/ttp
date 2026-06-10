@@ -4,12 +4,13 @@
 #   make            build everything (compiler + os)
 #   make os         build the bare-metal x86_64 OS image -> build/os/ttpos.img
 #   make compiler   build the host compiler            -> build/compiler/ttpc
-#   make test       boot the OS image in qemu
+#   make os-test    boot the OS image in qemu
+#   make compiler-test  re-assemble boot_flow.txt with ttpc and boot it in qemu
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
 
-.PHONY: all os compiler test clean
+.PHONY: all os compiler os-test compiler-test clean
 
 all: os compiler
 
@@ -21,8 +22,12 @@ os:
 compiler:
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler
 
-test:
+os-test:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os test
+
+# Re-assemble the OS boot-flow disassembly with ttpc and boot the result.
+compiler-test: compiler
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler test
 
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean

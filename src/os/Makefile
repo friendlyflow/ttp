@@ -6,7 +6,9 @@ CFLAGS = -ffreestanding -O2 -Wall -Wextra -nostdlib -nostdinc \
          -fno-builtin -fno-stack-protector -mno-red-zone \
          -mcmodel=large
 
-BUILD  = build
+# Default to the repo-root build tree (build/os); the root Makefile overrides
+# this with an absolute path to the same place.
+BUILD ?= ../../build/os
 
 KERNEL_OBJS = $(addprefix $(BUILD)/, \
               kernel_entry.o \

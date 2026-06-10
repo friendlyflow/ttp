@@ -1,709 +1,951 @@
-##############################################################################
-# BOOT FLOW  16-bit -> 32-bit -> 64-bit   (generated 2026-05-28T11:04:16+02:00)
-#
-# Each stage runs in a different CPU mode, so each region below is
-# disassembled in the mode the CPU is actually in at that point.
-# Format: address (load VMA)  |  raw bytes  |  assembly (Intel syntax)
-#
-# EXECUTION ORDER:
-#   1. boot.bin       @0x07C00  16-bit  -> jmp 0x1000:0x0000  (=phys 0x10000)
-#   2. kernel32.bin   @0x10000  16-bit  -> enable PE, jmp pmode32
-#                     @0x1001A  32-bit  -> paging+long mode,  jmp long_mode
-#                     @0x1008D  DATA    -> GDT32 + GDT64 descriptor tables
-#                     @0x100ED  64-bit  -> jmp rax (=0x11000)
-#   3. kernel.elf     @0x11000  64-bit  -> kernel_entry -> kernel_main ...
-#   *  kernel .rodata @0x116B8  DATA    -> string literals the code above prints
-#                                          (passed by address in rdi/rdx, never
-#                                           inline in the instruction stream)
-##############################################################################
+[1] boot.bin       disk 0x0    (loads @0x7C00)  16-bit
 
-============================================================================
-[1] boot.bin  --  16-bit real mode, loaded by BIOS @ 0x7C00
-    Reads 50 sectors from disk to 0x10000, then far-jumps into stage 2.
-============================================================================
-00007c00 <.data>:
-    7c00:	31 c0                	xor    ax,ax
-    7c02:	8e d8                	mov    ds,ax
-    7c04:	8e c0                	mov    es,ax
-    7c06:	8e d0                	mov    ss,ax
-    7c08:	bc 00 7c             	mov    sp,0x7c00
-    7c0b:	b4 02                	mov    ah,0x2
-    7c0d:	b0 32                	mov    al,0x32
-    7c0f:	b5 00                	mov    ch,0x0
-    7c11:	b1 02                	mov    cl,0x2
-    7c13:	b6 00                	mov    dh,0x0
-    7c15:	b2 80                	mov    dl,0x80
-    7c17:	bb 00 10             	mov    bx,0x1000
-    7c1a:	8e c3                	mov    es,bx
-    7c1c:	bb 00 00             	mov    bx,0x0
-    7c1f:	cd 13                	int    0x13
-    7c21:	72 05                	jb     0x7c28
-    7c23:	ea 00 00 00 10       	jmp    0x1000:0x0
-    7c28:	f4                   	hlt
-    ... (offsets 0x7C29..0x7DFD are zero padding) ...
-    0x7DFE: 55 AA            ; boot-sector signature (0xAA55)
+../../build/os/boot.bin:     file format binary
 
-  >>> 'jmp 0x1000:0x0000' transfers to physical 0x10000 = start of kernel32.bin
 
-============================================================================
-[2a] kernel32.bin  --  16-bit, @ 0x10000   (still real mode)
-     Loads GDT32, sets CR0.PE, far-jumps to the 32-bit entry 'pmode32'.
-============================================================================
-00010000 <.data>:
-   10000:	fa                   	cli
-   10001:	0e                   	push   cs
-   10002:	1f                   	pop    ds
-   10003:	0f 01 16 a5 00       	lgdtw  ds:0xa5
-   10008:	0f 20 c0             	mov    eax,cr0
-   1000b:	66 83 c8 01          	or     eax,0x1
-   1000f:	0f 22 c0             	mov    cr0,eax
-   10012:	66 ea 1a 00 01 00 08 	jmp    0x8:0x1001a
-   10019:	00 
+Disassembly of section .data:
 
-  >>> 'jmp dword 0x08:0x1001A' enters 32-bit protected mode
+00000000 <.data>:
+   0:	31 c0                	xor    ax,ax
+   2:	8e d8                	mov    ds,ax
+   4:	8e c0                	mov    es,ax
+   6:	8e d0                	mov    ss,ax
+   8:	bc 00 7c             	mov    sp,0x7c00
+   b:	b4 02                	mov    ah,0x2
+   d:	b0 32                	mov    al,0x32
+   f:	b5 00                	mov    ch,0x0
+  11:	b1 02                	mov    cl,0x2
+  13:	b6 00                	mov    dh,0x0
+  15:	b2 80                	mov    dl,0x80
+  17:	bb 00 10             	mov    bx,0x1000
+  1a:	8e c3                	mov    es,bx
+  1c:	bb 00 00             	mov    bx,0x0
+  1f:	cd 13                	int    0x13
+  21:	72 05                	jb     0x28
+  23:	ea 00 00 00 10       	jmp    0x1000:0x0
+  28:	f4                   	hlt
+	...
+ 1fd:	00 55 aa             	add    BYTE PTR [di-0x56],dl
+[2a] kernel32.bin  disk 0x200  (loads @0x10000) 16-bit
 
-============================================================================
-[2b] kernel32.bin  --  32-bit protected mode, @ 0x1001A  ('pmode32')
-     Identity-maps first 2MB (PML4/PDPT/PD @ 0x1000), sets PAE+LME+PG,
-     loads GDT64, far-jumps to the 64-bit entry 'long_mode'.
-============================================================================
-0001001a <.data>:
-   1001a:	66 b8 10 00          	mov    ax,0x10
-   1001e:	8e d8                	mov    ds,eax
-   10020:	8e c0                	mov    es,eax
-   10022:	8e d0                	mov    ss,eax
-   10024:	bc 00 00 09 00       	mov    esp,0x90000
-   10029:	bf 00 10 00 00       	mov    edi,0x1000
-   1002e:	b9 00 30 00 00       	mov    ecx,0x3000
-   10033:	31 c0                	xor    eax,eax
-   10035:	f3 ab                	rep stos DWORD PTR es:[edi],eax
-   10037:	c7 05 00 10 00 00 07 	mov    DWORD PTR ds:0x1000,0x2007
-   1003e:	20 00 00 
-   10041:	c7 05 00 20 00 00 07 	mov    DWORD PTR ds:0x2000,0x3007
-   10048:	30 00 00 
-   1004b:	c7 05 00 30 00 00 87 	mov    DWORD PTR ds:0x3000,0x87
-   10052:	00 00 00 
-   10055:	b8 00 10 00 00       	mov    eax,0x1000
-   1005a:	0f 22 d8             	mov    cr3,eax
-   1005d:	0f 20 e0             	mov    eax,cr4
-   10060:	83 c8 20             	or     eax,0x20
-   10063:	0f 22 e0             	mov    cr4,eax
-   10066:	b9 80 00 00 c0       	mov    ecx,0xc0000080
-   1006b:	0f 32                	rdmsr
-   1006d:	0d 00 01 00 00       	or     eax,0x100
-   10072:	0f 30                	wrmsr
-   10074:	0f 20 c0             	mov    eax,cr0
-   10077:	0d 01 00 00 80       	or     eax,0x80000001
-   1007c:	0f 22 c0             	mov    cr0,eax
-   1007f:	0f 01 15 e3 00 01 00 	lgdtd  ds:0x100e3
-   10086:	ea ed 00 01 00 08 00 	jmp    0x8:0x100ed
+/tmp/k32_16.bin:     file format binary
 
-  >>> 'jmp 0x08:0x100ED' enters 64-bit long mode
 
-============================================================================
-[2c] kernel32.bin  --  DATA, @ 0x1008D   (NOT code: GDT descriptor tables)
-     gdt32 (null,code,data) then gdt64 (null,kcode,kdata,ucode,udata,TSS).
-     Shown as raw bytes because disassembling it would be meaningless.
-============================================================================
-Contents of section .data:
- 1008d 00000000 00000000 ffff0000 009acf00  ................
- 1009d ffff0000 0092cf00 17008d00 01000000  ................
- 100ad 00000000 00000000 0000009a a0000000  ................
- 100bd 00000092 00000000 000000f2 00000000  ................
- 100cd 000000fa a0006800 00000089 00000000  ......h.........
- 100dd 00000000 00003700 ab000100 00000000  ......7.........
+Disassembly of section .data:
 
-============================================================================
-[2d] kernel32.bin  --  64-bit long mode, @ 0x100ED  ('long_mode')
-     Reloads data segments, sets RSP, jumps to the kernel at 0x11000.
-============================================================================
-00000000000100ed <.data>:
-   100ed:	66 b8 10 00          	mov    ax,0x10
-   100f1:	8e d8                	mov    ds,eax
-   100f3:	8e c0                	mov    es,eax
-   100f5:	8e d0                	mov    ss,eax
-   100f7:	bc 00 00 09 00       	mov    esp,0x90000
-   100fc:	b8 00 10 01 00       	mov    eax,0x11000
-   10101:	ff e0                	jmp    rax
+00000200 <.data>:
+ 200:	fa                   	cli
+ 201:	0e                   	push   cs
+ 202:	1f                   	pop    ds
+ 203:	0f 01 16 a5 00       	lgdtw  ds:0xa5
+ 208:	0f 20 c0             	mov    eax,cr0
+ 20b:	66 83 c8 01          	or     eax,0x1
+ 20f:	0f 22 c0             	mov    cr0,eax
+ 212:	66 ea 1a 00 01 00 08 	jmp    0x8:0x1001a
+ 219:	00 
+[2b] kernel32.bin  disk 0x21A  (loads @0x1001A) 32-bit (pmode32)
 
-  >>> 'jmp rax'  (rax = 0x11000) transfers to kernel_entry
+/tmp/k32_32.bin:     file format binary
 
-============================================================================
-[3] kernel.bin / kernel.elf  --  64-bit long mode, linked @ 0x11000
-    The C kernel, with symbols. Entry is kernel_entry, which calls kernel_main.
-============================================================================
-Disassembly of section .text:
 
-0000000000011000 <kernel_entry>:
-   11000:	48 83 e4 f0          	and    rsp,0xfffffffffffffff0
-   11004:	e8 07 00 00 00       	call   11010 <kernel_main>
+Disassembly of section .data:
 
-0000000000011009 <kernel_entry.hang>:
-   11009:	f4                   	hlt
-   1100a:	eb fd                	jmp    11009 <kernel_entry.hang>
-   1100c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+0000021a <.data>:
+ 21a:	66 b8 10 00          	mov    ax,0x10
+ 21e:	8e d8                	mov    ds,eax
+ 220:	8e c0                	mov    es,eax
+ 222:	8e d0                	mov    ss,eax
+ 224:	bc 00 00 09 00       	mov    esp,0x90000
+ 229:	bf 00 10 00 00       	mov    edi,0x1000
+ 22e:	b9 00 30 00 00       	mov    ecx,0x3000
+ 233:	31 c0                	xor    eax,eax
+ 235:	f3 ab                	rep stos DWORD PTR es:[edi],eax
+ 237:	c7 05 00 10 00 00 07 	mov    DWORD PTR ds:0x1000,0x2007
+ 23e:	20 00 00 
+ 241:	c7 05 00 20 00 00 07 	mov    DWORD PTR ds:0x2000,0x3007
+ 248:	30 00 00 
+ 24b:	c7 05 00 30 00 00 87 	mov    DWORD PTR ds:0x3000,0x87
+ 252:	00 00 00 
+ 255:	b8 00 10 00 00       	mov    eax,0x1000
+ 25a:	0f 22 d8             	mov    cr3,eax
+ 25d:	0f 20 e0             	mov    eax,cr4
+ 260:	83 c8 20             	or     eax,0x20
+ 263:	0f 22 e0             	mov    cr4,eax
+ 266:	b9 80 00 00 c0       	mov    ecx,0xc0000080
+ 26b:	0f 32                	rdmsr
+ 26d:	0d 00 01 00 00       	or     eax,0x100
+ 272:	0f 30                	wrmsr
+ 274:	0f 20 c0             	mov    eax,cr0
+ 277:	0d 01 00 00 80       	or     eax,0x80000001
+ 27c:	0f 22 c0             	mov    cr0,eax
+ 27f:	0f 01 15 e3 00 01 00 	lgdtd  ds:0x100e3
+ 286:	ea ed 00 01 00 08 00 	jmp    0x8:0x100ed
+[2c] kernel32.bin  disk 0x28D  (loads @0x1008D) DATA (GDT32 + GDT64)
 
-0000000000011010 <kernel_main>:
-   11010:	48 b8 80 11 01 00 00 	movabs rax,0x11180
-   11017:	00 00 00 
-   1101a:	55                   	push   rbp
-   1101b:	31 ff                	xor    edi,edi
-   1101d:	48 89 e5             	mov    rbp,rsp
-   11020:	53                   	push   rbx
-   11021:	48 bb a0 12 01 00 00 	movabs rbx,0x112a0
-   11028:	00 00 00 
-   1102b:	48 83 ec 08          	sub    rsp,0x8
-   1102f:	ff d0                	call   rax
-   11031:	31 d2                	xor    edx,edx
-   11033:	be 0e 00 00 00       	mov    esi,0xe
-   11038:	48 bf b8 16 01 00 00 	movabs rdi,0x116b8
-   1103f:	00 00 00 
-   11042:	ff d3                	call   rbx
-   11044:	31 d2                	xor    edx,edx
-   11046:	be 0a 00 00 00       	mov    esi,0xa
-   1104b:	48 bf e0 16 01 00 00 	movabs rdi,0x116e0
-   11052:	00 00 00 
-   11055:	ff d3                	call   rbx
-   11057:	31 d2                	xor    edx,edx
-   11059:	be 0f 00 00 00       	mov    esi,0xf
-   1105e:	48 bf d6 17 01 00 00 	movabs rdi,0x117d6
-   11065:	00 00 00 
-   11068:	ff d3                	call   rbx
-   1106a:	bf 00 00 09 00       	mov    edi,0x90000
-   1106f:	48 b8 f0 14 01 00 00 	movabs rax,0x114f0
-   11076:	00 00 00 
-   11079:	ff d0                	call   rax
-   1107b:	31 d2                	xor    edx,edx
-   1107d:	be 07 00 00 00       	mov    esi,0x7
-   11082:	48 bf 4a 17 01 00 00 	movabs rdi,0x1174a
-   11089:	00 00 00 
-   1108c:	ff d3                	call   rbx
-   1108e:	48 b8 70 15 01 00 00 	movabs rax,0x11570
-   11095:	00 00 00 
-   11098:	ff d0                	call   rax
-   1109a:	31 d2                	xor    edx,edx
-   1109c:	be 07 00 00 00       	mov    esi,0x7
-   110a1:	48 bf 60 17 01 00 00 	movabs rdi,0x11760
-   110a8:	00 00 00 
-   110ab:	ff d3                	call   rbx
-   110ad:	31 d2                	xor    edx,edx
-   110af:	be 0f 00 00 00       	mov    esi,0xf
-   110b4:	48 bf d6 17 01 00 00 	movabs rdi,0x117d6
-   110bb:	00 00 00 
-   110be:	ff d3                	call   rbx
-   110c0:	31 d2                	xor    edx,edx
-   110c2:	be 03 00 00 00       	mov    esi,0x3
-   110c7:	48 bf 7c 17 01 00 00 	movabs rdi,0x1177c
-   110ce:	00 00 00 
-   110d1:	ff d3                	call   rbx
-   110d3:	31 d2                	xor    edx,edx
-   110d5:	be 0f 00 00 00       	mov    esi,0xf
-   110da:	48 bf d6 17 01 00 00 	movabs rdi,0x117d6
-   110e1:	00 00 00 
-   110e4:	ff d3                	call   rbx
-   110e6:	48 b8 30 16 01 00 00 	movabs rax,0x11630
-   110ed:	00 00 00 
-   110f0:	ff d0                	call   rax
-   110f2:	eb fe                	jmp    110f2 <kernel_main+0xe2>
-   110f4:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
-   110fb:	00 00 00 
-   110fe:	66 90                	xchg   ax,ax
+/tmp/k32_data.bin:     file format binary
 
-0000000000011100 <putchar>:
-   11100:	48 b8 00 20 01 00 00 	movabs rax,0x12000
-   11107:	00 00 00 
-   1110a:	41 89 f0             	mov    r8d,esi
-   1110d:	8b 30                	mov    esi,DWORD PTR [rax]
-   1110f:	40 80 ff 0a          	cmp    dil,0xa
-   11113:	74 3f                	je     11154 <putchar+0x54>
-   11115:	a1 04 20 01 00 00 00 	movabs eax,ds:0x12004
-   1111c:	00 00 
-   1111e:	8d 0c b6             	lea    ecx,[rsi+rsi*4]
-   11121:	c1 e2 04             	shl    edx,0x4
-   11124:	66 40 0f be ff       	movsx  di,dil
-   11129:	c1 e1 04             	shl    ecx,0x4
-   1112c:	44 09 c2             	or     edx,r8d
-   1112f:	01 c1                	add    ecx,eax
-   11131:	c1 e2 08             	shl    edx,0x8
-   11134:	83 c0 01             	add    eax,0x1
-   11137:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
-   1113e:	00 00 
-   11140:	48 63 c9             	movsxd rcx,ecx
-   11143:	09 fa                	or     edx,edi
-   11145:	48 01 c9             	add    rcx,rcx
-   11148:	66 89 91 00 80 0b 00 	mov    WORD PTR [rcx+0xb8000],dx
-   1114f:	83 f8 4f             	cmp    eax,0x4f
-   11152:	7e 1c                	jle    11170 <putchar+0x70>
-   11154:	48 b8 04 20 01 00 00 	movabs rax,0x12004
-   1115b:	00 00 00 
-   1115e:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
-   11164:	8d 46 01             	lea    eax,[rsi+0x1]
-   11167:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
-   1116e:	00 00 
-   11170:	31 c0                	xor    eax,eax
-   11172:	31 d2                	xor    edx,edx
-   11174:	31 c9                	xor    ecx,ecx
-   11176:	31 f6                	xor    esi,esi
-   11178:	31 ff                	xor    edi,edi
-   1117a:	45 31 c0             	xor    r8d,r8d
-   1117d:	c3                   	ret
-   1117e:	66 90                	xchg   ax,ax
 
-0000000000011180 <vga_clear>:
-   11180:	89 fa                	mov    edx,edi
-   11182:	b9 a0 80 0b 00       	mov    ecx,0xb80a0
-   11187:	c1 e2 0c             	shl    edx,0xc
-   1118a:	66 81 ca 20 0f       	or     dx,0xf20
-   1118f:	90                   	nop
-   11190:	48 8d 81 60 ff ff ff 	lea    rax,[rcx-0xa0]
-   11197:	66 0f 1f 84 00 00 00 	nop    WORD PTR [rax+rax*1+0x0]
-   1119e:	00 00 
-   111a0:	66 89 10             	mov    WORD PTR [rax],dx
-   111a3:	48 83 c0 04          	add    rax,0x4
-   111a7:	66 89 50 fe          	mov    WORD PTR [rax-0x2],dx
-   111ab:	48 39 c8             	cmp    rax,rcx
-   111ae:	75 f0                	jne    111a0 <vga_clear+0x20>
-   111b0:	48 8d 88 a0 00 00 00 	lea    rcx,[rax+0xa0]
-   111b7:	48 3d a0 8f 0b 00    	cmp    rax,0xb8fa0
-   111bd:	75 d1                	jne    11190 <vga_clear+0x10>
-   111bf:	48 b8 00 20 01 00 00 	movabs rax,0x12000
-   111c6:	00 00 00 
-   111c9:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
-   111cf:	48 b8 04 20 01 00 00 	movabs rax,0x12004
-   111d6:	00 00 00 
-   111d9:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
-   111df:	31 c0                	xor    eax,eax
-   111e1:	31 d2                	xor    edx,edx
-   111e3:	31 c9                	xor    ecx,ecx
-   111e5:	31 ff                	xor    edi,edi
-   111e7:	c3                   	ret
-   111e8:	0f 1f 84 00 00 00 00 	nop    DWORD PTR [rax+rax*1+0x0]
-   111ef:	00 
+Disassembly of section .data:
 
-00000000000111f0 <vga_print>:
-   111f0:	89 f1                	mov    ecx,esi
-   111f2:	66 0f be 37          	movsx  si,BYTE PTR [rdi]
-   111f6:	49 89 f9             	mov    r9,rdi
-   111f9:	40 84 f6             	test   sil,sil
-   111fc:	0f 84 89 00 00 00    	je     1128b <vga_print+0x9b>
-   11202:	c1 e2 04             	shl    edx,0x4
-   11205:	45 31 d2             	xor    r10d,r10d
-   11208:	45 31 c0             	xor    r8d,r8d
-   1120b:	48 b8 04 20 01 00 00 	movabs rax,0x12004
-   11212:	00 00 00 
-   11215:	09 ca                	or     edx,ecx
-   11217:	8b 38                	mov    edi,DWORD PTR [rax]
-   11219:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
-   11220:	00 00 
-   11222:	c1 e2 08             	shl    edx,0x8
-   11225:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
-   1122c:	00 00 00 00 
-   11230:	40 80 fe 0a          	cmp    sil,0xa
-   11234:	74 1f                	je     11255 <vga_print+0x65>
-   11236:	8d 0c 80             	lea    ecx,[rax+rax*4]
-   11239:	09 d6                	or     esi,edx
-   1123b:	c1 e1 04             	shl    ecx,0x4
-   1123e:	01 f9                	add    ecx,edi
-   11240:	83 c7 01             	add    edi,0x1
-   11243:	48 63 c9             	movsxd rcx,ecx
-   11246:	48 01 c9             	add    rcx,rcx
-   11249:	66 89 b1 00 80 0b 00 	mov    WORD PTR [rcx+0xb8000],si
-   11250:	83 ff 4f             	cmp    edi,0x4f
-   11253:	7e 0b                	jle    11260 <vga_print+0x70>
-   11255:	83 c0 01             	add    eax,0x1
-   11258:	41 ba 01 00 00 00    	mov    r10d,0x1
-   1125e:	31 ff                	xor    edi,edi
-   11260:	41 83 c0 01          	add    r8d,0x1
-   11264:	49 63 c8             	movsxd rcx,r8d
-   11267:	66 41 0f be 34 09    	movsx  si,BYTE PTR [r9+rcx*1]
-   1126d:	40 84 f6             	test   sil,sil
-   11270:	75 be                	jne    11230 <vga_print+0x40>
-   11272:	45 84 d2             	test   r10b,r10b
-   11275:	74 09                	je     11280 <vga_print+0x90>
-   11277:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
-   1127e:	00 00 
-   11280:	89 f8                	mov    eax,edi
-   11282:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
-   11289:	00 00 
-   1128b:	31 c0                	xor    eax,eax
-   1128d:	31 d2                	xor    edx,edx
-   1128f:	31 c9                	xor    ecx,ecx
-   11291:	31 f6                	xor    esi,esi
-   11293:	31 ff                	xor    edi,edi
-   11295:	45 31 c0             	xor    r8d,r8d
-   11298:	45 31 c9             	xor    r9d,r9d
-   1129b:	45 31 d2             	xor    r10d,r10d
-   1129e:	c3                   	ret
-   1129f:	90                   	nop
+0000028d <.data>:
+	...
+ 295:	ff                   	(bad)
+ 296:	ff 00                	incl   (%eax)
+ 298:	00 00                	add    %al,(%eax)
+ 29a:	9a cf 00 ff ff 00 00 	lcall  $0x0,$0xffff00cf
+ 2a1:	00 92 cf 00 17 00    	add    %dl,0x1700cf(%edx)
+ 2a7:	8d 00                	lea    (%eax),%eax
+ 2a9:	01 00                	add    %eax,(%eax)
+	...
+ 2b7:	00 9a a0 00 00 00    	add    %bl,0xa0(%edx)
+ 2bd:	00 00                	add    %al,(%eax)
+ 2bf:	00 92 00 00 00 00    	add    %dl,0x0(%edx)
+ 2c5:	00 00                	add    %al,(%eax)
+ 2c7:	00 f2                	add    %dh,%dl
+ 2c9:	00 00                	add    %al,(%eax)
+ 2cb:	00 00                	add    %al,(%eax)
+ 2cd:	00 00                	add    %al,(%eax)
+ 2cf:	00 fa                	add    %bh,%dl
+ 2d1:	a0 00 68 00 00       	mov    0x6800,%al
+ 2d6:	00 00                	add    %al,(%eax)
+ 2d8:	89 00                	mov    %eax,(%eax)
+	...
+ 2e2:	00 37                	add    %dh,(%edi)
+ 2e4:	00 ab 00 01 00 00    	add    %ch,0x100(%ebx)
+ 2ea:	00 00                	add    %al,(%eax)
+	...
+[2d] kernel32.bin  disk 0x2ED  (loads @0x100ED) 64-bit (long_mode)
 
-00000000000112a0 <vga_println>:
-   112a0:	55                   	push   rbp
-   112a1:	41 89 f2             	mov    r10d,esi
-   112a4:	41 89 d3             	mov    r11d,edx
-   112a7:	48 89 e5             	mov    rbp,rsp
-   112aa:	53                   	push   rbx
-   112ab:	66 0f be 0f          	movsx  cx,BYTE PTR [rdi]
-   112af:	84 c9                	test   cl,cl
-   112b1:	0f 84 90 00 00 00    	je     11347 <vga_println+0xa7>
-   112b7:	41 89 d0             	mov    r8d,edx
-   112ba:	49 89 f9             	mov    r9,rdi
-   112bd:	31 db                	xor    ebx,ebx
-   112bf:	31 ff                	xor    edi,edi
-   112c1:	48 b8 04 20 01 00 00 	movabs rax,0x12004
-   112c8:	00 00 00 
-   112cb:	41 c1 e0 04          	shl    r8d,0x4
-   112cf:	8b 30                	mov    esi,DWORD PTR [rax]
-   112d1:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
-   112d8:	00 00 
-   112da:	45 09 d0             	or     r8d,r10d
-   112dd:	41 c1 e0 08          	shl    r8d,0x8
-   112e1:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
-   112e5:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
-   112ec:	00 00 00 00 
-   112f0:	80 f9 0a             	cmp    cl,0xa
-   112f3:	74 20                	je     11315 <vga_println+0x75>
-   112f5:	8d 14 80             	lea    edx,[rax+rax*4]
-   112f8:	44 09 c1             	or     ecx,r8d
-   112fb:	c1 e2 04             	shl    edx,0x4
-   112fe:	01 f2                	add    edx,esi
-   11300:	83 c6 01             	add    esi,0x1
-   11303:	48 63 d2             	movsxd rdx,edx
-   11306:	48 01 d2             	add    rdx,rdx
-   11309:	66 89 8a 00 80 0b 00 	mov    WORD PTR [rdx+0xb8000],cx
-   11310:	83 fe 4f             	cmp    esi,0x4f
-   11313:	7e 0a                	jle    1131f <vga_println+0x7f>
-   11315:	83 c0 01             	add    eax,0x1
-   11318:	bb 01 00 00 00       	mov    ebx,0x1
-   1131d:	31 f6                	xor    esi,esi
-   1131f:	83 c7 01             	add    edi,0x1
-   11322:	48 63 d7             	movsxd rdx,edi
-   11325:	66 41 0f be 0c 11    	movsx  cx,BYTE PTR [r9+rdx*1]
-   1132b:	84 c9                	test   cl,cl
-   1132d:	75 c1                	jne    112f0 <vga_println+0x50>
-   1132f:	84 db                	test   bl,bl
-   11331:	74 09                	je     1133c <vga_println+0x9c>
-   11333:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
-   1133a:	00 00 
-   1133c:	89 f0                	mov    eax,esi
-   1133e:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
-   11345:	00 00 
-   11347:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
-   1134b:	44 89 da             	mov    edx,r11d
-   1134e:	44 89 d6             	mov    esi,r10d
-   11351:	bf 0a 00 00 00       	mov    edi,0xa
-   11356:	c9                   	leave
-   11357:	48 b8 00 11 01 00 00 	movabs rax,0x11100
-   1135e:	00 00 00 
-   11361:	ff e0                	jmp    rax
-   11363:	66 90                	xchg   ax,ax
-   11365:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
-   1136c:	00 00 00 00 
+/tmp/k32_64.bin:     file format binary
 
-0000000000011370 <vga_print_int>:
-   11370:	55                   	push   rbp
-   11371:	41 89 f9             	mov    r9d,edi
-   11374:	41 89 f2             	mov    r10d,esi
-   11377:	48 89 e5             	mov    rbp,rsp
-   1137a:	53                   	push   rbx
-   1137b:	48 83 ec 38          	sub    rsp,0x38
-   1137f:	85 ff                	test   edi,edi
-   11381:	0f 88 21 01 00 00    	js     114a8 <vga_print_int+0x138>
-   11387:	0f 84 43 01 00 00    	je     114d0 <vga_print_int+0x160>
-   1138d:	4c 8d 5d d0          	lea    r11,[rbp-0x30]
-   11391:	31 ff                	xor    edi,edi
-   11393:	bb cd cc cc cc       	mov    ebx,0xcccccccd
-   11398:	0f 1f 80 00 00 00 00 	nop    DWORD PTR [rax+0x0]
-   1139f:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
-   113a6:	00 00 00 00 
-   113aa:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
-   113b1:	00 00 00 00 
-   113b5:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
-   113bc:	00 00 00 00 
-   113c0:	44 89 c8             	mov    eax,r9d
-   113c3:	44 89 c9             	mov    ecx,r9d
-   113c6:	41 89 f8             	mov    r8d,edi
-   113c9:	49 83 c3 01          	add    r11,0x1
-   113cd:	48 0f af c3          	imul   rax,rbx
-   113d1:	83 c7 01             	add    edi,0x1
-   113d4:	48 c1 e8 23          	shr    rax,0x23
-   113d8:	8d 34 80             	lea    esi,[rax+rax*4]
-   113db:	01 f6                	add    esi,esi
-   113dd:	29 f1                	sub    ecx,esi
-   113df:	83 c1 30             	add    ecx,0x30
-   113e2:	41 88 4b ff          	mov    BYTE PTR [r11-0x1],cl
-   113e6:	44 89 c9             	mov    ecx,r9d
-   113e9:	41 89 c1             	mov    r9d,eax
-   113ec:	83 f9 09             	cmp    ecx,0x9
-   113ef:	7f cf                	jg     113c0 <vga_print_int+0x50>
-   113f1:	c1 e2 04             	shl    edx,0x4
-   113f4:	49 63 c8             	movsxd rcx,r8d
-   113f7:	4c 8d 45 cf          	lea    r8,[rbp-0x31]
-   113fb:	45 31 c9             	xor    r9d,r9d
-   113fe:	44 09 d2             	or     edx,r10d
-   11401:	48 8d 74 0d d0       	lea    rsi,[rbp+rcx*1-0x30]
-   11406:	48 b8 04 20 01 00 00 	movabs rax,0x12004
-   1140d:	00 00 00 
-   11410:	8b 38                	mov    edi,DWORD PTR [rax]
-   11412:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
-   11419:	00 00 
-   1141b:	c1 e2 08             	shl    edx,0x8
-   1141e:	41 89 d2             	mov    r10d,edx
-   11421:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
-   11425:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
-   1142c:	00 00 00 00 
-   11430:	66 0f be 0e          	movsx  cx,BYTE PTR [rsi]
-   11434:	80 f9 0a             	cmp    cl,0xa
-   11437:	74 20                	je     11459 <vga_print_int+0xe9>
-   11439:	8d 14 80             	lea    edx,[rax+rax*4]
-   1143c:	44 09 d1             	or     ecx,r10d
-   1143f:	c1 e2 04             	shl    edx,0x4
-   11442:	01 fa                	add    edx,edi
-   11444:	83 c7 01             	add    edi,0x1
-   11447:	48 63 d2             	movsxd rdx,edx
-   1144a:	48 01 d2             	add    rdx,rdx
-   1144d:	66 89 8a 00 80 0b 00 	mov    WORD PTR [rdx+0xb8000],cx
-   11454:	83 ff 4f             	cmp    edi,0x4f
-   11457:	7e 0b                	jle    11464 <vga_print_int+0xf4>
-   11459:	83 c0 01             	add    eax,0x1
-   1145c:	41 b9 01 00 00 00    	mov    r9d,0x1
-   11462:	31 ff                	xor    edi,edi
-   11464:	48 83 ee 01          	sub    rsi,0x1
-   11468:	49 39 f0             	cmp    r8,rsi
-   1146b:	75 c3                	jne    11430 <vga_print_int+0xc0>
-   1146d:	45 84 c9             	test   r9b,r9b
-   11470:	74 09                	je     1147b <vga_print_int+0x10b>
-   11472:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
-   11479:	00 00 
-   1147b:	89 f8                	mov    eax,edi
-   1147d:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
-   11484:	00 00 
-   11486:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
-   1148a:	c9                   	leave
-   1148b:	31 c0                	xor    eax,eax
-   1148d:	31 d2                	xor    edx,edx
-   1148f:	31 c9                	xor    ecx,ecx
-   11491:	31 f6                	xor    esi,esi
-   11493:	31 ff                	xor    edi,edi
-   11495:	45 31 c0             	xor    r8d,r8d
-   11498:	45 31 c9             	xor    r9d,r9d
-   1149b:	45 31 d2             	xor    r10d,r10d
-   1149e:	45 31 db             	xor    r11d,r11d
-   114a1:	c3                   	ret
-   114a2:	66 0f 1f 44 00 00    	nop    WORD PTR [rax+rax*1+0x0]
-   114a8:	41 f7 d9             	neg    r9d
-   114ab:	89 55 cc             	mov    DWORD PTR [rbp-0x34],edx
-   114ae:	bf 2d 00 00 00       	mov    edi,0x2d
-   114b3:	48 b8 00 11 01 00 00 	movabs rax,0x11100
-   114ba:	00 00 00 
-   114bd:	ff d0                	call   rax
-   114bf:	45 85 c9             	test   r9d,r9d
-   114c2:	8b 55 cc             	mov    edx,DWORD PTR [rbp-0x34]
-   114c5:	0f 8f c2 fe ff ff    	jg     1138d <vga_print_int+0x1d>
-   114cb:	eb b9                	jmp    11486 <vga_print_int+0x116>
-   114cd:	0f 1f 00             	nop    DWORD PTR [rax]
-   114d0:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
-   114d4:	bf 30 00 00 00       	mov    edi,0x30
-   114d9:	48 b8 00 11 01 00 00 	movabs rax,0x11100
-   114e0:	00 00 00 
-   114e3:	c9                   	leave
-   114e4:	ff e0                	jmp    rax
-   114e6:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
-   114ed:	00 00 00 
 
-00000000000114f0 <tss_init>:
-   114f0:	48 b8 10 20 01 00 00 	movabs rax,0x12010
-   114f7:	00 00 00 
-   114fa:	55                   	push   rbp
-   114fb:	ba 68 00 00 00       	mov    edx,0x68
-   11500:	48 89 e5             	mov    rbp,rsp
-   11503:	48 83 ec 10          	sub    rsp,0x10
-   11507:	48 89 78 04          	mov    QWORD PTR [rax+0x4],rdi
-   1150b:	66 89 50 66          	mov    WORD PTR [rax+0x66],dx
-   1150f:	0f 01 45 f6          	sgdt   [rbp-0xa]
-   11513:	48 8b 75 f8          	mov    rsi,QWORD PTR [rbp-0x8]
-   11517:	48 89 c1             	mov    rcx,rax
-   1151a:	48 c1 e9 10          	shr    rcx,0x10
-   1151e:	88 4e 2c             	mov    BYTE PTR [rsi+0x2c],cl
-   11521:	48 89 c1             	mov    rcx,rax
-   11524:	66 89 46 2a          	mov    WORD PTR [rsi+0x2a],ax
-   11528:	48 c1 e9 18          	shr    rcx,0x18
-   1152c:	48 c1 e8 20          	shr    rax,0x20
-   11530:	89 46 30             	mov    DWORD PTR [rsi+0x30],eax
-   11533:	b8 28 00 00 00       	mov    eax,0x28
-   11538:	88 4e 2f             	mov    BYTE PTR [rsi+0x2f],cl
-   1153b:	0f 00 d8             	ltr    eax
-   1153e:	c9                   	leave
-   1153f:	31 c0                	xor    eax,eax
-   11541:	31 d2                	xor    edx,edx
-   11543:	31 c9                	xor    ecx,ecx
-   11545:	31 f6                	xor    esi,esi
-   11547:	31 ff                	xor    edi,edi
-   11549:	c3                   	ret
-   1154a:	66 0f 1f 44 00 00    	nop    WORD PTR [rax+rax*1+0x0]
+Disassembly of section .data:
 
-0000000000011550 <syscall_entry>:
-   11550:	0f 01 f8             	swapgs
-   11553:	51                   	push   rcx
-   11554:	41 53                	push   r11
-   11556:	48 89 fe             	mov    rsi,rdi
-   11559:	48 89 c7             	mov    rdi,rax
-   1155c:	e8 4f 00 00 00       	call   115b0 <syscall_handler>
-   11561:	41 5b                	pop    r11
-   11563:	59                   	pop    rcx
-   11564:	0f 01 f8             	swapgs
-   11567:	48 0f 07             	sysretq
-   1156a:	0f 0b                	ud2
-   1156c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+00000000000002ed <.data>:
+ 2ed:	66 b8 10 00          	mov    ax,0x10
+ 2f1:	8e d8                	mov    ds,eax
+ 2f3:	8e c0                	mov    es,eax
+ 2f5:	8e d0                	mov    ss,eax
+ 2f7:	bc 00 00 09 00       	mov    esp,0x90000
+ 2fc:	b8 00 10 01 00       	mov    eax,0x11000
+ 301:	ff e0                	jmp    rax
+[3] kernel.bin     disk 0x1200 (loads @0x11000) 64-bit (code + .rodata)
 
-0000000000011570 <syscall_init>:
-   11570:	48 b8 00 00 00 00 08 	movabs rax,0x10000800000000
-   11577:	00 10 00 
-   1157a:	b9 81 00 00 c0       	mov    ecx,0xc0000081
-   1157f:	0f 30                	wrmsr
-   11581:	48 b8 50 15 01 00 00 	movabs rax,0x11550
-   11588:	00 00 00 
-   1158b:	48 83 c1 01          	add    rcx,0x1
-   1158f:	0f 30                	wrmsr
-   11591:	b8 00 02 00 00       	mov    eax,0x200
-   11596:	48 83 c1 02          	add    rcx,0x2
-   1159a:	0f 30                	wrmsr
-   1159c:	48 83 e9 04          	sub    rcx,0x4
-   115a0:	0f 32                	rdmsr
-   115a2:	83 c8 01             	or     eax,0x1
-   115a5:	0f 30                	wrmsr
-   115a7:	31 c0                	xor    eax,eax
-   115a9:	31 d2                	xor    edx,edx
-   115ab:	31 c9                	xor    ecx,ecx
-   115ad:	c3                   	ret
-   115ae:	66 90                	xchg   ax,ax
+../../build/os/kernel.bin:     file format binary
 
-00000000000115b0 <syscall_handler>:
-   115b0:	48 85 ff             	test   rdi,rdi
-   115b3:	74 5b                	je     11610 <syscall_handler+0x60>
-   115b5:	48 83 ff 01          	cmp    rdi,0x1
-   115b9:	74 25                	je     115e0 <syscall_handler+0x30>
-   115bb:	31 d2                	xor    edx,edx
-   115bd:	be 0c 00 00 00       	mov    esi,0xc
-   115c2:	48 bf a9 17 01 00 00 	movabs rdi,0x117a9
-   115c9:	00 00 00 
-   115cc:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
-   115d3:	00 00 00 
-   115d6:	ff e0                	jmp    rax
-   115d8:	0f 1f 84 00 00 00 00 	nop    DWORD PTR [rax+rax*1+0x0]
-   115df:	00 
-   115e0:	55                   	push   rbp
-   115e1:	31 d2                	xor    edx,edx
-   115e3:	be 0e 00 00 00       	mov    esi,0xe
-   115e8:	48 bf 94 17 01 00 00 	movabs rdi,0x11794
-   115ef:	00 00 00 
-   115f2:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
-   115f9:	00 00 00 
-   115fc:	48 89 e5             	mov    rbp,rsp
-   115ff:	ff d0                	call   rax
-   11601:	f4                   	hlt
-   11602:	5d                   	pop    rbp
-   11603:	31 c0                	xor    eax,eax
-   11605:	31 d2                	xor    edx,edx
-   11607:	31 f6                	xor    esi,esi
-   11609:	31 ff                	xor    edi,edi
-   1160b:	c3                   	ret
-   1160c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
-   11610:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
-   11617:	00 00 00 
-   1161a:	48 89 f7             	mov    rdi,rsi
-   1161d:	31 d2                	xor    edx,edx
-   1161f:	be 0a 00 00 00       	mov    esi,0xa
-   11624:	ff e0                	jmp    rax
-   11626:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
-   1162d:	00 00 00 
 
-0000000000011630 <jump_to_userspace>:
-   11630:	48 b9 60 16 01 00 00 	movabs rcx,0x11660
-   11637:	00 00 00 
-   1163a:	ba 00 00 07 00       	mov    edx,0x70000
-   1163f:	66 b8 1b 00          	mov    ax,0x1b
-   11643:	8e d8                	mov    ds,eax
-   11645:	8e c0                	mov    es,eax
-   11647:	8e e0                	mov    fs,eax
-   11649:	8e e8                	mov    gs,eax
-   1164b:	6a 1b                	push   0x1b
-   1164d:	52                   	push   rdx
-   1164e:	68 02 02 00 00       	push   0x202
-   11653:	6a 23                	push   0x23
-   11655:	51                   	push   rcx
-   11656:	48 cf                	iretq
-   11658:	31 c0                	xor    eax,eax
-   1165a:	31 d2                	xor    edx,edx
-   1165c:	31 c9                	xor    ecx,ecx
-   1165e:	c3                   	ret
-   1165f:	90                   	nop
+Disassembly of section .data:
 
-0000000000011660 <user_program>:
-   11660:	48 ba ba 17 01 00 00 	movabs rdx,0x117ba
-   11667:	00 00 00 
-   1166a:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-   11671:	48 89 d7             	mov    rdi,rdx
-   11674:	0f 05                	syscall
-   11676:	48 ba 00 17 01 00 00 	movabs rdx,0x11700
-   1167d:	00 00 00 
-   11680:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-   11687:	48 89 d7             	mov    rdi,rdx
-   1168a:	0f 05                	syscall
-   1168c:	48 ba 28 17 01 00 00 	movabs rdx,0x11728
-   11693:	00 00 00 
-   11696:	48 c7 c0 00 00 00 00 	mov    rax,0x0
-   1169d:	48 89 d7             	mov    rdi,rdx
-   116a0:	0f 05                	syscall
-   116a2:	48 c7 c0 01 00 00 00 	mov    rax,0x1
-   116a9:	0f 05                	syscall
-   116ab:	31 c0                	xor    eax,eax
-   116ad:	31 d2                	xor    edx,edx
-   116af:	31 c9                	xor    ecx,ecx
-   116b1:	31 ff                	xor    edi,edi
-   116b3:	45 31 db             	xor    r11d,r11d
-   116b6:	c3                   	ret
-
-============================================================================
-[4] kernel.elf  --  .rodata string literals  (DATA, not code)  @ 0x116B8
-    The text printed by vga_println / syscalls. It is laid out right after
-    .text (.text ends at 0x116B7; 8-byte aligned -> strings begin 0x116B8).
-    The code never stores characters inline -- every call site loads a
-    POINTER to a byte sequence that lives here:
-        kernel_main:   movabs rdi,0x116B8   ; -> call vga_println
-        user_program:  movabs rdx,0x117BA   ; -> syscall
-    GCC merges duplicate literals into .rodata.str1.8 / .rodata.str1.1.
-============================================================================
-Contents of section .rodata.str1.8:
- 116b8 4b65726e 656c2062 6f6f7465 6420696e  Kernel booted in
- 116c8 2036342d 62697420 6c6f6e67 206d6f64   64-bit long mod
- 116d8 652e0000 00000000 52696e67 203020e2  e.......Ring 0 .
- 116e8 8094206b 65726e65 6c207370 61636520  .. kernel space 
- 116f8 61637469 76652e00 49206361 6e6e6f74  active..I cannot
- 11708 20746f75 63682068 61726477 61726520   touch hardware 
- 11718 64697265 63746c79 2e000000 00000000  directly........
- 11728 49207461 6c6b2074 6f207468 65206b65  I talk to the ke
- 11738 726e656c 20766961 20737973 63616c6c  rnel via syscall
- 11748 2e00                                 ..              
-Contents of section .rodata.str1.1:
- 1174a 5b4f4b5d 20545353 20696e69 7469616c  [OK] TSS initial
- 1175a 697a6564 2e005b4f 4b5d2053 79736361  ized..[OK] Sysca
- 1176a 6c6c2068 616e646c 65722072 65616479  ll handler ready
- 1177a 2e004a75 6d70696e 6720746f 20757365  ..Jumping to use
- 1178a 72737061 63652e2e 2e005573 65722070  rspace....User p
- 1179a 726f6772 616d2065 78697465 642e0055  rogram exited..U
- 117aa 6e6b6e6f 776e2073 79736361 6c6c2100  nknown syscall!.
- 117ba 48656c6c 6f206672 6f6d2072 696e6720  Hello from ring 
- 117ca 33207573 65727370 61636521 00        3 userspace!.   
-
-  >>> address -> string map (rdi/rdx value at each call site):
-  >>>   0x116B8  "Kernel booted in 64-bit long mode."   (kernel_main, YELLOW)
-  >>>   0x116E0  "Ring 0 — kernel space active."        (kernel_main, GREEN)
-  >>>   0x11700  "I cannot touch hardware directly."    (user_program syscall)
-  >>>   0x11728  "I talk to the kernel via syscall."     (user_program syscall)
-  >>>   0x1174A  "[OK] TSS initialized."                 (kernel_main, GREY)
-  >>>   0x11760  "[OK] Syscall handler ready."           (kernel_main, GREY)
-  >>>   0x1177C  "Jumping to userspace..."               (kernel_main, CYAN)
-  >>>   0x11794  "User program exited."                  (syscall_handler)
-  >>>   0x117AA  "Unknown syscall!"                      (syscall_handler)
-  >>>   0x117BA  "Hello from ring 3 userspace!"          (user_program syscall)
-  >>>   0x117D6  ""  (empty string: reuses the final NUL of the 0x117BA string)
+0000000000001200 <.data>:
+    1200:	48 83 e4 f0          	and    rsp,0xfffffffffffffff0
+    1204:	e8 07 00 00 00       	call   0x1210
+    1209:	f4                   	hlt
+    120a:	eb fd                	jmp    0x1209
+    120c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+    1210:	48 b8 80 11 01 00 00 	movabs rax,0x11180
+    1217:	00 00 00 
+    121a:	55                   	push   rbp
+    121b:	31 ff                	xor    edi,edi
+    121d:	48 89 e5             	mov    rbp,rsp
+    1220:	53                   	push   rbx
+    1221:	48 bb a0 12 01 00 00 	movabs rbx,0x112a0
+    1228:	00 00 00 
+    122b:	48 83 ec 08          	sub    rsp,0x8
+    122f:	ff d0                	call   rax
+    1231:	31 d2                	xor    edx,edx
+    1233:	be 0e 00 00 00       	mov    esi,0xe
+    1238:	48 bf b8 16 01 00 00 	movabs rdi,0x116b8
+    123f:	00 00 00 
+    1242:	ff d3                	call   rbx
+    1244:	31 d2                	xor    edx,edx
+    1246:	be 0a 00 00 00       	mov    esi,0xa
+    124b:	48 bf e0 16 01 00 00 	movabs rdi,0x116e0
+    1252:	00 00 00 
+    1255:	ff d3                	call   rbx
+    1257:	31 d2                	xor    edx,edx
+    1259:	be 0f 00 00 00       	mov    esi,0xf
+    125e:	48 bf 4a 17 01 00 00 	movabs rdi,0x1174a
+    1265:	00 00 00 
+    1268:	ff d3                	call   rbx
+    126a:	bf 00 00 09 00       	mov    edi,0x90000
+    126f:	48 b8 f0 14 01 00 00 	movabs rax,0x114f0
+    1276:	00 00 00 
+    1279:	ff d0                	call   rax
+    127b:	31 d2                	xor    edx,edx
+    127d:	be 07 00 00 00       	mov    esi,0x7
+    1282:	48 bf 4b 17 01 00 00 	movabs rdi,0x1174b
+    1289:	00 00 00 
+    128c:	ff d3                	call   rbx
+    128e:	48 b8 70 15 01 00 00 	movabs rax,0x11570
+    1295:	00 00 00 
+    1298:	ff d0                	call   rax
+    129a:	31 d2                	xor    edx,edx
+    129c:	be 07 00 00 00       	mov    esi,0x7
+    12a1:	48 bf 61 17 01 00 00 	movabs rdi,0x11761
+    12a8:	00 00 00 
+    12ab:	ff d3                	call   rbx
+    12ad:	31 d2                	xor    edx,edx
+    12af:	be 0f 00 00 00       	mov    esi,0xf
+    12b4:	48 bf 4a 17 01 00 00 	movabs rdi,0x1174a
+    12bb:	00 00 00 
+    12be:	ff d3                	call   rbx
+    12c0:	31 d2                	xor    edx,edx
+    12c2:	be 03 00 00 00       	mov    esi,0x3
+    12c7:	48 bf 7d 17 01 00 00 	movabs rdi,0x1177d
+    12ce:	00 00 00 
+    12d1:	ff d3                	call   rbx
+    12d3:	31 d2                	xor    edx,edx
+    12d5:	be 0f 00 00 00       	mov    esi,0xf
+    12da:	48 bf 4a 17 01 00 00 	movabs rdi,0x1174a
+    12e1:	00 00 00 
+    12e4:	ff d3                	call   rbx
+    12e6:	48 b8 30 16 01 00 00 	movabs rax,0x11630
+    12ed:	00 00 00 
+    12f0:	ff d0                	call   rax
+    12f2:	eb fe                	jmp    0x12f2
+    12f4:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
+    12fb:	00 00 00 
+    12fe:	66 90                	xchg   ax,ax
+    1300:	48 b8 00 20 01 00 00 	movabs rax,0x12000
+    1307:	00 00 00 
+    130a:	41 89 f0             	mov    r8d,esi
+    130d:	8b 30                	mov    esi,DWORD PTR [rax]
+    130f:	40 80 ff 0a          	cmp    dil,0xa
+    1313:	74 3f                	je     0x1354
+    1315:	a1 04 20 01 00 00 00 	movabs eax,ds:0x12004
+    131c:	00 00 
+    131e:	8d 0c b6             	lea    ecx,[rsi+rsi*4]
+    1321:	c1 e2 04             	shl    edx,0x4
+    1324:	66 40 0f be ff       	movsx  di,dil
+    1329:	c1 e1 04             	shl    ecx,0x4
+    132c:	44 09 c2             	or     edx,r8d
+    132f:	01 c1                	add    ecx,eax
+    1331:	c1 e2 08             	shl    edx,0x8
+    1334:	83 c0 01             	add    eax,0x1
+    1337:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+    133e:	00 00 
+    1340:	48 63 c9             	movsxd rcx,ecx
+    1343:	09 fa                	or     edx,edi
+    1345:	48 01 c9             	add    rcx,rcx
+    1348:	66 89 91 00 80 0b 00 	mov    WORD PTR [rcx+0xb8000],dx
+    134f:	83 f8 4f             	cmp    eax,0x4f
+    1352:	7e 1c                	jle    0x1370
+    1354:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+    135b:	00 00 00 
+    135e:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
+    1364:	8d 46 01             	lea    eax,[rsi+0x1]
+    1367:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+    136e:	00 00 
+    1370:	31 c0                	xor    eax,eax
+    1372:	31 d2                	xor    edx,edx
+    1374:	31 c9                	xor    ecx,ecx
+    1376:	31 f6                	xor    esi,esi
+    1378:	31 ff                	xor    edi,edi
+    137a:	45 31 c0             	xor    r8d,r8d
+    137d:	c3                   	ret
+    137e:	66 90                	xchg   ax,ax
+    1380:	89 fa                	mov    edx,edi
+    1382:	b9 a0 80 0b 00       	mov    ecx,0xb80a0
+    1387:	c1 e2 0c             	shl    edx,0xc
+    138a:	66 81 ca 20 0f       	or     dx,0xf20
+    138f:	90                   	nop
+    1390:	48 8d 81 60 ff ff ff 	lea    rax,[rcx-0xa0]
+    1397:	66 0f 1f 84 00 00 00 	nop    WORD PTR [rax+rax*1+0x0]
+    139e:	00 00 
+    13a0:	66 89 10             	mov    WORD PTR [rax],dx
+    13a3:	48 83 c0 04          	add    rax,0x4
+    13a7:	66 89 50 fe          	mov    WORD PTR [rax-0x2],dx
+    13ab:	48 39 c8             	cmp    rax,rcx
+    13ae:	75 f0                	jne    0x13a0
+    13b0:	48 8d 88 a0 00 00 00 	lea    rcx,[rax+0xa0]
+    13b7:	48 3d a0 8f 0b 00    	cmp    rax,0xb8fa0
+    13bd:	75 d1                	jne    0x1390
+    13bf:	48 b8 00 20 01 00 00 	movabs rax,0x12000
+    13c6:	00 00 00 
+    13c9:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
+    13cf:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+    13d6:	00 00 00 
+    13d9:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
+    13df:	31 c0                	xor    eax,eax
+    13e1:	31 d2                	xor    edx,edx
+    13e3:	31 c9                	xor    ecx,ecx
+    13e5:	31 ff                	xor    edi,edi
+    13e7:	c3                   	ret
+    13e8:	0f 1f 84 00 00 00 00 	nop    DWORD PTR [rax+rax*1+0x0]
+    13ef:	00 
+    13f0:	89 f1                	mov    ecx,esi
+    13f2:	66 0f be 37          	movsx  si,BYTE PTR [rdi]
+    13f6:	49 89 f9             	mov    r9,rdi
+    13f9:	40 84 f6             	test   sil,sil
+    13fc:	0f 84 89 00 00 00    	je     0x148b
+    1402:	c1 e2 04             	shl    edx,0x4
+    1405:	45 31 d2             	xor    r10d,r10d
+    1408:	45 31 c0             	xor    r8d,r8d
+    140b:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+    1412:	00 00 00 
+    1415:	09 ca                	or     edx,ecx
+    1417:	8b 38                	mov    edi,DWORD PTR [rax]
+    1419:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
+    1420:	00 00 
+    1422:	c1 e2 08             	shl    edx,0x8
+    1425:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+    142c:	00 00 00 00 
+    1430:	40 80 fe 0a          	cmp    sil,0xa
+    1434:	74 1f                	je     0x1455
+    1436:	8d 0c 80             	lea    ecx,[rax+rax*4]
+    1439:	09 d6                	or     esi,edx
+    143b:	c1 e1 04             	shl    ecx,0x4
+    143e:	01 f9                	add    ecx,edi
+    1440:	83 c7 01             	add    edi,0x1
+    1443:	48 63 c9             	movsxd rcx,ecx
+    1446:	48 01 c9             	add    rcx,rcx
+    1449:	66 89 b1 00 80 0b 00 	mov    WORD PTR [rcx+0xb8000],si
+    1450:	83 ff 4f             	cmp    edi,0x4f
+    1453:	7e 0b                	jle    0x1460
+    1455:	83 c0 01             	add    eax,0x1
+    1458:	41 ba 01 00 00 00    	mov    r10d,0x1
+    145e:	31 ff                	xor    edi,edi
+    1460:	41 83 c0 01          	add    r8d,0x1
+    1464:	49 63 c8             	movsxd rcx,r8d
+    1467:	66 41 0f be 34 09    	movsx  si,BYTE PTR [r9+rcx*1]
+    146d:	40 84 f6             	test   sil,sil
+    1470:	75 be                	jne    0x1430
+    1472:	45 84 d2             	test   r10b,r10b
+    1475:	74 09                	je     0x1480
+    1477:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+    147e:	00 00 
+    1480:	89 f8                	mov    eax,edi
+    1482:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+    1489:	00 00 
+    148b:	31 c0                	xor    eax,eax
+    148d:	31 d2                	xor    edx,edx
+    148f:	31 c9                	xor    ecx,ecx
+    1491:	31 f6                	xor    esi,esi
+    1493:	31 ff                	xor    edi,edi
+    1495:	45 31 c0             	xor    r8d,r8d
+    1498:	45 31 c9             	xor    r9d,r9d
+    149b:	45 31 d2             	xor    r10d,r10d
+    149e:	c3                   	ret
+    149f:	90                   	nop
+    14a0:	55                   	push   rbp
+    14a1:	41 89 f2             	mov    r10d,esi
+    14a4:	41 89 d3             	mov    r11d,edx
+    14a7:	48 89 e5             	mov    rbp,rsp
+    14aa:	53                   	push   rbx
+    14ab:	66 0f be 0f          	movsx  cx,BYTE PTR [rdi]
+    14af:	84 c9                	test   cl,cl
+    14b1:	0f 84 90 00 00 00    	je     0x1547
+    14b7:	41 89 d0             	mov    r8d,edx
+    14ba:	49 89 f9             	mov    r9,rdi
+    14bd:	31 db                	xor    ebx,ebx
+    14bf:	31 ff                	xor    edi,edi
+    14c1:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+    14c8:	00 00 00 
+    14cb:	41 c1 e0 04          	shl    r8d,0x4
+    14cf:	8b 30                	mov    esi,DWORD PTR [rax]
+    14d1:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
+    14d8:	00 00 
+    14da:	45 09 d0             	or     r8d,r10d
+    14dd:	41 c1 e0 08          	shl    r8d,0x8
+    14e1:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+    14e5:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+    14ec:	00 00 00 00 
+    14f0:	80 f9 0a             	cmp    cl,0xa
+    14f3:	74 20                	je     0x1515
+    14f5:	8d 14 80             	lea    edx,[rax+rax*4]
+    14f8:	44 09 c1             	or     ecx,r8d
+    14fb:	c1 e2 04             	shl    edx,0x4
+    14fe:	01 f2                	add    edx,esi
+    1500:	83 c6 01             	add    esi,0x1
+    1503:	48 63 d2             	movsxd rdx,edx
+    1506:	48 01 d2             	add    rdx,rdx
+    1509:	66 89 8a 00 80 0b 00 	mov    WORD PTR [rdx+0xb8000],cx
+    1510:	83 fe 4f             	cmp    esi,0x4f
+    1513:	7e 0a                	jle    0x151f
+    1515:	83 c0 01             	add    eax,0x1
+    1518:	bb 01 00 00 00       	mov    ebx,0x1
+    151d:	31 f6                	xor    esi,esi
+    151f:	83 c7 01             	add    edi,0x1
+    1522:	48 63 d7             	movsxd rdx,edi
+    1525:	66 41 0f be 0c 11    	movsx  cx,BYTE PTR [r9+rdx*1]
+    152b:	84 c9                	test   cl,cl
+    152d:	75 c1                	jne    0x14f0
+    152f:	84 db                	test   bl,bl
+    1531:	74 09                	je     0x153c
+    1533:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+    153a:	00 00 
+    153c:	89 f0                	mov    eax,esi
+    153e:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+    1545:	00 00 
+    1547:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
+    154b:	44 89 da             	mov    edx,r11d
+    154e:	44 89 d6             	mov    esi,r10d
+    1551:	bf 0a 00 00 00       	mov    edi,0xa
+    1556:	c9                   	leave
+    1557:	48 b8 00 11 01 00 00 	movabs rax,0x11100
+    155e:	00 00 00 
+    1561:	ff e0                	jmp    rax
+    1563:	66 90                	xchg   ax,ax
+    1565:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+    156c:	00 00 00 00 
+    1570:	55                   	push   rbp
+    1571:	41 89 f9             	mov    r9d,edi
+    1574:	41 89 f2             	mov    r10d,esi
+    1577:	48 89 e5             	mov    rbp,rsp
+    157a:	53                   	push   rbx
+    157b:	48 83 ec 38          	sub    rsp,0x38
+    157f:	85 ff                	test   edi,edi
+    1581:	0f 88 21 01 00 00    	js     0x16a8
+    1587:	0f 84 43 01 00 00    	je     0x16d0
+    158d:	4c 8d 5d d0          	lea    r11,[rbp-0x30]
+    1591:	31 ff                	xor    edi,edi
+    1593:	bb cd cc cc cc       	mov    ebx,0xcccccccd
+    1598:	0f 1f 80 00 00 00 00 	nop    DWORD PTR [rax+0x0]
+    159f:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+    15a6:	00 00 00 00 
+    15aa:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+    15b1:	00 00 00 00 
+    15b5:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+    15bc:	00 00 00 00 
+    15c0:	44 89 c8             	mov    eax,r9d
+    15c3:	44 89 c9             	mov    ecx,r9d
+    15c6:	41 89 f8             	mov    r8d,edi
+    15c9:	49 83 c3 01          	add    r11,0x1
+    15cd:	48 0f af c3          	imul   rax,rbx
+    15d1:	83 c7 01             	add    edi,0x1
+    15d4:	48 c1 e8 23          	shr    rax,0x23
+    15d8:	8d 34 80             	lea    esi,[rax+rax*4]
+    15db:	01 f6                	add    esi,esi
+    15dd:	29 f1                	sub    ecx,esi
+    15df:	83 c1 30             	add    ecx,0x30
+    15e2:	41 88 4b ff          	mov    BYTE PTR [r11-0x1],cl
+    15e6:	44 89 c9             	mov    ecx,r9d
+    15e9:	41 89 c1             	mov    r9d,eax
+    15ec:	83 f9 09             	cmp    ecx,0x9
+    15ef:	7f cf                	jg     0x15c0
+    15f1:	c1 e2 04             	shl    edx,0x4
+    15f4:	49 63 c8             	movsxd rcx,r8d
+    15f7:	4c 8d 45 cf          	lea    r8,[rbp-0x31]
+    15fb:	45 31 c9             	xor    r9d,r9d
+    15fe:	44 09 d2             	or     edx,r10d
+    1601:	48 8d 74 0d d0       	lea    rsi,[rbp+rcx*1-0x30]
+    1606:	48 b8 04 20 01 00 00 	movabs rax,0x12004
+    160d:	00 00 00 
+    1610:	8b 38                	mov    edi,DWORD PTR [rax]
+    1612:	a1 00 20 01 00 00 00 	movabs eax,ds:0x12000
+    1619:	00 00 
+    161b:	c1 e2 08             	shl    edx,0x8
+    161e:	41 89 d2             	mov    r10d,edx
+    1621:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+    1625:	66 66 2e 0f 1f 84 00 	data16 cs nop WORD PTR [rax+rax*1+0x0]
+    162c:	00 00 00 00 
+    1630:	66 0f be 0e          	movsx  cx,BYTE PTR [rsi]
+    1634:	80 f9 0a             	cmp    cl,0xa
+    1637:	74 20                	je     0x1659
+    1639:	8d 14 80             	lea    edx,[rax+rax*4]
+    163c:	44 09 d1             	or     ecx,r10d
+    163f:	c1 e2 04             	shl    edx,0x4
+    1642:	01 fa                	add    edx,edi
+    1644:	83 c7 01             	add    edi,0x1
+    1647:	48 63 d2             	movsxd rdx,edx
+    164a:	48 01 d2             	add    rdx,rdx
+    164d:	66 89 8a 00 80 0b 00 	mov    WORD PTR [rdx+0xb8000],cx
+    1654:	83 ff 4f             	cmp    edi,0x4f
+    1657:	7e 0b                	jle    0x1664
+    1659:	83 c0 01             	add    eax,0x1
+    165c:	41 b9 01 00 00 00    	mov    r9d,0x1
+    1662:	31 ff                	xor    edi,edi
+    1664:	48 83 ee 01          	sub    rsi,0x1
+    1668:	49 39 f0             	cmp    r8,rsi
+    166b:	75 c3                	jne    0x1630
+    166d:	45 84 c9             	test   r9b,r9b
+    1670:	74 09                	je     0x167b
+    1672:	a3 00 20 01 00 00 00 	movabs ds:0x12000,eax
+    1679:	00 00 
+    167b:	89 f8                	mov    eax,edi
+    167d:	a3 04 20 01 00 00 00 	movabs ds:0x12004,eax
+    1684:	00 00 
+    1686:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
+    168a:	c9                   	leave
+    168b:	31 c0                	xor    eax,eax
+    168d:	31 d2                	xor    edx,edx
+    168f:	31 c9                	xor    ecx,ecx
+    1691:	31 f6                	xor    esi,esi
+    1693:	31 ff                	xor    edi,edi
+    1695:	45 31 c0             	xor    r8d,r8d
+    1698:	45 31 c9             	xor    r9d,r9d
+    169b:	45 31 d2             	xor    r10d,r10d
+    169e:	45 31 db             	xor    r11d,r11d
+    16a1:	c3                   	ret
+    16a2:	66 0f 1f 44 00 00    	nop    WORD PTR [rax+rax*1+0x0]
+    16a8:	41 f7 d9             	neg    r9d
+    16ab:	89 55 cc             	mov    DWORD PTR [rbp-0x34],edx
+    16ae:	bf 2d 00 00 00       	mov    edi,0x2d
+    16b3:	48 b8 00 11 01 00 00 	movabs rax,0x11100
+    16ba:	00 00 00 
+    16bd:	ff d0                	call   rax
+    16bf:	45 85 c9             	test   r9d,r9d
+    16c2:	8b 55 cc             	mov    edx,DWORD PTR [rbp-0x34]
+    16c5:	0f 8f c2 fe ff ff    	jg     0x158d
+    16cb:	eb b9                	jmp    0x1686
+    16cd:	0f 1f 00             	nop    DWORD PTR [rax]
+    16d0:	48 8b 5d f8          	mov    rbx,QWORD PTR [rbp-0x8]
+    16d4:	bf 30 00 00 00       	mov    edi,0x30
+    16d9:	48 b8 00 11 01 00 00 	movabs rax,0x11100
+    16e0:	00 00 00 
+    16e3:	c9                   	leave
+    16e4:	ff e0                	jmp    rax
+    16e6:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
+    16ed:	00 00 00 
+    16f0:	48 b8 10 20 01 00 00 	movabs rax,0x12010
+    16f7:	00 00 00 
+    16fa:	55                   	push   rbp
+    16fb:	ba 68 00 00 00       	mov    edx,0x68
+    1700:	48 89 e5             	mov    rbp,rsp
+    1703:	48 83 ec 10          	sub    rsp,0x10
+    1707:	48 89 78 04          	mov    QWORD PTR [rax+0x4],rdi
+    170b:	66 89 50 66          	mov    WORD PTR [rax+0x66],dx
+    170f:	0f 01 45 f6          	sgdt   [rbp-0xa]
+    1713:	48 8b 75 f8          	mov    rsi,QWORD PTR [rbp-0x8]
+    1717:	48 89 c1             	mov    rcx,rax
+    171a:	48 c1 e9 10          	shr    rcx,0x10
+    171e:	88 4e 2c             	mov    BYTE PTR [rsi+0x2c],cl
+    1721:	48 89 c1             	mov    rcx,rax
+    1724:	66 89 46 2a          	mov    WORD PTR [rsi+0x2a],ax
+    1728:	48 c1 e9 18          	shr    rcx,0x18
+    172c:	48 c1 e8 20          	shr    rax,0x20
+    1730:	89 46 30             	mov    DWORD PTR [rsi+0x30],eax
+    1733:	b8 28 00 00 00       	mov    eax,0x28
+    1738:	88 4e 2f             	mov    BYTE PTR [rsi+0x2f],cl
+    173b:	0f 00 d8             	ltr    eax
+    173e:	c9                   	leave
+    173f:	31 c0                	xor    eax,eax
+    1741:	31 d2                	xor    edx,edx
+    1743:	31 c9                	xor    ecx,ecx
+    1745:	31 f6                	xor    esi,esi
+    1747:	31 ff                	xor    edi,edi
+    1749:	c3                   	ret
+    174a:	66 0f 1f 44 00 00    	nop    WORD PTR [rax+rax*1+0x0]
+    1750:	0f 01 f8             	swapgs
+    1753:	51                   	push   rcx
+    1754:	41 53                	push   r11
+    1756:	48 89 fe             	mov    rsi,rdi
+    1759:	48 89 c7             	mov    rdi,rax
+    175c:	e8 4f 00 00 00       	call   0x17b0
+    1761:	41 5b                	pop    r11
+    1763:	59                   	pop    rcx
+    1764:	0f 01 f8             	swapgs
+    1767:	48 0f 07             	sysretq
+    176a:	0f 0b                	ud2
+    176c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+    1770:	48 b8 00 00 00 00 08 	movabs rax,0x10000800000000
+    1777:	00 10 00 
+    177a:	b9 81 00 00 c0       	mov    ecx,0xc0000081
+    177f:	0f 30                	wrmsr
+    1781:	48 b8 50 15 01 00 00 	movabs rax,0x11550
+    1788:	00 00 00 
+    178b:	48 83 c1 01          	add    rcx,0x1
+    178f:	0f 30                	wrmsr
+    1791:	b8 00 02 00 00       	mov    eax,0x200
+    1796:	48 83 c1 02          	add    rcx,0x2
+    179a:	0f 30                	wrmsr
+    179c:	48 83 e9 04          	sub    rcx,0x4
+    17a0:	0f 32                	rdmsr
+    17a2:	83 c8 01             	or     eax,0x1
+    17a5:	0f 30                	wrmsr
+    17a7:	31 c0                	xor    eax,eax
+    17a9:	31 d2                	xor    edx,edx
+    17ab:	31 c9                	xor    ecx,ecx
+    17ad:	c3                   	ret
+    17ae:	66 90                	xchg   ax,ax
+    17b0:	48 85 ff             	test   rdi,rdi
+    17b3:	74 5b                	je     0x1810
+    17b5:	48 83 ff 01          	cmp    rdi,0x1
+    17b9:	74 25                	je     0x17e0
+    17bb:	31 d2                	xor    edx,edx
+    17bd:	be 0c 00 00 00       	mov    esi,0xc
+    17c2:	48 bf aa 17 01 00 00 	movabs rdi,0x117aa
+    17c9:	00 00 00 
+    17cc:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
+    17d3:	00 00 00 
+    17d6:	ff e0                	jmp    rax
+    17d8:	0f 1f 84 00 00 00 00 	nop    DWORD PTR [rax+rax*1+0x0]
+    17df:	00 
+    17e0:	55                   	push   rbp
+    17e1:	31 d2                	xor    edx,edx
+    17e3:	be 0e 00 00 00       	mov    esi,0xe
+    17e8:	48 bf 95 17 01 00 00 	movabs rdi,0x11795
+    17ef:	00 00 00 
+    17f2:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
+    17f9:	00 00 00 
+    17fc:	48 89 e5             	mov    rbp,rsp
+    17ff:	ff d0                	call   rax
+    1801:	f4                   	hlt
+    1802:	5d                   	pop    rbp
+    1803:	31 c0                	xor    eax,eax
+    1805:	31 d2                	xor    edx,edx
+    1807:	31 f6                	xor    esi,esi
+    1809:	31 ff                	xor    edi,edi
+    180b:	c3                   	ret
+    180c:	0f 1f 40 00          	nop    DWORD PTR [rax+0x0]
+    1810:	48 b8 a0 12 01 00 00 	movabs rax,0x112a0
+    1817:	00 00 00 
+    181a:	48 89 f7             	mov    rdi,rsi
+    181d:	31 d2                	xor    edx,edx
+    181f:	be 0a 00 00 00       	mov    esi,0xa
+    1824:	ff e0                	jmp    rax
+    1826:	66 2e 0f 1f 84 00 00 	cs nop WORD PTR [rax+rax*1+0x0]
+    182d:	00 00 00 
+    1830:	48 b9 60 16 01 00 00 	movabs rcx,0x11660
+    1837:	00 00 00 
+    183a:	ba 00 00 07 00       	mov    edx,0x70000
+    183f:	66 b8 1b 00          	mov    ax,0x1b
+    1843:	8e d8                	mov    ds,eax
+    1845:	8e c0                	mov    es,eax
+    1847:	8e e0                	mov    fs,eax
+    1849:	8e e8                	mov    gs,eax
+    184b:	6a 1b                	push   0x1b
+    184d:	52                   	push   rdx
+    184e:	68 02 02 00 00       	push   0x202
+    1853:	6a 23                	push   0x23
+    1855:	51                   	push   rcx
+    1856:	48 cf                	iretq
+    1858:	31 c0                	xor    eax,eax
+    185a:	31 d2                	xor    edx,edx
+    185c:	31 c9                	xor    ecx,ecx
+    185e:	c3                   	ret
+    185f:	90                   	nop
+    1860:	48 ba bb 17 01 00 00 	movabs rdx,0x117bb
+    1867:	00 00 00 
+    186a:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+    1871:	48 89 d7             	mov    rdi,rdx
+    1874:	0f 05                	syscall
+    1876:	48 ba 00 17 01 00 00 	movabs rdx,0x11700
+    187d:	00 00 00 
+    1880:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+    1887:	48 89 d7             	mov    rdi,rdx
+    188a:	0f 05                	syscall
+    188c:	48 ba 28 17 01 00 00 	movabs rdx,0x11728
+    1893:	00 00 00 
+    1896:	48 c7 c0 00 00 00 00 	mov    rax,0x0
+    189d:	48 89 d7             	mov    rdi,rdx
+    18a0:	0f 05                	syscall
+    18a2:	48 c7 c0 01 00 00 00 	mov    rax,0x1
+    18a9:	0f 05                	syscall
+    18ab:	31 c0                	xor    eax,eax
+    18ad:	31 d2                	xor    edx,edx
+    18af:	31 c9                	xor    ecx,ecx
+    18b1:	31 ff                	xor    edi,edi
+    18b3:	45 31 db             	xor    r11d,r11d
+    18b6:	c3                   	ret
+    18b7:	00 4b 65             	add    BYTE PTR [rbx+0x65],cl
+    18ba:	72 6e                	jb     0x192a
+    18bc:	65 6c                	gs ins BYTE PTR [rdi],dx
+    18be:	20 62 6f             	and    BYTE PTR [rdx+0x6f],ah
+    18c1:	6f                   	outs   dx,DWORD PTR [rsi]
+    18c2:	74 65                	je     0x1929
+    18c4:	64 20 69 6e          	and    BYTE PTR fs:[rcx+0x6e],ch
+    18c8:	20 36                	and    BYTE PTR [rsi],dh
+    18ca:	34 2d                	xor    al,0x2d
+    18cc:	62 69 74 20 6c       	(bad)
+    18d1:	6f                   	outs   dx,DWORD PTR [rsi]
+    18d2:	6e                   	outs   dx,BYTE PTR [rsi]
+    18d3:	67 20 6d 6f          	and    BYTE PTR [ebp+0x6f],ch
+    18d7:	64 65 2e 00 00       	fs gs add BYTE PTR gs:[rax],al
+    18dc:	00 00                	add    BYTE PTR [rax],al
+    18de:	00 00                	add    BYTE PTR [rax],al
+    18e0:	52                   	push   rdx
+    18e1:	69 6e 67 20 30 20 e2 	imul   ebp,DWORD PTR [rsi+0x67],0xe2203020
+    18e8:	80 94 20 6b 65 72 6e 	adc    BYTE PTR [rax+riz*1+0x6e72656b],0x65
+    18ef:	65 
+    18f0:	6c                   	ins    BYTE PTR [rdi],dx
+    18f1:	20 73 70             	and    BYTE PTR [rbx+0x70],dh
+    18f4:	61                   	(bad)
+    18f5:	63 65 20             	movsxd esp,DWORD PTR [rbp+0x20]
+    18f8:	61                   	(bad)
+    18f9:	63 74 69 76          	movsxd esi,DWORD PTR [rcx+rbp*2+0x76]
+    18fd:	65 2e 00 49 20       	gs add BYTE PTR gs:[rcx+0x20],cl
+    1902:	63 61 6e             	movsxd esp,DWORD PTR [rcx+0x6e]
+    1905:	6e                   	outs   dx,BYTE PTR [rsi]
+    1906:	6f                   	outs   dx,DWORD PTR [rsi]
+    1907:	74 20                	je     0x1929
+    1909:	74 6f                	je     0x197a
+    190b:	75 63                	jne    0x1970
+    190d:	68 20 68 61 72       	push   0x72616820
+    1912:	64 77 61             	fs ja  0x1976
+    1915:	72 65                	jb     0x197c
+    1917:	20 64 69 72          	and    BYTE PTR [rcx+rbp*2+0x72],ah
+    191b:	65 63 74 6c 79       	movsxd esi,DWORD PTR gs:[rsp+rbp*2+0x79]
+    1920:	2e 00 00             	cs add BYTE PTR [rax],al
+    1923:	00 00                	add    BYTE PTR [rax],al
+    1925:	00 00                	add    BYTE PTR [rax],al
+    1927:	00 49 20             	add    BYTE PTR [rcx+0x20],cl
+    192a:	74 61                	je     0x198d
+    192c:	6c                   	ins    BYTE PTR [rdi],dx
+    192d:	6b 20 74             	imul   esp,DWORD PTR [rax],0x74
+    1930:	6f                   	outs   dx,DWORD PTR [rsi]
+    1931:	20 74 68 65          	and    BYTE PTR [rax+rbp*2+0x65],dh
+    1935:	20 6b 65             	and    BYTE PTR [rbx+0x65],ch
+    1938:	72 6e                	jb     0x19a8
+    193a:	65 6c                	gs ins BYTE PTR [rdi],dx
+    193c:	20 76 69             	and    BYTE PTR [rsi+0x69],dh
+    193f:	61                   	(bad)
+    1940:	20 73 79             	and    BYTE PTR [rbx+0x79],dh
+    1943:	73 63                	jae    0x19a8
+    1945:	61                   	(bad)
+    1946:	6c                   	ins    BYTE PTR [rdi],dx
+    1947:	6c                   	ins    BYTE PTR [rdi],dx
+    1948:	2e 00 00             	cs add BYTE PTR [rax],al
+    194b:	5b                   	pop    rbx
+    194c:	4f                   	rex.WRXB
+    194d:	4b 5d                	rex.WXB pop r13
+    194f:	20 54 53 53          	and    BYTE PTR [rbx+rdx*2+0x53],dl
+    1953:	20 69 6e             	and    BYTE PTR [rcx+0x6e],ch
+    1956:	69 74 69 61 6c 69 7a 	imul   esi,DWORD PTR [rcx+rbp*2+0x61],0x657a696c
+    195d:	65 
+    195e:	64 2e 00 5b 4f       	fs add BYTE PTR fs:[rbx+0x4f],bl
+    1963:	4b 5d                	rex.WXB pop r13
+    1965:	20 53 79             	and    BYTE PTR [rbx+0x79],dl
+    1968:	73 63                	jae    0x19cd
+    196a:	61                   	(bad)
+    196b:	6c                   	ins    BYTE PTR [rdi],dx
+    196c:	6c                   	ins    BYTE PTR [rdi],dx
+    196d:	20 68 61             	and    BYTE PTR [rax+0x61],ch
+    1970:	6e                   	outs   dx,BYTE PTR [rsi]
+    1971:	64 6c                	fs ins BYTE PTR [rdi],dx
+    1973:	65 72 20             	gs jb  0x1996
+    1976:	72 65                	jb     0x19dd
+    1978:	61                   	(bad)
+    1979:	64 79 2e             	fs jns 0x19aa
+    197c:	00 4a 75             	add    BYTE PTR [rdx+0x75],cl
+    197f:	6d                   	ins    DWORD PTR [rdi],dx
+    1980:	70 69                	jo     0x19eb
+    1982:	6e                   	outs   dx,BYTE PTR [rsi]
+    1983:	67 20 74 6f 20       	and    BYTE PTR [edi+ebp*2+0x20],dh
+    1988:	75 73                	jne    0x19fd
+    198a:	65 72 73             	gs jb  0x1a00
+    198d:	70 61                	jo     0x19f0
+    198f:	63 65 2e             	movsxd esp,DWORD PTR [rbp+0x2e]
+    1992:	2e 2e 00 55 73       	cs cs add BYTE PTR [rbp+0x73],dl
+    1997:	65 72 20             	gs jb  0x19ba
+    199a:	70 72                	jo     0x1a0e
+    199c:	6f                   	outs   dx,DWORD PTR [rsi]
+    199d:	67 72 61             	addr32 jb 0x1a01
+    19a0:	6d                   	ins    DWORD PTR [rdi],dx
+    19a1:	20 65 78             	and    BYTE PTR [rbp+0x78],ah
+    19a4:	69 74 65 64 2e 00 55 	imul   esi,DWORD PTR [rbp+riz*2+0x64],0x6e55002e
+    19ab:	6e 
+    19ac:	6b 6e 6f 77          	imul   ebp,DWORD PTR [rsi+0x6f],0x77
+    19b0:	6e                   	outs   dx,BYTE PTR [rsi]
+    19b1:	20 73 79             	and    BYTE PTR [rbx+0x79],dh
+    19b4:	73 63                	jae    0x1a19
+    19b6:	61                   	(bad)
+    19b7:	6c                   	ins    BYTE PTR [rdi],dx
+    19b8:	6c                   	ins    BYTE PTR [rdi],dx
+    19b9:	21 00                	and    DWORD PTR [rax],eax
+    19bb:	48                   	rex.W
+    19bc:	65 6c                	gs ins BYTE PTR [rdi],dx
+    19be:	6c                   	ins    BYTE PTR [rdi],dx
+    19bf:	6f                   	outs   dx,DWORD PTR [rsi]
+    19c0:	20 66 72             	and    BYTE PTR [rsi+0x72],ah
+    19c3:	6f                   	outs   dx,DWORD PTR [rsi]
+    19c4:	6d                   	ins    DWORD PTR [rdi],dx
+    19c5:	20 72 69             	and    BYTE PTR [rdx+0x69],dh
+    19c8:	6e                   	outs   dx,BYTE PTR [rsi]
+    19c9:	67 20 33             	and    BYTE PTR [ebx],dh
+    19cc:	20 75 73             	and    BYTE PTR [rbp+0x73],dh
+    19cf:	65 72 73             	gs jb  0x1a45
+    19d2:	70 61                	jo     0x1a35
+    19d4:	63 65 21             	movsxd esp,DWORD PTR [rbp+0x21]
+    19d7:	00 14 00             	add    BYTE PTR [rax+rax*1],dl
+    19da:	00 00                	add    BYTE PTR [rax],al
+    19dc:	00 00                	add    BYTE PTR [rax],al
+    19de:	00 00                	add    BYTE PTR [rax],al
+    19e0:	01 7a 52             	add    DWORD PTR [rdx+0x52],edi
+    19e3:	00 01                	add    BYTE PTR [rcx],al
+    19e5:	78 10                	js     0x19f7
+    19e7:	01 1b                	add    DWORD PTR [rbx],ebx
+    19e9:	0c 07                	or     al,0x7
+    19eb:	08 90 01 00 00 1c    	or     BYTE PTR [rax+0x1c000001],dl
+    19f1:	00 00                	add    BYTE PTR [rax],al
+    19f3:	00 1c 00             	add    BYTE PTR [rax+rax*1],bl
+    19f6:	00 00                	add    BYTE PTR [rax],al
+    19f8:	18 f8                	sbb    al,bh
+    19fa:	ff                   	(bad)
+    19fb:	ff e4                	jmp    rsp
+    19fd:	00 00                	add    BYTE PTR [rax],al
+    19ff:	00 00                	add    BYTE PTR [rax],al
+    1a01:	4b 0e                	rex.WXB (bad)
+    1a03:	10 86 02 45 0d 06    	adc    BYTE PTR [rsi+0x60d4502],al
+    1a09:	41 83 03 00          	add    DWORD PTR [r11],0x0
+    1a0d:	00 00                	add    BYTE PTR [rax],al
+    1a0f:	00 14 00             	add    BYTE PTR [rax+rax*1],dl
+    1a12:	00 00                	add    BYTE PTR [rax],al
+    1a14:	00 00                	add    BYTE PTR [rax],al
+    1a16:	00 00                	add    BYTE PTR [rax],al
+    1a18:	01 7a 52             	add    DWORD PTR [rdx+0x52],edi
+    1a1b:	00 01                	add    BYTE PTR [rcx],al
+    1a1d:	78 10                	js     0x1a2f
+    1a1f:	01 1b                	add    DWORD PTR [rbx],ebx
+    1a21:	0c 07                	or     al,0x7
+    1a23:	08 90 01 00 00 10    	or     BYTE PTR [rax+0x10000001],dl
+    1a29:	00 00                	add    BYTE PTR [rax],al
+    1a2b:	00 1c 00             	add    BYTE PTR [rax+rax*1],bl
+    1a2e:	00 00                	add    BYTE PTR [rax],al
+    1a30:	d0 f8                	sar    al,1
+    1a32:	ff                   	(bad)
+    1a33:	ff                   	(bad)
+    1a34:	7e 00                	jle    0x1a36
+    1a36:	00 00                	add    BYTE PTR [rax],al
+    1a38:	00 00                	add    BYTE PTR [rax],al
+    1a3a:	00 00                	add    BYTE PTR [rax],al
+    1a3c:	10 00                	adc    BYTE PTR [rax],al
+    1a3e:	00 00                	add    BYTE PTR [rax],al
+    1a40:	30 00                	xor    BYTE PTR [rax],al
+    1a42:	00 00                	add    BYTE PTR [rax],al
+    1a44:	3c f9                	cmp    al,0xf9
+    1a46:	ff                   	(bad)
+    1a47:	ff 68 00             	jmp    FWORD PTR [rax+0x0]
+    1a4a:	00 00                	add    BYTE PTR [rax],al
+    1a4c:	00 00                	add    BYTE PTR [rax],al
+    1a4e:	00 00                	add    BYTE PTR [rax],al
+    1a50:	10 00                	adc    BYTE PTR [rax],al
+    1a52:	00 00                	add    BYTE PTR [rax],al
+    1a54:	44 00 00             	add    BYTE PTR [rax],r8b
+    1a57:	00 98 f9 ff ff af    	add    BYTE PTR [rax-0x50000007],bl
+    1a5d:	00 00                	add    BYTE PTR [rax],al
+    1a5f:	00 00                	add    BYTE PTR [rax],al
+    1a61:	00 00                	add    BYTE PTR [rax],al
+    1a63:	00 20                	add    BYTE PTR [rax],ah
+    1a65:	00 00                	add    BYTE PTR [rax],al
+    1a67:	00 58 00             	add    BYTE PTR [rax+0x0],bl
+    1a6a:	00 00                	add    BYTE PTR [rax],al
+    1a6c:	34 fa                	xor    al,0xfa
+    1a6e:	ff                   	(bad)
+    1a6f:	ff c3                	inc    ebx
+    1a71:	00 00                	add    BYTE PTR [rax],al
+    1a73:	00 00                	add    BYTE PTR [rax],al
+    1a75:	41 0e                	rex.B (bad)
+    1a77:	10 86 02 49 0d 06    	adc    BYTE PTR [rsi+0x60d4902],al
+    1a7d:	41 83 03 02          	add    DWORD PTR [r11],0x2
+    1a81:	ac                   	lods   al,BYTE PTR [rsi]
+    1a82:	c6 c3 0c             	mov    bl,0xc
+    1a85:	07                   	(bad)
+    1a86:	08 00                	or     BYTE PTR [rax],al
+    1a88:	2c 00                	sub    al,0x0
+    1a8a:	00 00                	add    BYTE PTR [rax],al
+    1a8c:	7c 00                	jl     0x1a8e
+    1a8e:	00 00                	add    BYTE PTR [rax],al
+    1a90:	e0 fa                	loopne 0x1a8c
+    1a92:	ff                   	(bad)
+    1a93:	ff 76 01             	push   QWORD PTR [rsi+0x1]
+    1a96:	00 00                	add    BYTE PTR [rax],al
+    1a98:	00 41 0e             	add    BYTE PTR [rcx+0xe],al
+    1a9b:	10 86 02 49 0d 06    	adc    BYTE PTR [rsi+0x60d4902],al
+    1aa1:	45 83 03 03          	rex.RB add DWORD PTR [r11],0x3
+    1aa5:	0c 01                	or     al,0x1
+    1aa7:	0a c6                	or     al,dh
+    1aa9:	c3                   	ret
+    1aaa:	0c 07                	or     al,0x7
+    1aac:	08 5d 0b             	or     BYTE PTR [rbp+0xb],bl
+    1aaf:	7c c6                	jl     0x1a77
+    1ab1:	c3                   	ret
+    1ab2:	0c 07                	or     al,0x7
+    1ab4:	08 00                	or     BYTE PTR [rax],al
+    1ab6:	00 00                	add    BYTE PTR [rax],al
+    1ab8:	14 00                	adc    al,0x0
+    1aba:	00 00                	add    BYTE PTR [rax],al
+    1abc:	00 00                	add    BYTE PTR [rax],al
+    1abe:	00 00                	add    BYTE PTR [rax],al
+    1ac0:	01 7a 52             	add    DWORD PTR [rdx+0x52],edi
+    1ac3:	00 01                	add    BYTE PTR [rcx],al
+    1ac5:	78 10                	js     0x1ad7
+    1ac7:	01 1b                	add    DWORD PTR [rbx],ebx
+    1ac9:	0c 07                	or     al,0x7
+    1acb:	08 90 01 00 00 1c    	or     BYTE PTR [rax+0x1c000001],dl
+    1ad1:	00 00                	add    BYTE PTR [rax],al
+    1ad3:	00 1c 00             	add    BYTE PTR [rax+rax*1],bl
+    1ad6:	00 00                	add    BYTE PTR [rax],al
+    1ad8:	18 fc                	sbb    ah,bh
+    1ada:	ff                   	(bad)
+    1adb:	ff 5a 00             	call   FWORD PTR [rdx+0x0]
+    1ade:	00 00                	add    BYTE PTR [rax],al
+    1ae0:	00 4b 0e             	add    BYTE PTR [rbx+0xe],cl
+    1ae3:	10 86 02 48 0d 06    	adc    BYTE PTR [rsi+0x60d4802],al
+    1ae9:	7c c6                	jl     0x1ab1
+    1aeb:	0c 07                	or     al,0x7
+    1aed:	08 00                	or     BYTE PTR [rax],al
+    1aef:	00 14 00             	add    BYTE PTR [rax+rax*1],dl
+    1af2:	00 00                	add    BYTE PTR [rax],al
+    1af4:	00 00                	add    BYTE PTR [rax],al
+    1af6:	00 00                	add    BYTE PTR [rax],al
+    1af8:	01 7a 52             	add    DWORD PTR [rdx+0x52],edi
+    1afb:	00 01                	add    BYTE PTR [rcx],al
+    1afd:	78 10                	js     0x1b0f
+    1aff:	01 1b                	add    DWORD PTR [rbx],ebx
+    1b01:	0c 07                	or     al,0x7
+    1b03:	08 90 01 00 00 10    	or     BYTE PTR [rax+0x10000001],dl
+    1b09:	00 00                	add    BYTE PTR [rax],al
+    1b0b:	00 1c 00             	add    BYTE PTR [rax+rax*1],bl
+    1b0e:	00 00                	add    BYTE PTR [rax],al
+    1b10:	40 fc                	rex cld
+    1b12:	ff                   	(bad)
+    1b13:	ff 1c 00             	call   FWORD PTR [rax+rax*1]
+    1b16:	00 00                	add    BYTE PTR [rax],al
+    1b18:	00 00                	add    BYTE PTR [rax],al
+    1b1a:	00 00                	add    BYTE PTR [rax],al
+    1b1c:	10 00                	adc    BYTE PTR [rax],al
+    1b1e:	00 00                	add    BYTE PTR [rax],al
+    1b20:	30 00                	xor    BYTE PTR [rax],al
+    1b22:	00 00                	add    BYTE PTR [rax],al
+    1b24:	4c fc                	rex.WR cld
+    1b26:	ff                   	(bad)
+    1b27:	ff                   	(bad)
+    1b28:	3e 00 00             	ds add BYTE PTR [rax],al
+    1b2b:	00 00                	add    BYTE PTR [rax],al
+    1b2d:	00 00                	add    BYTE PTR [rax],al
+    1b2f:	00 1c 00             	add    BYTE PTR [rax+rax*1],bl
+    1b32:	00 00                	add    BYTE PTR [rax],al
+    1b34:	44 00 00             	add    BYTE PTR [rax],r8b
+    1b37:	00 78 fc             	add    BYTE PTR [rax-0x4],bh
+    1b3a:	ff                   	(bad)
+    1b3b:	ff 76 00             	push   QWORD PTR [rsi+0x0]
+    1b3e:	00 00                	add    BYTE PTR [rax],al
+    1b40:	00 71 0e             	add    BYTE PTR [rcx+0xe],dh
+    1b43:	10 86 02 5e 0d 06    	adc    BYTE PTR [rsi+0x60d5e02],al
+    1b49:	44 c6                	rex.R (bad)
+    1b4b:	0c 07                	or     al,0x7
+    1b4d:	08 00                	or     BYTE PTR [rax],al
+    1b4f:	00 14 00             	add    BYTE PTR [rax+rax*1],dl
+    1b52:	00 00                	add    BYTE PTR [rax],al
+    1b54:	00 00                	add    BYTE PTR [rax],al
+    1b56:	00 00                	add    BYTE PTR [rax],al
+    1b58:	01 7a 52             	add    DWORD PTR [rdx+0x52],edi
+    1b5b:	00 01                	add    BYTE PTR [rcx],al
+    1b5d:	78 10                	js     0x1b6f
+    1b5f:	01 1b                	add    DWORD PTR [rbx],ebx
+    1b61:	0c 07                	or     al,0x7
+    1b63:	08 90 01 00 00 14    	or     BYTE PTR [rax+0x14000001],dl
+    1b69:	00 00                	add    BYTE PTR [rax],al
+    1b6b:	00 1c 00             	add    BYTE PTR [rax+rax*1],bl
+    1b6e:	00 00                	add    BYTE PTR [rax],al
+    1b70:	c0 fc ff             	sar    ah,0xff
+    1b73:	ff 2f                	jmp    FWORD PTR [rdi]
+	...
+    1b7d:	00 00                	add    BYTE PTR [rax],al
+    1b7f:	00 14 00             	add    BYTE PTR [rax+rax*1],dl
+    1b82:	00 00                	add    BYTE PTR [rax],al
+    1b84:	00 00                	add    BYTE PTR [rax],al
+    1b86:	00 00                	add    BYTE PTR [rax],al
+    1b88:	01 7a 52             	add    DWORD PTR [rdx+0x52],edi
+    1b8b:	00 01                	add    BYTE PTR [rcx],al
+    1b8d:	78 10                	js     0x1b9f
+    1b8f:	01 1b                	add    DWORD PTR [rbx],ebx
+    1b91:	0c 07                	or     al,0x7
+    1b93:	08 90 01 00 00 14    	or     BYTE PTR [rax+0x14000001],dl
+    1b99:	00 00                	add    BYTE PTR [rax],al
+    1b9b:	00 1c 00             	add    BYTE PTR [rax+rax*1],bl
+    1b9e:	00 00                	add    BYTE PTR [rax],al
+    1ba0:	c0 fc ff             	sar    ah,0xff
+    1ba3:	ff 57 00             	call   QWORD PTR [rdi+0x0]
+	...
