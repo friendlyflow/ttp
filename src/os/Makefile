@@ -5,7 +5,7 @@ NASM   = nasm
 # The CPU has SSE disabled at boot, so those instructions #UD and triple-fault.
 # Remove this once the kernel enables SSE in hardware (CR0.EM=0, CR4.OSFXSR=1)
 # and can thus execute the full instruction set.
-CFLAGS = -ffreestanding -O2 -Wall -Wextra -nostdlib -nostdinc \
+CFLAGS = -ffreestanding -O0 -Wall -Wextra -nostdlib -nostdinc \
          -isystem $(shell $(CC) -print-file-name=include) \
          -fno-builtin -fno-stack-protector -mno-red-zone \
          -mgeneral-regs-only -mcmodel=large
@@ -45,7 +45,7 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/gen_program: ff/gen_program.c $(INCLUDE)/node.h | $(BUILD)
-	$(HOSTCC) -O2 -Wall -Wextra -DTTP_HOSTED -I$(INCLUDE) ff/gen_program.c -o $@
+	NIX_HARDENING_ENABLE= $(HOSTCC) -O0 -Wall -Wextra -DTTP_HOSTED -I$(INCLUDE) ff/gen_program.c -o $@
 
 # The node program is committed source (the "ff"), regenerated here.
 ff/program.nodes: $(BUILD)/gen_program

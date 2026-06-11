@@ -1,5 +1,10 @@
 CC     ?= cc
-CFLAGS ?= -O2 -Wall -Wextra
+CFLAGS ?= -O0 -Wall -Wextra
+
+# The Nix cc-wrapper auto-injects -D_FORTIFY_SOURCE, which warns at -O0 (fortify
+# needs an optimizer pass). Disable its hardening for the host build; a non-Nix
+# cc simply ignores this env var.
+export NIX_HARDENING_ENABLE :=
 
 # Shared headers (the node format lives in the repo-root include/). TTP_HOSTED
 # selects node.h's libc-backed FILE* serialization (the OS build omits it).
