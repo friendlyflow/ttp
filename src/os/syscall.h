@@ -21,6 +21,12 @@
 
 void syscall_init(void);
 
-// Syscall numbers — add your own
-#define SYS_PRINT 0
-#define SYS_EXIT  1
+// Syscall numbers. The ABI: rax = number, rdi = arg0, return value in rax.
+#define SYS_PRINT  0   // arg0 = const char* (NUL-terminated), prints a line
+#define SYS_EXIT   1   // halt the machine
+#define SYS_GETKEY 2   // block for a key; returns the key code
+#define SYS_BLIT   3   // arg0 = uint16_t[80*25] cell buffer -> copied to VGA
+#define SYS_ALLOC  4   // arg0 = size; returns a heap pointer (or 0)
+
+// VGA text dimensions, shared so ring 3 can size its blit buffer.
+#define VGA_CELLS (80 * 25)

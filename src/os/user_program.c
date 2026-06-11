@@ -19,35 +19,23 @@
 // ╔══════════════════════════════════════════════╗
 // ║  USER PROGRAM — ring 3, restricted access    ║
 // ║  - cannot touch hardware directly            ║
-// ║  - cannot call kernel functions directly     ║
-// ║  - talk to kernel only via syscall           ║
-// ║  Add user programs here:                     ║
-// ║    - shell                                   ║
-// ║    - applications                            ║
-// ║    - user libraries                          ║
+// ║  - talks to the kernel only via syscall      ║
+// ║  This is the ring-3 entry: it runs the ff    ║
+// ║  navigator (and, through it, the compiler).  ║
 // ╚══════════════════════════════════════════════╝
 
-// Inline syscall — no libc available
-static void sys_print(const char *str) {
-    __asm__ volatile(
-        "mov $0, %%rax  \n"     // SYS_PRINT = 0
-        "mov %0, %%rdi  \n"     // arg0 = string pointer
-        "syscall        \n"
-        :: "r"(str) : "rax", "rdi", "rcx", "r11"
-    );
-}
+#include "uapi.h"
+#include "navigator.h"
 
-static void sys_exit(void) {
-    __asm__ volatile(
-        "mov $1, %%rax  \n"     // SYS_EXIT = 1
-        "syscall        \n"
-        ::: "rax", "rcx", "r11"
-    );
-}
+// The ff root, published by the kernel (ring 0) before jump_to_userspace and
+// read here in ring 3. The tree lives on the shared heap, so the pointer is all
+// that crosses the boundary.
+struct node *g_ff;
 
 void user_program(void) {
-    sys_print("Hello from ring 3 userspace!");
-    sys_print("I cannot touch hardware directly.");
-    sys_print("I talk to the kernel via syscall.");
+    if (g_ff)
+        navigator_run(g_ff);   // owns the screen; does not return
+
+    sys_print("ff failed to load.");
     sys_exit();
 }

@@ -30,6 +30,9 @@
 extern const unsigned char ff_blob_start[];
 extern const unsigned char ff_blob_end[];
 
+// Handed to the ring-3 navigator entry (user_program.c).
+extern struct node *g_ff;
+
 // Total node count in a subtree (the ff's true size, including operand leaves).
 static int ff_count(struct node *n) {
     int c = 1;
@@ -99,27 +102,22 @@ void kernel_main(void) {
         vga_println("[!!] ff failed to load.", LIGHT_RED, BLACK);
     }
 
-    // Bring up the keyboard (IRQ1) and hand control to the ff navigator. The
-    // navigator owns the screen from here and does not return.
-    keyboard_init();
-    if (ff)
-        navigator_run(ff);
-
-    // Set up TSS so CPU knows the kernel stack for ring 3 → ring 0 switches
+    // Publish the ff to the ring-3 navigator, then bring up the surface it
+    // needs: the TSS (kernel stack for ring 3 -> ring 0 interrupts/syscalls),
+    // the SYSCALL handler, and the IRQ1 keyboard.
+    g_ff = ff;
     tss_init(0x90000);
     vga_println("[OK] TSS initialized.",              LIGHT_GREY,  BLACK);
-
-    // Set up syscall instruction handler
     syscall_init();
     vga_println("[OK] Syscall handler ready.",        LIGHT_GREY,  BLACK);
+    keyboard_init();
+    vga_println("[OK] Keyboard (IRQ1) enabled.",      LIGHT_GREY,  BLACK);
 
     vga_println("",                                   WHITE,       BLACK);
-    vga_println("Jumping to userspace...",            CYAN,        BLACK);
-    vga_println("",                                   WHITE,       BLACK);
+    vga_println("Entering the ff navigator in ring 3...", CYAN,    BLACK);
 
-    // ── Hand off to ring 3 ────────────────────────
+    // Hand off to ring 3; user_program() runs the navigator and never returns.
     jump_to_userspace();
 
-    // Never reached — jump_to_userspace does not return
     while (1) {}
 }

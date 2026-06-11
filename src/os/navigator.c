@@ -17,8 +17,9 @@
  */
 
 #include "navigator.h"
-#include "keyboard.h"
-#include "vga.h"
+#include "keyboard.h"   // KEY_* codes
+#include "uapi.h"       // sys_getkey / sys_blit (the navigator runs in ring 3)
+#include "vga.h"        // VGA_COLS/ROWS, vga_color
 #include "string.h"
 #include "encode.h"
 
@@ -36,6 +37,24 @@ static int          depth;
 
 // Last assembler result (filled when the user presses 'a').
 static char info[VGA_COLS + 1];
+
+// Ring 3 cannot touch VGA memory through the (future) isolation boundary, so the
+// navigator renders into this shadow buffer and SYS_BLITs it in one syscall.
+static uint16_t fb[VGA_COLS * VGA_ROWS];
+
+static uint16_t cell(char c, vga_color fg, vga_color bg) {
+    return (uint16_t)(unsigned char)c | (uint16_t)(((bg << 4) | fg) << 8);
+}
+static void fb_clear(vga_color bg) {
+    for (int i = 0; i < VGA_COLS * VGA_ROWS; i++) fb[i] = cell(' ', WHITE, bg);
+}
+static void fb_putc(int x, int y, char c, vga_color fg, vga_color bg) {
+    if (x < 0 || x >= VGA_COLS || y < 0 || y >= VGA_ROWS) return;
+    fb[y * VGA_COLS + x] = cell(c, fg, bg);
+}
+static void fb_puts(int x, int y, const char *s, vga_color fg, vga_color bg) {
+    for (int i = 0; s[i] && x + i < VGA_COLS; i++) fb_putc(x + i, y, s[i], fg, bg);
+}
 
 static struct node *current(void) { return path[depth]; }
 
@@ -104,10 +123,10 @@ static void draw(void) {
     struct node *cur = current();
     int nkids = cur->n_children;
 
-    vga_clear(BLUE);
+    fb_clear(BLUE);
 
     // ── title ─────────────────────────────────────────────
-    vga_puts_at(0, 0, " ff - the trust project              "
+    fb_puts(0, 0, " ff - the trust project              "
                       "                                       ",
                 BLACK, LIGHT_GREY);
 
@@ -115,16 +134,16 @@ static void draw(void) {
     int x = 0;
     for (int d = 0; d <= depth; d++) {
         vga_color fg = (d == depth) ? YELLOW : LIGHT_CYAN;
-        vga_puts_at(x, 1, path[d]->content, fg, BLUE);
+        fb_puts(x, 1, path[d]->content, fg, BLUE);
         x += (int)strlen(path[d]->content);
-        if (d != depth) { vga_puts_at(x, 1, " > ", DARK_GREY, BLUE); x += 3; }
+        if (d != depth) { fb_puts(x, 1, " > ", DARK_GREY, BLUE); x += 3; }
         if (x >= VGA_COLS - 4) break;
     }
 
     // ── current node + child count ────────────────────────
-    vga_puts_at(0, 3, "node: ", LIGHT_GREY, BLUE);
-    vga_puts_at(6, 3, cur->content, WHITE, BLUE);
-    vga_puts_at(40, 3, "children: ", LIGHT_GREY, BLUE);
+    fb_puts(0, 3, "node: ", LIGHT_GREY, BLUE);
+    fb_puts(6, 3, cur->content, WHITE, BLUE);
+    fb_puts(40, 3, "children: ", LIGHT_GREY, BLUE);
     {
         char num[12]; int n = nkids, i = 0;
         if (n == 0) num[i++] = '0';
@@ -132,7 +151,7 @@ static void draw(void) {
         char rev[12]; int k = 0;
         while (i--) rev[k++] = num[i];
         rev[k] = '\0';
-        vga_puts_at(50, 3, rev, WHITE, BLUE);
+        fb_puts(50, 3, rev, WHITE, BLUE);
     }
 
     // ── child list, windowed around the selection ─────────
@@ -152,24 +171,26 @@ static void draw(void) {
         vga_color bg = selected ? CYAN  : BLUE;
         // paint the whole row so the highlight is a full bar
         for (int cx = 0; cx < VGA_COLS; cx++)
-            vga_putc_at(cx, LIST_TOP + row, ' ', fg, bg);
-        vga_puts_at(2, LIST_TOP + row, selected ? ">" : " ", fg, bg);
-        vga_puts_at(4, LIST_TOP + row, kid->content, fg, bg);
+            fb_putc(cx, LIST_TOP + row, ' ', fg, bg);
+        fb_puts(2, LIST_TOP + row, selected ? ">" : " ", fg, bg);
+        fb_puts(4, LIST_TOP + row, kid->content, fg, bg);
         // hint that a child has its own subtree
         if (kid->n_children)
-            vga_puts_at(VGA_COLS - 6, LIST_TOP + row, "[+]",
+            fb_puts(VGA_COLS - 6, LIST_TOP + row, "[+]",
                         selected ? BLACK : DARK_GREY, bg);
     }
     if (nkids == 0)
-        vga_puts_at(4, LIST_TOP, "(leaf - no children)", DARK_GREY, BLUE);
+        fb_puts(4, LIST_TOP, "(leaf - no children)", DARK_GREY, BLUE);
 
     // ── assembler result line ─────────────────────────────
-    vga_puts_at(0, INFO_ROW, info, LIGHT_GREEN, BLUE);
+    fb_puts(0, INFO_ROW, info, LIGHT_GREEN, BLUE);
 
     // ── help ──────────────────────────────────────────────
-    vga_puts_at(0, VGA_ROWS - 1,
+    fb_puts(0, VGA_ROWS - 1,
                 " Left:parent  Right:children  Up/Down:select  a:assemble ",
                 BLACK, LIGHT_GREY);
+
+    sys_blit(fb);   // push the frame to the screen in one syscall
 }
 
 void navigator_run(struct node *root) {
@@ -180,7 +201,7 @@ void navigator_run(struct node *root) {
 
     for (;;) {
         draw();
-        int key = keyboard_getkey();
+        int key = sys_getkey();
         struct node *cur = current();
 
         switch (key) {
