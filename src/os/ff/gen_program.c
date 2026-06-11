@@ -94,7 +94,7 @@ int main(int argc, char **argv)
 	I("int", "0x13", NULL);                  /* cd 13                  */
 	Im("lgdt", NULL, MEM("-","-","-","-","-","0xa5"));  /* 0f 01 16 a5 00 */
 
-	/* ---- 32-bit protected mode (kernel32 shapes) -------------------- */
+	/* ---- 32-bit protected mode (stage2 shapes) --------------------- */
 	bits("32");
 	I("mov", "ax", "0x10", NULL);            /* 66 b8 10 00            */
 	I("mov", "esp", "0x90000", NULL);        /* bc 00 00 09 00         */

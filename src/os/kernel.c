@@ -16,93 +16,110 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <stdint.h>
-#include <stddef.h>
+#include "vga.h"
+#include "idt.h"
+#include "heap.h"
+#include "keyboard.h"
+#include "navigator.h"
+#include "tss.h"
+#include "syscall.h"
+#include "userspace.h"
+#include <node.h>
 
-// VGA text buffer
-#define VGA_ADDRESS  0xB8000
-#define VGA_WIDTH    80
-#define VGA_HEIGHT   25
+// The embedded ff (serialized node program), from ff_blob.asm.
+extern const unsigned char ff_blob_start[];
+extern const unsigned char ff_blob_end[];
 
-typedef enum {
-    BLACK       = 0,
-    BLUE        = 1,
-    GREEN       = 2,
-    CYAN        = 3,
-    RED         = 4,
-    MAGENTA     = 5,
-    BROWN       = 6,
-    LIGHT_GREY  = 7,
-    DARK_GREY   = 8,
-    LIGHT_BLUE  = 9,
-    LIGHT_GREEN = 10,
-    LIGHT_CYAN  = 11,
-    LIGHT_RED   = 12,
-    PINK        = 13,
-    YELLOW      = 14,
-    WHITE       = 15,
-} vga_color;
-
-static volatile uint16_t* vga = (uint16_t*)VGA_ADDRESS;
-static int cur_x = 0;
-static int cur_y = 0;
-
-static uint16_t vga_entry(char c, vga_color fg, vga_color bg) {
-    return (uint16_t)c | (uint16_t)((bg << 4) | fg) << 8;
+// Total node count in a subtree (the ff's true size, including operand leaves).
+static int ff_count(struct node *n) {
+    int c = 1;
+    for (int i = 0; i < n->n_children; i++)
+        c += ff_count(n->children[i]);
+    return c;
 }
 
-void clear_screen(vga_color bg) {
-    for (int y = 0; y < VGA_HEIGHT; y++)
-        for (int x = 0; x < VGA_WIDTH; x++)
-            vga[y * VGA_WIDTH + x] = vga_entry(' ', WHITE, bg);
-    cur_x = cur_y = 0;
-}
+// ╔══════════════════════════════════════════════╗
+// ║  KERNEL MAIN — ring 0, full hardware access  ║
+// ║  Add kernel features here:                   ║
+// ║    - memory management                       ║
+// ║    - interrupt handlers (IDT)                ║
+// ║    - device drivers                          ║
+// ║    - filesystem                              ║
+// ║    - process scheduler                       ║
+// ╚══════════════════════════════════════════════╝
 
-void putchar(char c, vga_color fg, vga_color bg) {
-    if (c == '\n') {
-        cur_x = 0;
-        cur_y++;
-        return;
-    }
-    vga[cur_y * VGA_WIDTH + cur_x] = vga_entry(c, fg, bg);
-    if (++cur_x >= VGA_WIDTH) {
-        cur_x = 0;
-        cur_y++;
-    }
-}
-
-void print(const char *str, vga_color fg, vga_color bg) {
-    for (int i = 0; str[i]; i++)
-        putchar(str[i], fg, bg);
-}
-
-// Minimal itoa — no stdlib available
-void print_int(int n, vga_color fg, vga_color bg) {
-    if (n < 0) { putchar('-', fg, bg); n = -n; }
-    char buf[20];
-    int i = 0;
-    if (n == 0) { putchar('0', fg, bg); return; }
-    while (n > 0) { buf[i++] = '0' + (n % 10); n /= 10; }
-    while (i--) putchar(buf[i], fg, bg);
-}
-
-// -----------------------------------------------
-// Your kernel starts here
-// -----------------------------------------------
 void kernel_main(void) {
-    clear_screen(BLACK);
 
-    print("=== My 64-bit OS ===\n", YELLOW, BLACK);
-    print("Running in 64-bit long mode.\n", WHITE, BLACK);
-    print("VGA text output working.\n", LIGHT_GREEN, BLACK);
-    print("\nCount: ", CYAN, BLACK);
+    // ── Boot message ─────────────────────────────
+    vga_clear(BLACK);
+    vga_println("Kernel booted in 64-bit long mode.", YELLOW,      BLACK);
+    vga_println("Ring 0 — kernel space active.",      LIGHT_GREEN, BLACK);
+    vga_println("",                                   WHITE,       BLACK);
 
-    for (int i = 1; i <= 5; i++) {
-        print_int(i, LIGHT_CYAN, BLACK);
-        print(" ", WHITE, BLACK);
+    // ── Kernel initialization ─────────────────────
+    // Install the IDT first: until it exists, any CPU exception triple-faults
+    // and silently reboots. With it, a fault renders a PANIC screen instead.
+    idt_init();
+    vga_println("[OK] IDT installed (PIC remapped, IRQs masked).", LIGHT_GREY, BLACK);
+
+    // Bring up the heap (bump allocator in the 0x100000..0x1F0000 hole).
+    heap_init();
+    {
+        // Self-test: allocate a few blocks, prove realloc preserves data.
+        char *a = malloc(64);
+        for (int i = 0; i < 64; i++) a[i] = (char)i;
+        a = realloc(a, 256);
+        int ok = 1;
+        for (int i = 0; i < 64; i++) if (a[i] != (char)i) ok = 0;
+        int *b = malloc(100 * sizeof(int));
+        for (int i = 0; i < 100; i++) b[i] = i * 3;
+        if (b[99] != 297) ok = 0;
+
+        vga_print("[OK] Heap up @0x100000: ", LIGHT_GREY, BLACK);
+        vga_print_int((int)heap_used(), WHITE, BLACK);
+        vga_print(" bytes used, ", LIGHT_GREY, BLACK);
+        vga_print_int((int)(heap_free() / 1024), WHITE, BLACK);
+        vga_print(" KB free", LIGHT_GREY, BLACK);
+        vga_println(ok ? " (realloc OK)." : " (SELFTEST FAIL).",
+                    ok ? LIGHT_GREY : LIGHT_RED, BLACK);
     }
 
-    print("\n\nKernel halted.", LIGHT_GREY, BLACK);
+    // ── Load the ff (the node tree) from the embedded blob ────────
+    struct node *ff = node_read_mem(ff_blob_start,
+                                    (size_t)(ff_blob_end - ff_blob_start));
+    if (ff) {
+        vga_print("[OK] ff loaded: root '", LIGHT_GREY, BLACK);
+        vga_print(ff->content, YELLOW, BLACK);
+        vga_print("', ", LIGHT_GREY, BLACK);
+        vga_print_int(ff_count(ff), WHITE, BLACK);
+        vga_print(" nodes, ", LIGHT_GREY, BLACK);
+        vga_print_int(ff->n_children, WHITE, BLACK);
+        vga_println(" top-level children.", LIGHT_GREY, BLACK);
+    } else {
+        vga_println("[!!] ff failed to load.", LIGHT_RED, BLACK);
+    }
 
+    // Bring up the keyboard (IRQ1) and hand control to the ff navigator. The
+    // navigator owns the screen from here and does not return.
+    keyboard_init();
+    if (ff)
+        navigator_run(ff);
+
+    // Set up TSS so CPU knows the kernel stack for ring 3 → ring 0 switches
+    tss_init(0x90000);
+    vga_println("[OK] TSS initialized.",              LIGHT_GREY,  BLACK);
+
+    // Set up syscall instruction handler
+    syscall_init();
+    vga_println("[OK] Syscall handler ready.",        LIGHT_GREY,  BLACK);
+
+    vga_println("",                                   WHITE,       BLACK);
+    vga_println("Jumping to userspace...",            CYAN,        BLACK);
+    vga_println("",                                   WHITE,       BLACK);
+
+    // ── Hand off to ring 3 ────────────────────────
+    jump_to_userspace();
+
+    // Never reached — jump_to_userspace does not return
     while (1) {}
 }

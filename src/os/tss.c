@@ -19,7 +19,7 @@
 #include "tss.h"
 #include <stdint.h>
 
-// GDT TSS descriptor is at selector offset 0x28 in the GDT set up by kernel32.asm
+// GDT TSS descriptor is at selector offset 0x28 in the GDT set up by stage2.asm
 
 __attribute__((aligned(16)))
 TSS tss = {0};
@@ -31,7 +31,7 @@ void tss_init(uint64_t kernel_stack) {
     uint64_t base = (uint64_t)&tss;
 
     // Read the live GDT base instead of hardcoding it, so this stays correct
-    // regardless of where kernel32.asm placed the GDT.
+    // regardless of where stage2.asm placed the GDT.
     struct __attribute__((packed)) {
         uint16_t limit;
         uint64_t base;

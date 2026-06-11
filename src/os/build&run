@@ -3,9 +3,9 @@ make test # qemu
 
 ttpos/
 ├── boot.asm          ; stage 1 — 16-bit bootloader
-├── kernel32.asm      ; stage 2 — bridge to 64-bit
+├── stage2.asm        ; stage 2 — bridge to 64-bit
 ├── kernel_entry.asm  ; stage 3 — 64-bit entry, calls kernel_main
-├── kernel_main.c     ; ★ YOUR KERNEL CODE GOES HERE
+├── kernel.c          ; ★ YOUR KERNEL CODE GOES HERE
 ├── vga.c             ; kernel helper — VGA text output
 ├── vga.h
 ├── tss.c             ; kernel — TSS setup

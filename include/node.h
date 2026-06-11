@@ -27,18 +27,41 @@
  * "rax" and "rax". ttpc's `-a` mode reads such a tree and assembles it.
  *
  * This header is owned by the OS (nodes are the OS's data model) and shared with
- * the host compiler. The serialized form below is a flat record stream — the
- * bootstrap stand-in for the eventual 4 KB on-disk DISK NODE blocks with their
- * child_lba block numbers (see src/compiler/PLAN.md); children are referenced by
- * array index instead of block number until a block allocator exists.
+ * the host compiler. The two builds differ only in I/O:
+ *
+ *   - The freestanding CORE (struct, builder, and the buffer-based
+ *     node_read_mem / node_write_mem serialization) needs only malloc/realloc/
+ *     calloc/free/memcpy/strlen. The OS supplies these (heap.c, string.c), so
+ *     the kernel can build and serialize trees without libc.
+ *
+ *   - The host adds FILE* convenience wrappers (node_read / node_write) when it
+ *     defines TTP_HOSTED; they just slurp/spill a file around the mem core.
+ *
+ * The serialized form is a flat record stream — the bootstrap stand-in for the
+ * eventual 4 KB on-disk DISK NODE blocks with their child_lba block numbers
+ * (see src/compiler/PLAN.md); children are referenced by array index instead of
+ * block number until a block allocator exists.
  */
 #ifndef TTP_NODE_H
 #define TTP_NODE_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <stdint.h>
+#include <stddef.h>
+
+#ifdef TTP_HOSTED
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+#else
+  /* Freestanding: declare the libc subset the OS implements (heap.c/string.c).
+     Prototypes match those headers, so including them too is harmless. */
+  void  *malloc(size_t);
+  void  *calloc(size_t, size_t);
+  void  *realloc(void *, size_t);
+  void   free(void *);
+  void  *memcpy(void *, const void *, size_t);
+  size_t strlen(const char *);
+#endif
 
 struct node {
 	unsigned char  id[32];       /* content hash — reserved (zero for now)   */
@@ -77,7 +100,7 @@ static inline struct node *node_kid(struct node *parent, const char *content)
 	return c;
 }
 
-/* ---- serialization -------------------------------------------------------- */
+/* ---- serialization core (freestanding) ------------------------------------ */
 
 static inline void node__collect(struct node *n, struct node ***arr,
 				 int *len, int *cap)
@@ -100,68 +123,89 @@ static inline int node__index(struct node **arr, int len, struct node *n)
 	return -1;
 }
 
-/* Write the tree rooted at `root` as a flat record stream. Returns 0. */
-static inline int node_write(FILE *f, struct node *root)
+/* Copy `sz` bytes into buf at *pos when there is room; always advance *pos so a
+   NULL/short buffer still computes the total length (dry run). */
+static inline void node__put(unsigned char *buf, size_t cap, size_t *pos,
+			     const void *src, size_t sz)
+{
+	if (buf && *pos + sz <= cap)
+		memcpy(buf + *pos, src, sz);
+	*pos += sz;
+}
+
+/* Serialize the tree rooted at `root` into buf (capacity cap). With buf==NULL it
+   only measures: *out_len gets the byte count and it returns 0. With a real buf
+   it returns 0 on success, -1 if cap was too small (*out_len still set). */
+static inline int node_write_mem(struct node *root, unsigned char *buf,
+				 size_t cap, size_t *out_len)
 {
 	struct node **arr = NULL;
-	int len = 0, cap = 0;
-	node__collect(root, &arr, &len, &cap);
+	int len = 0, acap = 0;
+	node__collect(root, &arr, &len, &acap);
 
+	size_t pos = 0;
 	uint32_t cnt = (uint32_t)len;
-	if (fwrite(&cnt, sizeof cnt, 1, f) != 1)
-		return -1;
+	node__put(buf, cap, &pos, &cnt, sizeof cnt);
 	for (int i = 0; i < len; i++) {
 		struct node *n = arr[i];
 		int32_t cl = n->content_len;
 		int32_t nc = n->n_children;
-		if (fwrite(n->id, 1, sizeof n->id, f) != sizeof n->id ||
-		    fwrite(&cl, sizeof cl, 1, f) != 1 ||
-		    (cl > 0 && fwrite(n->content, 1, (size_t)cl, f) != (size_t)cl) ||
-		    fwrite(&nc, sizeof nc, 1, f) != 1) {
-			free(arr);
-			return -1;
-		}
+		node__put(buf, cap, &pos, n->id, sizeof n->id);
+		node__put(buf, cap, &pos, &cl, sizeof cl);
+		if (cl > 0)
+			node__put(buf, cap, &pos, n->content, (size_t)cl);
+		node__put(buf, cap, &pos, &nc, sizeof nc);
 		for (int j = 0; j < n->n_children; j++) {
 			int32_t ci = node__index(arr, len, n->children[j]);
-			if (fwrite(&ci, sizeof ci, 1, f) != 1) {
-				free(arr);
-				return -1;
-			}
+			node__put(buf, cap, &pos, &ci, sizeof ci);
 		}
 	}
 	free(arr);
-	return 0;
+	if (out_len)
+		*out_len = pos;
+	return (buf && pos > cap) ? -1 : 0;
 }
 
-/* Read a flat record stream back into a tree; returns the root or NULL. */
-static inline struct node *node_read(FILE *f)
+/* Rebuild a tree from a flat record stream in memory; returns root or NULL. */
+static inline struct node *node_read_mem(const unsigned char *buf, size_t len)
 {
+	size_t pos = 0;
 	uint32_t cnt;
-	if (fread(&cnt, sizeof cnt, 1, f) != 1 || cnt == 0)
+	if (len < sizeof cnt)
+		return NULL;
+	memcpy(&cnt, buf + pos, sizeof cnt); pos += sizeof cnt;
+	if (cnt == 0)
 		return NULL;
 
 	struct node **nodes = (struct node **)calloc(cnt, sizeof(struct node *));
 	for (uint32_t i = 0; i < cnt; i++) {
 		struct node *n = (struct node *)calloc(1, sizeof *n);
 		int32_t cl = 0, nc = 0;
-		if (fread(n->id, 1, sizeof n->id, f) != sizeof n->id ||
-		    fread(&cl, sizeof cl, 1, f) != 1 || cl < 0) {
+		if (pos + sizeof n->id + sizeof cl > len) {
+			free(n); free(nodes); return NULL;
+		}
+		memcpy(n->id, buf + pos, sizeof n->id); pos += sizeof n->id;
+		memcpy(&cl, buf + pos, sizeof cl);       pos += sizeof cl;
+		if (cl < 0 || pos + (size_t)cl + sizeof nc > len) {
 			free(n); free(nodes); return NULL;
 		}
 		n->content_len = cl;
 		n->content = (char *)malloc((size_t)cl + 1);
-		if ((cl > 0 && fread(n->content, 1, (size_t)cl, f) != (size_t)cl) ||
-		    fread(&nc, sizeof nc, 1, f) != 1 || nc < 0) {
+		if (cl > 0)
+			memcpy(n->content, buf + pos, (size_t)cl);
+		pos += (size_t)cl;
+		n->content[cl] = '\0';
+		memcpy(&nc, buf + pos, sizeof nc); pos += sizeof nc;
+		if (nc < 0 || pos + (size_t)nc * sizeof(int32_t) > len) {
 			free(n->content); free(n); free(nodes); return NULL;
 		}
-		n->content[cl] = '\0';
 		n->n_children = nc;
 		n->children = nc ? (struct node **)malloc(
 			(size_t)nc * sizeof(struct node *)) : NULL;
 		for (int j = 0; j < nc; j++) {
 			int32_t ci = 0;
-			if (fread(&ci, sizeof ci, 1, f) != 1 ||
-			    ci < 0 || (uint32_t)ci >= i) {   /* child precedes parent */
+			memcpy(&ci, buf + pos, sizeof ci); pos += sizeof ci;
+			if (ci < 0 || (uint32_t)ci >= i) {   /* child precedes parent */
 				free(n->children); free(n->content);
 				free(n); free(nodes); return NULL;
 			}
@@ -173,5 +217,43 @@ static inline struct node *node_read(FILE *f)
 	free(nodes);
 	return root;
 }
+
+/* ---- host FILE* convenience (libc only) ----------------------------------- */
+#ifdef TTP_HOSTED
+
+/* Read a flat record stream from a file; returns the root or NULL. */
+static inline struct node *node_read(FILE *f)
+{
+	if (fseek(f, 0, SEEK_END) != 0)
+		return NULL;
+	long sz = ftell(f);
+	if (sz <= 0 || fseek(f, 0, SEEK_SET) != 0)
+		return NULL;
+	unsigned char *buf = (unsigned char *)malloc((size_t)sz);
+	if (!buf)
+		return NULL;
+	struct node *root = NULL;
+	if (fread(buf, 1, (size_t)sz, f) == (size_t)sz)
+		root = node_read_mem(buf, (size_t)sz);
+	free(buf);
+	return root;
+}
+
+/* Write the tree rooted at `root` as a flat record stream. Returns 0. */
+static inline int node_write(FILE *f, struct node *root)
+{
+	size_t need = 0;
+	node_write_mem(root, NULL, 0, &need);          /* measure */
+	unsigned char *buf = (unsigned char *)malloc(need);
+	if (!buf)
+		return -1;
+	int rc = node_write_mem(root, buf, need, NULL);
+	if (rc == 0 && fwrite(buf, 1, need, f) != need)
+		rc = -1;
+	free(buf);
+	return rc;
+}
+
+#endif /* TTP_HOSTED */
 
 #endif /* TTP_NODE_H */

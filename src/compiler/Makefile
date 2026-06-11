@@ -1,8 +1,9 @@
 CC     ?= cc
 CFLAGS ?= -O2 -Wall -Wextra
 
-# Shared headers (the node format lives in the repo-root include/).
-CPPFLAGS ?= -I../../include
+# Shared headers (the node format lives in the repo-root include/). TTP_HOSTED
+# selects node.h's libc-backed FILE* serialization (the OS build omits it).
+CPPFLAGS ?= -I../../include -DTTP_HOSTED
 
 BUILD ?= build
 

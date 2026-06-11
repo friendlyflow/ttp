@@ -14,15 +14,17 @@
 ; You should have received a copy of the GNU General Public License
 ; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+; The "ff" — the serialized node program — embedded into the kernel image as a
+; read-only blob. At boot the kernel rebuilds the tree from it with
+; node_read_mem(ff_blob_start, ff_blob_end - ff_blob_start). M8 replaces this
+; with loading the nodes from disk; the format and the load call stay the same.
+
 [bits 64]
+section .rodata
 
-global kernel_entry
-extern kernel_main          ; defined in kernel.c
+global ff_blob_start
+global ff_blob_end
 
-kernel_entry:
-    and rsp, ~0xF           ; 16-byte align stack
-    call kernel_main        ; ── ENTERS YOUR C KERNEL ──
-
-.hang:
-    hlt
-    jmp .hang
+ff_blob_start:
+    incbin "ff/program.nodes"
+ff_blob_end:

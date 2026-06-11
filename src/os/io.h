@@ -19,23 +19,19 @@
 #pragma once
 #include <stdint.h>
 
-typedef enum {
-    BLACK = 0, BLUE, GREEN, CYAN, RED, MAGENTA,
-    BROWN, LIGHT_GREY, DARK_GREY, LIGHT_BLUE,
-    LIGHT_GREEN, LIGHT_CYAN, LIGHT_RED, PINK,
-    YELLOW, WHITE
-} vga_color;
+// Port I/O primitives. Used by the PIC, keyboard, and (later) disk drivers.
 
-#define VGA_COLS 80
-#define VGA_ROWS 25
+static inline void outb(uint16_t port, uint8_t val) {
+    __asm__ volatile("outb %0, %1" :: "a"(val), "Nd"(port));
+}
 
-void vga_clear(vga_color bg);
-void vga_print(const char *str, vga_color fg, vga_color bg);
-void vga_println(const char *str, vga_color fg, vga_color bg);
-void vga_print_int(int n, vga_color fg, vga_color bg);
-void vga_print_hex(uint64_t n, vga_color fg, vga_color bg);
+static inline uint8_t inb(uint16_t port) {
+    uint8_t ret;
+    __asm__ volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
 
-// Positioned output for full-screen UIs (the navigator). vga_putc_at writes one
-// cell; vga_puts_at writes a string from (x,y), clipped at the right edge.
-void vga_putc_at(int x, int y, char c, vga_color fg, vga_color bg);
-void vga_puts_at(int x, int y, const char *s, vga_color fg, vga_color bg);
+// A short, side-effect-free I/O delay: write to the unused POST port 0x80.
+static inline void io_wait(void) {
+    outb(0x80, 0);
+}

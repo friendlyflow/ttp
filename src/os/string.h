@@ -1,0 +1,32 @@
+/*
+ * ttp — the trust project: a self-hosting OS and compiler.
+ * Copyright (C) 2026  Nico Verrijdt
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+#include <stddef.h>
+
+// Minimal freestanding libc shim. memcpy/memset/memmove/memcmp also satisfy the
+// calls a freestanding GCC may emit on its own. These let the shared node.h
+// core (and later the ported compiler) build inside the kernel without libc.
+
+void  *memcpy(void *dst, const void *src, size_t n);
+void  *memset(void *dst, int c, size_t n);
+void  *memmove(void *dst, const void *src, size_t n);
+int    memcmp(const void *a, const void *b, size_t n);
+size_t strlen(const char *s);
+int    strcmp(const char *a, const char *b);
+int    atoi(const char *s);

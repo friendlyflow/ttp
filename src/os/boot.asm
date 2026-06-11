@@ -24,15 +24,12 @@ start:
     mov ss, ax
     mov sp, 0x7C00
 
-    mov ah, 0x02
-    mov al, 50
-    mov ch, 0
-    mov cl, 2
-    mov dh, 0
+    ; Load the rest of the OS (stage2 + kernel) with the INT 13h extended read
+    ; (AH=42h, LBA + Disk Address Packet). Unlike the CHS read it replaced, this
+    ; does not cap at one track, so the kernel can keep growing past ~32 KB.
+    mov ah, 0x42
     mov dl, 0x80
-    mov bx, 0x1000
-    mov es, bx
-    mov bx, 0x0000
+    mov si, dap
     int 0x13
     jc disk_error
 
@@ -40,6 +37,17 @@ start:
 
 disk_error:
     hlt
+    jmp disk_error
+
+; Disk Address Packet: load SECTORS sectors from LBA 1 (stage2) to 0x1000:0000
+; (physical 0x10000). 127 sectors = ~63 KB, well clear of the kernel stack.
+dap:
+    db 0x10          ; packet size
+    db 0x00          ; reserved
+    dw 127           ; sectors to transfer
+    dw 0x0000        ; destination offset
+    dw 0x1000        ; destination segment -> 0x10000
+    dq 1             ; starting LBA (stage2 sits at LBA 1)
 
 times 510 - ($ - $$) db 0
 dw 0xAA55

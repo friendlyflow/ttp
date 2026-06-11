@@ -60,3 +60,21 @@ void vga_print_int(int n, vga_color fg, vga_color bg) {
     while (n > 0) { buf[i++] = '0' + (n % 10); n /= 10; }
     while (i--) putchar(buf[i], fg, bg);
 }
+
+void vga_print_hex(uint64_t n, vga_color fg, vga_color bg) {
+    static const char digits[] = "0123456789abcdef";
+    if (n == 0) { putchar('0', fg, bg); return; }
+    char buf[16]; int i = 0;
+    while (n > 0) { buf[i++] = digits[n & 0xF]; n >>= 4; }
+    while (i--) putchar(buf[i], fg, bg);
+}
+
+void vga_putc_at(int x, int y, char c, vga_color fg, vga_color bg) {
+    if (x < 0 || x >= VGA_WIDTH || y < 0 || y >= VGA_HEIGHT) return;
+    vga[y * VGA_WIDTH + x] = entry(c, fg, bg);
+}
+
+void vga_puts_at(int x, int y, const char *s, vga_color fg, vga_color bg) {
+    for (int i = 0; s[i] && x + i < VGA_WIDTH; i++)
+        vga_putc_at(x + i, y, s[i], fg, bg);
+}

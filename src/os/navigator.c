@@ -1,0 +1,138 @@
+/*
+ * ttp — the trust project: a self-hosting OS and compiler.
+ * Copyright (C) 2026  Nico Verrijdt
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "navigator.h"
+#include "keyboard.h"
+#include "vga.h"
+#include "string.h"
+
+#define MAX_DEPTH 64
+#define LIST_TOP  5                       // first row of the child list
+#define LIST_BOT  (VGA_ROWS - 2)          // last usable row (leave row 24 for help)
+#define LIST_ROWS (LIST_BOT - LIST_TOP)   // visible child rows
+
+// Path from root to the current node, plus the selected child index at each
+// level. The node tree has no parent pointers, so we remember the descent.
+static struct node *path[MAX_DEPTH];
+static int          sel[MAX_DEPTH];
+static int          depth;
+
+static struct node *current(void) { return path[depth]; }
+
+static void draw(void) {
+    struct node *cur = current();
+    int nkids = cur->n_children;
+
+    vga_clear(BLUE);
+
+    // ── title ─────────────────────────────────────────────
+    vga_puts_at(0, 0, " ff - the trust project              "
+                      "                                       ",
+                BLACK, LIGHT_GREY);
+
+    // ── breadcrumb (path to the current node) ─────────────
+    int x = 0;
+    for (int d = 0; d <= depth; d++) {
+        vga_color fg = (d == depth) ? YELLOW : LIGHT_CYAN;
+        vga_puts_at(x, 1, path[d]->content, fg, BLUE);
+        x += (int)strlen(path[d]->content);
+        if (d != depth) { vga_puts_at(x, 1, " > ", DARK_GREY, BLUE); x += 3; }
+        if (x >= VGA_COLS - 4) break;
+    }
+
+    // ── current node + child count ────────────────────────
+    vga_puts_at(0, 3, "node: ", LIGHT_GREY, BLUE);
+    vga_puts_at(6, 3, cur->content, WHITE, BLUE);
+    vga_puts_at(40, 3, "children: ", LIGHT_GREY, BLUE);
+    {
+        char num[12]; int n = nkids, i = 0;
+        if (n == 0) num[i++] = '0';
+        while (n > 0) { num[i++] = '0' + (n % 10); n /= 10; }
+        char rev[12]; int k = 0;
+        while (i--) rev[k++] = num[i];
+        rev[k] = '\0';
+        vga_puts_at(50, 3, rev, WHITE, BLUE);
+    }
+
+    // ── child list, windowed around the selection ─────────
+    int s = sel[depth];
+    int top = 0;
+    if (nkids > LIST_ROWS) {
+        top = s - LIST_ROWS / 2;
+        if (top < 0) top = 0;
+        if (top > nkids - LIST_ROWS) top = nkids - LIST_ROWS;
+    }
+    for (int row = 0; row < LIST_ROWS; row++) {
+        int i = top + row;
+        if (i >= nkids) break;
+        struct node *kid = cur->children[i];
+        int selected = (i == s);
+        vga_color fg = selected ? BLACK : WHITE;
+        vga_color bg = selected ? CYAN  : BLUE;
+        // paint the whole row so the highlight is a full bar
+        for (int cx = 0; cx < VGA_COLS; cx++)
+            vga_putc_at(cx, LIST_TOP + row, ' ', fg, bg);
+        vga_puts_at(2, LIST_TOP + row, selected ? ">" : " ", fg, bg);
+        vga_puts_at(4, LIST_TOP + row, kid->content, fg, bg);
+        // hint that a child has its own subtree
+        if (kid->n_children)
+            vga_puts_at(VGA_COLS - 6, LIST_TOP + row, "[+]",
+                        selected ? BLACK : DARK_GREY, bg);
+    }
+    if (nkids == 0)
+        vga_puts_at(4, LIST_TOP, "(leaf — no children)", DARK_GREY, BLUE);
+
+    // ── help ──────────────────────────────────────────────
+    vga_puts_at(0, VGA_ROWS - 1,
+                " Left:parent   Right:children   Up/Down:select ",
+                BLACK, LIGHT_GREY);
+}
+
+void navigator_run(struct node *root) {
+    depth = 0;
+    path[0] = root;
+    sel[0] = 0;
+
+    for (;;) {
+        draw();
+        int key = keyboard_getkey();
+        struct node *cur = current();
+
+        switch (key) {
+        case KEY_UP:
+            if (sel[depth] > 0) sel[depth]--;
+            break;
+        case KEY_DOWN:
+            if (sel[depth] + 1 < cur->n_children) sel[depth]++;
+            break;
+        case KEY_RIGHT:
+            if (cur->n_children > 0 && depth + 1 < MAX_DEPTH) {
+                struct node *kid = cur->children[sel[depth]];
+                depth++;
+                path[depth] = kid;
+                sel[depth] = 0;
+            }
+            break;
+        case KEY_LEFT:
+            if (depth > 0) depth--;
+            break;
+        default:
+            break;
+        }
+    }
+}
