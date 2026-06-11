@@ -44,7 +44,7 @@
  */
 #define DEFAULT_INPUT  "src/os/boot_flow.txt"
 #define DEFAULT_OUTPUT "build/compiler/ttpos.img"
-#define DEFAULT_NODES  "src/os/program.nodes"   /* -a: the node program */
+#define DEFAULT_NODES  "src/os/ff/program.nodes"   /* -a: the node program */
 
 /* Pad the output to a full disk so BIOS/QEMU can read every sector the boot
  * code loads (boot.bin pulls in 50 sectors). Matches the 2048-sector (1 MiB)

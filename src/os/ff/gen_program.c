@@ -19,7 +19,7 @@
 /*
  * gen_program.c — bootstrap authoring of a node program.
  *
- * The "new asm" is a tree of nodes: an instruction is a node whose content is
+ * The "ff" is a tree of nodes: an instruction is a node whose content is
  * the mnemonic, with one child per operand (a register/immediate leaf, or a
  * "mem" node). Until a node editor exists, this host tool builds a
  * representative program with the node-builder API in <node.h> and serializes

@@ -29,15 +29,15 @@ all: $(BUILD)/ttpos.img
 $(BUILD):
 	mkdir -p $(BUILD)
 
-$(BUILD)/gen_program: gen_program.c $(INCLUDE)/node.h | $(BUILD)
-	$(HOSTCC) -O2 -Wall -Wextra -I$(INCLUDE) gen_program.c -o $@
+$(BUILD)/gen_program: ff/gen_program.c $(INCLUDE)/node.h | $(BUILD)
+	$(HOSTCC) -O2 -Wall -Wextra -I$(INCLUDE) ff/gen_program.c -o $@
 
-# The node program is committed source (the "new asm"), regenerated here.
-program.nodes: $(BUILD)/gen_program
+# The node program is committed source (the "ff"), regenerated here.
+ff/program.nodes: $(BUILD)/gen_program
 	$(BUILD)/gen_program $@
 
 .PHONY: nodes
-nodes: program.nodes
+nodes: ff/program.nodes
 
 $(BUILD)/boot.bin: boot.asm | $(BUILD)
 	$(NASM) -f bin $< -o $@
