@@ -25,6 +25,7 @@ KERNEL_OBJS = $(addprefix $(BUILD)/, \
               keyboard.o     \
               navigator.o    \
               encode.o       \
+              hash.o         \
               tss.o          \
               syscall.o      \
               userspace.o    \
@@ -94,13 +95,14 @@ $(BUILD)/isr.o: isr.asm | $(BUILD)
 $(BUILD)/ff_blob.o: ff_blob.asm ff/program.nodes | $(BUILD)
 	$(NASM) -f elf64 $< -o $@
 
-# The x86-64 encoder, shared with the host ttpc. Compiled WITHOUT TTP_HOSTED so
-# it uses the OS's freestanding libc subset (string.c) instead of glibc.
-$(BUILD)/encode.o: ../compiler/encode.c ../compiler/encode.h | $(BUILD)
+# The x86-64 encoder, shared with the host ttpc. The interface lives in the
+# repo-root include/ (like node.h); only the .c stays with the compiler. Built
+# WITHOUT TTP_HOSTED so it uses the OS's freestanding libc subset (string.c).
+$(BUILD)/encode.o: ../compiler/encode.c $(INCLUDE)/encode.h | $(BUILD)
 	$(CC) $(CFLAGS) -I$(INCLUDE) -c $< -o $@
 
 $(BUILD)/%.o: %.c | $(BUILD)
-	$(CC) $(CFLAGS) -I$(INCLUDE) -I../compiler -c $< -o $@
+	$(CC) $(CFLAGS) -I$(INCLUDE) -c $< -o $@
 
 $(BUILD)/kernel.bin: $(KERNEL_OBJS) linker.ld | $(BUILD)
 	$(LD) -T linker.ld --oformat binary -o $@ $(KERNEL_OBJS)

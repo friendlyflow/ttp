@@ -100,6 +100,100 @@ static inline struct node *node_kid(struct node *parent, const char *content)
 	return c;
 }
 
+/* ---- meta convention -----------------------------------------------------
+ * A node may carry a child tagged by the reserved content "meta" (conventionally
+ * first). It holds compiled artifacts (meta/elf) and provenance, and is excluded
+ * from the operand/source walks — so it never shifts operand positions and the
+ * source hash stays stable when only the cached binary changes. meta is found by
+ * its tag, not its index, so it survives sorting and any child reordering.
+ */
+
+/* Does this node's content equal the NUL-terminated string s? (binary-safe) */
+static inline int node_is(const struct node *n, const char *s)
+{
+	int i = 0;
+	for (; s[i]; i++)
+		if (i >= n->content_len || n->content[i] != s[i])
+			return 0;
+	return i == n->content_len;
+}
+
+/* The node's meta child, or NULL. */
+static inline struct node *node_meta(struct node *n)
+{
+	for (int i = 0; i < n->n_children; i++)
+		if (node_is(n->children[i], "meta"))
+			return n->children[i];
+	return NULL;
+}
+
+/* Count / index the non-meta children — the operands (or body) the encoder and
+   the source hash see. node_operand(n, i) returns the i-th, or NULL. */
+static inline int node_noperands(struct node *n)
+{
+	int c = 0;
+	for (int i = 0; i < n->n_children; i++)
+		if (!node_is(n->children[i], "meta"))
+			c++;
+	return c;
+}
+static inline struct node *node_operand(struct node *n, int idx)
+{
+	for (int i = 0; i < n->n_children; i++) {
+		if (node_is(n->children[i], "meta"))
+			continue;
+		if (idx-- == 0)
+			return n->children[i];
+	}
+	return NULL;
+}
+
+/* The child whose content equals `name`, or NULL. */
+static inline struct node *node_child(struct node *n, const char *name)
+{
+	for (int i = 0; i < n->n_children; i++)
+		if (node_is(n->children[i], name))
+			return n->children[i];
+	return NULL;
+}
+
+/* The child named `name`, creating an empty leaf if absent. */
+static inline struct node *node_get_or_add(struct node *n, const char *name)
+{
+	struct node *c = node_child(n, name);
+	return c ? c : node_kid(n, name);
+}
+
+/* The single value-child of `n`, creating it if absent. A named node keeps its
+   name in its content; its payload (e.g. meta/elf's bytes) lives in this child,
+   so storing the payload never clobbers the name used to look the node up. */
+static inline struct node *node_value(struct node *n)
+{
+	if (n->n_children == 0)
+		node_kid(n, "");
+	return n->children[0];
+}
+
+/* Replace a node's content with `len` bytes (binary-safe; NUL-terminated copy). */
+static inline void node_set_content(struct node *n, const char *data, int len)
+{
+	n->content = (char *)realloc(n->content, (size_t)len + 1);
+	if (len > 0 && data)
+		memcpy(n->content, data, (size_t)len);
+	n->content[len] = '\0';
+	n->content_len = len;
+}
+
+/* Insert `child` as the first child of `parent` (used to keep meta in front). */
+static inline struct node *node_prepend(struct node *parent, struct node *child)
+{
+	node_add(parent, child);
+	for (int i = parent->n_children - 1; i > 0; i--)
+		parent->children[i] = parent->children[i - 1];
+	parent->children[0] = child;
+	return child;
+}
+
 /* ---- serialization core (freestanding) ------------------------------------ */
 
 static inline void node__collect(struct node *n, struct node ***arr,

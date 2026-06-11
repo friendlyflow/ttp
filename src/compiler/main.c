@@ -21,7 +21,7 @@
 #include <string.h>
 
 #include <node.h>                /* the node tree that `-a` assembles (-Iinclude) */
-#include "encode.h"              /* struct insn, encode(), assemble() — shared */
+#include <encode.h>              /* struct insn, encode(), assemble() — shared */
 
 /*
  * Bootstrap stage: the "compiler" reads the OS boot-flow disassembly and, for

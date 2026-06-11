@@ -30,7 +30,7 @@
  * This file is compiled into both the host ttpc and the OS; the only difference
  * is where the small libc subset below comes from.
  */
-#include "encode.h"
+#include <encode.h>
 #include <node.h>
 #include <stddef.h>
 
@@ -374,8 +374,8 @@ int encode(struct node *nd, int mode, struct insn *out, const char **err)
 	/* rep / repne wrapper: encode the child, prepend the prefix. */
 	if (!strcmp(m,"rep")||!strcmp(m,"repe")||!strcmp(m,"repz")||
 	    !strcmp(m,"repne")||!strcmp(m,"repnz")) {
-		if (nd->n_children != 1) { *err = "rep takes one child instruction"; return 0; }
-		if (!encode(nd->children[0], mode, out, err)) return 0;
+		if (node_noperands(nd) != 1) { *err = "rep takes one child instruction"; return 0; }
+		if (!encode(node_operand(nd, 0), mode, out, err)) return 0;
 		unsigned char pfx = (m[3]=='n') ? 0xf2 : 0xf3;
 		if (out->n_legacy >= (int)sizeof out->legacy) { *err = "too many prefixes"; return 0; }
 		for (int k = out->n_legacy; k > 0; k--) out->legacy[k] = out->legacy[k-1];
@@ -389,10 +389,10 @@ int encode(struct node *nd, int mode, struct insn *out, const char **err)
 	e.in = out; e.mode = mode; e.seg = -1;
 
 	struct operand ops[4];
-	int nops = nd->n_children;
+	int nops = node_noperands(nd);          /* meta child, if any, is skipped */
 	if (nops > 4) { *err = "too many operands"; return 0; }
 	for (int i = 0; i < nops; i++) {
-		if (!parse_operand(nd->children[i], &ops[i], err)) return 0;
+		if (!parse_operand(node_operand(nd, i), &ops[i], err)) return 0;
 		if (ops[i].kind==OP_REG && ops[i].r8rex)  e.need_rex8 = 1;
 		if (ops[i].kind==OP_REG && ops[i].r8high) e.bad_rex8  = 1;
 	}
