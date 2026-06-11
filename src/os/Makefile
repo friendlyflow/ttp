@@ -26,6 +26,8 @@ KERNEL_OBJS = $(addprefix $(BUILD)/, \
               navigator.o    \
               encode.o       \
               hash.o         \
+              ata.o          \
+              gen.o          \
               tss.o          \
               syscall.o      \
               userspace.o    \

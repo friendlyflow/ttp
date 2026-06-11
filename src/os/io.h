@@ -31,6 +31,17 @@ static inline uint8_t inb(uint16_t port) {
     return ret;
 }
 
+// 16-bit port I/O — the ATA PIO data register (0x1F0) transfers words.
+static inline void outw(uint16_t port, uint16_t val) {
+    __asm__ volatile("outw %0, %1" :: "a"(val), "Nd"(port));
+}
+
+static inline uint16_t inw(uint16_t port) {
+    uint16_t ret;
+    __asm__ volatile("inw %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
 // A short, side-effect-free I/O delay: write to the unused POST port 0x80.
 static inline void io_wait(void) {
     outb(0x80, 0);

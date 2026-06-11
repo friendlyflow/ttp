@@ -19,15 +19,10 @@
 #pragma once
 #include <stdint.h>
 
-void syscall_init(void);
+#define ATA_SECTOR 512
 
-// Syscall numbers. The ABI: rax = number, rdi = arg0, return value in rax.
-#define SYS_PRINT  0   // arg0 = const char* (NUL-terminated), prints a line
-#define SYS_EXIT   1   // halt the machine
-#define SYS_GETKEY 2   // block for a key; returns the key code
-#define SYS_BLIT   3   // arg0 = uint16_t[80*25] cell buffer -> copied to VGA
-#define SYS_ALLOC  4   // arg0 = size; returns a heap pointer (or 0)
-#define SYS_SAVE   5   // arg0 = node* root; save a generation, return its index
-
-// VGA text dimensions, shared so ring 3 can size its blit buffer.
-#define VGA_CELLS (80 * 25)
+// Polled ATA PIO read/write of the primary master (LBA28). buf must hold
+// count*512 bytes. Return 0 on success, -1 on a drive error. count is 1..255.
+// QEMU's default `pc` machine exposes this drive at the legacy 0x1F0 ports.
+int ata_read(uint32_t lba, uint8_t count, void *buf);
+int ata_write(uint32_t lba, uint8_t count, const void *buf);

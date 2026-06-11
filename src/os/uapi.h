@@ -55,3 +55,11 @@ static inline void *sys_alloc(uint64_t n) {
                      : "rcx", "r11", "memory");
     return (void *)r;
 }
+
+// Persist the node tree `root` as a new generation; returns its index, or -1.
+static inline int sys_save(void *root) {
+    uint64_t r;
+    __asm__ volatile("syscall" : "=a"(r) : "a"((uint64_t)SYS_SAVE), "D"(root)
+                     : "rcx", "r11", "memory");
+    return (int)r;
+}

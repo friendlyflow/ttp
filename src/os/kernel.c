@@ -21,6 +21,8 @@
 #include "heap.h"
 #include "keyboard.h"
 #include "navigator.h"
+#include "ata.h"
+#include "gen.h"
 #include "tss.h"
 #include "syscall.h"
 #include "userspace.h"
@@ -39,6 +41,46 @@ static int ff_count(struct node *n) {
     for (int i = 0; i < n->n_children; i++)
         c += ff_count(n->children[i]);
     return c;
+}
+
+// Print the first 4 bytes of a 32-byte id as 8 hex chars.
+static void print_hash8(const uint8_t *h, vga_color fg) {
+    static const char hx[] = "0123456789abcdef";
+    char b[9];
+    for (int i = 0; i < 4; i++) { b[i*2] = hx[h[i] >> 4]; b[i*2+1] = hx[h[i] & 0xF]; }
+    b[8] = '\0';
+    vga_print(b, fg, BLACK);
+}
+
+// NixOS-style boot menu: pick a saved generation to boot. Returns the chosen
+// generation index, or -1 when none are saved (boot the embedded ff). Defaults
+// the selection to the newest generation.
+static int boot_menu(void) {
+    int n = gen_count();
+    if (n == 0) return -1;
+    int sel = n - 1;
+    for (;;) {
+        vga_clear(BLACK);
+        vga_println("ttp - boot a generation:", YELLOW, BLACK);
+        vga_println("", WHITE, BLACK);
+        for (int i = 0; i < n; i++) {
+            int on = (i == sel);
+            vga_print(on ? "  > generation " : "    generation ",
+                      on ? LIGHT_CYAN : LIGHT_GREY, BLACK);
+            vga_print_int(i, on ? WHITE : LIGHT_GREY, BLACK);
+            vga_print("   root ", LIGHT_GREY, BLACK);
+            print_hash8(gen_root_id(i), on ? LIGHT_GREEN : DARK_GREY);
+            if (i == gen_current()) vga_print("   (last booted)", DARK_GREY, BLACK);
+            vga_println("", WHITE, BLACK);
+        }
+        vga_println("", WHITE, BLACK);
+        vga_println("Up/Down: select    Enter: boot", DARK_GREY, BLACK);
+
+        int k = keyboard_getkey();
+        if (k == KEY_UP && sel > 0) sel--;
+        else if (k == KEY_DOWN && sel < n - 1) sel++;
+        else if (k == KEY_ENTER) return sel;
+    }
 }
 
 // ╔══════════════════════════════════════════════╗
@@ -87,33 +129,60 @@ void kernel_main(void) {
                     ok ? LIGHT_GREY : LIGHT_RED, BLACK);
     }
 
-    // ── Load the ff (the node tree) from the embedded blob ────────
-    struct node *ff = node_read_mem(ff_blob_start,
-                                    (size_t)(ff_blob_end - ff_blob_start));
+    // ── Disk (ATA PIO) self-test ──────────────────────────────────
+    {
+        static uint8_t sec[ATA_SECTOR];
+        int rok = (ata_read(0, 1, sec) == 0 &&
+                   sec[510] == 0x55 && sec[511] == 0xAA);   // boot signature
+        static uint8_t pat[ATA_SECTOR], back[ATA_SECTOR];
+        for (int i = 0; i < ATA_SECTOR; i++) pat[i] = (uint8_t)(i * 7 + 1);
+        int wok = (ata_write(1900, 1, pat) == 0 &&
+                   ata_read(1900, 1, back) == 0);
+        for (int i = 0; i < ATA_SECTOR && wok; i++) if (back[i] != pat[i]) wok = 0;
+        vga_print("[OK] ATA disk: read ", LIGHT_GREY, BLACK);
+        vga_print(rok ? "OK" : "FAIL", rok ? LIGHT_GREY : LIGHT_RED, BLACK);
+        vga_print(", write ", LIGHT_GREY, BLACK);
+        vga_println(wok ? "OK." : "FAIL.", wok ? LIGHT_GREY : LIGHT_RED, BLACK);
+    }
+
+    // Keyboard up early — the boot menu needs it (it runs in ring 0).
+    keyboard_init();
+    vga_println("[OK] Keyboard (IRQ1) enabled.",      LIGHT_GREY,  BLACK);
+
+    // ── Choose the ff to boot: a saved generation, or the embedded seed ──
+    gen_init();
+    int choice = boot_menu();          // -1 when no generations exist yet
+    struct node *ff = 0;
+    if (choice >= 0) {
+        ff = gen_load(choice);
+        if (ff) gen_set_current(choice);
+    }
+    if (!ff)                            // first boot, or a load failure
+        ff = node_read_mem(ff_blob_start,
+                           (size_t)(ff_blob_end - ff_blob_start));
+
+    vga_clear(BLACK);
     if (ff) {
-        vga_print("[OK] ff loaded: root '", LIGHT_GREY, BLACK);
+        vga_print("[OK] ff: root '", LIGHT_GREY, BLACK);
         vga_print(ff->content, YELLOW, BLACK);
         vga_print("', ", LIGHT_GREY, BLACK);
         vga_print_int(ff_count(ff), WHITE, BLACK);
-        vga_print(" nodes, ", LIGHT_GREY, BLACK);
-        vga_print_int(ff->n_children, WHITE, BLACK);
-        vga_println(" top-level children.", LIGHT_GREY, BLACK);
+        vga_print(" nodes", LIGHT_GREY, BLACK);
+        if (choice >= 0) { vga_print(" (generation ", LIGHT_GREY, BLACK);
+                           vga_print_int(choice, WHITE, BLACK);
+                           vga_print(")", LIGHT_GREY, BLACK); }
+        else vga_print(" (embedded seed)", LIGHT_GREY, BLACK);
+        vga_println(".", LIGHT_GREY, BLACK);
     } else {
         vga_println("[!!] ff failed to load.", LIGHT_RED, BLACK);
     }
 
-    // Publish the ff to the ring-3 navigator, then bring up the surface it
-    // needs: the TSS (kernel stack for ring 3 -> ring 0 interrupts/syscalls),
-    // the SYSCALL handler, and the IRQ1 keyboard.
+    // Publish the ff to the ring-3 navigator, then bring up the rest of the
+    // surface it needs: the TSS (kernel stack for ring 3 -> ring 0) and SYSCALL.
     g_ff = ff;
     tss_init(0x90000);
-    vga_println("[OK] TSS initialized.",              LIGHT_GREY,  BLACK);
     syscall_init();
-    vga_println("[OK] Syscall handler ready.",        LIGHT_GREY,  BLACK);
-    keyboard_init();
-    vga_println("[OK] Keyboard (IRQ1) enabled.",      LIGHT_GREY,  BLACK);
 
-    vga_println("",                                   WHITE,       BLACK);
     vga_println("Entering the ff navigator in ring 3...", CYAN,    BLACK);
 
     // Hand off to ring 3; user_program() runs the navigator and never returns.

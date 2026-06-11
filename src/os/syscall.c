@@ -21,6 +21,8 @@
 #include "keyboard.h"
 #include "heap.h"
 #include "string.h"
+#include "gen.h"
+#include <node.h>
 
 extern void syscall_entry(void);   // defined below in asm
 
@@ -80,6 +82,10 @@ uint64_t syscall_handler(uint64_t num, uint64_t arg0) {
 
         case SYS_ALLOC:
             return (uint64_t)malloc(arg0);
+
+        case SYS_SAVE:
+            // arg0 = root node*; serialize + write a generation (ring 0 / ATA).
+            return (uint64_t)(int64_t)gen_save((struct node *)arg0);
 
         default:
             vga_println("Unknown syscall!", LIGHT_RED, BLACK);

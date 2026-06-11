@@ -64,6 +64,13 @@ static int s_put(char *dst, int pos, const char *s) {
     while (*s && pos < VGA_COLS) dst[pos++] = *s++;
     return pos;
 }
+static int s_puti(char *dst, int pos, int v) {
+    char t[12]; int i = 0;
+    if (v == 0) t[i++] = '0';
+    while (v > 0) { t[i++] = (char)('0' + v % 10); v /= 10; }
+    while (i > 0 && pos < VGA_COLS) dst[pos++] = t[--i];
+    return pos;
+}
 
 // The CPU mode in effect for child `idx`: the most recent preceding "bits" node.
 static int asm_mode_for(struct node *cur, int idx) {
@@ -156,6 +163,21 @@ static void compile_selected(void) {
 }
 
 static void draw(void);
+
+// Persist the whole tree as a new generation (via the kernel, which serializes
+// it and writes it to disk). A later boot can pick it from the boot menu.
+static void save_tree(void) {
+    int g = sys_save(path[0]);
+    int p;
+    if (g >= 0) {
+        p = s_put(info, 0, "saved generation ");
+        p = s_puti(info, p, g);
+        p = s_put(info, p, "  (reboot to pick it from the boot menu)");
+    } else {
+        p = s_put(info, 0, "save failed (generation log full or tree too big)");
+    }
+    info[p] = '\0';
+}
 
 // Edit the selected node's content in place: type to change it, Backspace to
 // delete, Enter to commit (node_set_content), Esc to cancel. Editing a node — a
@@ -265,7 +287,7 @@ static void draw(void) {
 
     // ── help ──────────────────────────────────────────────
     fb_puts(0, VGA_ROWS - 1,
-                " arrows:navigate  a:compile  e:edit ",
+                " arrows:navigate  a:compile  e:edit  s:save generation ",
                 BLACK, LIGHT_GREY);
 
     sys_blit(fb);   // push the frame to the screen in one syscall
@@ -305,6 +327,9 @@ void navigator_run(struct node *root) {
             break;
         case 'e':
             edit_selected();
+            break;
+        case 's':
+            save_tree();
             break;
         default:
             break;
