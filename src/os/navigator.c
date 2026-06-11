@@ -20,10 +20,12 @@
 #include "keyboard.h"
 #include "vga.h"
 #include "string.h"
+#include "encode.h"
 
 #define MAX_DEPTH 64
+#define INFO_ROW  (VGA_ROWS - 2)          // the assembler result line
 #define LIST_TOP  5                       // first row of the child list
-#define LIST_BOT  (VGA_ROWS - 2)          // last usable row (leave row 24 for help)
+#define LIST_BOT  (VGA_ROWS - 3)          // last list row (info on 23, help on 24)
 #define LIST_ROWS (LIST_BOT - LIST_TOP)   // visible child rows
 
 // Path from root to the current node, plus the selected child index at each
@@ -32,7 +34,71 @@ static struct node *path[MAX_DEPTH];
 static int          sel[MAX_DEPTH];
 static int          depth;
 
+// Last assembler result (filled when the user presses 'a').
+static char info[VGA_COLS + 1];
+
 static struct node *current(void) { return path[depth]; }
+
+// ── tiny string builders (no sprintf in the kernel) ──────────────────
+static int s_put(char *dst, int pos, const char *s) {
+    while (*s && pos < VGA_COLS) dst[pos++] = *s++;
+    return pos;
+}
+static int s_puti(char *dst, int pos, int v) {
+    char t[12]; int i = 0;
+    if (v == 0) t[i++] = '0';
+    while (v > 0) { t[i++] = (char)('0' + v % 10); v /= 10; }
+    while (i > 0 && pos < VGA_COLS) dst[pos++] = t[--i];
+    return pos;
+}
+
+// The CPU mode in effect for child `idx`: the most recent preceding "bits" node.
+static int asm_mode_for(struct node *cur, int idx) {
+    int mode = 64;
+    for (int i = 0; i < idx && i < cur->n_children; i++) {
+        struct node *c = cur->children[i];
+        if (!strcmp(c->content, "bits") && c->n_children == 1)
+            mode = atoi(c->children[0]->content);
+    }
+    return mode;
+}
+
+// Assemble the selected node with the shared encoder and format the bytes (or
+// the error) into `info`. This is the compiler running inside the OS.
+static void assemble_selected(void) {
+    struct node *cur = current();
+    int s = sel[depth];
+    if (cur->n_children == 0 || s >= cur->n_children) {
+        info[s_put(info, 0, "(nothing to assemble)")] = '\0';
+        return;
+    }
+    struct node *t = cur->children[s];
+    int mode = asm_mode_for(cur, s);
+
+    int pos = 0;
+    pos = s_put(info, pos, "asm ");
+    pos = s_put(info, pos, t->content);
+    pos = s_put(info, pos, " (bits ");
+    pos = s_puti(info, pos, mode);
+    pos = s_put(info, pos, "): ");
+
+    struct insn in;
+    const char *err = NULL;
+    if (!encode(t, mode, &in, &err)) {
+        pos = s_put(info, pos, "error: ");
+        pos = s_put(info, pos, err ? err : "unsupported");
+    } else {
+        unsigned char buf[16];
+        int n = assemble(&in, buf);
+        static const char hx[] = "0123456789abcdef";
+        for (int k = 0; k < n && pos < VGA_COLS - 3; k++) {
+            info[pos++] = hx[buf[k] >> 4];
+            info[pos++] = hx[buf[k] & 0xF];
+            info[pos++] = ' ';
+        }
+    }
+    info[pos] = '\0';
+}
 
 static void draw(void) {
     struct node *cur = current();
@@ -95,11 +161,14 @@ static void draw(void) {
                         selected ? BLACK : DARK_GREY, bg);
     }
     if (nkids == 0)
-        vga_puts_at(4, LIST_TOP, "(leaf — no children)", DARK_GREY, BLUE);
+        vga_puts_at(4, LIST_TOP, "(leaf - no children)", DARK_GREY, BLUE);
+
+    // ── assembler result line ─────────────────────────────
+    vga_puts_at(0, INFO_ROW, info, LIGHT_GREEN, BLUE);
 
     // ── help ──────────────────────────────────────────────
     vga_puts_at(0, VGA_ROWS - 1,
-                " Left:parent   Right:children   Up/Down:select ",
+                " Left:parent  Right:children  Up/Down:select  a:assemble ",
                 BLACK, LIGHT_GREY);
 }
 
@@ -107,6 +176,7 @@ void navigator_run(struct node *root) {
     depth = 0;
     path[0] = root;
     sel[0] = 0;
+    info[s_put(info, 0, "press 'a' to assemble the selected node")] = '\0';
 
     for (;;) {
         draw();
@@ -130,6 +200,9 @@ void navigator_run(struct node *root) {
             break;
         case KEY_LEFT:
             if (depth > 0) depth--;
+            break;
+        case 'a':
+            assemble_selected();
             break;
         default:
             break;

@@ -24,6 +24,7 @@ KERNEL_OBJS = $(addprefix $(BUILD)/, \
               string.o       \
               keyboard.o     \
               navigator.o    \
+              encode.o       \
               tss.o          \
               syscall.o      \
               userspace.o    \
@@ -93,8 +94,13 @@ $(BUILD)/isr.o: isr.asm | $(BUILD)
 $(BUILD)/ff_blob.o: ff_blob.asm ff/program.nodes | $(BUILD)
 	$(NASM) -f elf64 $< -o $@
 
-$(BUILD)/%.o: %.c | $(BUILD)
+# The x86-64 encoder, shared with the host ttpc. Compiled WITHOUT TTP_HOSTED so
+# it uses the OS's freestanding libc subset (string.c) instead of glibc.
+$(BUILD)/encode.o: ../compiler/encode.c ../compiler/encode.h | $(BUILD)
 	$(CC) $(CFLAGS) -I$(INCLUDE) -c $< -o $@
+
+$(BUILD)/%.o: %.c | $(BUILD)
+	$(CC) $(CFLAGS) -I$(INCLUDE) -I../compiler -c $< -o $@
 
 $(BUILD)/kernel.bin: $(KERNEL_OBJS) linker.ld | $(BUILD)
 	$(LD) -T linker.ld --oformat binary -o $@ $(KERNEL_OBJS)

@@ -29,4 +29,10 @@ void  *memmove(void *dst, const void *src, size_t n);
 int    memcmp(const void *a, const void *b, size_t n);
 size_t strlen(const char *s);
 int    strcmp(const char *a, const char *b);
+int    strncmp(const char *a, const char *b, size_t n);
 int    atoi(const char *s);
+
+// Base-aware integer parsing (base 0 auto-detects 0x hex / 0 octal / decimal).
+// endptr may be NULL. The encoder uses these to read operand immediates.
+long long          strtoll(const char *s, char **endptr, int base);
+unsigned long long strtoull(const char *s, char **endptr, int base);
