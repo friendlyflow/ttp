@@ -27,7 +27,18 @@
             gnumake
             coreutils # dd
             qemu       # qemu-system-x86_64 for `make test`
+            fish
           ]);
+
+          # `nix develop` always starts bash; drop into fish instead.
+          # Guard against re-exec loops and non-interactive invocations
+          # (e.g. `nix develop -c make`).
+          shellHook = ''
+            if [ -z "$IN_NIX_FISH" ] && [ -t 1 ]; then
+              export IN_NIX_FISH=1
+              exec fish
+            fi
+          '';
         };
       });
 
