@@ -6,7 +6,7 @@ Waarom niet alles digitaal openbaar? Aan de fysieke privacy wordt niet geraken m
 
 De structuur van het computer programma dat ik voor ogen heb is het volgende:
 - qua cryptografische functies alleen de hash gebruiken als referentie en niet om een geheim te beschermen
-- je hebt een compiler nodig die c functies compileert die vervat zijn in een ffon structuur, zie friendlyflow/sicompass op github voor een beschrijving. De resulterende c taal in ffon wordt ff genoemd, de ideale text editor zit in sicompass
+- je hebt een compiler nodig die 'asm+c in één?' functies compileert die vervat zijn in een ffon structuur, zie friendlyflow/sicompass op github voor een beschrijving. De resulterende c taal in ffon wordt ff genoemd, de ideale text editor zit in sicompass
 - om een compiler te gebruiken heb je een os nodig. Dat os wordt zo vroeg mogelijk zo samengesteld dat vooruitgang git gewijs wordt opgeslaan, maar dan in een blockchain eigenlijk, niet de klassieke git, elke block bevat de hash van de vorige block. En dus heb je ook een hash functie nodig.
 - ik weet nu eigenlijk niet hoe je dat best samenvat, maar die blockchain is even belangrijk als de rest, en heel het development proces moet zo vroeg mogelijk in de blockchain opgenomen worden. Hash-functie, git, os, compiler, netwerk, blockchain. Ff(on) is dan weer belangrijk door dat haar structuur uitnodigt om makkelijk gehashed te worden en opgenomen in een merkle tree om gefoeter met de code te kunnen detecteren.
 - elke node in de ff code kan een soort van library zijn, er kan altijd naar die code gejumped worden in memory in heel het development proces
