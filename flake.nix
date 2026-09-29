@@ -1,5 +1,5 @@
 {
-  description = "ttp — the trust project: bare-metal x86_64 kernel";
+  description = "ttp — the trust project: bare-metal RISC-V OS";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -12,9 +12,9 @@
         pkgs = import nixpkgs { inherit system; };
       });
 
-      # Cross toolchain targeting x86_64-elf, providing the
-      # `x86_64-elf-gcc` / `x86_64-elf-ld` binaries the Makefile expects.
-      toolchain = pkgs: with pkgs.pkgsCross.x86_64-embedded.buildPackages; [
+      # Cross toolchain targeting bare-metal RISC-V, providing the
+      # `riscv64-none-elf-gcc` / `-objdump` binaries src/os expects.
+      toolchain = pkgs: with pkgs.pkgsCross.riscv64-embedded.buildPackages; [
         gcc
         binutils
       ];
@@ -23,10 +23,8 @@
       devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
           packages = (toolchain pkgs) ++ (with pkgs; [
-            nasm
             gnumake
-            coreutils # dd
-            qemu       # qemu-system-x86_64 for `make test`
+            qemu # qemu-system-riscv64 for `make os-test`
             fish
           ]);
 
@@ -49,16 +47,14 @@
           src = ./.;
 
           nativeBuildInputs = (toolchain pkgs) ++ (with pkgs; [
-            nasm
             gnumake
-            coreutils
           ]);
 
-          buildPhase = "make";
+          buildPhase = "make os";
 
           installPhase = ''
             mkdir -p $out
-            cp build/ttpos.img $out/
+            cp build/os/os.elf $out/
           '';
         };
       });

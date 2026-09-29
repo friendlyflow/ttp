@@ -1,20 +1,21 @@
 # The Trust Project
 
-**ttp** — the trust project: a self-hosting OS and compiler, a bare-metal x86_64 kernel
+**ttp** — the trust project: a self-hosting OS and compiler, a bare-metal RISC-V OS
 ([src/os](src/os)) and a content-addressed compiler ([src/compiler](src/compiler))
 that grows organically from a minimal seed.
 
 ## Build
 
 A [Nix](https://nixos.org) flake provides the cross toolchain
-(`x86_64-elf-gcc`, `nasm`, `qemu`, …):
+(`riscv64-none-elf-gcc`, `qemu`, …):
 
 ```sh
 nix develop          # enter a shell with the toolchain
 make                 # build everything  -> build/
-make os              # build the OS image -> build/os/ttpos.img
+make os              # build the OS       -> build/os/os.elf
 make compiler        # build the compiler -> build/compiler/ttpc
-make test            # boot the OS image in qemu
+make os-test         # boot the OS in a qemu-system-riscv64 window (Ctrl-D to quit)
+make os-console      # same, serial console in this terminal (Ctrl-D or Ctrl-A X)
 make clean           # remove build/
 ```
 

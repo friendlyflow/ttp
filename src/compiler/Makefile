@@ -33,8 +33,9 @@ $(IMG): $(BIN) $(BOOT_FLOW) | $(BUILD)
 
 img: $(IMG)
 
+# QEMU loads the flat image at 0x80000000, like the OS's own os-test.
 test: $(IMG)
-	qemu-system-x86_64 -drive format=raw,file=$(IMG)
+	qemu-system-riscv64 -machine virt -bios none -monitor none -kernel $(IMG)
 
 clean:
 	rm -rf $(BUILD)
