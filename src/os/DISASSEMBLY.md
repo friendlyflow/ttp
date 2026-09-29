@@ -67,7 +67,9 @@ to `os.bin` (objcopy's flat image of `os.elf`). `-n` limits the compare to
 `compiler-test` boots the result with `-kernel` just like `make os-test`; QEMU
 loads a raw image at `0x80000000` the same way it loads the ELF.
 
-ttpc's field decoder only knows x86-64 encodings, so most RISC-V lines are
-*passed through* (their raw bytes go straight into the image) rather than
-decoded. That is still a faithful re-assembly; decoding RISC-V fields is ttpc's
-next step.
+ttpc decodes every RISC-V instruction line into its fields (opcode, funct
+bits, registers, immediate; compressed ones too) and rebuilds the bytes from
+them. Lines that are no instruction (the `unimp` padding and the `.rodata`
+strings) are *passed through*: their raw bytes go straight into the image.
+Each decoded `.text` line is also re-assembled from its mnemonic and operands,
+checking ttpc's encoder against objdump's text.

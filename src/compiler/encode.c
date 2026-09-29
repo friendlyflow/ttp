@@ -17,750 +17,854 @@
  */
 
 /*
- * encode.c — node tree -> machine code, the inverse of main.c's decode().
+ * encode.c — node tree -> RISC-V machine code, the inverse of main.c's decode().
  *
  * An instruction node carries the mnemonic in its content and its operands as
- * children. Operands are leaf nodes (a register name like "rax", or an immediate
- * literal like "0x7c00"), or a "mem" node with six children — size seg base
- * index scale disp ("-" = absent). A "bits" node (one child 16/32/64) switches
- * the assembler mode; the caller tracks that and passes `mode` to encode().
+ * children. Operands are leaf nodes — a register ("a0", "sp", "x5"), a CSR name
+ * ("mtvec"), or an immediate literal ("-16", "0x10000") — or a "mem" node with
+ * children `base offset` for a load/store address: `ld a0, 8(sp)` is the node
+ * "ld" with children "a0" and mem("sp", "8"). Branch and jump targets are
+ * pc-relative offsets. The common pseudo-instructions (li, mv, j, ret, beqz,
+ * csrr, ...) expand to their base instruction first.
  *
- * Each handler fills a struct insn's fields and reuses assemble() to lay the
- * bytes out, so the encoder and decoder share one notion of instruction shape.
- * This file is compiled into both the host ttpc and the OS; the only difference
- * is where the small libc subset below comes from.
+ * Everything is driven by one opcode table, rv_ops: the decoder matches bytes
+ * against it and the encoder looks mnemonics up in it, and both go through
+ * rv_fields() / assemble() for the bit layouts, so the encoder and decoder share
+ * one notion of instruction shape. This file is compiled into both the host
+ * ttpc and (later) the OS; the only difference is where the small libc subset
+ * below comes from.
  */
 #include <encode.h>
 #include <node.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef TTP_HOSTED
   #include <string.h>
   #include <stdlib.h>
 #else
   /* Freestanding: the OS implements these (string.c). */
-  int                 strcmp(const char *, const char *);
-  int                 strncmp(const char *, const char *, size_t);
-  void               *memset(void *, int, size_t);
-  int                 atoi(const char *);
-  long long           strtoll(const char *, char **, int);
-  unsigned long long  strtoull(const char *, char **, int);
+  int        strcmp(const char *, const char *);
+  int        strncmp(const char *, const char *, size_t);
+  void      *memset(void *, int, size_t);
+  long long  strtoll(const char *, char **, int);
 #endif
 
-/* Reassemble fields back into bytes, in canonical x86 order. */
+/*
+ * Operand spec letters (rv_op.args), one per operand, in assembler order:
+ *   d rd   s rs1   t rs2   D rd, which is also rs1 (compressed two-address forms)
+ *   j I-immediate          u U-immediate (20-bit field)   > shift amount
+ *   m mem(base, offset) -> rs1, imm (a bare register means offset 0)
+ *   A mem(base) with no offset -> rs1 (atomics)
+ *   p branch offset        a jump offset (both pc-relative)
+ *   E CSR (name or number) Z 5-bit CSR immediate, lives in rs1
+ *   P Q fence predecessor / successor set ("iorw" letters)
+ */
+
+#define MR   0xfe00707fu   /* funct7 + funct3 + opcode          */
+#define MI   0x0000707fu   /* funct3 + opcode                   */
+#define MSH  0xfc00707fu   /* funct6 + funct3 + opcode          */
+#define MO   0x0000007fu   /* opcode                            */
+#define MALL 0xffffffffu   /* every bit fixed                   */
+#define MAMO 0xf800707fu   /* funct5 + funct3 + opcode; aq/rl free */
+#define MLR  0xf9f0707fu   /* ... and rs2 = 0                   */
+
+#define ENC(f7, f3, op) (((uint32_t)(f7) << 25) | ((uint32_t)(f3) << 12) | (op))
+
+#define OP(n, m, x, f, a) \
+	{ n, m, x, f, a, NULL, K_ANY, K_ANY, K_ANY, 0, 0, 0, 0 }
+#define AMO(n, f5, f3) \
+	OP(n, MAMO, ((uint32_t)(f5) << 27) | ENC(0, f3, 0x2f), RV_R, "dtA")
+#define C(n, m, x, f, a, b, rd, rs1, rs2, lo, hi, al, nz) \
+	{ n, m, x, f, a, b, rd, rs1, rs2, lo, hi, al, nz }
+
+const struct rv_op rv_ops[] = {
+	/* ---- RV64I -------------------------------------------------------- */
+	OP("lui",    MO, 0x37, RV_U, "du"),
+	OP("auipc",  MO, 0x17, RV_U, "du"),
+	OP("jal",    MO, 0x6f, RV_J, "da"),
+	OP("jalr",   MI, ENC(0, 0, 0x67), RV_I, "dm"),
+	OP("beq",    MI, ENC(0, 0, 0x63), RV_B, "stp"),
+	OP("bne",    MI, ENC(0, 1, 0x63), RV_B, "stp"),
+	OP("blt",    MI, ENC(0, 4, 0x63), RV_B, "stp"),
+	OP("bge",    MI, ENC(0, 5, 0x63), RV_B, "stp"),
+	OP("bltu",   MI, ENC(0, 6, 0x63), RV_B, "stp"),
+	OP("bgeu",   MI, ENC(0, 7, 0x63), RV_B, "stp"),
+	OP("lb",     MI, ENC(0, 0, 0x03), RV_I, "dm"),
+	OP("lh",     MI, ENC(0, 1, 0x03), RV_I, "dm"),
+	OP("lw",     MI, ENC(0, 2, 0x03), RV_I, "dm"),
+	OP("ld",     MI, ENC(0, 3, 0x03), RV_I, "dm"),
+	OP("lbu",    MI, ENC(0, 4, 0x03), RV_I, "dm"),
+	OP("lhu",    MI, ENC(0, 5, 0x03), RV_I, "dm"),
+	OP("lwu",    MI, ENC(0, 6, 0x03), RV_I, "dm"),
+	OP("sb",     MI, ENC(0, 0, 0x23), RV_S, "tm"),
+	OP("sh",     MI, ENC(0, 1, 0x23), RV_S, "tm"),
+	OP("sw",     MI, ENC(0, 2, 0x23), RV_S, "tm"),
+	OP("sd",     MI, ENC(0, 3, 0x23), RV_S, "tm"),
+	OP("addi",   MI, ENC(0, 0, 0x13), RV_I, "dsj"),
+	OP("slti",   MI, ENC(0, 2, 0x13), RV_I, "dsj"),
+	OP("sltiu",  MI, ENC(0, 3, 0x13), RV_I, "dsj"),
+	OP("xori",   MI, ENC(0, 4, 0x13), RV_I, "dsj"),
+	OP("ori",    MI, ENC(0, 6, 0x13), RV_I, "dsj"),
+	OP("andi",   MI, ENC(0, 7, 0x13), RV_I, "dsj"),
+	OP("slli",   MSH, ENC(0x00, 1, 0x13), RV_ISH, "ds>"),
+	OP("srli",   MSH, ENC(0x00, 5, 0x13), RV_ISH, "ds>"),
+	OP("srai",   MSH, ENC(0x20, 5, 0x13), RV_ISH, "ds>"),
+	OP("add",    MR, ENC(0x00, 0, 0x33), RV_R, "dst"),
+	OP("sub",    MR, ENC(0x20, 0, 0x33), RV_R, "dst"),
+	OP("sll",    MR, ENC(0x00, 1, 0x33), RV_R, "dst"),
+	OP("slt",    MR, ENC(0x00, 2, 0x33), RV_R, "dst"),
+	OP("sltu",   MR, ENC(0x00, 3, 0x33), RV_R, "dst"),
+	OP("xor",    MR, ENC(0x00, 4, 0x33), RV_R, "dst"),
+	OP("srl",    MR, ENC(0x00, 5, 0x33), RV_R, "dst"),
+	OP("sra",    MR, ENC(0x20, 5, 0x33), RV_R, "dst"),
+	OP("or",     MR, ENC(0x00, 6, 0x33), RV_R, "dst"),
+	OP("and",    MR, ENC(0x00, 7, 0x33), RV_R, "dst"),
+	OP("addiw",  MI, ENC(0, 0, 0x1b), RV_I, "dsj"),
+	OP("slliw",  MR, ENC(0x00, 1, 0x1b), RV_ISH, "ds>"),
+	OP("srliw",  MR, ENC(0x00, 5, 0x1b), RV_ISH, "ds>"),
+	OP("sraiw",  MR, ENC(0x20, 5, 0x1b), RV_ISH, "ds>"),
+	OP("addw",   MR, ENC(0x00, 0, 0x3b), RV_R, "dst"),
+	OP("subw",   MR, ENC(0x20, 0, 0x3b), RV_R, "dst"),
+	OP("sllw",   MR, ENC(0x00, 1, 0x3b), RV_R, "dst"),
+	OP("srlw",   MR, ENC(0x00, 5, 0x3b), RV_R, "dst"),
+	OP("sraw",   MR, ENC(0x20, 5, 0x3b), RV_R, "dst"),
+	OP("fence",  0x000fffffu, ENC(0, 0, 0x0f), RV_IU, "PQ"),
+	OP("fence.i", MALL, ENC(0, 1, 0x0f), RV_IU, ""),
+	OP("ecall",  MALL, 0x00000073, RV_I, ""),
+	OP("ebreak", MALL, 0x00100073, RV_I, ""),
+	OP("sret",   MALL, 0x10200073, RV_I, ""),
+	OP("mret",   MALL, 0x30200073, RV_I, ""),
+	OP("wfi",    MALL, 0x10500073, RV_I, ""),
+	OP("sfence.vma", 0xfe007fffu, ENC(0x09, 0, 0x73), RV_R, "st"),
+
+	/* ---- Zicsr -------------------------------------------------------- */
+	OP("csrrw",  MI, ENC(0, 1, 0x73), RV_IU, "dEs"),
+	OP("csrrs",  MI, ENC(0, 2, 0x73), RV_IU, "dEs"),
+	OP("csrrc",  MI, ENC(0, 3, 0x73), RV_IU, "dEs"),
+	OP("csrrwi", MI, ENC(0, 5, 0x73), RV_IU, "dEZ"),
+	OP("csrrsi", MI, ENC(0, 6, 0x73), RV_IU, "dEZ"),
+	OP("csrrci", MI, ENC(0, 7, 0x73), RV_IU, "dEZ"),
+
+	/* ---- M ------------------------------------------------------------ */
+	OP("mul",    MR, ENC(0x01, 0, 0x33), RV_R, "dst"),
+	OP("mulh",   MR, ENC(0x01, 1, 0x33), RV_R, "dst"),
+	OP("mulhsu", MR, ENC(0x01, 2, 0x33), RV_R, "dst"),
+	OP("mulhu",  MR, ENC(0x01, 3, 0x33), RV_R, "dst"),
+	OP("div",    MR, ENC(0x01, 4, 0x33), RV_R, "dst"),
+	OP("divu",   MR, ENC(0x01, 5, 0x33), RV_R, "dst"),
+	OP("rem",    MR, ENC(0x01, 6, 0x33), RV_R, "dst"),
+	OP("remu",   MR, ENC(0x01, 7, 0x33), RV_R, "dst"),
+	OP("mulw",   MR, ENC(0x01, 0, 0x3b), RV_R, "dst"),
+	OP("divw",   MR, ENC(0x01, 4, 0x3b), RV_R, "dst"),
+	OP("divuw",  MR, ENC(0x01, 5, 0x3b), RV_R, "dst"),
+	OP("remw",   MR, ENC(0x01, 6, 0x3b), RV_R, "dst"),
+	OP("remuw",  MR, ENC(0x01, 7, 0x3b), RV_R, "dst"),
+
+	/* ---- A (aq/rl: a ".aq" / ".rl" / ".aqrl" mnemonic suffix) ---------- */
+	OP("lr.w", MLR, ((uint32_t)0x02 << 27) | ENC(0, 2, 0x2f), RV_R, "dA"),
+	OP("lr.d", MLR, ((uint32_t)0x02 << 27) | ENC(0, 3, 0x2f), RV_R, "dA"),
+	AMO("sc.w", 0x03, 2),      AMO("sc.d", 0x03, 3),
+	AMO("amoswap.w", 0x01, 2), AMO("amoswap.d", 0x01, 3),
+	AMO("amoadd.w", 0x00, 2),  AMO("amoadd.d", 0x00, 3),
+	AMO("amoxor.w", 0x04, 2),  AMO("amoxor.d", 0x04, 3),
+	AMO("amoand.w", 0x0c, 2),  AMO("amoand.d", 0x0c, 3),
+	AMO("amoor.w", 0x08, 2),   AMO("amoor.d", 0x08, 3),
+	AMO("amomin.w", 0x10, 2),  AMO("amomin.d", 0x10, 3),
+	AMO("amomax.w", 0x14, 2),  AMO("amomax.d", 0x14, 3),
+	AMO("amominu.w", 0x18, 2), AMO("amominu.d", 0x18, 3),
+	AMO("amomaxu.w", 0x1c, 2), AMO("amomaxu.d", 0x1c, 3),
+
+	/* ---- C (RV64, integer) --------------------------------------------
+	 * Constraints are on the 32-bit expansion's fields. Order matters twice:
+	 * the decoder takes the first entry that matches *and* fits, and the
+	 * compressor tries entries in order (c.addi before c.addi16sp, as GNU as
+	 * does for `addi sp,sp,-16`). */
+	C("c.addi4spn", 0xe003, 0x0000, C_CIW, "dsj", "addi", K_P, K_SP, K_Z, 4, 1020, 4, 1),
+	C("c.lw",   0xe003, 0x4000, C_CLW, "dm", "lw", K_P, K_P, K_Z, 0, 124, 4, 0),
+	C("c.ld",   0xe003, 0x6000, C_CLD, "dm", "ld", K_P, K_P, K_Z, 0, 248, 8, 0),
+	C("c.sw",   0xe003, 0xc000, C_CSW, "tm", "sw", K_Z, K_P, K_P, 0, 124, 4, 0),
+	C("c.sd",   0xe003, 0xe000, C_CSD, "tm", "sd", K_Z, K_P, K_P, 0, 248, 8, 0),
+	C("c.nop",  0xef83, 0x0001, C_CI, "", "addi", K_Z, K_Z, K_Z, 0, 0, 1, 0),
+	C("c.addi", 0xe003, 0x0001, C_CI, "Dj", "addi", K_NZ, K_RD, K_Z, -32, 31, 1, 1),
+	C("c.addiw", 0xe003, 0x2001, C_CI, "Dj", "addiw", K_NZ, K_RD, K_Z, -32, 31, 1, 0),
+	C("c.li",   0xe003, 0x4001, C_CI, "dj", "addi", K_NZ, K_Z, K_Z, -32, 31, 1, 0),
+	C("c.addi16sp", 0xef83, 0x6101, C_ADDI16SP, "Dj", "addi", K_SP, K_RD, K_Z, -512, 496, 16, 1),
+	C("c.lui",  0xe003, 0x6001, C_LUI, "du", "lui", K_NZSP, K_Z, K_Z, -32, 31, 1, 1),
+	C("c.srli", 0xec03, 0x8001, C_CBSH, "D>", "srli", K_P, K_RD, K_Z, 1, 63, 1, 0),
+	C("c.srai", 0xec03, 0x8401, C_CBSH, "D>", "srai", K_P, K_RD, K_Z, 1, 63, 1, 0),
+	C("c.andi", 0xec03, 0x8801, C_CBI, "Dj", "andi", K_P, K_RD, K_Z, -32, 31, 1, 0),
+	C("c.sub",  0xfc63, 0x8c01, C_CA, "Dt", "sub",  K_P, K_RD, K_P, 0, 0, 1, 0),
+	C("c.xor",  0xfc63, 0x8c21, C_CA, "Dt", "xor",  K_P, K_RD, K_P, 0, 0, 1, 0),
+	C("c.or",   0xfc63, 0x8c41, C_CA, "Dt", "or",   K_P, K_RD, K_P, 0, 0, 1, 0),
+	C("c.and",  0xfc63, 0x8c61, C_CA, "Dt", "and",  K_P, K_RD, K_P, 0, 0, 1, 0),
+	C("c.subw", 0xfc63, 0x9c01, C_CA, "Dt", "subw", K_P, K_RD, K_P, 0, 0, 1, 0),
+	C("c.addw", 0xfc63, 0x9c21, C_CA, "Dt", "addw", K_P, K_RD, K_P, 0, 0, 1, 0),
+	C("c.j",    0xe003, 0xa001, C_CJ, "a", "jal", K_Z, K_Z, K_Z, -2048, 2046, 2, 0),
+	C("c.beqz", 0xe003, 0xc001, C_CBB, "sp", "beq", K_Z, K_P, K_Z, -256, 254, 2, 0),
+	C("c.bnez", 0xe003, 0xe001, C_CBB, "sp", "bne", K_Z, K_P, K_Z, -256, 254, 2, 0),
+	C("c.slli", 0xe003, 0x0002, C_CISH, "D>", "slli", K_NZ, K_RD, K_Z, 1, 63, 1, 0),
+	C("c.lwsp", 0xe003, 0x4002, C_LWSP, "dm", "lw", K_NZ, K_SP, K_Z, 0, 252, 4, 0),
+	C("c.ldsp", 0xe003, 0x6002, C_LDSP, "dm", "ld", K_NZ, K_SP, K_Z, 0, 504, 8, 0),
+	C("c.jr",   0xf07f, 0x8002, C_CRJ, "s", "jalr", K_Z, K_NZ, K_Z, 0, 0, 1, 0),
+	C("c.mv",   0xf003, 0x8002, C_CRM, "dt", "add", K_NZ, K_Z, K_NZ, 0, 0, 1, 0),
+	C("c.ebreak", 0xffff, 0x9002, C_CRJ, "", "ebreak", K_Z, K_Z, K_Z, 1, 1, 1, 0),
+	C("c.jalr", 0xf07f, 0x9002, C_CRJ, "s", "jalr", K_RA, K_NZ, K_Z, 0, 0, 1, 0),
+	C("c.add",  0xf003, 0x9002, C_CRM, "Dt", "add", K_NZ, K_RD, K_NZ, 0, 0, 1, 0),
+	C("c.swsp", 0xe003, 0xc002, C_SWSP, "tm", "sw", K_Z, K_SP, K_ANY, 0, 252, 4, 0),
+	C("c.sdsp", 0xe003, 0xe002, C_SDSP, "tm", "sd", K_Z, K_SP, K_ANY, 0, 504, 8, 0),
+
+	OP(NULL, 0, 0, 0, NULL)
+};
+
+const char *const rv_abi[32] = {
+	"zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
+	"s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+	"a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+	"s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6",
+};
+
+static const struct { const char *name; int csr; } CSRS[] = {
+	{"fflags", 0x001}, {"frm", 0x002}, {"fcsr", 0x003},
+	{"cycle", 0xc00}, {"time", 0xc01}, {"instret", 0xc02},
+	{"sstatus", 0x100}, {"sie", 0x104}, {"stvec", 0x105},
+	{"scounteren", 0x106}, {"senvcfg", 0x10a}, {"sscratch", 0x140},
+	{"sepc", 0x141}, {"scause", 0x142}, {"stval", 0x143}, {"sip", 0x144},
+	{"satp", 0x180},
+	{"mstatus", 0x300}, {"misa", 0x301}, {"medeleg", 0x302},
+	{"mideleg", 0x303}, {"mie", 0x304}, {"mtvec", 0x305},
+	{"mcounteren", 0x306}, {"menvcfg", 0x30a}, {"mscratch", 0x340},
+	{"mepc", 0x341}, {"mcause", 0x342}, {"mtval", 0x343}, {"mip", 0x344},
+	{"mtinst", 0x34a}, {"mtval2", 0x34b},
+	{"pmpcfg0", 0x3a0}, {"pmpcfg2", 0x3a2}, {"pmpaddr0", 0x3b0},
+	{"pmpaddr1", 0x3b1}, {"pmpaddr2", 0x3b2}, {"pmpaddr3", 0x3b3},
+	{"mcycle", 0xb00}, {"minstret", 0xb02},
+	{"mvendorid", 0xf11}, {"marchid", 0xf12}, {"mimpid", 0xf13},
+	{"mhartid", 0xf14}, {"mconfigptr", 0xf15},
+};
+
+const char *rv_csr_name(int csr)
+{
+	for (size_t i = 0; i < sizeof CSRS / sizeof CSRS[0]; i++)
+		if (CSRS[i].csr == csr)
+			return CSRS[i].name;
+	return NULL;
+}
+
+const struct rv_op *rv_find(const char *name)
+{
+	for (const struct rv_op *op = rv_ops; op->name; op++)
+		if (!RV_IS_C(op->fmt) && !strcmp(op->name, name))
+			return op;
+	return NULL;
+}
+
+/* ---- field layouts ------------------------------------------------------ */
+
+/* Bits hi..lo of w, shifted down. */
+static uint32_t bits(uint32_t w, int hi, int lo)
+{
+	return (w >> lo) & ((1u << (hi - lo + 1)) - 1);
+}
+
+/* Sign-extend the low n bits of v. */
+static long sx(uint32_t v, int n)
+{
+	long m = 1L << (n - 1);
+	return ((long)(v & ((1u << n) - 1)) ^ m) - m;
+}
+
+/* The fixed (non-operand) fields: opcode and functs. */
+static void fields_funct(int fmt, uint32_t w, struct insn *in)
+{
+	in->opcode = in->funct3 = in->funct7 = in->funct2 = 0;
+	if (!RV_IS_C(fmt)) {
+		in->opcode = bits(w, 6, 0);
+		if (fmt != RV_U && fmt != RV_J)
+			in->funct3 = bits(w, 14, 12);
+		if (fmt == RV_R)
+			in->funct7 = bits(w, 31, 25);
+		if (fmt == RV_ISH)
+			in->funct7 = bits(w, 31, 26);
+		return;
+	}
+	in->opcode = bits(w, 1, 0);
+	in->funct3 = bits(w, 15, 13);
+	if (fmt == C_CRJ || fmt == C_CRM)
+		in->funct7 = bits(w, 15, 12);
+	if (fmt == C_CA) {
+		in->funct7 = bits(w, 15, 10);
+		in->funct2 = bits(w, 6, 5);
+	}
+	if (fmt == C_CBSH || fmt == C_CBI)
+		in->funct2 = bits(w, 11, 10);
+}
+
+void rv_fields(const struct rv_op *op, uint32_t w, struct insn *in)
+{
+	int fmt = op->fmt;
+
+	in->op  = op;
+	in->fmt = fmt;
+	in->len = RV_IS_C(fmt) ? 2 : 4;
+	in->rd = in->rs1 = in->rs2 = 0;
+	in->imm = 0;
+	fields_funct(fmt, w, in);
+
+	int rd = bits(w, 11, 7), rs1 = bits(w, 19, 15), rs2 = bits(w, 24, 20);
+	int cr = bits(w, 11, 7), cs = bits(w, 6, 2);           /* full regs     */
+	int ch = 8 + bits(w, 9, 7), cl = 8 + bits(w, 4, 2);    /* rd'/rs1'/rs2' */
+
+	switch (fmt) {
+	case RV_R:   in->rd = rd; in->rs1 = rs1; in->rs2 = rs2; break;
+	case RV_I:   in->rd = rd; in->rs1 = rs1; in->imm = sx(w >> 20, 12); break;
+	case RV_IU:  in->rd = rd; in->rs1 = rs1; in->imm = bits(w, 31, 20); break;
+	case RV_ISH: in->rd = rd; in->rs1 = rs1; in->imm = bits(w, 25, 20); break;
+	case RV_S:
+		in->rs1 = rs1; in->rs2 = rs2;
+		in->imm = sx(bits(w, 31, 25) << 5 | bits(w, 11, 7), 12);
+		break;
+	case RV_B:
+		in->rs1 = rs1; in->rs2 = rs2;
+		in->imm = sx(bits(w, 31, 31) << 12 | bits(w, 7, 7) << 11 |
+			     bits(w, 30, 25) << 5 | bits(w, 11, 8) << 1, 13);
+		break;
+	case RV_U:   in->rd = rd; in->imm = bits(w, 31, 12); break;
+	case RV_J:
+		in->rd = rd;
+		in->imm = sx(bits(w, 31, 31) << 20 | bits(w, 19, 12) << 12 |
+			     bits(w, 20, 20) << 11 | bits(w, 30, 21) << 1, 21);
+		break;
+
+	case C_CIW:
+		in->rd = cl; in->rs1 = 2;
+		in->imm = bits(w, 12, 11) << 4 | bits(w, 10, 7) << 6 |
+			  bits(w, 6, 6) << 2 | bits(w, 5, 5) << 3;
+		break;
+	case C_CLW: case C_CSW:
+		if (fmt == C_CLW) in->rd = cl; else in->rs2 = cl;
+		in->rs1 = ch;
+		in->imm = bits(w, 12, 10) << 3 | bits(w, 6, 6) << 2 | bits(w, 5, 5) << 6;
+		break;
+	case C_CLD: case C_CSD:
+		if (fmt == C_CLD) in->rd = cl; else in->rs2 = cl;
+		in->rs1 = ch;
+		in->imm = bits(w, 12, 10) << 3 | bits(w, 6, 5) << 6;
+		break;
+	case C_CI:
+		in->rd = cr;
+		in->imm = sx(bits(w, 12, 12) << 5 | bits(w, 6, 2), 6);
+		break;
+	case C_ADDI16SP:
+		in->rd = cr;
+		in->imm = sx(bits(w, 12, 12) << 9 | bits(w, 6, 6) << 4 |
+			     bits(w, 5, 5) << 6 | bits(w, 4, 3) << 7 |
+			     bits(w, 2, 2) << 5, 10);
+		break;
+	case C_LUI:
+		in->rd = cr;
+		in->imm = sx(bits(w, 12, 12) << 5 | bits(w, 6, 2), 6) & 0xfffff;
+		break;
+	case C_CISH:
+		in->rd = cr;
+		in->imm = bits(w, 12, 12) << 5 | bits(w, 6, 2);
+		break;
+	case C_LWSP:
+		in->rd = cr; in->rs1 = 2;
+		in->imm = bits(w, 12, 12) << 5 | bits(w, 6, 4) << 2 | bits(w, 3, 2) << 6;
+		break;
+	case C_LDSP:
+		in->rd = cr; in->rs1 = 2;
+		in->imm = bits(w, 12, 12) << 5 | bits(w, 6, 5) << 3 | bits(w, 4, 2) << 6;
+		break;
+	case C_SWSP:
+		in->rs2 = cs; in->rs1 = 2;
+		in->imm = bits(w, 12, 9) << 2 | bits(w, 8, 7) << 6;
+		break;
+	case C_SDSP:
+		in->rs2 = cs; in->rs1 = 2;
+		in->imm = bits(w, 12, 10) << 3 | bits(w, 9, 7) << 6;
+		break;
+	case C_CBSH:
+		in->rd = ch;
+		in->imm = bits(w, 12, 12) << 5 | bits(w, 6, 2);
+		break;
+	case C_CBI:
+		in->rd = ch;
+		in->imm = sx(bits(w, 12, 12) << 5 | bits(w, 6, 2), 6);
+		break;
+	case C_CA:   in->rd = ch; in->rs2 = cl; break;
+	case C_CJ:
+		in->imm = sx(bits(w, 12, 12) << 11 | bits(w, 11, 11) << 4 |
+			     bits(w, 10, 9) << 8 | bits(w, 8, 8) << 10 |
+			     bits(w, 7, 7) << 6 | bits(w, 6, 6) << 7 |
+			     bits(w, 5, 3) << 1 | bits(w, 2, 2) << 5, 12);
+		break;
+	case C_CBB:
+		in->rs1 = ch;
+		in->imm = sx(bits(w, 12, 12) << 8 | bits(w, 11, 10) << 3 |
+			     bits(w, 6, 5) << 6 | bits(w, 4, 3) << 1 |
+			     bits(w, 2, 2) << 5, 9);
+		break;
+	case C_CRJ:  in->rs1 = cr; in->rs2 = cs; break;
+	case C_CRM:  in->rd = cr; in->rs2 = cs; break;
+	}
+
+	/* Fields a compressed layout leaves implicit follow from its constraints,
+	   so the fields describe the 32-bit expansion. */
+	if (RV_IS_C(fmt)) {
+		if (op->rs1 == K_RD)
+			in->rs1 = in->rd;
+		if (op->rd == K_RA)
+			in->rd = 1;
+		if (fmt == C_CRJ || fmt == C_CRM || fmt == C_CA)
+			in->imm = op->lo;           /* c.ebreak's expansion: imm 1 */
+	}
+}
+
+static int reg_ok(int k, int r, int rd)
+{
+	switch (k) {
+	case K_ANY:  return 1;
+	case K_Z:    return r == 0;
+	case K_NZ:   return r != 0;
+	case K_P:    return r >= 8 && r <= 15;
+	case K_SP:   return r == 2;
+	case K_RA:   return r == 1;
+	case K_RD:   return r == rd;
+	case K_NZSP: return r != 0 && r != 2;
+	}
+	return 0;
+}
+
+int rv_fits(const struct rv_op *op, const struct insn *in)
+{
+	if (!reg_ok(op->rd, in->rd, 0) || !reg_ok(op->rs1, in->rs1, in->rd) ||
+	    !reg_ok(op->rs2, in->rs2, 0))
+		return 0;
+	long v = in->imm;
+	if (op->fmt == C_LUI)
+		v = sx((uint32_t)v, 20);            /* the 20-bit field, signed */
+	return v >= op->lo && v <= op->hi && v % op->align == 0 &&
+	       (!op->nz || v != 0);
+}
+
+/* Reassemble fields back into bytes: the inverse of rv_fields(). */
 int assemble(const struct insn *in, unsigned char *buf)
 {
-	int n = 0;
-	for (int i = 0; i < in->n_legacy; i++)
-		buf[n++] = in->legacy[i];
-	if (in->has_rex)
-		buf[n++] = in->rex;
-	if (in->opmap >= 1)
-		buf[n++] = 0x0F;
-	if (in->opmap == 2)
-		buf[n++] = 0x38;
-	else if (in->opmap == 3)
-		buf[n++] = 0x3A;
-	buf[n++] = in->opcode;
-	if (in->has_modrm)
-		buf[n++] = in->modrm;
-	if (in->has_sib)
-		buf[n++] = in->sib;
-	for (int i = 0; i < in->disp_len; i++)
-		buf[n++] = in->disp[i];
-	for (int i = 0; i < in->imm_len; i++)
-		buf[n++] = in->imm[i];
-	return n;
-}
+	uint32_t u = (uint32_t)in->imm;
+	uint32_t rd = in->rd, rs1 = in->rs1, rs2 = in->rs2;
+	uint32_t w;
 
-enum { RC_GPR, RC_SEG, RC_CR, RC_DR, RC_RIP };
-enum { OP_NONE, OP_REG, OP_IMM, OP_MEM };
+	if (!RV_IS_C(in->fmt)) {
+		w = in->opcode | rd << 7 | in->funct3 << 12 | rs1 << 15 | rs2 << 20;
+		switch (in->fmt) {
+		case RV_R:   w |= in->funct7 << 25; break;
+		case RV_I: case RV_IU:
+			w = in->opcode | rd << 7 | in->funct3 << 12 | rs1 << 15 |
+			    bits(u, 11, 0) << 20;
+			break;
+		case RV_ISH:
+			w = in->opcode | rd << 7 | in->funct3 << 12 | rs1 << 15 |
+			    bits(u, 5, 0) << 20 | in->funct7 << 26;
+			break;
+		case RV_S:
+			w = in->opcode | bits(u, 4, 0) << 7 | in->funct3 << 12 |
+			    rs1 << 15 | rs2 << 20 | bits(u, 11, 5) << 25;
+			break;
+		case RV_B:
+			w = in->opcode | bits(u, 11, 11) << 7 | bits(u, 4, 1) << 8 |
+			    in->funct3 << 12 | rs1 << 15 | rs2 << 20 |
+			    bits(u, 10, 5) << 25 | bits(u, 12, 12) << 31;
+			break;
+		case RV_U:
+			w = in->opcode | rd << 7 | bits(u, 19, 0) << 12;
+			break;
+		case RV_J:
+			w = in->opcode | rd << 7 | bits(u, 19, 12) << 12 |
+			    bits(u, 11, 11) << 20 | bits(u, 10, 1) << 21 |
+			    bits(u, 20, 20) << 31;
+			break;
+		}
+	} else {
+		uint32_t cl = (in->fmt == C_CLW || in->fmt == C_CLD) ? rd : rs2;
 
-struct operand {
-	int       kind;     /* OP_*                                            */
-	int       size;     /* operand size in bits (8/16/32/64), 0 = unknown  */
-	int       rc;       /* RC_* (register class)                           */
-	int       regnum;   /* 0..15                                           */
-	int       r8rex;    /* spl/bpl/sil/dil — forces a REX prefix           */
-	int       r8high;   /* ah/ch/dh/bh — forbids a REX prefix              */
-	long long imm;
-	int       base;     /* memory: base reg or -1                          */
-	int       index;    /* memory: index reg or -1                         */
-	int       scale;    /* memory: 1/2/4/8                                 */
-	int       addrsize; /* memory: 16/32/64 from base/index regs           */
-	int       rip;      /* memory: RIP-relative                            */
-	long      disp;
-	int       seg;      /* memory: seg reg 0..5, or -1                     */
-};
-
-/* Encoder context: prefix/REX state accumulated while building one insn. */
-struct enc {
-	struct insn *in;
-	int mode;
-	int rexW, rexR, rexX, rexB;
-	int p66, p67;
-	int seg;            /* segment-override reg (fs/gs) or -1              */
-	int need_rex8;      /* an operand is spl/bpl/sil/dil                   */
-	int bad_rex8;       /* an operand is ah/ch/dh/bh                       */
-};
-
-static const char *GPR64[16] = {"rax","rcx","rdx","rbx","rsp","rbp","rsi","rdi",
-	"r8","r9","r10","r11","r12","r13","r14","r15"};
-static const char *GPR32[16] = {"eax","ecx","edx","ebx","esp","ebp","esi","edi",
-	"r8d","r9d","r10d","r11d","r12d","r13d","r14d","r15d"};
-static const char *GPR16[16] = {"ax","cx","dx","bx","sp","bp","si","di",
-	"r8w","r9w","r10w","r11w","r12w","r13w","r14w","r15w"};
-static const char *GPR8[16]  = {"al","cl","dl","bl","spl","bpl","sil","dil",
-	"r8b","r9b","r10b","r11b","r12b","r13b","r14b","r15b"};
-static const char *GPR8H[4]  = {"ah","ch","dh","bh"};
-static const char *SEG[6]    = {"es","cs","ss","ds","fs","gs"};
-
-static int size_kw(const char *s)
-{
-	if (!strcmp(s, "byte"))  return 8;
-	if (!strcmp(s, "word"))  return 16;
-	if (!strcmp(s, "dword")) return 32;
-	if (!strcmp(s, "qword")) return 64;
-	return 0;
-}
-
-static int parse_reg(const char *s, struct operand *op)
-{
-	for (int i = 0; i < 16; i++) {
-		if (!strcmp(s, GPR64[i])) { op->kind=OP_REG; op->rc=RC_GPR; op->size=64; op->regnum=i; return 1; }
-		if (!strcmp(s, GPR32[i])) { op->kind=OP_REG; op->rc=RC_GPR; op->size=32; op->regnum=i; return 1; }
-		if (!strcmp(s, GPR16[i])) { op->kind=OP_REG; op->rc=RC_GPR; op->size=16; op->regnum=i; return 1; }
-		if (!strcmp(s, GPR8[i]))  { op->kind=OP_REG; op->rc=RC_GPR; op->size=8;  op->regnum=i; op->r8rex=(i>=4&&i<=7); return 1; }
-	}
-	for (int i = 0; i < 4; i++)
-		if (!strcmp(s, GPR8H[i])) { op->kind=OP_REG; op->rc=RC_GPR; op->size=8; op->regnum=4+i; op->r8high=1; return 1; }
-	for (int i = 0; i < 6; i++)
-		if (!strcmp(s, SEG[i]))   { op->kind=OP_REG; op->rc=RC_SEG; op->size=16; op->regnum=i; return 1; }
-	if (s[0]=='c' && s[1]=='r' && s[2]) { op->kind=OP_REG; op->rc=RC_CR; op->size=64; op->regnum=atoi(s+2); return 1; }
-	if (s[0]=='d' && s[1]=='r' && s[2]) { op->kind=OP_REG; op->rc=RC_DR; op->size=64; op->regnum=atoi(s+2); return 1; }
-	if (!strcmp(s, "rip")) { op->kind=OP_REG; op->rc=RC_RIP; op->size=64; op->regnum=0; return 1; }
-	return 0;
-}
-
-static int parse_mem(struct node *nd, struct operand *op, const char **err)
-{
-	if (nd->n_children != 6) {
-		*err = "mem node needs 6 children: size seg base index scale disp";
-		return 0;
-	}
-	op->kind = OP_MEM; op->base = -1; op->index = -1; op->scale = 1;
-	op->seg = -1; op->disp = 0; op->size = 0; op->addrsize = 0; op->rip = 0;
-
-	const char *sz = nd->children[0]->content, *sg = nd->children[1]->content;
-	const char *bs = nd->children[2]->content, *ix = nd->children[3]->content;
-	const char *sc = nd->children[4]->content, *dp = nd->children[5]->content;
-
-	if (strcmp(sz, "-")) op->size = size_kw(sz);
-	if (strcmp(sg, "-")) for (int i = 0; i < 6; i++) if (!strcmp(sg, SEG[i])) op->seg = i;
-	if (strcmp(bs, "-")) {
-		if (!strcmp(bs, "rip")) { op->rip = 1; op->addrsize = 64; }
-		else {
-			struct operand t; memset(&t, 0, sizeof t);
-			if (!parse_reg(bs, &t) || t.rc != RC_GPR) { *err = "bad mem base register"; return 0; }
-			op->base = t.regnum; op->addrsize = t.size;
+		w = in->opcode | in->funct3 << 13;
+		switch (in->fmt) {
+		case C_CIW:
+			w |= (rd - 8) << 2 | bits(u, 3, 3) << 5 | bits(u, 2, 2) << 6 |
+			     bits(u, 9, 6) << 7 | bits(u, 5, 4) << 11;
+			break;
+		case C_CLW: case C_CSW:
+			w |= (cl - 8) << 2 | bits(u, 6, 6) << 5 | bits(u, 2, 2) << 6 |
+			     (rs1 - 8) << 7 | bits(u, 5, 3) << 10;
+			break;
+		case C_CLD: case C_CSD:
+			w |= (cl - 8) << 2 | bits(u, 7, 6) << 5 |
+			     (rs1 - 8) << 7 | bits(u, 5, 3) << 10;
+			break;
+		case C_CI: case C_LUI: case C_CISH:
+			w |= bits(u, 4, 0) << 2 | rd << 7 | bits(u, 5, 5) << 12;
+			break;
+		case C_ADDI16SP:
+			w |= bits(u, 5, 5) << 2 | bits(u, 8, 7) << 3 | bits(u, 6, 6) << 5 |
+			     bits(u, 4, 4) << 6 | rd << 7 | bits(u, 9, 9) << 12;
+			break;
+		case C_LWSP:
+			w |= bits(u, 7, 6) << 2 | bits(u, 4, 2) << 4 | rd << 7 |
+			     bits(u, 5, 5) << 12;
+			break;
+		case C_LDSP:
+			w |= bits(u, 8, 6) << 2 | bits(u, 4, 3) << 5 | rd << 7 |
+			     bits(u, 5, 5) << 12;
+			break;
+		case C_SWSP:
+			w |= rs2 << 2 | bits(u, 7, 6) << 7 | bits(u, 5, 2) << 9;
+			break;
+		case C_SDSP:
+			w |= rs2 << 2 | bits(u, 8, 6) << 7 | bits(u, 5, 3) << 10;
+			break;
+		case C_CBSH: case C_CBI:
+			w |= bits(u, 4, 0) << 2 | (rd - 8) << 7 | in->funct2 << 10 |
+			     bits(u, 5, 5) << 12;
+			break;
+		case C_CA:
+			w |= (rs2 - 8) << 2 | in->funct2 << 5 | (rd - 8) << 7 |
+			     in->funct7 << 10;
+			break;
+		case C_CJ:
+			w |= bits(u, 5, 5) << 2 | bits(u, 3, 1) << 3 | bits(u, 7, 7) << 6 |
+			     bits(u, 6, 6) << 7 | bits(u, 10, 10) << 8 |
+			     bits(u, 9, 8) << 9 | bits(u, 4, 4) << 11 |
+			     bits(u, 11, 11) << 12;
+			break;
+		case C_CBB:
+			w |= bits(u, 5, 5) << 2 | bits(u, 2, 1) << 3 | bits(u, 7, 6) << 5 |
+			     (rs1 - 8) << 7 | bits(u, 4, 3) << 10 | bits(u, 8, 8) << 12;
+			break;
+		case C_CRJ:
+			w |= rs2 << 2 | rs1 << 7 | in->funct7 << 12;
+			break;
+		case C_CRM:
+			w |= rs2 << 2 | rd << 7 | in->funct7 << 12;
+			break;
 		}
 	}
-	if (strcmp(ix, "-")) {
-		struct operand t; memset(&t, 0, sizeof t);
-		if (!parse_reg(ix, &t) || t.rc != RC_GPR) { *err = "bad mem index register"; return 0; }
-		op->index = t.regnum; op->addrsize = t.size;
+
+	for (int k = 0; k < in->len; k++)
+		buf[k] = (unsigned char)(w >> (8 * k));
+	return in->len;
+}
+
+/* ---- encoder ------------------------------------------------------------ */
+
+enum { OPD_REG, OPD_IMM, OPD_SYM, OPD_MEM };
+
+struct operand {
+	int         kind;   /* OPD_*                                  */
+	int         reg;    /* register, or a mem operand's base      */
+	long        imm;    /* immediate, or a mem operand's offset   */
+	const char *sym;    /* a bare name: CSR, fence set            */
+};
+
+static int parse_reg(const char *s)
+{
+	for (int i = 0; i < 32; i++)
+		if (!strcmp(s, rv_abi[i]))
+			return i;
+	if (!strcmp(s, "fp"))
+		return 8;
+	if (s[0] == 'x' && s[1] >= '0' && s[1] <= '9') {
+		char *end;
+		long n = strtoll(s + 1, &end, 10);
+		if (*end == '\0' && n < 32)
+			return (int)n;
 	}
-	if (strcmp(sc, "-")) op->scale = atoi(sc);
-	if (strcmp(dp, "-")) op->disp = (dp[0]=='-') ? (long)strtoll(dp,NULL,0)
-						      : (long)strtoull(dp,NULL,0);
-	return 1;
+	return -1;
+}
+
+static int parse_num(const char *s, long *v)
+{
+	char *end;
+	if (!*s)
+		return 0;
+	*v = (long)strtoll(s, &end, 0);
+	return *end == '\0';
 }
 
 static int parse_operand(struct node *nd, struct operand *op, const char **err)
 {
 	memset(op, 0, sizeof *op);
-	op->base = -1; op->index = -1; op->scale = 1; op->seg = -1;
-	if (nd->n_children > 0 && !strcmp(nd->content, "mem"))
-		return parse_mem(nd, op, err);
-	if (parse_reg(nd->content, op))
-		return 1;
-	op->kind = OP_IMM;
-	op->imm = (nd->content[0]=='-') ? (long long)strtoll(nd->content,NULL,0)
-					: (long long)strtoull(nd->content,NULL,0);
-	return 1;
-}
-
-static int is_acc(const struct operand *o)
-{
-	return o->kind==OP_REG && o->rc==RC_GPR && o->regnum==0;
-}
-
-static void put_imm(struct insn *in, long long v, int bytes)
-{
-	for (int k = 0; k < bytes; k++)
-		in->imm[k] = (unsigned char)((v >> (8*k)) & 0xff);
-	in->imm_len = bytes;
-}
-
-/* Choose the operand-size prefix / REX.W for an `osize`-bit operation. */
-static void enc_opsize(struct enc *e, int osize)
-{
-	if (osize == 16 && e->mode != 16)      e->p66 = 1;
-	else if (osize == 32 && e->mode == 16) e->p66 = 1;
-	else if (osize == 64)                  e->rexW = 1;
-}
-
-/* Build ModRM (+ SIB + disp) for an r/m operand with `regfield` in reg. */
-static int enc_rm(struct enc *e, const struct operand *rm, int regfield, const char **err)
-{
-	struct insn *in = e->in;
-	e->rexR = (regfield >= 8);
-
-	if (rm->kind == OP_REG) {
-		in->has_modrm = 1;
-		in->modrm = (3<<6) | ((regfield&7)<<3) | (rm->regnum&7);
-		e->rexB = (rm->regnum >= 8);
-		return 1;
-	}
-	if (rm->kind != OP_MEM) { *err = "expected register or memory operand"; return 0; }
-	if (rm->seg == 4 || rm->seg == 5) e->seg = rm->seg;     /* fs/gs override */
-
-	int defaddr = (e->mode==16) ? 16 : (e->mode==64 ? 64 : 32);
-	int addr = rm->addrsize ? rm->addrsize : defaddr;
-	if (addr != defaddr) e->p67 = 1;
-
-	if (addr == 16) {
-		if (rm->base < 0 && rm->index < 0) {
-			in->has_modrm = 1;
-			in->modrm = ((regfield&7)<<3) | 6;     /* mod=0, rm=110 */
-			in->disp[0] = rm->disp & 0xff;
-			in->disp[1] = (rm->disp >> 8) & 0xff;
-			in->disp_len = 2;
-			return 1;
+	if (node_is(nd, "mem") && nd->n_children > 0) {
+		op->kind = OPD_MEM;
+		op->reg = parse_reg(nd->children[0]->content);
+		if (op->reg < 0) { *err = "bad mem base register"; return 0; }
+		if (nd->n_children > 1 && !parse_num(nd->children[1]->content, &op->imm)) {
+			*err = "bad mem offset"; return 0;
 		}
-		*err = "16-bit register addressing unsupported"; return 0;
-	}
-	if (rm->rip) {
-		in->has_modrm = 1;
-		in->modrm = ((regfield&7)<<3) | 5;             /* mod=0, rm=101 */
-		for (int k = 0; k < 4; k++) in->disp[k] = (rm->disp >> (8*k)) & 0xff;
-		in->disp_len = 4;
 		return 1;
 	}
+	if ((op->reg = parse_reg(nd->content)) >= 0) {
+		op->kind = OPD_REG;
+		return 1;
+	}
+	if (parse_num(nd->content, &op->imm)) {
+		op->kind = OPD_IMM;
+		return 1;
+	}
+	op->kind = OPD_SYM;
+	op->sym = nd->content;
+	return 1;
+}
 
-	int base = rm->base, index = rm->index;
-	if (index == 4) { *err = "rsp/esp cannot be a memory index"; return 0; }
+/* A fence set: "iorw" letters -> bits i=8 o=4 r=2 w=1. */
+static int fence_set(const char *s)
+{
+	int v = 0;
+	for (; *s; s++) {
+		if      (*s == 'i') v |= 8;
+		else if (*s == 'o') v |= 4;
+		else if (*s == 'r') v |= 2;
+		else if (*s == 'w') v |= 1;
+		else return -1;
+	}
+	return v;
+}
 
-	/* Pure absolute [disp32]: 64-bit addressing must route it through a SIB
-	 * (mod=0,rm=101 is RIP-relative there); 32-bit can use mod=0,rm=101. */
-	if (base < 0 && index < 0) {
-		in->has_modrm = 1;
-		if (addr == 64) {
-			in->modrm = ((regfield&7)<<3) | 4;
-			in->has_sib = 1;
-			in->sib = (4<<3) | 5;          /* no index, no base, disp32 */
-		} else {
-			in->modrm = ((regfield&7)<<3) | 5;
+/* Put operand o into the field(s) spec letter c names. */
+static int put_arg(char c, const struct operand *o, struct insn *in, const char **err)
+{
+	switch (c) {
+	case 'd': case 's': case 't': case 'D':
+		if (o->kind != OPD_REG) { *err = "expected a register"; return 0; }
+		if (c == 'd' || c == 'D') in->rd  = o->reg;
+		if (c == 's' || c == 'D') in->rs1 = o->reg;
+		if (c == 't')             in->rs2 = o->reg;
+		return 1;
+	case 'j': case 'u': case '>': case 'p': case 'a':
+		if (o->kind != OPD_IMM) { *err = "expected an immediate"; return 0; }
+		in->imm = o->imm;
+		if (c == 'u' && in->imm < 0 && in->imm >= -0x80000)
+			in->imm &= 0xfffff;     /* lui a0, -8 == lui a0, 0xffff8 */
+		return 1;
+	case 'm': case 'A':
+		if (o->kind != OPD_MEM && o->kind != OPD_REG) {
+			*err = "expected a memory operand"; return 0;
 		}
-		for (int k = 0; k < 4; k++) in->disp[k] = (rm->disp >> (8*k)) & 0xff;
-		in->disp_len = 4;
+		if (c == 'A' && o->imm) { *err = "atomics take no offset"; return 0; }
+		in->rs1 = o->reg;
+		if (c == 'm')
+			in->imm = o->kind == OPD_MEM ? o->imm : 0;
+		return 1;
+	case 'E':
+		if (o->kind == OPD_IMM) { in->imm = o->imm; return 1; }
+		if (o->kind == OPD_SYM)
+			for (size_t i = 0; i < sizeof CSRS / sizeof CSRS[0]; i++)
+				if (!strcmp(o->sym, CSRS[i].name)) {
+					in->imm = CSRS[i].csr;
+					return 1;
+				}
+		*err = "unknown CSR";
+		return 0;
+	case 'Z':
+		if (o->kind != OPD_IMM || o->imm < 0 || o->imm > 31) {
+			*err = "CSR immediate must be 0..31"; return 0;
+		}
+		in->rs1 = (int)o->imm;
+		return 1;
+	case 'P': case 'Q': {
+		int v = o->kind == OPD_SYM ? fence_set(o->sym) : -1;
+		if (v < 0) { *err = "bad fence set"; return 0; }
+		in->imm |= (c == 'P') ? v << 4 : v;
 		return 1;
 	}
-
-	int need_sib = (index >= 0) || ((base&7) == 4);
-	int mod, dl;
-	if (base < 0)                              { mod = 0; dl = 4; }   /* index-only */
-	else if (rm->disp == 0 && (base&7) != 5)   { mod = 0; dl = 0; }
-	else if (rm->disp >= -128 && rm->disp <= 127) { mod = 1; dl = 1; }
-	else                                       { mod = 2; dl = 4; }
-
-	int rmf;
-	if (need_sib) {
-		rmf = 4;
-		int ss = rm->scale==8?3 : rm->scale==4?2 : rm->scale==2?1 : 0;
-		int idx3 = (index >= 0) ? (index&7) : 4;       /* 4 = no index */
-		int bas3 = (base  >= 0) ? (base&7)  : 5;       /* 5 = no base  */
-		in->has_sib = 1;
-		in->sib = (ss<<6) | (idx3<<3) | bas3;
-		if (index >= 0) e->rexX = (index >= 8);
-		if (base  >= 0) e->rexB = (base  >= 8);
-		if (base < 0)   { mod = 0; dl = 4; }
-	} else {
-		rmf = base & 7;
-		e->rexB = (base >= 8);
 	}
-	in->has_modrm = 1;
-	in->modrm = (mod<<6) | ((regfield&7)<<3) | rmf;
-	for (int k = 0; k < dl; k++) in->disp[k] = (rm->disp >> (8*k)) & 0xff;
-	in->disp_len = dl;
-	return 1;
-}
-
-/* Lay down legacy prefixes (in canonical order) and the REX byte. */
-static int enc_finalize(struct enc *e, const char **err)
-{
-	struct insn *in = e->in;
-	static const unsigned char SEGP[6] = {0x26,0x2e,0x36,0x3e,0x64,0x65};
-
-	/* (rep is prepended by its own handler) seg, then 66, then 67. */
-	if (e->seg >= 0) in->legacy[in->n_legacy++] = SEGP[e->seg];
-	if (e->p66)      in->legacy[in->n_legacy++] = 0x66;
-	if (e->p67)      in->legacy[in->n_legacy++] = 0x67;
-
-	int wantrex = e->rexW || e->rexR || e->rexX || e->rexB || e->need_rex8;
-	if (wantrex) {
-		if (e->mode != 64) { *err = "this form requires `bits 64`"; return 0; }
-		if (e->bad_rex8)   { *err = "ah/ch/dh/bh cannot be used with a REX prefix"; return 0; }
-		in->has_rex = 1;
-		in->rex = 0x40 | (e->rexW<<3) | (e->rexR<<2) | (e->rexX<<1) | e->rexB;
-	}
-	return 1;
-}
-
-/* Condition code from a jcc/setcc/cmovcc suffix, or -1. */
-static int cc_lookup(const char *s)
-{
-	static const struct { const char *n; int cc; } T[] = {
-		{"o",0},{"no",1},{"b",2},{"c",2},{"nae",2},{"ae",3},{"nb",3},{"nc",3},
-		{"e",4},{"z",4},{"ne",5},{"nz",5},{"be",6},{"na",6},{"a",7},{"nbe",7},
-		{"s",8},{"ns",9},{"p",10},{"pe",10},{"np",11},{"po",11},
-		{"l",12},{"nge",12},{"ge",13},{"nl",13},{"le",14},{"ng",14},{"g",15},{"nle",15},
-	};
-	for (size_t i = 0; i < sizeof T/sizeof T[0]; i++)
-		if (!strcmp(s, T[i].n)) return T[i].cc;
-	return -1;
-}
-
-/* Fixed (no-ModRM) instructions: returns 1 if `m` was one. */
-static int enc_fixed(const char *m, struct enc *e)
-{
-	struct insn *in = e->in;
-	struct { const char *m; int opmap; unsigned char op; int rexw; int modrm; } F[] = {
-		{"nop",0,0x90,0,-1}, {"hlt",0,0xf4,0,-1}, {"cli",0,0xfa,0,-1},
-		{"sti",0,0xfb,0,-1}, {"cld",0,0xfc,0,-1}, {"std",0,0xfd,0,-1},
-		{"clc",0,0xf8,0,-1}, {"stc",0,0xf9,0,-1}, {"cmc",0,0xf5,0,-1},
-		{"ret",0,0xc3,0,-1}, {"retf",0,0xcb,0,-1}, {"leave",0,0xc9,0,-1},
-		{"int3",0,0xcc,0,-1}, {"into",0,0xce,0,-1},
-		{"pushf",0,0x9c,0,-1}, {"popf",0,0x9d,0,-1},
-		{"iret",0,0xcf,0,-1}, {"iretd",0,0xcf,0,-1}, {"iretq",0,0xcf,1,-1},
-		{"cwd",0,0x99,0,-1}, {"cdq",0,0x99,0,-1}, {"cqo",0,0x99,1,-1},
-		{"cbw",0,0x98,0,-1}, {"cwde",0,0x98,0,-1}, {"cdqe",0,0x98,1,-1},
-		{"syscall",1,0x05,0,-1}, {"sysret",1,0x07,0,-1}, {"sysretq",1,0x07,1,-1},
-		{"rdmsr",1,0x32,0,-1}, {"wrmsr",1,0x30,0,-1}, {"rdtsc",1,0x31,0,-1},
-		{"rdpmc",1,0x33,0,-1}, {"cpuid",1,0xa2,0,-1}, {"ud2",1,0x0b,0,-1},
-		{"clts",1,0x06,0,-1}, {"invd",1,0x08,0,-1}, {"wbinvd",1,0x09,0,-1},
-		{"sysenter",1,0x34,0,-1}, {"sysexit",1,0x35,0,-1},
-		{"swapgs",1,0x01,0,0xf8},
-		{NULL,0,0,0,-1}
-	};
-	for (int i = 0; F[i].m; i++) {
-		if (strcmp(m, F[i].m)) continue;
-		in->opmap = F[i].opmap;
-		in->opcode = F[i].op;
-		if (F[i].rexw) e->rexW = 1;
-		/* cwde/cdqe/cwd/cdq pick width by mnemonic via the 66 prefix. */
-		if (!strcmp(m,"cbw") || !strcmp(m,"cwd")) e->p66 = (e->mode != 16);
-		if ((!strcmp(m,"cwde") || !strcmp(m,"cdq")) && e->mode == 16) e->p66 = 1;
-		if (F[i].modrm >= 0) { in->has_modrm = 1; in->modrm = (unsigned char)F[i].modrm; }
-		return 1;
-	}
+	*err = "bad operand spec";
 	return 0;
 }
 
-int encode(struct node *nd, int mode, struct insn *out, const char **err)
+/* Range-check a 32-bit instruction's immediate against its layout. */
+static int imm_ok(const struct insn *in, const char **err)
 {
-	const char *m = nd->content;
+	long v = in->imm;
+	switch (in->fmt) {
+	case RV_I: case RV_S:
+		if (v < -2048 || v > 2047) { *err = "immediate out of range (12-bit)"; return 0; }
+		break;
+	case RV_IU:
+		if (v < 0 || v > 4095) { *err = "CSR out of range"; return 0; }
+		break;
+	case RV_ISH:
+		if (v < 0 || v > (in->opcode == 0x1b ? 31 : 63)) {
+			*err = "shift amount out of range"; return 0;
+		}
+		break;
+	case RV_B:
+		if (v < -4096 || v > 4094 || (v & 1)) {
+			*err = "branch offset out of range or odd"; return 0;
+		}
+		break;
+	case RV_U:
+		if (v < 0 || v > 0xfffff) { *err = "immediate out of range (20-bit)"; return 0; }
+		break;
+	case RV_J:
+		if (v < -(1L << 20) || v > (1L << 20) - 2 || (v & 1)) {
+			*err = "jump offset out of range or odd"; return 0;
+		}
+		break;
+	}
+	return 1;
+}
 
-	/* rep / repne wrapper: encode the child, prepend the prefix. */
-	if (!strcmp(m,"rep")||!strcmp(m,"repe")||!strcmp(m,"repz")||
-	    !strcmp(m,"repne")||!strcmp(m,"repnz")) {
-		if (node_noperands(nd) != 1) { *err = "rep takes one child instruction"; return 0; }
-		if (!encode(node_operand(nd, 0), mode, out, err)) return 0;
-		unsigned char pfx = (m[3]=='n') ? 0xf2 : 0xf3;
-		if (out->n_legacy >= (int)sizeof out->legacy) { *err = "too many prefixes"; return 0; }
-		for (int k = out->n_legacy; k > 0; k--) out->legacy[k] = out->legacy[k-1];
-		out->legacy[0] = pfx;
-		out->n_legacy++;
+/* Swap a 32-bit instruction for its compressed form when one fits. */
+static void compress(struct insn *in)
+{
+	struct insn t = *in;
+	const char *base = in->op->name;
+
+	/* mv is addi rd,rs,0; RVC spells it c.mv, whose expansion is add rd,x0,rs. */
+	if (!strcmp(base, "addi") && t.imm == 0 && t.rs1 != 0) {
+		t.rs2 = t.rs1;
+		t.rs1 = 0;
+		base = "add";
+	}
+	for (const struct rv_op *c = rv_ops; c->name; c++) {
+		if (!RV_IS_C(c->fmt) || strcmp(c->base, base) || !rv_fits(c, &t))
+			continue;
+		t.op  = c;
+		t.fmt = c->fmt;
+		t.len = 2;
+		fields_funct(c->fmt, c->match, &t);
+		*in = t;
+		return;
+	}
+}
+
+/*
+ * Pseudo-instructions: `name` with `nops` operands is `base` with the operands
+ * `tmpl` spells: '0'..'3' copy a pseudo operand, 'z' is x0, 'r' is ra, 'k' 'o'
+ * 'm' 'f' are the immediates 0, 1, -1, 255, and 'w' is the fence set "iorw".
+ */
+static const struct { const char *name; int nops; const char *base, *tmpl; } PSEUDO[] = {
+	{"nop",    0, "addi",   "zzk"},
+	{"li",     2, "addi",   "0z1"},
+	{"mv",     2, "addi",   "01k"},
+	{"not",    2, "xori",   "01m"},
+	{"neg",    2, "sub",    "0z1"},
+	{"negw",   2, "subw",   "0z1"},
+	{"sext.w", 2, "addiw",  "01k"},
+	{"zext.b", 2, "andi",   "01f"},
+	{"seqz",   2, "sltiu",  "01o"},
+	{"snez",   2, "sltu",   "0z1"},
+	{"sltz",   2, "slt",    "01z"},
+	{"sgtz",   2, "slt",    "0z1"},
+	{"beqz",   2, "beq",    "0z1"},
+	{"bnez",   2, "bne",    "0z1"},
+	{"blez",   2, "bge",    "z01"},
+	{"bgez",   2, "bge",    "0z1"},
+	{"bltz",   2, "blt",    "0z1"},
+	{"bgtz",   2, "blt",    "z01"},
+	{"bgt",    3, "blt",    "102"},
+	{"ble",    3, "bge",    "102"},
+	{"bgtu",   3, "bltu",   "102"},
+	{"bleu",   3, "bgeu",   "102"},
+	{"j",      1, "jal",    "z0"},
+	{"jal",    1, "jal",    "r0"},
+	{"jr",     1, "jalr",   "z0"},
+	{"jalr",   1, "jalr",   "r0"},
+	{"ret",    0, "jalr",   "zr"},
+	{"csrr",   2, "csrrs",  "01z"},
+	{"csrw",   2, "csrrw",  "z01"},
+	{"csrs",   2, "csrrs",  "z01"},
+	{"csrc",   2, "csrrc",  "z01"},
+	{"csrwi",  2, "csrrwi", "z01"},
+	{"csrsi",  2, "csrrsi", "z01"},
+	{"csrci",  2, "csrrci", "z01"},
+	{"fence",  0, "fence",  "ww"},
+};
+
+int encode(struct node *nd, int rvc, struct insn *out, const char **err)
+{
+	const char     *m = nd->content;
+	struct operand  ops[4];
+	int             nops = node_noperands(nd);  /* meta child, if any, is skipped */
+
+	if (nops > 4) { *err = "too many operands"; return 0; }
+	for (int i = 0; i < nops; i++)
+		if (!parse_operand(node_operand(nd, i), &ops[i], err))
+			return 0;
+
+	/* Pseudo-instruction: rewrite into its base instruction's operands. */
+	for (size_t p = 0; p < sizeof PSEUDO / sizeof PSEUDO[0]; p++) {
+		if (strcmp(m, PSEUDO[p].name) || nops != PSEUDO[p].nops)
+			continue;
+		struct operand base[4];
+		const char *t = PSEUDO[p].tmpl;
+		int n = 0;
+		for (; t[n]; n++) {
+			struct operand *o = &base[n];
+			memset(o, 0, sizeof *o);
+			switch (t[n]) {
+			case 'z': o->kind = OPD_REG; o->reg = 0;   break;
+			case 'r': o->kind = OPD_REG; o->reg = 1;   break;
+			case 'k': o->kind = OPD_IMM; o->imm = 0;   break;
+			case 'o': o->kind = OPD_IMM; o->imm = 1;   break;
+			case 'm': o->kind = OPD_IMM; o->imm = -1;  break;
+			case 'f': o->kind = OPD_IMM; o->imm = 255; break;
+			case 'w': o->kind = OPD_SYM; o->sym = "iorw"; break;
+			default:  *o = ops[t[n] - '0'];            break;
+			}
+		}
+		memcpy(ops, base, sizeof base);
+		nops = n;
+		m = PSEUDO[p].base;
+		break;
+	}
+
+	/* Atomics' ordering suffix: .aq / .rl / .aqrl set funct7's low bits. */
+	char name[24];
+	unsigned aqrl = 0;
+	size_t len = strlen(m);
+	if (len >= sizeof name) { *err = "unsupported mnemonic"; return 0; }
+	memcpy(name, m, len + 1);
+	if (!strncmp(name, "amo", 3) || !strncmp(name, "lr.", 3) || !strncmp(name, "sc.", 3)) {
+		static const struct { const char *sfx; unsigned bits; } SFX[] = {
+			{".aqrl", 3}, {".aq", 2}, {".rl", 1},
+		};
+		for (int k = 0; k < 3; k++) {
+			size_t sl = strlen(SFX[k].sfx);
+			if (len > sl && !strcmp(name + len - sl, SFX[k].sfx)) {
+				name[len - sl] = '\0';
+				aqrl = SFX[k].bits;
+				break;
+			}
+		}
+	}
+
+	/* Explicit c.* mnemonics are compressed entries; the rest are 32-bit. */
+	const struct rv_op *op = NULL;
+	for (const struct rv_op *o = rv_ops; o->name && !op; o++)
+		if (!strcmp(o->name, name))
+			op = o;
+	if (!op) { *err = "unsupported mnemonic"; return 0; }
+	if ((int)strlen(op->args) != nops) { *err = "wrong number of operands"; return 0; }
+
+	/* Start from the entry's fixed bits (e.g. mret's funct12), then place
+	   the operands. */
+	memset(out, 0, sizeof *out);
+	rv_fields(op, op->match, out);
+	for (int i = 0; i < nops; i++)
+		if (!put_arg(op->args[i], &ops[i], out, err))
+			return 0;
+
+	if (RV_IS_C(op->fmt)) {
+		if (!rv_fits(op, out)) { *err = "operands do not fit this compressed form"; return 0; }
 		return 1;
 	}
-
-	memset(out, 0, sizeof *out);
-	struct enc e; memset(&e, 0, sizeof e);
-	e.in = out; e.mode = mode; e.seg = -1;
-
-	struct operand ops[4];
-	int nops = node_noperands(nd);          /* meta child, if any, is skipped */
-	if (nops > 4) { *err = "too many operands"; return 0; }
-	for (int i = 0; i < nops; i++) {
-		if (!parse_operand(node_operand(nd, i), &ops[i], err)) return 0;
-		if (ops[i].kind==OP_REG && ops[i].r8rex)  e.need_rex8 = 1;
-		if (ops[i].kind==OP_REG && ops[i].r8high) e.bad_rex8  = 1;
-	}
-	struct operand *d = nops>0 ? &ops[0] : NULL;
-	struct operand *s = nops>1 ? &ops[1] : NULL;
-
-	int handled = 0;
-
-	/* --- ALU group: add/or/adc/sbb/and/sub/xor/cmp --------------------- */
-	static const struct { const char *m; int base; } ALU[] = {
-		{"add",0x00},{"or",0x08},{"adc",0x10},{"sbb",0x18},
-		{"and",0x20},{"sub",0x28},{"xor",0x30},{"cmp",0x38},
-	};
-	for (int a = 0; a < 8 && !handled; a++) {
-		if (strcmp(m, ALU[a].m)) continue;
-		if (nops != 2) { *err = "binary op needs two operands"; return 0; }
-		int base = ALU[a].base;
-		if (s->kind == OP_IMM) {
-			int os = d->size;
-			if (!os) { *err = "operation needs an operand size"; return 0; }
-			enc_opsize(&e, os);
-			if (os == 8) {                       /* no imm8 sign-extend form */
-				if (is_acc(d)) { out->opcode = base+4; put_imm(out, s->imm, 1); }
-				else { out->opcode = 0x80; if (!enc_rm(&e,d,base>>3,err)) return 0; put_imm(out, s->imm, 1); }
-			} else if (s->imm >= -128 && s->imm <= 127) {   /* 0x83: shortest, even for acc */
-				out->opcode = 0x83;
-				if (!enc_rm(&e, d, base>>3, err)) return 0;
-				put_imm(out, s->imm, 1);
-			} else if (is_acc(d)) {
-				out->opcode = base + 5;
-				put_imm(out, s->imm, os==16?2:4);
-			} else {
-				out->opcode = 0x81;
-				if (!enc_rm(&e, d, base>>3, err)) return 0;
-				put_imm(out, s->imm, os==16?2:4);
-			}
-		} else if (d->kind==OP_REG && s->kind==OP_MEM) {
-			int os = d->size; enc_opsize(&e, os);
-			out->opcode = base + (os==8?2:3);
-			if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		} else if (s->kind==OP_REG) {
-			int os = (d->kind==OP_REG) ? d->size : (d->size?d->size:s->size);
-			enc_opsize(&e, os);
-			out->opcode = base + (os==8?0:1);
-			if (!enc_rm(&e, d, s->regnum, err)) return 0;
-		} else { *err = "bad operands"; return 0; }
-		handled = 1;
-	}
-
-	/* --- mov / movabs -------------------------------------------------- */
-	if (!handled && !strcmp(m, "mov")) {
-		if (nops != 2) { *err = "mov needs two operands"; return 0; }
-		if (d->rc==RC_SEG) {                       /* mov sreg, r/m16 */
-			out->opcode = 0x8e;
-			if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		} else if (s->rc==RC_SEG) {                /* mov r/m16, sreg */
-			out->opcode = 0x8c;
-			if (!enc_rm(&e, d, s->regnum, err)) return 0;
-		} else if (s->rc==RC_CR) {                 /* mov r64, cr */
-			out->opmap=1; out->opcode=0x20;
-			if (!enc_rm(&e, d, s->regnum, err)) return 0;
-		} else if (d->rc==RC_CR) {                 /* mov cr, r64 */
-			out->opmap=1; out->opcode=0x22;
-			if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		} else if (s->rc==RC_DR) {
-			out->opmap=1; out->opcode=0x21;
-			if (!enc_rm(&e, d, s->regnum, err)) return 0;
-		} else if (d->rc==RC_DR) {
-			out->opmap=1; out->opcode=0x23;
-			if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		} else if (s->kind==OP_IMM) {
-			if (d->kind==OP_REG) {
-				int os = d->size; enc_opsize(&e, os);
-				if (os==8) { out->opcode=0xb0+(d->regnum&7); e.rexB=(d->regnum>=8); put_imm(out,s->imm,1); }
-				else if (os==16||os==32) { out->opcode=0xb8+(d->regnum&7); e.rexB=(d->regnum>=8); put_imm(out,s->imm,os==16?2:4); }
-				else { /* mov r64, imm32 (sign-extended) */
-					if (s->imm < -2147483648LL || s->imm > 2147483647LL) { *err="64-bit immediate needs movabs"; return 0; }
-					out->opcode=0xc7;
-					if (!enc_rm(&e, d, 0, err)) return 0;
-					put_imm(out, s->imm, 4);
-				}
-			} else {
-				int os = d->size; if (!os) { *err="memory store needs a size"; return 0; }
-				enc_opsize(&e, os);
-				out->opcode = (os==8)?0xc6:0xc7;
-				if (!enc_rm(&e, d, 0, err)) return 0;
-				put_imm(out, s->imm, os==8?1:(os==16?2:4));
-			}
-		} else if (s->kind==OP_REG) {              /* mov r/m, r */
-			int os = s->size; enc_opsize(&e, os);
-			out->opcode = (os==8)?0x88:0x89;
-			if (!enc_rm(&e, d, s->regnum, err)) return 0;
-		} else if (d->kind==OP_REG) {              /* mov r, r/m */
-			int os = d->size; enc_opsize(&e, os);
-			out->opcode = (os==8)?0x8a:0x8b;
-			if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		} else { *err="bad mov operands"; return 0; }
-		handled = 1;
-	}
-	if (!handled && !strcmp(m, "movabs")) {
-		if (nops != 2) { *err="movabs needs two operands"; return 0; }
-		if (s->kind==OP_IMM && d->kind==OP_REG && d->size==64) {
-			e.rexW=1; out->opcode=0xb8+(d->regnum&7); e.rexB=(d->regnum>=8);
-			put_imm(out, s->imm, 8);
-		} else if (is_acc(d) && s->kind==OP_MEM) {        /* movabs acc, [moffs] */
-			int os=d->size; enc_opsize(&e, os);
-			int a = s->addrsize ? s->addrsize : (mode==64?64:32);
-			if (s->seg==4||s->seg==5) e.seg=s->seg;
-			out->opcode = (os==8)?0xa0:0xa1;
-			put_imm(out, s->disp, a/8);
-		} else if (is_acc(s) && d->kind==OP_MEM) {        /* movabs [moffs], acc */
-			int os=s->size; enc_opsize(&e, os);
-			int a = d->addrsize ? d->addrsize : (mode==64?64:32);
-			if (d->seg==4||d->seg==5) e.seg=d->seg;
-			out->opcode = (os==8)?0xa2:0xa3;
-			put_imm(out, d->disp, a/8);
-		} else { *err="bad movabs operands"; return 0; }
-		handled = 1;
-	}
-
-	/* --- test / lea / xchg -------------------------------------------- */
-	if (!handled && !strcmp(m, "test")) {
-		if (nops!=2) { *err="test needs two operands"; return 0; }
-		int os = d->size ? d->size : s->size;
-		if (s->kind==OP_IMM) {
-			enc_opsize(&e, os);
-			if (is_acc(d)) { out->opcode=(os==8?0xa8:0xa9); put_imm(out,s->imm,os==8?1:(os==16?2:4)); }
-			else { out->opcode=(os==8?0xf6:0xf7); if(!enc_rm(&e,d,0,err))return 0; put_imm(out,s->imm,os==8?1:(os==16?2:4)); }
-		} else if (s->kind==OP_REG) {
-			enc_opsize(&e, s->size);
-			out->opcode=(s->size==8?0x84:0x85);
-			if (!enc_rm(&e, d, s->regnum, err)) return 0;
-		} else { *err="bad test operands"; return 0; }
-		handled = 1;
-	}
-	if (!handled && !strcmp(m, "lea")) {
-		if (nops!=2 || d->kind!=OP_REG || s->kind!=OP_MEM) { *err="lea needs reg, mem"; return 0; }
-		enc_opsize(&e, d->size);
-		out->opcode = 0x8d;
-		if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		handled = 1;
-	}
-	if (!handled && !strcmp(m, "xchg")) {
-		if (nops!=2) { *err="xchg needs two operands"; return 0; }
-		struct operand *rm = (d->kind==OP_MEM)?d:s, *rg = (d->kind==OP_MEM)?s:d;
-		if (rg->kind!=OP_REG) { *err="bad xchg operands"; return 0; }
-		enc_opsize(&e, rg->size);
-		out->opcode = (rg->size==8)?0x86:0x87;
-		if (!enc_rm(&e, rm, rg->regnum, err)) return 0;
-		handled = 1;
-	}
-
-	/* --- push / pop ---------------------------------------------------- */
-	if (!handled && !strcmp(m, "push")) {
-		if (nops!=1) { *err="push needs one operand"; return 0; }
-		if (d->kind==OP_IMM) {
-			if (d->imm>=-128 && d->imm<=127) { out->opcode=0x6a; put_imm(out,d->imm,1); }
-			else { out->opcode=0x68; put_imm(out,d->imm,4); }
-		} else if (d->kind==OP_REG && d->rc==RC_GPR) {
-			if (d->size==16) e.p66=1;
-			out->opcode=0x50+(d->regnum&7); e.rexB=(d->regnum>=8);
-		} else if (d->rc==RC_SEG && (d->regnum==4||d->regnum==5)) {
-			out->opmap=1; out->opcode=(d->regnum==4)?0xa0:0xa8;
-		} else if (d->kind==OP_MEM) {
-			out->opcode=0xff; if(!enc_rm(&e,d,6,err))return 0;
-		} else { *err="bad push operand"; return 0; }
-		handled = 1;
-	}
-	if (!handled && !strcmp(m, "pop")) {
-		if (nops!=1) { *err="pop needs one operand"; return 0; }
-		if (d->kind==OP_REG && d->rc==RC_GPR) {
-			if (d->size==16) e.p66=1;
-			out->opcode=0x58+(d->regnum&7); e.rexB=(d->regnum>=8);
-		} else if (d->rc==RC_SEG && (d->regnum==4||d->regnum==5)) {
-			out->opmap=1; out->opcode=(d->regnum==4)?0xa1:0xa9;
-		} else if (d->kind==OP_MEM) {
-			out->opcode=0x8f; if(!enc_rm(&e,d,0,err))return 0;
-		} else { *err="bad pop operand"; return 0; }
-		handled = 1;
-	}
-
-	/* --- unary group3/4/5: not/neg/mul/imul1/div/idiv/inc/dec --------- */
-	if (!handled) {
-		static const struct { const char *m; unsigned char op; int digit; } U[] = {
-			{"not",0xf7,2},{"neg",0xf7,3},{"mul",0xf7,4},
-			{"div",0xf7,6},{"idiv",0xf7,7},{"inc",0xff,0},{"dec",0xff,1},
-		};
-		for (int u = 0; u < 7 && !handled; u++) {
-			if (strcmp(m, U[u].m)) continue;
-			if (nops!=1) { *err="needs one operand"; return 0; }
-			int os = d->size; if(!os){*err="operand needs a size";return 0;}
-			enc_opsize(&e, os);
-			out->opcode = (os==8) ? (U[u].op==0xf7?0xf6:0xfe) : U[u].op;
-			if (!enc_rm(&e, d, U[u].digit, err)) return 0;
-			handled = 1;
-		}
-	}
-
-	/* --- imul (1/2/3-operand) ----------------------------------------- */
-	if (!handled && !strcmp(m, "imul")) {
-		if (nops==1) {
-			int os=d->size; if(!os){*err="imul needs a size";return 0;}
-			enc_opsize(&e,os); out->opcode=(os==8?0xf6:0xf7);
-			if(!enc_rm(&e,d,5,err))return 0;
-		} else if (nops==2) {
-			enc_opsize(&e,d->size); out->opmap=1; out->opcode=0xaf;
-			if(!enc_rm(&e,s,d->regnum,err))return 0;
-		} else if (nops==3) {
-			struct operand *imm=&ops[2];
-			enc_opsize(&e,d->size);
-			if (imm->imm>=-128&&imm->imm<=127){ out->opcode=0x6b; if(!enc_rm(&e,s,d->regnum,err))return 0; put_imm(out,imm->imm,1);}
-			else { out->opcode=0x69; if(!enc_rm(&e,s,d->regnum,err))return 0; put_imm(out,imm->imm,d->size==16?2:4);}
-		} else { *err="bad imul"; return 0; }
-		handled = 1;
-	}
-
-	/* --- shifts / rotates --------------------------------------------- */
-	if (!handled) {
-		static const struct { const char *m; int digit; } SH[] = {
-			{"rol",0},{"ror",1},{"rcl",2},{"rcr",3},
-			{"shl",4},{"sal",4},{"shr",5},{"sar",7},
-		};
-		for (int h = 0; h < 8 && !handled; h++) {
-			if (strcmp(m, SH[h].m)) continue;
-			if (nops!=2) { *err="shift needs two operands"; return 0; }
-			int os=d->size; if(!os){*err="shift needs a size";return 0;}
-			enc_opsize(&e, os);
-			if (s->kind==OP_REG && s->size==8 && s->regnum==1) out->opcode=(os==8?0xd2:0xd3);
-			else if (s->kind==OP_IMM && s->imm==1)             out->opcode=(os==8?0xd0:0xd1);
-			else if (s->kind==OP_IMM)                          out->opcode=(os==8?0xc0:0xc1);
-			else { *err="shift count must be cl, 1, or imm8"; return 0; }
-			if (!enc_rm(&e, d, SH[h].digit, err)) return 0;
-			if (out->opcode==0xc0||out->opcode==0xc1) put_imm(out, s->imm, 1);
-			handled = 1;
-		}
-	}
-
-	/* --- movzx / movsx / movsxd --------------------------------------- */
-	if (!handled && (!strcmp(m,"movzx")||!strcmp(m,"movsx"))) {
-		if (nops!=2 || d->kind!=OP_REG) { *err="needs reg, r/m"; return 0; }
-		int ss = (s->kind==OP_REG)?s->size:s->size;
-		if (ss!=8 && ss!=16) { *err="source must be 8- or 16-bit"; return 0; }
-		enc_opsize(&e, d->size);
-		out->opmap=1;
-		out->opcode = (!strcmp(m,"movzx")) ? (ss==8?0xb6:0xb7) : (ss==8?0xbe:0xbf);
-		if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		handled = 1;
-	}
-	if (!handled && !strcmp(m,"movsxd")) {
-		if (nops!=2 || d->kind!=OP_REG) { *err="needs reg, r/m"; return 0; }
-		e.rexW=1; out->opcode=0x63;
-		if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		handled = 1;
-	}
-
-	/* --- bit ops: bt/bts/btr/btc, bsf/bsr, bswap ---------------------- */
-	if (!handled) {
-		static const struct { const char *m; unsigned char rop; int digit; } BT[] = {
-			{"bt",0xa3,4},{"bts",0xab,5},{"btr",0xb3,6},{"btc",0xbb,7},
-		};
-		for (int b = 0; b < 4 && !handled; b++) {
-			if (strcmp(m, BT[b].m)) continue;
-			if (nops!=2) { *err="bit op needs two operands"; return 0; }
-			out->opmap=1;
-			if (s->kind==OP_IMM) {
-				int os=d->size?d->size:32; enc_opsize(&e,os);
-				out->opcode=0xba;
-				if(!enc_rm(&e,d,BT[b].digit,err))return 0;
-				put_imm(out,s->imm,1);
-			} else if (s->kind==OP_REG) {
-				enc_opsize(&e,s->size);
-				out->opcode=BT[b].rop;
-				if(!enc_rm(&e,d,s->regnum,err))return 0;
-			} else { *err="bad bit op"; return 0; }
-			handled = 1;
-		}
-	}
-	if (!handled && (!strcmp(m,"bsf")||!strcmp(m,"bsr"))) {
-		if (nops!=2 || d->kind!=OP_REG) { *err="needs reg, r/m"; return 0; }
-		enc_opsize(&e,d->size); out->opmap=1; out->opcode=(!strcmp(m,"bsf")?0xbc:0xbd);
-		if(!enc_rm(&e,s,d->regnum,err))return 0;
-		handled = 1;
-	}
-	if (!handled && !strcmp(m,"bswap")) {
-		if (nops!=1 || d->kind!=OP_REG) { *err="bswap needs a register"; return 0; }
-		enc_opsize(&e,d->size); out->opmap=1; out->opcode=0xc8+(d->regnum&7); e.rexB=(d->regnum>=8);
-		handled = 1;
-	}
-
-	/* --- control flow: jmp/call/jcc/setcc/cmovcc ---------------------- */
-	if (!handled && (!strcmp(m,"jmp")||!strcmp(m,"call"))) {
-		if (nops!=1) { *err="needs one operand"; return 0; }
-		int call = !strcmp(m,"call");
-		if (d->kind==OP_IMM) {                     /* relative displacement */
-			if (!call && d->imm>=-128 && d->imm<=127) { out->opcode=0xeb; put_imm(out,d->imm,1); }
-			else { out->opcode=call?0xe8:0xe9; put_imm(out,d->imm,4); }
-		} else {                                   /* indirect r/m64 */
-			out->opcode=0xff;
-			if (!enc_rm(&e, d, call?2:4, err)) return 0;
-		}
-		handled = 1;
-	}
-	if (!handled && m[0]=='j' && cc_lookup(m+1) >= 0) {
-		if (nops!=1 || d->kind!=OP_IMM) { *err="jcc needs a displacement"; return 0; }
-		int cc = cc_lookup(m+1);
-		if (d->imm>=-128 && d->imm<=127) { out->opcode=0x70+cc; put_imm(out,d->imm,1); }
-		else { out->opmap=1; out->opcode=0x80+cc; put_imm(out,d->imm,4); }
-		handled = 1;
-	}
-	if (!handled && !strncmp(m,"set",3) && cc_lookup(m+3) >= 0) {
-		if (nops!=1) { *err="setcc needs one operand"; return 0; }
-		out->opmap=1; out->opcode=0x90+cc_lookup(m+3);
-		if (!enc_rm(&e, d, 0, err)) return 0;
-		handled = 1;
-	}
-	if (!handled && !strncmp(m,"cmov",4) && cc_lookup(m+4) >= 0) {
-		if (nops!=2 || d->kind!=OP_REG) { *err="cmovcc needs reg, r/m"; return 0; }
-		enc_opsize(&e, d->size);
-		out->opmap=1; out->opcode=0x40+cc_lookup(m+4);
-		if (!enc_rm(&e, s, d->regnum, err)) return 0;
-		handled = 1;
-	}
-
-	/* --- string ops --------------------------------------------------- */
-	if (!handled) {
-		static const struct { const char *m; unsigned char op8; unsigned char opv; int os; } ST[] = {
-			{"movsb",0xa4,0,8},{"movsw",0,0xa5,16},{"movsd",0,0xa5,32},{"movsq",0,0xa5,64},
-			{"stosb",0xaa,0,8},{"stosw",0,0xab,16},{"stosd",0,0xab,32},{"stosq",0,0xab,64},
-			{"lodsb",0xac,0,8},{"lodsw",0,0xad,16},{"lodsd",0,0xad,32},{"lodsq",0,0xad,64},
-			{"scasb",0xae,0,8},{"scasw",0,0xaf,16},{"scasd",0,0xaf,32},{"scasq",0,0xaf,64},
-			{"cmpsb",0xa6,0,8},{"cmpsw",0,0xa7,16},{"cmpsd",0,0xa7,32},{"cmpsq",0,0xa7,64},
-		};
-		for (int t = 0; t < (int)(sizeof ST/sizeof ST[0]) && !handled; t++) {
-			if (strcmp(m, ST[t].m)) continue;
-			if (ST[t].os==8) out->opcode=ST[t].op8;
-			else { enc_opsize(&e, ST[t].os); out->opcode=ST[t].opv; }
-			handled = 1;
-		}
-	}
-
-	/* --- int imm8 ----------------------------------------------------- */
-	if (!handled && !strcmp(m,"int")) {
-		if (nops!=1 || d->kind!=OP_IMM) { *err="int needs an immediate"; return 0; }
-		out->opcode=0xcd; put_imm(out,d->imm,1);
-		handled = 1;
-	}
-
-	/* --- system descriptor-table / segment ops (0F 00 / 0F 01) -------- */
-	if (!handled) {
-		static const struct { const char *m; unsigned char op; int digit; } S0[] = {
-			{"sgdt",0x01,0},{"sidt",0x01,1},{"lgdt",0x01,2},{"lidt",0x01,3},
-			{"smsw",0x01,4},{"lmsw",0x01,6},
-			{"sldt",0x00,0},{"str",0x00,1},{"lldt",0x00,2},{"ltr",0x00,3},
-			{"verr",0x00,4},{"verw",0x00,5},
-		};
-		for (int t = 0; t < (int)(sizeof S0/sizeof S0[0]) && !handled; t++) {
-			if (strcmp(m, S0[t].m)) continue;
-			if (nops!=1) { *err="needs one operand"; return 0; }
-			out->opmap=1; out->opcode=S0[t].op;
-			if (!enc_rm(&e, d, S0[t].digit, err)) return 0;
-			handled = 1;
-		}
-	}
-
-	/* --- fixed (no-operand) instructions ------------------------------ */
-	if (!handled && enc_fixed(m, &e))
-		handled = 1;
-
-	if (!handled) { *err = "unsupported mnemonic"; return 0; }
-	return enc_finalize(&e, err);
+	if (!imm_ok(out, err))
+		return 0;
+	out->funct7 |= aqrl;
+	if (rvc)
+		compress(out);
+	return 1;
 }

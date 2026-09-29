@@ -44,61 +44,57 @@ id = hash(content + child_ids_in_order)
 
 ## Build / run / verify
 
-The bootstrap compiler reads `src/os/boot_flow.txt`, breaks each instruction
-into its fields (legacy prefixes, REX, opcode with its 0F/0F38/0F3A escapes,
-ModRM, SIB, disp, imm) with hard-coded x86-64 opcode tables, reassembles the
-bytes, and writes them into a binary image at each line's disk offset. Field
-lengths follow the CPU mode (16/32/64-bit, tracked from the region banners),
-the 66/67 size prefixes and REX.W. Nearly the whole boot flow now decodes;
-encodings ttpc can't fully account for on a line are passed through verbatim,
-so the image is faithful regardless.
+The bootstrap compiler reads `src/os/boot_flow.txt` (the objdump of the RISC-V
+OS, see `src/os/DISASSEMBLY.md`), breaks each instruction into its fields and
+writes the bytes into a binary image at each line's file offset. Decoding is
+driven by one opcode table (`rv_ops` in `encode.c`, RV64IMAC + Zicsr +
+Zifencei): a 32-bit instruction becomes opcode, funct3/funct7, rd/rs1/rs2 and
+its un-scrambled immediate; a compressed (RVC) one its quadrant, funct bits,
+registers and immediate, described as its 32-bit expansion. The fields are
+reassembled and must reproduce the original bytes (PASS). Words that are no
+such instruction (the `unimp` padding, `.insn`, reserved/HINT encodings, the
+`.rodata` strings shown as code) are passed through verbatim, so the image is
+faithful regardless.
+
+Every decoded `.text` line is also re-encoded from objdump's *text* through the
+node-tree assembler (`encode()`) and must give the same bytes: the encoder is
+checked against the real toolchain on every run.
 
 ```sh
-# Build the compiler
-make compiler
+make os compiler && make -C src/os bin      # os.elf, flat os.bin, ttpc
 
-# Run it: reads boot_flow.txt, writes the binary (add -v for the field breakdown).
-# Expect a high decoded count and 0 failed, e.g.:
-#   ttpc: assembled 829 instruction(s) ... (813 decoded, 16 passed through, 0 failed)
+# Expect 0 failed and every .text line re-encoded, e.g.:
+#   ttpc: assembled 342 instruction(s) ... (304 decoded, 38 passed through,
+#         0 failed; 265/265 .text lines re-encoded)
 ./build/compiler/ttpc src/os/boot_flow.txt build/compiler/ttpos.img
+./build/compiler/ttpc -v src/os/boot_flow.txt /dev/null | less   # field breakdown
 
-# 1) The image must be byte-identical to the OS build's image, since every
-#    instruction's bytes are reproduced (decoded or passed through):
-cmp build/compiler/ttpos.img build/os/ttpos.img   # (run `make os` first if stale)
-
-# 2) boot.bin sits at disk offset 0x0 (it loads @0x7c00). Round-trip its bytes:
-xxd -s 0 -l 6 build/compiler/ttpos.img
-#   expected: 00000000: 31c0 8ed8 8ec0   1.....
-dd if=build/compiler/ttpos.img bs=1 skip=0 count=6 2>/dev/null \
-  | ndisasm -b16 -o 0x7c00 -
-#   expected:
-#     00007C00  31C0   xor ax,ax
-#     00007C02  8ED8   mov ds,ax
-#     00007C04  8EC0   mov es,ax
+# The image must be byte-identical to os.bin (ttpc pads to 1 MiB, hence -n):
+cmp -n $(stat -c%s build/os/os.bin) build/os/os.bin build/compiler/ttpos.img
+make compiler-test                                     # boot it in QEMU
 ```
-
-`ndisasm` ships with `nasm` (already used by the OS build). Alternative:
-`objdump -D -b binary -m i8086 --adjust-vma=0x7c00 build/compiler/ttpos.img`
 
 ## Assembler mode (`-a`): node tree -> machine code
 
 The inverse direction. Code is written as a **node tree** (the "ff", see
 `include/node.h`): an instruction is a node whose content is the mnemonic and
-whose children are its operands — `xor rax, rax` is the node `xor` with children
-`rax` and `rax`. Operands are register/immediate leaves, or a `mem` node
-(`size seg base index scale disp`); a `bits` node switches CPU mode.
+whose children are its operands. Operands are leaves (a register `a0`/`x10`, a
+CSR name like `mtvec`, an immediate) or a `mem` node with children
+`base offset` for a load/store address: `ld a0, 8(sp)` is the node `ld` with
+children `a0` and `mem(sp, 8)`. Branch and jump targets are pc-relative
+offsets. The common pseudo-instructions (`li` with a 12-bit value, `mv`, `j`,
+`ret`, `beqz`, `csrr`, `sext.w`, ...) are accepted, and so are explicit `c.*`
+mnemonics. By default the encoder picks the compressed form whenever one fits,
+as GNU as does; an `option` node with child `norvc` / `rvc` turns that off/on.
 
 `ttpc -a` reads a serialized node program and prints each instruction's machine
-code as hex, covering the broad common integer x86-64 ISA. It reuses the
-decoder's `struct insn` + `assemble()`, so the encoder and decoder agree on
-instruction shape. The node format lives in the repo-root `include/`; the node
-program is authored (until a node editor exists) by `src/os/ff/gen_program.c`.
+code as hex, in memory order. It shares `struct insn`, the opcode table and
+`assemble()` with the decoder, so the encoder and decoder agree on instruction
+shape. (The x86 node program `src/os/ff/program.nodes` went away with the x86
+OS; until a RISC-V one exists, the `.text` re-encode check above is the
+encoder's test.)
 
 ```sh
-make compiler                                # build ttpc (-I../../include)
-make -C src/os nodes                         # gen_program -> src/os/ff/program.nodes
-./build/compiler/ttpc -a src/os/ff/program.nodes     # hex, one insn per line
-./build/compiler/ttpc -a -v src/os/ff/program.nodes  # + mnemonic/operands
-
-# Cross-check against nasm (non-branch subset round-trips byte-for-byte).
+./build/compiler/ttpc -a program.nodes       # hex, one insn per line
+./build/compiler/ttpc -a -v program.nodes    # + mnemonic/operands
 ```
