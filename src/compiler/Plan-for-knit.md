@@ -77,6 +77,28 @@ free, na malloc, kan overal liggen, maar automatisch als laatste in zelfde array
 hoe tests implementeren?
 
 
+
+if
+    :(verdwijnt)
+        x0
+        ==
+        x1
+    and
+    ...
+
+: (anonymous function call)
+    comment
+        blah deze function call wordt uitgevoerd en is gegroepeerd, is alleen veel langer dan op 1 lijn, ook een revisioning van asm
+    x0
+    and
+    x1
+
+om weg te geraken van lisp style asm
+
+
+
+
+
 dus je hebt functie creëren en functie oproepen
 functie: en call instructie
 volgende lijn 
