@@ -3,10 +3,10 @@
 #
 #   make            build everything (compiler + os)
 #   make os         build the bare-metal RISC-V OS     -> build/os/os.elf
-#   make compiler   build the host compiler            -> build/compiler/ttpc
+#   make compiler   build the RISC-V asm compiler      -> build/compiler/ttpc
 #   make os-test    boot the OS in a qemu-system-riscv64 window
 #   make os-console boot the OS with its serial console in this terminal
-#   make compiler-test  re-assemble boot_flow.txt with ttpc and boot it in qemu
+#   make compiler-test  load src/compiler/test.ff with ttpc under qemu-riscv64
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
@@ -29,7 +29,7 @@ os-test:
 os-console:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os console
 
-# Re-assemble the OS boot-flow disassembly with ttpc and boot the result.
+# Run ttpc (a Linux riscv64 binary) under qemu-riscv64 on an ff file.
 compiler-test: compiler
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler test
 

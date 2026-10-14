@@ -1,43 +1,39 @@
-CC     ?= cc
-CFLAGS ?= -O0 -Wall -Wextra
+# ttpc is plain RISC-V assembly, no libc: assembled and linked with the
+# bare-metal cross binutils into a static Linux riscv64 executable that only
+# makes raw syscalls. On a non-RISC-V host it runs under qemu-riscv64.
+CROSS   ?= riscv64-none-elf-
+AS      := $(CROSS)as
+LD      := $(CROSS)ld
+ASFLAGS ?= -march=rv64imac -mabi=lp64
+QEMU    ?= qemu-riscv64
 
-# The Nix cc-wrapper auto-injects -D_FORTIFY_SOURCE, which warns at -O0 (fortify
-# needs an optimizer pass). Disable its hardening for the host build; a non-Nix
-# cc simply ignores this env var.
+# The Nix ld-wrapper injects -z relro / -z now hardening, which this static
+# no-libc binary has no use for (ld warns). A non-Nix ld ignores this.
 export NIX_HARDENING_ENABLE :=
-
-# Shared headers (the node format lives in the repo-root include/). TTP_HOSTED
-# selects node.h's libc-backed FILE* serialization (the OS build omits it).
-CPPFLAGS ?= -I../../include -DTTP_HOSTED
 
 BUILD ?= build
 
-SRCS := $(wildcard *.c)
-BIN  := $(BUILD)/ttpc
-IMG  := $(BUILD)/ttpos.img
+BIN := $(BUILD)/ttpc
+OBJ := $(BUILD)/ttpc.o
 
-# Boot-flow disassembly to re-assemble (override to point elsewhere).
-BOOT_FLOW ?= ../os/boot_flow.txt
+# ff file that `make test` loads.
+FF ?= test.ff
 
 all: $(BIN)
 
 $(BUILD):
 	mkdir -p $(BUILD)
 
-$(BIN): $(SRCS) | $(BUILD)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(SRCS) -o $@
+$(OBJ): ttpc.s | $(BUILD)
+	$(AS) $(ASFLAGS) $< -o $@
 
-# Re-assemble the boot-flow disassembly into a bootable disk image.
-$(IMG): $(BIN) $(BOOT_FLOW) | $(BUILD)
-	$(BIN) $(BOOT_FLOW) $@
+$(BIN): $(OBJ)
+	$(LD) -static -e _start $< -o $@
 
-img: $(IMG)
-
-# QEMU loads the flat image at 0x80000000, like the OS's own os-test.
-test: $(IMG)
-	qemu-system-riscv64 -machine virt -bios none -monitor none -kernel $(IMG)
+test: $(BIN)
+	$(QEMU) $(BIN) $(FF)
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all img test clean
+.PHONY: all test clean
