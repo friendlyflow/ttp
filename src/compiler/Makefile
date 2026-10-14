@@ -33,7 +33,11 @@ $(BIN): $(OBJ)
 test: $(BIN)
 	$(QEMU) $(BIN) $(FF)
 
+# Regenerate the RV64GC node tree in test.ff (host Perl, see mkff.pl).
+ff:
+	perl mkff.pl > test.ff.tmp && mv test.ff.tmp test.ff
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test clean
+.PHONY: all test ff clean
