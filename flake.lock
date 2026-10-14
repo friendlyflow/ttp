@@ -16,9 +16,26 @@
         "type": "github"
       }
     },
+    "raddebugger": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791824307,
+        "narHash": "sha256-lhIhOYpTif0zMtIXk7WbW7iQ8/naENE5DzyahDed3d8=",
+        "owner": "EpicGamesExt",
+        "repo": "raddebugger",
+        "rev": "d5cbced499843ad9ef7873240d98dea6c29bbc4c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "EpicGamesExt",
+        "repo": "raddebugger",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "raddebugger": "raddebugger"
       }
     }
   },

@@ -3,9 +3,13 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    raddebugger = {
+      url = "github:EpicGamesExt/raddebugger";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, raddebugger }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -18,6 +22,41 @@
         gcc
         binutils
       ];
+
+      # RAD Debugger, built from source with upstream's build.sh. Its Linux
+      # port is x86_64-only (hand-written BLAKE3 asm, -msse2/-mcx16).
+      raddbg = pkgs: pkgs.clangStdenv.mkDerivation {
+        pname = "raddbg";
+        version = "unstable-${raddebugger.lastModifiedDate}";
+        src = raddebugger;
+
+        nativeBuildInputs = with pkgs; [ pkg-config llvmPackages.bintools makeWrapper ];
+        buildInputs = with pkgs; [
+          freetype
+          libx11
+          libxext
+          libxfixes
+          libxrandr
+          libGL
+        ];
+
+        buildPhase = ''
+          runHook preBuild
+          bash build.sh raddbg release
+          runHook postBuild
+        '';
+
+        installPhase = ''
+          runHook preInstall
+          install -Dm755 build/raddbg $out/bin/raddbg
+          # Message boxes and the file picker shell out to zenity.
+          wrapProgram $out/bin/raddbg --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.zenity ]}
+          runHook postInstall
+        '';
+
+        meta.platforms = [ "x86_64-linux" ];
+      };
+      isX86Linux = pkgs: pkgs.stdenv.hostPlatform.system == "x86_64-linux";
     in
     {
       devShells = forAllSystems ({ pkgs }: {
@@ -26,7 +65,7 @@
             gnumake
             qemu # qemu-system-riscv64 for `make os-test`
             fish
-          ]);
+          ]) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
 
           # `nix develop` always starts bash; drop into fish instead.
           # Guard against re-exec loops and non-interactive invocations
@@ -57,6 +96,8 @@
             cp build/os/os.elf $out/
           '';
         };
+      } // pkgs.lib.optionalAttrs (isX86Linux pkgs) {
+        raddbg = raddbg pkgs;
       });
     };
 }
