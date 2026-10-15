@@ -119,29 +119,29 @@ $isa->add("registers",
 # ---------------------------------------------------------------------------
 
 $isa->group("encodings");
-$isa->add("encodings", node("comment:", node(
+$isa->add("encodings", node("comment", node(
     "rex w r x b: the REX prefix, 0100 W R X B, from bit 3 of r (ModRM.reg), x (SIB.index), b (ModRM.rm or SIB.base); W 1 for 64 bits.")));
 $isa->def("rex", "fixed=0100", "w[0]", "r[3]", "x[3]", "b[3]");
-$isa->add("encodings", node("comment:", node(
+$isa->add("encodings", node("comment", node(
     "modrm mod reg rm: a ModRM byte; mod 3 is a register, reg a register or an opcode digit.")));
 $isa->def("modrm", "mod[1:0]", "reg'[2:0]", "rm'[2:0]");
-$isa->add("encodings", node("comment:", node(
+$isa->add("encodings", node("comment", node(
     "modrm.base base reg: ModRM mod 10 rm 100 and a SIB without index: [base + disp32], the disp32 follows. modrm.sib scale index base reg: [base + index*scale + disp32], scale 1 2 4 8. modrm.rip reg: [rip + disp32].")));
 $isa->def("modrm.base", "ss=00", "index=100", "base'[2:0]", "mod=10", "reg'[2:0]", "rm=100");
 $isa->{seen}{"scale'[1:0]"} = 1;      # its slice is below: 1 2 4 8 -> 0..3
 $isa->def("modrm.sib", "scale'[1:0]", "index'[2:0]", "base'[2:0]", "mod=10", "reg'[2:0]", "rm=100");
 $isa->def("modrm.rip", "mod=00", "reg'[2:0]", "rm=101");
-$isa->add("encodings", node("comment:", node(
+$isa->add("encodings", node("comment", node(
     "opreg op r: an opcode with the register in its low 3 bits (push, pop, bswap, mov imm, movabs).")));
 $isa->def("opreg", "op[7:3]", "r'[2:0]");
-$isa->add("encodings", node("comment:", node(
+$isa->add("encodings", node("comment", node(
     "simm8 imm: a sign-extended imm8 or rel8: an operand called imm is range checked as signed only, -128..127 (byte takes 0..255 too).")));
 $isa->def("simm8", "imm[7:0]");
 $isa->add("encodings",
-    node("comment:", node("scale'[1:0]: the 2-bit SIB scale of 1, 2, 4 or 8: (scale >> 1) - (scale >> 3).")),
+    node("comment", node("scale'[1:0]: the 2-bit SIB scale of 1, 2, 4 or 8: (scale >> 1) - (scale >> 3).")),
     node("scale'[1:0]:", node("scale'"),
         C("srli", 3, "scale'", "t0"), C("srli", 1, "scale'", "a0"), C("sub", "t0", "a0", "a0")),
-    node("comment:", node("rel32 target, rel8 target: target - the end of the rel32 or rel8 field that starts at pc.")),
+    node("comment", node("rel32 target, rel8 target: target - the end of the rel32 or rel8 field that starts at pc.")),
     node("rel32:", node("target"), C("sub", "pc", "target", "a0"), C("addi", -4, "a0", "a0")),
     node("rel8:", node("target"), C("sub", "pc", "target", "a0"), C("addi", -1, "a0", "a0")),
 );

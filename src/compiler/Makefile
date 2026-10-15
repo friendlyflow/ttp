@@ -101,7 +101,8 @@ run: $(P)/exit42.elf $(P)/hello.elf
 # assemble itself into itself, assemble every asm program and print
 # ttpc1.ff exactly as stage0 does. ttpc1 assembles ttpc (TTPC_SRC) into
 # stage1, stage1 assembles it into stage2: they must be the same, the fixed
-# point.
+# point. ttpc1 knows comment only in code, so it gets shared.ff without its
+# comments (uncomment.pl); they emit nothing, stage1 is the same.
 BOOT := $(BUILD)/boot
 
 $(BOOT):
@@ -113,8 +114,11 @@ $(BOOT)/ttpc1: $(TTPC1_FF) $(BIN) | $(BOOT)
 $(BOOT)/ttpc1.self: $(TTPC1_FF) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 $< $@ > $@.lst
 
-$(BOOT)/stage1: $(TTPC_SRC) $(BOOT)/ttpc1
-	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(TTPC_SRC) $@ > $@.lst
+$(BOOT)/shared.ff: $(SHARED) uncomment.pl FF.pm | $(BOOT)
+	perl uncomment.pl $< > $@
+
+$(BOOT)/stage1: $(BOOT)/shared.ff $(filter-out $(SHARED),$(TTPC_SRC)) $(BOOT)/ttpc1
+	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(BOOT)/shared.ff $(filter-out $(SHARED),$(TTPC_SRC)) $@ > $@.lst
 
 $(BOOT)/stage2: $(TTPC_SRC) $(BOOT)/stage1
 	$(QEMU) $(BOOT)/stage1 --target riscv64 $(TTPC_SRC) $@ > $@.lst

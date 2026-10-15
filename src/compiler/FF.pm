@@ -23,12 +23,21 @@ use warnings;
 use Digest::SHA qw(sha256);
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(node call read_ff write_ff read_txt write_txt);
+our @EXPORT_OK = qw(node call uncomment read_ff write_ff read_txt write_txt);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
 # A call: name with leaf arguments.
 sub call { my ($name, @args) = @_; node($name, map { node($_) } @args) }
+
+# The tree under n without its comments (comment with its text), all the way
+# down. A leaf comment is data (ascii / comment) and stays.
+sub uncomment {
+    my ($n) = @_;
+    node($n->{content},
+        map { uncomment($_) } grep { !($_->{content} eq "comment" && @{ $_->{children} }) }
+            @{ $n->{children} });
+}
 
 # ---------------------------------------------------------------------------
 # .ff

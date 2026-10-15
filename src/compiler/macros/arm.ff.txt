@@ -1,7 +1,7 @@
 macros:
-  comment:
+  comment
     The groups macros, elf, c and linux of the arm section (isa/arm.pl reads this file): the address helpers and pseudo-instructions, A32 unless named t. (Thumb). Operands go in the reverse order of GNU as, the destination last.
-  comment:
+  comment
     arel and trel: the offset of target from PC as a branch reads it, the instruction + 8 in A32, + 4 in Thumb. lo16 and hi16: the halves of a 32-bit value, for movw and movt.
   arel:
     target
@@ -37,7 +37,7 @@ macros:
       32
       48
       0
-  comment:
+  comment
     li and la: any 32-bit value or address in two instructions (movw, movt), whatever it is.
   li:
     value
@@ -118,7 +118,7 @@ macros:
     t.bx
       lr
 elf:
-  comment:
+  comment
     ELF32 for arm: a 52-byte header and one 32-byte program header, 84 bytes, then the program at 0x10000 + 84. EABI version 5, entry in A32 state.
   elf_base:
     addi
@@ -183,7 +183,7 @@ elf:
       7
     word
       0x1000
-  comment:
+  comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
   frame:
     origin
@@ -199,9 +199,9 @@ elf:
     bss
     mem_end:
 c:
-  comment:
+  comment
     The C layer of ttpc, for arm in A32: the primitives it emits, in its own terms. V is the value (r0), L the left operand (r12), X a scale or count (r8), FP the frame (r11), SP the stack (sp), LR the return address (lr).
-  comment:
+  comment
     arm is ILP32: a stack slot and a word (long, address) are 4 bytes. A call takes its arguments in r0..r7 (r0..r3 as in the AAPCS, then r4..r7), a system call its number in r7 (svc 0) and its arguments in r0..r6.
   cc_v:
     addi
@@ -228,7 +228,7 @@ c:
       4
       zero
       a0
-  comment:
+  comment
     The registers C must not write, a bit each: r11 (fp), sp, lr, pc.
   cc_fixed:
     addi
@@ -251,7 +251,7 @@ c:
       4
       sp
       r12
-  comment:
+  comment
     cc_drop n: n is 0..65535, its low byte, then its high byte (rotated right 24).
   cc_drop:
     n
@@ -327,7 +327,7 @@ c:
       hi16
         target
       r0
-  comment:
+  comment
     cc_text n: PC reads as this instruction + 8, the address right after the primitive; the branch at + 4 goes n bytes past it.
   cc_text:
     n
@@ -455,7 +455,7 @@ c:
       r8
       r0
       r0
-  comment:
+  comment
     cc_zero keeps V on the stack while r0 holds the zero it stores.
   cc_zero:
     str.pre
@@ -694,7 +694,7 @@ c:
       r0
       r12
       r0
-  comment:
+  comment
     cc_rem and cc_remu: L - (L / V) * V, the quotient in X, which they keep on the stack.
   cc_rem:
     str.pre
@@ -747,7 +747,7 @@ c:
       0
       r0
       r0
-  comment:
+  comment
     A long and an address are 4 bytes: the 64-bit loads and stores are those of a word (ttpc does not take i64 and u64 on arm).
   cc_load_i64:
     ldr
@@ -794,9 +794,9 @@ c:
       0
       r12
       r0
-  comment:
+  comment
     For compile time only, when ttpc runs on arm (assembled with rv64:, its registers the 8-byte slots at r10): the bridge to ttpc. cc_ctreg: the C layer gives ttpc's a1 in r1.
-  comment:
+  comment
     cc_ctargs: a1 = r1 and a2 = SP, as 64-bit values. cc_call_l: a0 = V, ra = the address after the bx (pc reads as the addi + 8, + 8 more), bx to L, then V = a0.
   cc_ctreg:
     addi
@@ -860,9 +860,9 @@ c:
       r10
       r0
 linux:
-  comment:
+  comment
     The Linux system calls by name, for syscall: the arm EABI numbers (mmap is mmap2, its offset in pages).
-  comment:
+  comment
     host_name, host_name_len: the name of this section, NUL-terminated, and its length without the NUL: what ttpc built for arm takes as its host, the section compile time is assembled with.
   host_name:
     ascii
@@ -943,11 +943,11 @@ linux:
       zero
       a0
 rv64:
-  comment:
+  comment
     rv64: ttpc's own instructions, RV64 in ff order (the destination last), in arm instructions (A32): what ttpc, written in RV64, is assembled with to run on arm. mkhost.pl renames each op of ttpc to rv.op and each register to rv.reg.
-  comment:
+  comment
     Each RV64 register is a slot of 8 bytes, lo word then hi word, at r10 + 8 * its number: a 64-bit value is two registers of arm. A value is loaded into r0:r1 (and r2:r3), worked on in pairs (adds and adc, ...), stored back.
-  comment:
+  comment
     ra is a slot too: rv.call puts the return address in it, rv.ret loads pc from it. sp is a slot, its stack is rvstack; arm's sp is the stack of the C layer. r0-r8, r12 and lr are the scratch registers; C does not write r9 r10 r11.
   rv.x0 rv.zero:
     00000
@@ -1013,7 +1013,7 @@ rv64:
     11110
   rv.x31 rv.t6:
     11111
-  comment:
+  comment
     rv.s r: the offset of the slot of register r from r10, rv.sh r: of its hi word. rv.lo32, rv.hi32, rv.sx32: the words of a value, a value sign-extended from bit 31.
   rv.s:
     r
@@ -1057,7 +1057,7 @@ rv64:
       32
       a0
       a0
-  comment:
+  comment
     rv.start regs stack: first in _start, r10 = regs; sp = an array on stack (its end) of argc and argv as RV64 sees them, 8 bytes each, copied from arm's 4-byte ones (argc + 2 of them, the NULL after argv too).
   rv.start:
     regs
@@ -1126,7 +1126,7 @@ rv64:
       r2
     bne
       -24
-  comment:
+  comment
     rv.pair v lo hi: lo:hi = the 64-bit value v (movw and movt, twice); rv.ld2 rs1 rs2: r0:r1 = rs1, r2:r3 = rs2.
   rv.pair:
     v
@@ -1384,7 +1384,7 @@ rv64:
         rd
       r10
       r0
-  comment:
+  comment
     rv.mul: the low 64 bits, umull of the lo words and the two cross products.
   rv.mul:
     rs2
@@ -1413,7 +1413,7 @@ rv64:
         rd
       r10
       r4
-  comment:
+  comment
     The shifts of r0:r1 by r2 mod 64: arm shifts a register by 32 or more (the low byte of the amount) to 0, so 32 - n and n - 32 cover both halves; sra takes its n - 32 part only when n >= 32.
   rv.sllr:
     andi
@@ -1638,7 +1638,7 @@ rv64:
         rd
       r10
       r0
-  comment:
+  comment
     rv.divmod: r4:r5 = r0:r1 / r2:r3 and r6:r7 = the remainder, unsigned, a bit a step (r8 counts 64): by 0 that gives all ones and the dividend, as RV64 does. bne goes back 13 instructions.
   rv.divmod:
     movi
@@ -1826,7 +1826,7 @@ rv64:
         rd
       r10
       r0
-  comment:
+  comment
     Loads and stores: the address is the lo word of rs1 + imm (in r12 and r3).
   rv.ld:
     imm
@@ -1979,7 +1979,7 @@ rv64:
       r3
       r12
       r0
-  comment:
+  comment
     The branches: imm is from the start of the macro (rel); arm's offset is from the branch + 8. The pseudo-branches take the target itself (arel).
   rv.beq:
     imm
@@ -2249,7 +2249,7 @@ rv64:
     b
       arel
         target
-  comment:
+  comment
     rv.call: ra = the address after the b (pc reads as the addi + 8, + 8 more), then b. rv.ret, rv.jr: pc = the register.
   rv.call:
     target
@@ -2281,7 +2281,7 @@ rv64:
         rs
       r10
       r15
-  comment:
+  comment
     rv.jalr imm rs1 ra: call the address rs1 (ttpc's imm is 0, its rd ra), ra = the address after the bx.
   rv.jalr:
     imm
@@ -2307,7 +2307,7 @@ rv64:
       r0
     bx
       r12
-  comment:
+  comment
     rv.jitcall rs: cacheflush (0xf0002) of 64 KiB from rs, then blx: the code of the C layer returns with bx lr, its value in r0 (V), sign-extended into a0.
   rv.jitcall:
     rs
@@ -2356,7 +2356,7 @@ rv64:
   rv.fence.i:
     align
       1
-  comment:
+  comment
     rv.ecall: the number from a7 (136) in r7, the arguments a0-a5 (their lo words) in r0-r5, the result sign-extended to a0 (80).
   rv.ecall:
     ldr

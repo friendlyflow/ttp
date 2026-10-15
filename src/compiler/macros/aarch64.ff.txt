@@ -1,9 +1,9 @@
 macros:
-  comment:
+  comment
     macros/aarch64.ff.txt: the groups of the aarch64 section after its instructions (isa/aarch64.pl reads it, mkff.pl puts it in shared.ff): macros:, elf: (the ELF header and frame:), c: (the primitives of the C layer), linux: (the system calls).
-  comment:
+  comment
     The address helpers, the condition codes and the pseudo-instructions of aarch64. Operands go as in the instructions: the destination last (GNU's mov x0, x1 is mov x1 x0, lsl x0, x1, #3 is lsl 3 x1 x0).
-  comment:
+  comment
     pagerel: the distance from the 4 KiB page of pc to that of target, what adrp takes; lo12: the low 12 bits of target, for the addi after it.
   pagerel:
     target
@@ -25,7 +25,7 @@ macros:
       4095
       value
       a0
-  comment:
+  comment
     The conditions, for b.cond's family, csel, ccmp, ...: their numbers.
   eq:
     addi
@@ -117,7 +117,7 @@ macros:
       15
       zero
       a0
-  comment:
+  comment
     invcond: the opposite condition (eq <-> ne, ...); the immr of lsl #sh, 64 or 32 bits.
   invcond:
     cond
@@ -145,7 +145,7 @@ macros:
       31
       a0
       a0
-  comment:
+  comment
     Moves: mov between general registers (xzr reads 0), mov.sp to or from sp, li any 64-bit value in four instructions, liw a 32-bit one in two, la the address of a label (+-4 GiB).
   mov:
     rs
@@ -269,7 +269,7 @@ macros:
         sym
       rd
       rd
-  comment:
+  comment
     Compares: the flags of rn - rm (cmp), rn + rm (cmn), rn & rm (tst); cmp rm rn is GNU's cmp rn, rm.
   cmp:
     rm
@@ -352,7 +352,7 @@ macros:
       imms
       rn
       xzr
-  comment:
+  comment
     Shifts by a constant, through the bitfield moves; sign and zero extension.
   lsl:
     sh
@@ -481,7 +481,7 @@ macros:
       rn
       wzr
       rd
-  comment:
+  comment
     Multiplies without an addend; cset and friends, cond a number or eq ne ...
   mul:
     rm
@@ -566,7 +566,7 @@ macros:
         cond
       rn
       rd
-  comment:
+  comment
     Jumps and calls to a label (+-128 MiB).
   j:
     target
@@ -590,7 +590,7 @@ elf:
       -65536
       addr
       a0
-  comment:
+  comment
     elf_header: an ELF64 header for aarch64 (e_machine 183) and one program header, one RWX PT_LOAD of the whole file at elf_base, 120 bytes.
   elf_header:
     entry
@@ -644,7 +644,7 @@ elf:
         mem_end
     dword
       0x1000
-  comment:
+  comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
   frame:
     origin
@@ -660,7 +660,7 @@ elf:
     bss
     mem_end:
 c:
-  comment:
+  comment
     The C layer of ttpc, for aarch64: the primitives it emits, in its own terms. V is the value (x0), L the left operand (x9), X a scale or count (x10), FP the frame (x29), SP the stack (sp).
     One slot of the stack is 16 bytes, so that sp stays 16-aligned as Linux wants. x16 is the primitives' scratch (cc_rem).
   cc_v:
@@ -688,7 +688,7 @@ c:
       8
       zero
       a0
-  comment:
+  comment
     The registers C must not write, a bit each: x16, x29 (fp), x30 (lr), 31 (sp, xzr).
   cc_fixed:
     addi
@@ -838,7 +838,7 @@ c:
         48
         0
       rd
-  comment:
+  comment
     A register read or written by name: through addi, so that 31 is sp.
   cc_getreg:
     r
@@ -988,7 +988,7 @@ c:
       x0
       x9
       x0
-  comment:
+  comment
     A comparison sets the flags of L - V and V = 1 if its condition holds: csinc with the opposite one, by number: a label of the program (a C variable too) would hide the names eq ne ...
   cc_eq:
     subs
@@ -1121,7 +1121,7 @@ c:
       xzr
       x9
       x0
-  comment:
+  comment
     Division as riscv64 does it: by 0 gives -1 (sdiv gives 0, csinv makes it -1), the remainder by 0 the dividend (msub does that by itself).
   cc_div:
     subsi
@@ -1231,7 +1231,7 @@ c:
       0
       x9
       x0
-  comment:
+  comment
     For compile time only, when ttpc runs on aarch64 (assembled with rv64:, where a0-a7 are x0-x7): the bridge to ttpc. cc_ctargs: a1 = x11 (the C layer gives a1 there), a2 = SP. cc_call_l: call the address in L; a0 is V, before and after.
   cc_ctargs:
     mov
@@ -1250,9 +1250,9 @@ c:
     blr
       x9
 linux:
-  comment:
+  comment
     The Linux system calls by name, for syscall: aarch64 has the generic numbers, as riscv64.
-  comment:
+  comment
     host_name, host_name_len: the name of this section, NUL-terminated, and its length without the NUL: what ttpc built for aarch64 takes as its host, the section compile time is assembled with.
   host_name:
     ascii
@@ -1333,11 +1333,11 @@ linux:
       zero
       a0
 rv64:
-  comment:
+  comment
     rv64: ttpc's own instructions, RV64 in ff order (the destination last), in aarch64 instructions: what ttpc, written in RV64, is assembled with to run on aarch64. mkhost.pl renames each op of ttpc to rv.op and each register to rv.reg.
-  comment:
+  comment
     The RV64 registers are aarch64 registers: a0-a5 a7 x0-x5 x7 (a0 is V of the C layer), t0-t4 x9-x13, t5 x6 (ttpc has no a6; x29 is the FP of C), t6 x8, s0-s11 x17-x28 (which C does not write), ra x30, sp sp. zero is x15, kept 0, so that 31 is always sp.
-  comment:
+  comment
     x14 and x16 are the scratch registers. Immediates go through x16 (rv.imm: movz and sxth, a 12-bit value sign-extended), loads and stores take a register offset, add and sub the extended form, which may name sp.
   rv.x0 rv.zero:
     01111
@@ -1397,7 +1397,7 @@ rv64:
     00110
   rv.x31 rv.t6:
     01000
-  comment:
+  comment
     rv.start regs stack: first in _start, zero = 0; aarch64 needs neither regs nor stack (sp is sp, the calls use x30).
   rv.start:
     regs
@@ -1406,7 +1406,7 @@ rv64:
       0
       0
       x15
-  comment:
+  comment
     rv.imm imm: x16 = imm, 12 bits sign-extended (8 bytes).
   rv.imm:
     imm
@@ -1433,7 +1433,7 @@ rv64:
     sxth
       rd
       rd
-  comment:
+  comment
     rv.li32 imm rd: rd = imm, 32 bits sign-extended (12 bytes); rv.lui imm rd: rd = imm without its low 12 bits, sign-extended from bit 31.
   rv.li32:
     imm
@@ -1583,7 +1583,7 @@ rv64:
       rs2
       rs1
       rd
-  comment:
+  comment
     The shifts by a register take the amount mod 64, as lslv lsrv asrv do.
   rv.sll:
     rs2
@@ -1609,7 +1609,7 @@ rv64:
       rs2
       rs1
       rd
-  comment:
+  comment
     divu by 0 gives all ones as on RV64 (udiv gives 0, csinv makes it ~0); remu by 0 the dividend (msub does that by itself).
   rv.divu:
     rs2
@@ -1724,7 +1724,7 @@ rv64:
       0
       rs1
       rs2
-  comment:
+  comment
     The branches: imm is from the start of the macro (rel), the b.cond is 4 bytes in; the pseudo-branches take the target itself. beq and bne compare in the extended form, rs2 - rs1, so that sp may be rs2.
   rv.beq:
     imm
@@ -1890,7 +1890,7 @@ rv64:
     rs
     br
       rs
-  comment:
+  comment
     rv.jalr imm rs1 ra: call the address rs1 + imm (ttpc's rd is always ra).
   rv.jalr:
     imm
@@ -1906,13 +1906,13 @@ rv64:
       x16
     blr
       x16
-  comment:
+  comment
     rv.fence.i: the stores of the code that compile time made reach memory; rv.jitcall makes the instructions see it.
   rv.fence.i:
     dsb
       11
     isb
-  comment:
+  comment
     rv.jitcall rs: clean 64 KiB from rs to the point of unification (dc cvau), drop it from the instruction cache (ic ivau), 16 bytes a step, then call it: its value is in x0, which is a0.
   rv.jitcall:
     rs
@@ -1969,7 +1969,7 @@ rv64:
     isb
     blr
       rs
-  comment:
+  comment
     rv.ecall: the number from a7 (x7) in x8, which is t6 and kept in x14; the arguments a0-a5 are x0-x5 already, the result is x0, a0.
   rv.ecall:
     mov

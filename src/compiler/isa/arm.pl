@@ -192,7 +192,7 @@ $isa->add("registers",
 my @condnames = (eq => 0, ne => 1, cs => 2, hs => 2, cc => 3, lo => 3, mi => 4, pl => 5,
                  vs => 6, vc => 7, hi => 8, ls => 9, ge => 10, lt => 11, gt => 12, le => 13, al => 14);
 $isa->add("conds",
-    node("comment:", node("The conditions by name, for the .if forms and t.it: a number 0..14.")),
+    node("comment", node("The conditions by name, for the .if forms and t.it: a number 0..14.")),
     map { my $i = $_ * 2; node("cond.$condnames[$i]:", call("addi", $condnames[$i + 1], "zero", "a0")) }
         0 .. @condnames / 2 - 1);
 
@@ -635,7 +635,7 @@ for my $c (@CC) {
 }
 
 $isa->add("fields",
-    node("comment:", node("Fields that compute their bits: up[n] the U bit of a signed offset (1 for imm >= 0), mag[..] bits of its magnitude, j1/j2 the J bits of a Thumb-2 branch, msb lsb + width - 1, wm1 width - 1. The bracket gives the reach of the operand, for the range check.")),
+    node("comment", node("Fields that compute their bits: up[n] the U bit of a signed offset (1 for imm >= 0), mag[..] bits of its magnitude, j1/j2 the J bits of a Thumb-2 branch, msb lsb + width - 1, wm1 width - 1. The bracket gives the reach of the operand, for the range check.")),
     @custom);
 
 $isa->section("arm", "macros/arm.ff.txt");

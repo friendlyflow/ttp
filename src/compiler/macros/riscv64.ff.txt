@@ -1,5 +1,5 @@
 macros:
-  comment:
+  comment
     The address helpers and the pseudo-instructions of RISC-V.
   pcrel_hi:
     target
@@ -11,7 +11,7 @@ macros:
       2048
       a0
       a0
-  comment:
+  comment
     pcrel_lo and lo give the low 12 bits sign-extended, as an I-type immediate holds them: a 12-bit field must not be handed more than its 12 bits.
   pcrel_lo:
     target
@@ -280,7 +280,7 @@ elf:
         mem_end
     dword
       0x1000
-  comment:
+  comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
   frame:
     origin
@@ -296,7 +296,7 @@ elf:
     bss
     mem_end:
 c:
-  comment:
+  comment
     The C layer of ttpc, for riscv64: the primitives it emits, in its own terms. V is the value (a0), L the left operand (t0), X a scale or count (t1), FP the frame (s0), SP the stack. One slot of the stack is 8 bytes.
   cc_v:
     addi
@@ -323,7 +323,7 @@ c:
       8
       zero
       a0
-  comment:
+  comment
     The registers C must not write, a bit each: zero, ra, sp, s0.
   cc_fixed:
     addi
@@ -822,7 +822,7 @@ c:
       0
       a0
       t0
-  comment:
+  comment
     For compile time only, which runs on riscv64: a2 = SP for the bridge to ttpc, and the call of the address in L.
   cc_ctargs:
     addi
@@ -834,7 +834,7 @@ c:
       0
       t0
       ra
-  comment:
+  comment
     jitcall rs: call the code that compile time made, at rs; its value is in a0 (V). On riscv64 that is jalr, a host of ttpc that is not (rv64:) also moves V to a0.
   jitcall:
     rs
@@ -842,7 +842,7 @@ c:
       0
       rs
       ra
-  comment:
+  comment
     ldword off base rd: rd = a word of C at base + off (the bridge reads its arguments with it): ld on riscv64. cc_ctreg: the register the C layer gives ttpc's a1 in, for cc_ctargs: a1 itself.
   ldword:
     off
@@ -858,9 +858,9 @@ c:
       zero
       a0
 linux:
-  comment:
+  comment
     The Linux system calls by name, for syscall: riscv64 has the generic numbers.
-  comment:
+  comment
     host_name, host_name_len: the name of this section, NUL-terminated, and its length without the NUL: what ttpc built for riscv64 takes as its host, the section compile time is assembled with.
   host_name:
     ascii

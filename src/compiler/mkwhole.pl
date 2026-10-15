@@ -12,8 +12,8 @@
 # ttpc for a host: perl mkwhole.pl x86_64 ttpc.defs.ff ttpc.ff, of the trees
 # mkhost.pl made. prog.ff is a program of only its own (its root's children
 # are the program), or a whole tree, whose last page is the program and
-# whose other pages are definitions. comment nodes and the
-# compile-time choice of a target are left out: stage0 has neither. Only
+# whose other pages are definitions. Comments and the compile-time
+# choice of a target are left out: stage0 has neither. Only
 # the definitions the program reaches are kept, for stage0's 1 MiB.
 #
 # A host tool (core Perl only), not part of ttpc.
@@ -22,7 +22,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use FF qw(node read_ff write_ff);
+use FF qw(node uncomment read_ff write_ff);
 
 die "usage: mkwhole.pl <target> [defs.ff ...] <prog.ff>\n" unless @ARGV >= 2;
 my ($target, @defs_files) = @ARGV;
@@ -35,16 +35,7 @@ sub slurp {
     <$in>;
 }
 
-# A node without its comment children (a call or a definition, with its
-# text: a leaf comment is data, ascii comment), all the way down.
-sub strip {
-    my ($n) = @_;
-    node($n->{content},
-        map { strip($_) } grep { !($_->{content} =~ /^comment:?$/ && @{ $_->{children} }) }
-            @{ $n->{children} });
-}
-
-my ($shared) = @{ read_ff(slurp("$FindBin::Bin/shared.ff"))->{children} };
+my ($shared) = @{ uncomment(read_ff(slurp("$FindBin::Bin/shared.ff")))->{children} };
 my %section = map { ($_->{content}, $_) } grep { $_->{content} =~ /^\w+:$/ && @{ $_->{children} }
     && $_->{children}[0]{content} =~ /^\w+:$/ } @{ $shared->{children} };
 die "mkwhole: $target is not a target\n" unless $section{"$target:"};
@@ -53,10 +44,10 @@ die "mkwhole: $target is not a target\n" unless $section{"$target:"};
 sub pages {
     my ($name, @only) = @_;
     my %want = map { ("$_:" => 1) } @only;
-    map { strip($_) } grep { !@only || $want{ $_->{content} } } @{ $section{"$name:"}{children} };
+    map { uncomment($_) } grep { !@only || $want{ $_->{content} } } @{ $section{"$name:"}{children} };
 }
 
-my $common = strip(node("shared:", grep { !$section{ $_->{content} } && $_->{content} ne ":" }
+my $common = uncomment(node("shared:", grep { !$section{ $_->{content} } && $_->{content} ne ":" }
     @{ $shared->{children} }));
 
 my $root = read_ff(slurp($prog));
@@ -68,8 +59,8 @@ my $page = $whole ? $kids[-1] : node("program:", @kids);
 
 # After the target's and the shared ones: the pages of the definition
 # trees and the other pages of a whole tree, then the exec ops.
-my @host = ((map { strip($_) } map { @{ read_ff(slurp($_))->{children} } } @defs_files),
-    $whole ? map { strip($_) } @kids[0 .. $#kids - 1] : (),
+my @host = ((map { uncomment($_) } map { @{ read_ff(slurp($_))->{children} } } @defs_files),
+    $whole ? map { uncomment($_) } @kids[0 .. $#kids - 1] : (),
     $target eq "riscv64" ? () : pages("riscv64", "registers", "integer"));
 my @defs = (pages($target), $common, @host);
 
@@ -116,7 +107,7 @@ sub host_ops {
 # program, or of a definition kept, names it (stage0 holds 1 MiB).
 my %named;
 sub names { my ($n) = @_; $named{ $n->{content} } = 1; names($_) for @{ $n->{children} } }
-names(strip($page));
+names(uncomment($page));
 my %kept;
 for (my $more = 1; $more;) {
     $more = 0;
@@ -132,4 +123,4 @@ for (my $more = 1; $more;) {
     map { node($_->{content}, grep { $kept{$_} } @{ $_->{children} }) } @defs;
 
 binmode STDOUT;
-print write_ff(node("", @defs, host_ops(strip($page))));
+print write_ff(node("", @defs, host_ops(uncomment($page))));

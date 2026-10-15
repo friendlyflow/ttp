@@ -327,7 +327,7 @@ my @missing;
 for my $g (@{ $section->{children} }) {
     next unless $g->{content} =~ /^(integer|branch|system|memory|atomic|float):$/;
     for (@{ $g->{children} }) {
-        (my $name = $_->{content}) =~ s/:$//;
+        (my $name = $_->{content}) =~ s/:$// or next;
         push @missing, $name unless $used{$name};
     }
 }

@@ -63,11 +63,12 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `rv64:` in `macros/<host>.ff.txt` | ttpc's own ops of RV64 (`rv.add`, `rv.ld`, ..., 50 or so) and its registers (`rv.a0`, ...) in the host's instructions: on x86_64 and arm the registers are 8-byte slots in memory, on aarch64 registers of its own. Also per host: `host_name`, `cc_ctargs` / `cc_call_l` / `cc_ctreg` (the bridge from compile time to ttpc), `ldword`. |
 | `mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host. |
 | `mkwhole.pl` | a whole tree in the language of stage0: the target's section as pages, the shared definitions, the given pages, the exec ops, the program; only what the program reaches (stage0 reads 1 MiB). |
+| `uncomment.pl` | a tree without its comments: `shared.ff` for ttpc1, which knows `comment` only in code. |
 
 ```
 stage0 = GNU as(ttpc.s)
 ttpc1  = stage0(ttpc1.ff)       == ttpc1(ttpc1.ff)
-stage1 = ttpc1(shared.ff ttpc.defs.ff ttpc.ff)
+stage1 = ttpc1(shared.ff without comments, ttpc.defs.ff ttpc.ff)
 stage2 = stage1(shared.ff ttpc.defs.ff ttpc.ff)
                                 == stage1, byte for byte: the fixed point
 ```
@@ -132,8 +133,16 @@ gets tight, the chain gets a next link: freeze ttpc.ff as ttpc2.ff.
   header, its children where `frame:` says `program`, then `file_end:`,
   `bss`, `mem_end:`. A page that lays itself out is left as it is.
 - **Builtins**: `ascii`, `align`, `reserve`, `origin`, `bss`, `size`, and
-  `comment` (any children, text that is not evaluated: it emits nothing; not
-  in stage0, so ttpc.ff itself has none).
+  `comment` (any children, text that is not evaluated). It is the one
+  comment, anywhere: in code and at assemble time it does nothing; beside
+  definitions (a page, a section, a group) and among the fields of an
+  encoding ttpc passes it by. It comes after a function's parameters, which
+  are its leading leaves. stage0 has none and ttpc1 knows it only in code,
+  so the bootstrap hands ttpc1 `shared.ff` without comments (`uncomment.pl`).
+  All of them are declared on the shared page (`shared.ff.txt`: `comment:` /
+  `text`, `ascii:` / `bytes`, `align:` / `n`, ..., `size:` / `label`) like any
+  function, so that each is defined before it is called; ttpc takes their
+  calls itself, before it looks up a name.
 - **Range checks** (pass 2): every operand must fit its slices, sign- or
   zero-extended from the highest bit they take; an `imm` below bit 31 only
   sign-extended (the U-type's 32-bit pattern aside), `rd'` and friends not
@@ -230,7 +239,8 @@ section), what --target names the *target*.
   (`shared.ff.txt`: `byte` `half` `word` `dword`, `bits`, `rel`), then one
   **section** per target, a function whose children are **groups**
   (`registers:`, `integer:`, `float:`, ..., `macros:`, `elf:`, `linux:`,
-  `c:`), each holding definitions (a node holds at most 255 children). The
+  `c:`), each holding definitions (a node holds at most 255 children);
+  comments may stand among the groups and the definitions. The
   instructions come from `isa/<target>.pl` (with `ISA.pm`), the rest from
   `macros/<target>.ff.txt`.
 - **Choosing**: the shared page ends in a compile-time lambda, `if` /

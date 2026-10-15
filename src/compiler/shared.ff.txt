@@ -1,6 +1,35 @@
-comment:
+comment
   The shared page: what every target has (the data words, bits, rel), the targets as sections, and the choice of one of them by --target. Operands go in the reverse order of GNU as, the destination last, as in the instructions.
+comment
+  The builtins, declared here like any function so that each is defined before it is called. ttpc takes these calls itself, before it looks up a name: their arguments are not bound as a function's are.
+comment
+  comment text: a comment, anywhere (code, assemble time, C, beside definitions, among the fields of an encoding); its text is never evaluated.
 comment:
+  text
+comment
+  ascii bytes: emits the content of its argument as it is.
+ascii:
+  bytes
+comment
+  align n: pads with zeros up to a multiple of n.
+align:
+  n
+comment
+  reserve n: n zero bytes.
+reserve:
+  n
+comment
+  origin n: the address of what follows.
+origin:
+  n
+comment
+  bss: from here on align and reserve only move the address.
+bss:
+comment
+  size label: at assemble time, the size of what label holds.
+size:
+  label
+comment
   bits value left right pos: a0 = ((value << left) >> right) << pos, moves bits hi:lo of value to bit pos for left = 63-hi, right = 63-hi+lo. It runs while assembling, on the ops of the machine ttpc runs on (riscv64).
 bits:
   value
@@ -69,7 +98,7 @@ rel:
     pc
     target
     a0
-comment:
+comment
   The target: a section is a function whose children are groups of definitions. Calling one while compiling puts its definitions in scope for the program; target is the section --target names (riscv64 without it). Compile time itself always runs on riscv64.
 :
   compile time
