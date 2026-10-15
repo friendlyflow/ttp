@@ -332,6 +332,33 @@ assemble:
     li      a0, 0
     j       exit
 
+# The errors of loading, within branch reach (4 KiB) of _start and
+# parse_node.
+usage:
+    la      a1, msg_usage
+    li      a2, msg_usage_len
+    j       die
+open_failed:
+    la      a1, msg_open
+    li      a2, msg_open_len
+    j       die
+read_failed:
+    la      a1, msg_read
+    li      a2, msg_read_len
+    j       die
+too_large:
+    la      a1, msg_large
+    li      a2, msg_large_len
+    j       die
+truncated:
+    la      a1, msg_truncated
+    li      a2, msg_truncated_len
+    j       die
+trailing:
+    la      a1, msg_trailing
+    li      a2, msg_trailing_len
+    j       die
+
 # parse_node: reads the node at s0 into a new NODE, recursing on its
 # children, and leaves s0 just past it. Returns the NODE in a0.
 parse_node:
@@ -1587,47 +1614,6 @@ execute:
     ld      t1, 72(sp)
     ld      t3, OP_code(s8)
     jr      t3
-op_add:
-    add     t2, t1, t0
-    j       4f
-op_sub:
-    sub     t2, t1, t0
-    j       4f
-op_and:
-    and     t2, t1, t0
-    j       4f
-op_or:
-    or      t2, t1, t0
-    j       4f
-op_xor:
-    xor     t2, t1, t0
-    j       4f
-op_sll:
-    sll     t2, t1, t0
-    j       4f
-op_srl:
-    srl     t2, t1, t0
-    j       4f
-op_sra:
-    sra     t2, t1, t0
-    j       4f
-op_mul:
-    mul     t2, t1, t0
-4:  beqz    s9, 5f                      # x0 stays 0
-    la      t0, vregs
-    slli    t1, s9, 3
-    add     t0, t0, t1
-    sd      t2, 0(t0)
-5:  ld      ra, 0(sp)
-    ld      s4, 8(sp)
-    ld      s5, 16(sp)
-    ld      s6, 24(sp)
-    ld      s7, 32(sp)
-    ld      s8, 40(sp)
-    ld      s9, 48(sp)
-    ld      s10, 56(sp)
-    addi    sp, sp, 96
-    ret
 7:  la      a1, msg_register
     li      a2, msg_register_len
     ld      t0, 0(s7)
@@ -1640,6 +1626,52 @@ op_mul:
     ld      a3, NODE_content(s4)
     lbu     a4, NODE_content_len(s4)
     j       die_name
+
+# The ops of exec_ops: t2 = t1 op t0, then exec_store, still in the frame
+# of execute.
+op_add:
+    add     t2, t1, t0
+    j       exec_store
+op_sub:
+    sub     t2, t1, t0
+    j       exec_store
+op_and:
+    and     t2, t1, t0
+    j       exec_store
+op_or:
+    or      t2, t1, t0
+    j       exec_store
+op_xor:
+    xor     t2, t1, t0
+    j       exec_store
+op_sll:
+    sll     t2, t1, t0
+    j       exec_store
+op_srl:
+    srl     t2, t1, t0
+    j       exec_store
+op_sra:
+    sra     t2, t1, t0
+    j       exec_store
+op_mul:
+    mul     t2, t1, t0
+# exec_store: stores t2 in the destination vreg s9 and returns from execute.
+exec_store:
+    beqz    s9, 1f                      # x0 stays 0
+    la      t0, vregs
+    slli    t1, s9, 3
+    add     t0, t0, t1
+    sd      t2, 0(t0)
+1:  ld      ra, 0(sp)
+    ld      s4, 8(sp)
+    ld      s5, 16(sp)
+    ld      s6, 24(sp)
+    ld      s7, 32(sp)
+    ld      s8, 40(sp)
+    ld      s9, 48(sp)
+    ld      s10, 56(sp)
+    addi    sp, sp, 96
+    ret
 
 # ---------------------------------------------------------------------------
 # Encoding and output
@@ -1890,30 +1922,6 @@ write_out:
     ecall
     ret
 
-usage:
-    la      a1, msg_usage
-    li      a2, msg_usage_len
-    j       die
-open_failed:
-    la      a1, msg_open
-    li      a2, msg_open_len
-    j       die
-read_failed:
-    la      a1, msg_read
-    li      a2, msg_read_len
-    j       die
-too_large:
-    la      a1, msg_large
-    li      a2, msg_large_len
-    j       die
-truncated:
-    la      a1, msg_truncated
-    li      a2, msg_truncated_len
-    j       die
-trailing:
-    la      a1, msg_trailing
-    li      a2, msg_trailing_len
-    j       die
 create_failed:
     la      a1, msg_create
     li      a2, msg_create_len

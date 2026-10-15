@@ -79,6 +79,53 @@ run: $(P)/exit42.elf $(P)/hello.elf
 	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/hello.out
 	@echo "hello: prints its three lines"
 
+# The bootstrap. ttpc.s, assembled by GNU as, is stage0. ttpc in ff
+# (ttpc.consts.ff.txt and ttpc.ff.txt, after the ISA and macros.ff.txt) is
+# assembled by stage0 into stage1 and by stage1 into stage2, which must be
+# the same: the fixed point. stage1 must also assemble every program and
+# print test.ff exactly as stage0 does.
+BOOT := $(BUILD)/boot
+TTPC_FF := ttpc.consts.ff.txt ttpc.ff.txt
+
+$(BOOT):
+	mkdir -p $@
+
+$(BOOT)/ttpc.ff: macros.ff.txt $(TTPC_FF) mkff.pl FF.pm | $(BOOT)
+	perl mkff.pl macros.ff.txt $(TTPC_FF) > $@
+
+$(BOOT)/stage1: $(BOOT)/ttpc.ff $(BIN)
+	$(QEMU) $(BIN) $< $@ > $@.lst
+
+$(BOOT)/stage2: $(BOOT)/ttpc.ff $(BOOT)/stage1
+	$(QEMU) $(BOOT)/stage1 $< $@ > $@.lst
+
+bootstrap: $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
+	cmp $(BOOT)/stage1 $(BOOT)/stage2
+	@echo "bootstrap: stage1 == stage2"
+	@for p in $(PROGS); do \
+	    $(QEMU) $(BOOT)/stage1 $(P)/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
+	    cmp $(BOOT)/$$p.elf $(P)/$$p.elf && cmp $(BOOT)/$$p.lst $(P)/$$p.lst || exit 1; \
+	done
+	$(QEMU) $(BIN) $(FF) > $(BOOT)/tree0.txt
+	$(QEMU) $(BOOT)/stage1 $(FF) | cmp - $(BOOT)/tree0.txt
+	@echo "bootstrap: stage1 assembles and prints like stage0"
+
+# As long as ttpc.ff.txt is the translation of ttpc.s (s2ff.pl), stage1 is
+# byte-identical to GNU as assembling ttpc.s, uncompressed, into the layout
+# of ff.ld.
+$(BOOT)/oracle.bin: ttpc.s ff.ld | $(BOOT)
+	$(AS) -march=rv64ima -mabi=lp64 -mno-relax $< -o $(BOOT)/oracle.o
+	$(LD) $(TWIN_LDFLAGS) $(BOOT)/oracle.o -o $(BOOT)/oracle
+	$(OBJCOPY) -O binary $(BOOT)/oracle $@
+
+oracle: $(BOOT)/stage1 $(BOOT)/oracle.bin
+	tail -c +121 $(BOOT)/stage1 | cmp - $(BOOT)/oracle.bin
+	@echo "oracle: stage1 and GNU as agree"
+
+# Translate ttpc.s into the ff source of ttpc again.
+s2ff:
+	perl s2ff.pl ttpc.s $(TTPC_FF)
+
 # Regenerate test.ff: the RV64GC node tree, the macros and the exit-42
 # program (host Perl, see mkff.pl and FF.pm).
 ff:
@@ -87,4 +134,4 @@ ff:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip check run ff clean
+.PHONY: all test roundtrip check run bootstrap oracle s2ff ff clean

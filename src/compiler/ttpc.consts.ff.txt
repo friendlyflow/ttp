@@ -1,0 +1,283 @@
+SYS_openat:
+  addi
+    56
+    zero
+    a0
+SYS_close:
+  addi
+    57
+    zero
+    a0
+SYS_read:
+  addi
+    63
+    zero
+    a0
+SYS_write:
+  addi
+    64
+    zero
+    a0
+SYS_exit:
+  addi
+    93
+    zero
+    a0
+AT_FDCWD:
+  addi
+    -100
+    zero
+    a0
+O_RDONLY:
+  addi
+    0
+    zero
+    a0
+O_CREAT_WRONLY_TRUNC:
+  addi
+    577
+    zero
+    a0
+MODE_0755:
+  addi
+    493
+    zero
+    a0
+STDOUT:
+  addi
+    1
+    zero
+    a0
+STDERR:
+  addi
+    2
+    zero
+    a0
+CH_space:
+  addi
+    32
+    zero
+    a0
+CH_minus:
+  addi
+    45
+    zero
+    a0
+CH_zero:
+  addi
+    48
+    zero
+    a0
+CH_colon:
+  addi
+    58
+    zero
+    a0
+CH_lbracket:
+  addi
+    91
+    zero
+    a0
+CH_rbracket:
+  addi
+    93
+    zero
+    a0
+CH_bar:
+  addi
+    124
+    zero
+    a0
+CH_a:
+  addi
+    97
+    zero
+    a0
+CH_x:
+  addi
+    120
+    zero
+    a0
+MAX_PARAMS:
+  addi
+    8
+    zero
+    a0
+FRAME_count:
+  addi
+    0
+    zero
+    a0
+FRAME_params:
+  addi
+    8
+    zero
+    a0
+FRAME_size:
+  addi
+    136
+    zero
+    a0
+VREG_a0:
+  addi
+    10
+    zero
+    a0
+OUT_SIZE:
+  addi
+    65536
+    zero
+    a0
+MAX_DEPTH:
+  addi
+    64
+    zero
+    a0
+LABEL_node:
+  addi
+    0
+    zero
+    a0
+LABEL_addr:
+  addi
+    8
+    zero
+    a0
+LABEL_end:
+  addi
+    16
+    zero
+    a0
+LABEL_size:
+  addi
+    24
+    zero
+    a0
+OP_name:
+  addi
+    0
+    zero
+    a0
+OP_code:
+  addi
+    8
+    zero
+    a0
+OP_size:
+  addi
+    16
+    zero
+    a0
+NODE_hash:
+  addi
+    0
+    zero
+    a0
+NODE_children_len:
+  addi
+    32
+    zero
+    a0
+NODE_children:
+  addi
+    40
+    zero
+    a0
+NODE_content_len:
+  addi
+    48
+    zero
+    a0
+NODE_content:
+  addi
+    56
+    zero
+    a0
+NODE_size:
+  addi
+    64
+    zero
+    a0
+BUF_SIZE:
+  addi
+    1048576
+    zero
+    a0
+MAX_NODES:
+  addi
+    32768
+    zero
+    a0
+msg_usage_len:
+  size
+    msg_usage
+msg_open_len:
+  size
+    msg_open
+msg_read_len:
+  size
+    msg_read
+msg_large_len:
+  size
+    msg_large
+msg_truncated_len:
+  size
+    msg_truncated
+msg_trailing_len:
+  size
+    msg_trailing
+msg_create_len:
+  size
+    msg_create
+msg_write_len:
+  size
+    msg_write
+msg_full_len:
+  size
+    msg_full
+msg_function_len:
+  size
+    msg_function
+msg_name_len:
+  size
+    msg_name
+msg_args_len:
+  size
+    msg_args
+msg_params_len:
+  size
+    msg_params
+msg_register_len:
+  size
+    msg_register
+msg_execute_len:
+  size
+    msg_execute
+msg_field_len:
+  size
+    msg_field
+msg_slice_len:
+  size
+    msg_slice
+msg_width_len:
+  size
+    msg_width
+msg_moved_len:
+  size
+    msg_moved
+msg_depth_len:
+  size
+    msg_depth
+msg_bss_len:
+  size
+    msg_bss
+CALL_frame:
+  addi
+    32
+    zero
+    a0
+CALL_stack:
+  addi
+    176
+    zero
+    a0

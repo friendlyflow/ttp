@@ -7,12 +7,14 @@
 #   make os-test    boot the OS in a qemu-system-riscv64 window
 #   make os-console boot the OS with its serial console in this terminal
 #   make compiler-test  load src/compiler/test.ff with ttpc under qemu-riscv64
-#   make compiler-check assemble test.ff with ttpc, compare with GNU as, run it
+#   make compiler-check assemble the programs in src/compiler/progs, compare
+#                       them with GNU as and run them
+#   make bootstrap  ttpc assembles itself from ff: stage1 == stage2
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
 
-.PHONY: all os compiler os-test os-console compiler-test compiler-check clean
+.PHONY: all os compiler os-test os-console compiler-test compiler-check bootstrap clean
 
 all: os compiler
 
@@ -34,9 +36,14 @@ os-console:
 compiler-test: compiler
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler test
 
-# Assemble the program in test.ff, check it against GNU as and run it.
+# Assemble the programs, check them against GNU as and run them.
 compiler-check: compiler
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check run
+
+# ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
+# stage2: they must be the same, and stage1 the same as GNU as makes it.
+bootstrap: compiler
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstrap oracle
 
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean
