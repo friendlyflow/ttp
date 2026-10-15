@@ -92,7 +92,9 @@ still written in the language of stage0. stage0 also bounds ttpc.ff to 1 MiB.
   the ALU ops of `exec_ops` are the seed).
 - **Arguments**: a nested call (run in exec, its value is `a0`), a number
   (decimal or `0x`), a parameter, a register, `pc`, a label or a constant.
-- **Builtins**: `ascii`, `align`, `reserve`, `origin`, `bss`, `size`.
+- **Builtins**: `ascii`, `align`, `reserve`, `origin`, `bss`, `size`, and
+  `comment` (any children, text that is not evaluated: it emits nothing; not
+  in stage0, so ttpc.ff itself has none).
 - **Range checks** (pass 2): every operand must fit its slices, sign- or
   zero-extended from the highest bit they take; an `imm` below bit 31 only
   sign-extended (the U-type's 32-bit pattern aside), `rd'` and friends not
