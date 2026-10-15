@@ -22,13 +22,17 @@ BUILD ?= build
 BIN := $(BUILD)/ttpc
 OBJ := $(BUILD)/ttpc.o
 
-# The ff sources: ttpc itself and the programs in progs/, each a whole tree
-# (the shared pages from mkff.pl, then its own; the last page is what ttpc
-# assembles), edited in sicompass. progs/<name>.s is a program's GNU twin.
+# The ff sources, edited in sicompass. ttpc itself and the asm programs in
+# progs/ are whole trees (the shared pages from mkff.pl, then their own;
+# the last page is what ttpc assembles); progs/<name>.s is the GNU twin of
+# one. shared.ff is the shared pages alone, and a C program is its program
+# alone: ttpc shared.ff prog.ff out.
 TTPC_FF := ttpc.ff
 PROGS := exit42 hello wide
 CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cunroll ctasm ctmix
-TREES := $(TTPC_FF) $(PROGS:%=progs/%.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff
+SHARED := shared.ff
+WHOLE := $(TTPC_FF) $(PROGS:%=progs/%.ff)
+TREES := $(WHOLE) $(SHARED) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff
 P := $(BUILD)/progs
 
 all: $(BIN)
@@ -111,9 +115,10 @@ bootstrap: $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
 # The C programs (progs/c*.ff) use the C layer, which ttpc.s predates:
 # stage2, ttpc as ttpc.ff makes it, assembles them. Each must exit with the
 # status on the first line of progs/<name>.expect ("exit N") and print the
-# rest of it.
-$(P)/%.celf: progs/%.ff $(BOOT)/stage2 | $(P)
-	$(QEMU) $(BOOT)/stage2 $< $@ > $(P)/$*.lst
+# rest of it. A C program is only its program: the shared pages come from
+# shared.ff.
+$(P)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)
+	$(QEMU) $(BOOT)/stage2 $(SHARED) $< $@ > $(P)/$*.lst
 
 ctest: $(CPROGS:%=$(P)/%.celf)
 	@for p in $(CPROGS); do \
@@ -136,16 +141,17 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx "asm and C at compile time" $(P)/ctmix.lst
 	! grep -aq compiling $(P)/cnow.celf
 	! grep -aq other $(P)/cct.celf
-	! $(QEMU) $(BOOT)/stage2 progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
 	grep -q "compile time: no" $(P)/cnowfail.err
-	! $(QEMU) $(BOOT)/stage2 progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
 	grep -q "a reserved word: content" $(P)/creserved.err
 	@echo "ctime: compile time runs and stays out of the program"
 
 # Put the current shared pages (the ISA from mkff.pl, macros.ff.txt) into
-# every tree, after changing either of them.
+# every whole tree and into shared.ff, after changing either of them.
 refresh:
-	perl mkff.pl --refresh $(TREES)
+	perl mkff.pl --refresh $(WHOLE)
+	perl mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 
 clean:
 	rm -rf $(BUILD)

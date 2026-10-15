@@ -328,3 +328,18 @@ elf_header:
       mem_end
   dword
     0x1000
+comment:
+  frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
+frame:
+  origin
+    elf_base
+  elf_header
+    _start
+    file_end
+    mem_end
+  program
+  align
+    8
+  file_end:
+  bss
+  mem_end:

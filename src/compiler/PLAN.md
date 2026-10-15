@@ -50,9 +50,10 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 |---|---|
 | `ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
 | `ttpc.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a whole tree, the shared pages, ttpc's constants (page `3:`) and ttpc itself (page `4:`, the last). |
-| `progs/*.ff` | test programs, whole trees too: `exit42`, `hello`, `wide` in asm-level ff, each with a GNU twin `.s`; the `c*` ones in the C layer, each with its `.expect` (`exit N`, then its output). |
+| `progs/*.ff` | test programs: `exit42`, `hello`, `wide` in asm-level ff, whole trees, each with a GNU twin `.s`; the `c*` ones in the C layer, only their program (no pages, no frame), each with its `.expect` (`exit N`, then its output). |
+| `shared.ff` | the shared pages alone (`perl mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc shared.ff prog.ff out`. |
 | `mkff.pl` | the shared pages every tree starts with: the RV64GC instruction set (pages `0:`, `1:`) and `macros.ff.txt` (page `2:`). `perl mkff.pl a.ff.txt ... > new.ff` starts a new tree; `make refresh` puts changed shared pages into every tree. |
-| `macros.ff.txt` | the source of shared page `2:`: `byte`/`half`/`word`/`dword`, `rel`, `pcrel_hi/lo`, the pseudo-instructions (`li`, `la`, `call`, `j`, `beqz`, ...) and `elf_header`. |
+| `macros.ff.txt` | the source of shared page `2:`: `byte`/`half`/`word`/`dword`, `rel`, `pcrel_hi/lo`, the pseudo-instructions (`li`, `la`, `call`, `j`, `beqz`, ...), `elf_header` and `frame`. |
 | `ff.ld` | the layout ttpc gives a program, for linking the GNU twins. |
 | `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
 
@@ -72,7 +73,10 @@ A change to ttpc is a change to `ttpc.ff` that keeps `make bootstrap`
 green: stage0 builds the new stage1, which must then rebuild itself
 identically. ttpc reads `.ff` directly; the text form is only for the host
 tools (`perl fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl fftext.pl ff
-t.ff.txt > ttpc.ff`). Whatever ttpc.ff uses, stage0 must know: new
+t.ff.txt > ttpc.ff`). ttpc reads several trees too: `ttpc a.ff b.ff ... prog.ff out` takes the
+pages of all but the last, then the last whole as the program (its root is
+the page): a C program file is just its program, with `shared.ff` before
+it. One tree alone is read as before. Whatever ttpc.ff uses, stage0 must know: new
 features (the C layer, compile time) are for the programs, ttpc itself is
 still written in the language of stage0. stage0 also bounds ttpc.ff to 1 MiB.
 
@@ -92,6 +96,10 @@ still written in the language of stage0. stage0 also bounds ttpc.ff to 1 MiB.
   the ALU ops of `exec_ops` are the seed).
 - **Arguments**: a nested call (run in exec, its value is `a0`), a number
   (decimal or `0x`), a parameter, a register, `pc`, a label or a constant.
+- **The frame.** A program page without an `origin` or `elf_header` of
+  its own is assembled inside `frame:` (macros.ff.txt): `origin`, the ELF
+  header, its children where `frame:` says `program`, then `file_end:`,
+  `bss`, `mem_end:`. A page that lays itself out is left as it is.
 - **Builtins**: `ascii`, `align`, `reserve`, `origin`, `bss`, `size`, and
   `comment` (any children, text that is not evaluated: it emits nothing; not
   in stage0, so ttpc.ff itself has none).

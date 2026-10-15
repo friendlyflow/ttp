@@ -20,6 +20,9 @@
 # slli, ...) assembles to that instruction's machine word, a call of any
 # other function expands in place.
 #
+# perl mkff.pl > shared.ff makes the shared pages alone, the tree a program
+# of only its own (ttpc shared.ff prog.ff out) is assembled with.
+#
 # The tree: comment:, the registers (x0..x31, f0..f31, each with its 5-bit
 # number as child), bits:, the slice functions, then every instruction
 # (RV64I, Zifencei, Zicsr, the privileged mret/sret/wfi/sfence.vma, M, A, F,
