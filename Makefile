@@ -7,11 +7,12 @@
 #   make os-test    boot the OS in a qemu-system-riscv64 window
 #   make os-console boot the OS with its serial console in this terminal
 #   make compiler-test  load src/compiler/test.ff with ttpc under qemu-riscv64
+#   make compiler-check assemble test.ff with ttpc, compare with GNU as, run it
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
 
-.PHONY: all os compiler os-test os-console compiler-test clean
+.PHONY: all os compiler os-test os-console compiler-test compiler-check clean
 
 all: os compiler
 
@@ -32,6 +33,10 @@ os-console:
 # Run ttpc (a Linux riscv64 binary) under qemu-riscv64 on an ff file.
 compiler-test: compiler
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler test
+
+# Assemble the program in test.ff, check it against GNU as and run it.
+compiler-check: compiler
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check run
 
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean

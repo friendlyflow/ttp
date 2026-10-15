@@ -24,13 +24,16 @@
 # number as child), bits:, the slice functions, then every instruction
 # (RV64I, Zifencei, Zicsr, the privileged mret/sret/wfi/sfence.vma, M, A, F,
 # D, C). A node holds at most 255 children, so the list is split over the
-# root's children 0:, 1:, ...
+# root's children 0:, 1:, ... The last root child holds the program: the
+# calls that ttpc assembles, in order.
 #
 # An instruction is a function: its operands (rd, rs1, imm, ...) are its
 # parameters, in field order, followed by its encoding fields in bit order,
 # MSB first. A fixed field (opcode, funct*, ...) is a definition with its bits
-# as child; an operand field is a call: rd refers to the parameter rd,
-# imm[20|10:1|11|19:12] calls the slice function of that name with arg imm.
+# as child; an operand field is a call of a slice function with the operand
+# as arg: imm[20|10:1|11|19:12] imm, and for a bare operand the bits it
+# takes, rd[4:0] rd or rs1'[2:0] rs1'. So every field shows its width, and
+# the parameters are exactly the leading children that are leaves.
 #
 #   bits: value left right pos   a0 = ((value << left) >> right) << pos
 #
@@ -49,12 +52,25 @@ sub call { my ($name, @args) = @_; node($name, map { node($_) } @args) }
 # Slice names (imm[11:0], ...) in order of first use, each gets a function.
 my (@slices, %slices);
 
-# "funct3=000" -> funct3: with child 000; "rd" -> call rd;
+# The bits of a bare operand field, so that it is a slice like imm[11:0]:
+# a register is 5 bits, a primed one (rd', x8..x15) its low 3.
+sub operand_bits {
+    my ($name) = @_;
+    return "2:0"  if $name =~ /'/ || $name eq "rm";
+    return "4:0"  if $name =~ m{^(rd|rs1|rs2|rs3|rd/rs1)$};
+    return "11:0" if $name eq "csr";
+    return "3:0"  if $name =~ /^(fm|pred|succ)$/;
+    return "0"    if $name =~ /^(aq|rl)$/;
+    die "mkff: no width for operand $name\n";
+}
+
+# "funct3=000" -> funct3: with child 000; "rd" -> call rd[4:0] with arg rd;
 # "imm[11:0]" -> call imm[11:0] with arg imm.
 sub field {
     my ($name, $bits) = split /=/, $_[0], 2;
     return node("$name:", node($bits)) if defined $bits;
-    return call($name) unless $name =~ /^(.+)\[/;
+    $name .= "[" . operand_bits($name) . "]" unless $name =~ /\[/;
+    $name =~ /^(.+)\[/;
     push @slices, $name unless $slices{$name}++;
     call($name, $1);
 }
@@ -299,12 +315,33 @@ def("c.swsp",  "funct3=110", "uimm[5:2|7:6]", "rs2", "op=10");
 def("c.sdsp",  "funct3=111", "uimm[5:3|8:6]", "rs2", "op=10");
 
 # ---------------------------------------------------------------------------
+# Program: the calls ttpc assembles, after the definitions
+# ---------------------------------------------------------------------------
+
+my @program = (
+    call("addi", qw(42 zero a0)),           # li a0, 42
+    call("addi", qw(93 zero a7)),           # li a7, SYS_exit
+    call("ecall"),                          # exit(42); the rest only checks encodings
+    call("sd", qw(-8 a0 sp)),               # sd a0, -8(sp)
+    call("ld", qw(16 sp s0)),               # ld s0, 16(sp)
+    call("lui", qw(305418240 t0)),          # lui t0, 0x12345
+    call("beq", qw(16 a1 a0)),              # beq a0, a1, .+16
+    call("jal", qw(-12 ra)),                # jal ra, .-12
+    call("slli", qw(3 a0 a0)),              # slli a0, a0, 3
+    call("sub", qw(a1 a0 a0)),              # sub a0, a0, a1
+    call("c.addi", qw(-1 a0)),              # c.addi a0, -1
+    call("c.ld", qw(8 s0 a0)),              # c.ld a0, 8(s0)
+    call("c.mv", qw(a0 a1)),                # c.mv a0, a1
+);
+
+# ---------------------------------------------------------------------------
 # Tree, hashes, bytes
 # ---------------------------------------------------------------------------
 
 my @items = (node("comment:"), @registers, $bits, (map { slice($_) } @slices), @insns);
 my @pages;
 push @pages, node(scalar(@pages) . ":", splice(@items, 0, 255)) while @items;
+push @pages, node(scalar(@pages) . ":", @program);
 my $root = node("", @pages);
 
 sub rehash {
