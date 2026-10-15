@@ -32,7 +32,10 @@ RAM NODE:
 
 ## na de bootstrap (ttpc.ff assembleert zichzelf)
 - Merkle hashes: sha256 in ttpc, de hashes van de nodes nakijken
-- range checks op immediates (tot dan vangt de GNU oracle overflow)
-- conditionals en loops in exec context (li die zelf zijn expansie kiest)
-- native exec in plaats van de seed tabel (addi, slli, ...)
+- range checks op immediates: klaar (pass 2, in encode)
+- de C-laag in ff-stijl en `compile time` (native, in ttpc zelf): klaar, zie PLAN.md
+- conditionals en loops in exec context: `compile time` doet het nu; exec zelf blijft de seed
+- ttpc.ff tegen 1 MiB (stage0): de versieketen, ttpc in de C-laag schrijven
+- `compile time` kan nog geen asm-labels oproepen (alleen C-functies en -variabelen)
+- structs: geen kopie per waarde, als parameter enkel via address
 - includes / meerdere files, secties als aparte segments, het os in ff

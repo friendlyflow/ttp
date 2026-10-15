@@ -27,7 +27,8 @@ OBJ := $(BUILD)/ttpc.o
 # assembles), edited in sicompass. progs/<name>.s is a program's GNU twin.
 TTPC_FF := ttpc.ff
 PROGS := exit42 hello wide
-TREES := $(TTPC_FF) $(PROGS:%=progs/%.ff)
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cunroll
+TREES := $(TTPC_FF) $(PROGS:%=progs/%.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff
 P := $(BUILD)/progs
 
 all: $(BIN)
@@ -107,18 +108,36 @@ bootstrap: $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
 	$(QEMU) $(BOOT)/stage1 $(TTPC_FF) | cmp - $(BOOT)/tree0.txt
 	@echo "bootstrap: stage1 assembles and prints like stage0"
 
-# As long as the program in ttpc.ff is the translation of ttpc.s (made by
-# s2ff.pl, see git history), stage1 is byte-identical to GNU as assembling
-# ttpc.s, uncompressed, into the layout of ff.ld. Drop this with the first
-# change to ttpc in ttpc.ff.
-$(BOOT)/oracle.bin: ttpc.s ff.ld | $(BOOT)
-	$(AS) -march=rv64ima -mabi=lp64 -mno-relax $< -o $(BOOT)/oracle.o
-	$(LD) $(TWIN_LDFLAGS) $(BOOT)/oracle.o -o $(BOOT)/oracle
-	$(OBJCOPY) -O binary $(BOOT)/oracle $@
+# The C programs (progs/c*.ff) use the C layer, which ttpc.s predates:
+# stage2, ttpc as ttpc.ff makes it, assembles them. Each must exit with the
+# status on the first line of progs/<name>.expect ("exit N") and print the
+# rest of it.
+$(P)/%.celf: progs/%.ff $(BOOT)/stage2 | $(P)
+	$(QEMU) $(BOOT)/stage2 $< $@ > $(P)/$*.lst
 
-oracle: $(BOOT)/stage1 $(BOOT)/oracle.bin
-	tail -c +121 $(BOOT)/stage1 | cmp - $(BOOT)/oracle.bin
-	@echo "oracle: stage1 and GNU as agree"
+ctest: $(CPROGS:%=$(P)/%.celf)
+	@for p in $(CPROGS); do \
+	    tail -n +2 progs/$$p.expect > $(P)/$$p.want; \
+	    $(QEMU) $(P)/$$p.celf > $(P)/$$p.out; s=$$?; \
+	    want=$$(head -n 1 progs/$$p.expect | cut -d" " -f2); \
+	    test $$s -eq $$want || { echo "ctest: $$p: exit status $$s, not $$want"; exit 1; }; \
+	    cmp $(P)/$$p.out $(P)/$$p.want || { echo "ctest: $$p: wrong output"; exit 1; }; \
+	    echo "ctest: $$p"; \
+	done
+
+# compile time: cnow prints while it is compiled and none of that is in
+# the program, cct keeps only the branch its condition takes, cnowfail
+# fails to compile with its message, and so does creserved, which names a
+# variable content.
+ctime: $(P)/cnow.celf $(P)/cct.celf
+	grep -qx compiling $(P)/cnow.lst
+	! grep -aq compiling $(P)/cnow.celf
+	! grep -aq other $(P)/cct.celf
+	! $(QEMU) $(BOOT)/stage2 progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
+	grep -q "compile time: no" $(P)/cnowfail.err
+	! $(QEMU) $(BOOT)/stage2 progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
+	grep -q "a reserved word: content" $(P)/creserved.err
+	@echo "ctime: compile time runs and stays out of the program"
 
 # Put the current shared pages (the ISA from mkff.pl, macros.ff.txt) into
 # every tree, after changing either of them.
@@ -128,4 +147,4 @@ refresh:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip check run bootstrap oracle refresh clean
+.PHONY: all test roundtrip check run bootstrap ctest ctime refresh clean

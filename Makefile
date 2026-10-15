@@ -36,14 +36,15 @@ os-console:
 compiler-test: compiler
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler test
 
-# Assemble the programs, check them against GNU as and run them.
+# Assemble the programs, check them against GNU as and run them; build and
+# run the C programs.
 compiler-check: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check run
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check run ctest ctime
 
 # ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
-# stage2: they must be the same, and stage1 the same as GNU as makes it.
+# stage2: they must be the same.
 bootstrap: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstrap oracle
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstrap
 
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean

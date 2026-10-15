@@ -60,6 +60,8 @@ pcrel_hi:
     2048
     a0
     a0
+comment:
+  pcrel_lo and lo give the low 12 bits sign-extended, as an I-type immediate holds them: a 12-bit field must not be handed more than its 12 bits.
 pcrel_lo:
   target
   sub
@@ -68,6 +70,24 @@ pcrel_lo:
     a0
   addi
     4
+    a0
+    a0
+  slli
+    52
+    a0
+    a0
+  srai
+    52
+    a0
+    a0
+lo:
+  value
+  slli
+    52
+    value
+    a0
+  srai
+    52
     a0
     a0
 hi:
@@ -103,7 +123,8 @@ li32:
       imm
     rd
   addiw
-    imm
+    lo
+      imm
     rd
     rd
 neg:

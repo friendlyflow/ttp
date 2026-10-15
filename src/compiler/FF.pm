@@ -48,6 +48,7 @@ sub emit {
     my $len = length $n->{content};
     die "ff: $n->{content} has $count children (max 255)\n" if $count > 255;
     die "ff: $n->{content} is $len bytes (max 255)\n" if $len > 255;
+    die "ff: a node's text is not UTF-8: $n->{content}\n" unless utf8::decode(my $text = $n->{content});
     join "", $n->{hash}, chr($count), (map { emit($_) } @{ $n->{children} }),
         chr($len), $n->{content};
 }
