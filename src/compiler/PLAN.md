@@ -113,7 +113,8 @@ operator through the stack, locals below the frame pointer `s0`.
   expression, with C precedence: `een variabele` / `*` / `3`. Siblings
   without an operator between them are separate items: statements,
   arguments, elements. Operators: `+ - * / % << >> & | ^ == != < <= > >=`,
-  `and or not ~` (and, or short-circuit), `= += -=`, `++ --`, a leading `-`.
+  `&& || ! ~` (&&, || short-circuit), `= += -=`, `++ --`, a leading `-`.
+  `and` and `or` are the instructions of the tree (bitwise, with operands).
 - **`:`** is an anonymous function run in place: a block with its own
   scope, or parentheses (its value is its last item).
 - **Declarations** `name:` [type] items: a local in a function, a global at
