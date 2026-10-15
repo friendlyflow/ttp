@@ -22,13 +22,12 @@ BUILD ?= build
 BIN := $(BUILD)/ttpc
 OBJ := $(BUILD)/ttpc.o
 
-# ff file that `make test` prints.
-FF ?= test.ff
-
-# The programs in progs/. A program's tree is the ISA, macros.ff.txt, its
-# constants (progs/<name>.consts.ff.txt, when there is one) and itself, the
-# last page; progs/<name>.s is its GNU twin.
+# The ff sources: ttpc itself and the programs in progs/, each a whole tree
+# (the shared pages from mkff.pl, then its own; the last page is what ttpc
+# assembles), edited in sicompass. progs/<name>.s is a program's GNU twin.
+TTPC_FF := ttpc.ff
 PROGS := exit42 hello wide
+TREES := $(TTPC_FF) $(PROGS:%=progs/%.ff)
 P := $(BUILD)/progs
 
 all: $(BIN)
@@ -42,14 +41,13 @@ $(OBJ): ttpc.s | $(BUILD)
 $(BIN): $(OBJ)
 	$(LD) -static --no-relax -e _start $< -o $@
 
+# Print the tree of ttpc.ff, or of FF=<file>.
+FF ?= $(TTPC_FF)
 test: $(BIN)
 	$(QEMU) $(BIN) $(FF)
 
-$(P)/%.ff: progs/%.ff.txt macros.ff.txt $(wildcard progs/*.consts.ff.txt) mkff.pl FF.pm | $(P)
-	perl mkff.pl macros.ff.txt $(wildcard progs/$*.consts.ff.txt) $< > $@
-
 # ttpc assembles a program, its listing goes to <name>.lst.
-$(P)/%.elf: $(P)/%.ff $(BIN)
+$(P)/%.elf: progs/%.ff $(BIN) | $(P)
 	$(QEMU) $(BIN) $< $@ > $(P)/$*.lst
 
 $(P)/%.twin.bin: progs/%.s ff.ld | $(P)
@@ -59,10 +57,14 @@ $(P)/%.twin.bin: progs/%.s ff.ld | $(P)
 
 .SECONDARY:
 
-# The text form of test.ff must read back to the same bytes.
+# Every tree must read back to the same bytes from its text form (which
+# also checks its hashes).
 roundtrip: | $(BUILD)
-	perl fftext.pl txt $(FF) > $(BUILD)/roundtrip.ff.txt
-	perl fftext.pl ff $(BUILD)/roundtrip.ff.txt | cmp - $(FF)
+	@for t in $(TREES); do \
+	    perl fftext.pl txt $$t > $(BUILD)/roundtrip.ff.txt && \
+	    perl fftext.pl ff $(BUILD)/roundtrip.ff.txt | cmp - $$t || exit 1; \
+	done
+	@echo "roundtrip: $(TREES)"
 
 # Every program, after its 120-byte ELF header, must be byte-identical to
 # its GNU twin.
@@ -79,41 +81,36 @@ run: $(P)/exit42.elf $(P)/hello.elf
 	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/hello.out
 	@echo "hello: prints its three lines"
 
-# The bootstrap. ttpc.s, assembled by GNU as, is stage0. ttpc in ff
-# (ttpc.consts.ff.txt and ttpc.ff.txt, after the ISA and macros.ff.txt) is
+# The bootstrap. ttpc.s, assembled by GNU as, is stage0. ttpc.ff is
 # assembled by stage0 into stage1 and by stage1 into stage2, which must be
 # the same: the fixed point. stage1 must also assemble every program and
-# print test.ff exactly as stage0 does.
+# print ttpc.ff exactly as stage0 does.
 BOOT := $(BUILD)/boot
-TTPC_FF := ttpc.consts.ff.txt ttpc.ff.txt
 
 $(BOOT):
 	mkdir -p $@
 
-$(BOOT)/ttpc.ff: macros.ff.txt $(TTPC_FF) mkff.pl FF.pm | $(BOOT)
-	perl mkff.pl macros.ff.txt $(TTPC_FF) > $@
-
-$(BOOT)/stage1: $(BOOT)/ttpc.ff $(BIN)
+$(BOOT)/stage1: $(TTPC_FF) $(BIN) | $(BOOT)
 	$(QEMU) $(BIN) $< $@ > $@.lst
 
-$(BOOT)/stage2: $(BOOT)/ttpc.ff $(BOOT)/stage1
+$(BOOT)/stage2: $(TTPC_FF) $(BOOT)/stage1
 	$(QEMU) $(BOOT)/stage1 $< $@ > $@.lst
 
 bootstrap: $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
 	cmp $(BOOT)/stage1 $(BOOT)/stage2
 	@echo "bootstrap: stage1 == stage2"
 	@for p in $(PROGS); do \
-	    $(QEMU) $(BOOT)/stage1 $(P)/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
+	    $(QEMU) $(BOOT)/stage1 progs/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
 	    cmp $(BOOT)/$$p.elf $(P)/$$p.elf && cmp $(BOOT)/$$p.lst $(P)/$$p.lst || exit 1; \
 	done
-	$(QEMU) $(BIN) $(FF) > $(BOOT)/tree0.txt
-	$(QEMU) $(BOOT)/stage1 $(FF) | cmp - $(BOOT)/tree0.txt
+	$(QEMU) $(BIN) $(TTPC_FF) > $(BOOT)/tree0.txt
+	$(QEMU) $(BOOT)/stage1 $(TTPC_FF) | cmp - $(BOOT)/tree0.txt
 	@echo "bootstrap: stage1 assembles and prints like stage0"
 
-# As long as ttpc.ff.txt is the translation of ttpc.s (made by s2ff.pl, see
-# git history), stage1 is byte-identical to GNU as assembling ttpc.s,
-# uncompressed, into the layout of ff.ld. Drop this with the first change
-# to ttpc.ff.txt.
+# As long as the program in ttpc.ff is the translation of ttpc.s (made by
+# s2ff.pl, see git history), stage1 is byte-identical to GNU as assembling
+# ttpc.s, uncompressed, into the layout of ff.ld. Drop this with the first
+# change to ttpc in ttpc.ff.
 $(BOOT)/oracle.bin: ttpc.s ff.ld | $(BOOT)
 	$(AS) -march=rv64ima -mabi=lp64 -mno-relax $< -o $(BOOT)/oracle.o
 	$(LD) $(TWIN_LDFLAGS) $(BOOT)/oracle.o -o $(BOOT)/oracle
@@ -123,12 +120,12 @@ oracle: $(BOOT)/stage1 $(BOOT)/oracle.bin
 	tail -c +121 $(BOOT)/stage1 | cmp - $(BOOT)/oracle.bin
 	@echo "oracle: stage1 and GNU as agree"
 
-# Regenerate test.ff: the RV64GC node tree, the macros and the exit-42
-# program (host Perl, see mkff.pl and FF.pm).
-ff:
-	perl mkff.pl macros.ff.txt progs/exit42.ff.txt > test.ff.tmp && mv test.ff.tmp test.ff
+# Put the current shared pages (the ISA from mkff.pl, macros.ff.txt) into
+# every tree, after changing either of them.
+refresh:
+	perl mkff.pl --refresh $(TREES)
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip check run bootstrap oracle ff clean
+.PHONY: all test roundtrip check run bootstrap oracle refresh clean

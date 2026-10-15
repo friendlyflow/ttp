@@ -1,4 +1,4 @@
-# exit42.s — progs/exit42.ff.txt for GNU as, linked with ff.ld: `make check`
+# exit42.s — progs/exit42.ff for GNU as, linked with ff.ld: `make check`
 # compares the bytes. The c.* lines only check encodings: exit(42) comes
 # first.
 #

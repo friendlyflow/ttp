@@ -1,8 +1,13 @@
 #!/usr/bin/env perl
-# mkff.pl — writes an ff tree: the RV64GC instruction set, then one page per
-# text file given (see FF.pm for both formats).
+# mkff.pl — the shared pages of an ff tree: the RV64GC instruction set
+# (pages 0:, 1:) and macros.ff.txt (page 2:). Every tree (ttpc.ff,
+# progs/*.ff) starts with them, its own pages follow (see FF.pm for both
+# formats).
 #
-#   perl mkff.pl progs/exit42.ff.txt > test.ff
+#   perl mkff.pl [page.ff.txt ...] > new.ff    a new tree: the shared pages,
+#                                              then one page per text file
+#   perl mkff.pl --refresh tree.ff ...         puts the current shared pages
+#                                              in place in each tree
 #
 # A host tool (core Perl only), not part of ttpc.
 #
@@ -19,8 +24,8 @@
 # number as child), bits:, the slice functions, then every instruction
 # (RV64I, Zifencei, Zicsr, the privileged mret/sret/wfi/sfence.vma, M, A, F,
 # D, C). A node holds at most 255 children, so the list is split over the
-# root's children 0:, 1:, ... Each text file given becomes the next page,
-# the last one is the program that ttpc assembles.
+# root's children 0:, 1:, ... The last page of a tree is the program that
+# ttpc assembles.
 #
 # An instruction is a function: its operands (rd, rs1, imm, ...) are its
 # parameters, in field order, followed by its encoding fields in bit order,
@@ -40,7 +45,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use FF qw(node call read_txt write_ff);
+use FF qw(node call read_ff write_ff read_txt);
 
 # Slice names (imm[11:0], ...) in order of first use, each gets a function.
 my (@slices, %slices);
@@ -312,13 +317,34 @@ def("c.sdsp",  "funct3=111", "uimm[5:3|8:6]", "rs2", "op=10");
 # ---------------------------------------------------------------------------
 
 my @items = (node("comment:"), @registers, $bits, (map { slice($_) } @slices), @insns);
-my @pages;
-push @pages, node(scalar(@pages) . ":", splice(@items, 0, 255)) while @items;
-for my $file (@ARGV) {
+my @shared;
+push @shared, [splice(@items, 0, 255)] while @items;
+push @shared, [read_txt(slurp("$FindBin::Bin/macros.ff.txt"), "macros.ff.txt")];
+
+sub slurp {
+    my ($file) = @_;
     open my $in, "<:raw", $file or die "mkff: cannot open $file: $!\n";
-    my $text = do { local $/; <$in> };
-    push @pages, node(scalar(@pages) . ":", read_txt($text, $file));
+    local $/;
+    <$in>;
+}
+
+# The pages, named by their index: the shared ones, then the given ones.
+sub tree { my $i = 0; node("", map { node($i++ . ":", @$_) } @shared, @_) }
+
+if (@ARGV && $ARGV[0] eq "--refresh") {
+    shift;
+    for my $file (@ARGV) {
+        my $root = read_ff(slurp($file));
+        my @own = map { $_->{children} } @{ $root->{children} };
+        die "mkff: $file has no pages of its own\n" if @own <= @shared;
+        splice @own, 0, scalar @shared;
+        open my $out, ">:raw", "$file.tmp" or die "mkff: cannot write $file.tmp: $!\n";
+        print $out write_ff(tree(@own));
+        close $out;
+        rename "$file.tmp", $file or die "mkff: cannot replace $file: $!\n";
+    }
+    exit;
 }
 
 binmode STDOUT;
-print write_ff(node("", @pages));
+print write_ff(tree(map { [read_txt(slurp($_), $_)] } @ARGV));

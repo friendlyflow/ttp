@@ -49,12 +49,12 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | file | what |
 |---|---|
 | `ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
-| `ttpc.consts.ff.txt`, `ttpc.ff.txt` | **ttpc in ff**, the source from now on: its constants and its program page, in the text form (`fftext.pl` converts to and from `.ff`). |
-| `mkff.pl` | writes an ff tree: the RV64GC instruction set (pages `0:`, `1:`), then one page per `.ff.txt` file. |
-| `macros.ff.txt` | the shared page: `byte`/`half`/`word`/`dword`, `rel`, `pcrel_hi/lo`, the pseudo-instructions (`li`, `la`, `call`, `j`, `beqz`, ...) and `elf_header`. |
-| `progs/` | test programs (`exit42`, `hello`, `wide`), each with a GNU twin `.s`. |
+| `ttpc.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a whole tree, the shared pages, ttpc's constants (page `3:`) and ttpc itself (page `4:`, the last). |
+| `progs/*.ff` | test programs (`exit42`, `hello`, `wide`), whole trees too, each with a GNU twin `.s`. |
+| `mkff.pl` | the shared pages every tree starts with: the RV64GC instruction set (pages `0:`, `1:`) and `macros.ff.txt` (page `2:`). `perl mkff.pl a.ff.txt ... > new.ff` starts a new tree; `make refresh` puts changed shared pages into every tree. |
+| `macros.ff.txt` | the source of shared page `2:`: `byte`/`half`/`word`/`dword`, `rel`, `pcrel_hi/lo`, the pseudo-instructions (`li`, `la`, `call`, `j`, `beqz`, ...) and `elf_header`. |
 | `ff.ld` | the layout ttpc gives a program, for linking the GNU twins. |
-| `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`. |
+| `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
 
 ```
 stage0 = GNU as(ttpc.s)
@@ -67,11 +67,13 @@ make bootstrap        # stage1 == stage2, stage1 behaves as stage0, the oracle
 make compiler-check   # every program == its GNU twin, exit42 and hello run
 ```
 
-A change to ttpc is a change to `ttpc.ff.txt` (eventually `ttpc.ff` in
-sicompass) that keeps `make bootstrap` green: stage0 builds the new stage1,
-which must then rebuild itself identically. `make oracle` holds only while
-`ttpc.ff.txt` is still the translation of `ttpc.s`; drop it from the root
-`bootstrap` target with the first change to `ttpc.ff.txt`.
+A change to ttpc is a change to `ttpc.ff` that keeps `make bootstrap`
+green: stage0 builds the new stage1, which must then rebuild itself
+identically. ttpc reads `.ff` directly; the text form is only for the host
+tools (`perl fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl fftext.pl ff
+t.ff.txt > ttpc.ff`). `make oracle` holds only while ttpc in `ttpc.ff` is
+still the translation of `ttpc.s`; drop it from the root `bootstrap` target
+with the first change to it.
 
 ### The language ttpc assembles
 

@@ -1,4 +1,4 @@
-# hello.s — progs/hello.ff.txt for GNU as, linked with ff.ld: `make check`
+# hello.s — progs/hello.ff for GNU as, linked with ff.ld: `make check`
 # compares the bytes.
     .option norvc
     .section .rodata

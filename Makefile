@@ -6,7 +6,7 @@
 #   make compiler   build the RISC-V asm compiler      -> build/compiler/ttpc
 #   make os-test    boot the OS in a qemu-system-riscv64 window
 #   make os-console boot the OS with its serial console in this terminal
-#   make compiler-test  load src/compiler/test.ff with ttpc under qemu-riscv64
+#   make compiler-test  print the tree of src/compiler/ttpc.ff with ttpc
 #   make compiler-check assemble the programs in src/compiler/progs, compare
 #                       them with GNU as and run them
 #   make bootstrap  ttpc assembles itself from ff: stage1 == stage2

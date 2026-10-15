@@ -1,4 +1,4 @@
-# wide.s — progs/wide.ff.txt for GNU as: one instruction of most formats,
+# wide.s — progs/wide.ff for GNU as: one instruction of most formats,
 # with offsets at the edges of their range. `make check` compares the bytes.
     .option rvc
     .globl _start
