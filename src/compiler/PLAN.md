@@ -63,12 +63,12 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `rv64:` in `macros/<host>.ff.txt` | ttpc's own ops of RV64 (`rv.add`, `rv.ld`, ..., 50 or so) and its registers (`rv.a0`, ...) in the host's instructions: on x86_64 and arm the registers are 8-byte slots in memory, on aarch64 registers of its own. Also per host: `host_name`, `cc_ctargs` / `cc_call_l` / `cc_ctreg` (the bridge from compile time to ttpc), `ldword`. |
 | `mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host. |
 | `mkwhole.pl` | a whole tree in the language of stage0: the target's section as pages, the shared definitions, the given pages, the exec ops, the program; only what the program reaches (stage0 reads 1 MiB). |
-| `uncomment.pl` | a tree without its comments: `shared.ff` for ttpc1, which knows `comment` only in code. |
+| `frozen.pl` | a tree in the language of the frozen ttpc1 and stage0: `shared.ff` without comments (known only in code) and without `else if:` (which they take for a register). |
 
 ```
 stage0 = GNU as(ttpc.s)
 ttpc1  = stage0(ttpc1.ff)       == ttpc1(ttpc1.ff)
-stage1 = ttpc1(shared.ff without comments, ttpc.defs.ff ttpc.ff)
+stage1 = ttpc1(frozen shared.ff, ttpc.defs.ff ttpc.ff)
 stage2 = stage1(shared.ff ttpc.defs.ff ttpc.ff)
                                 == stage1, byte for byte: the fixed point
 ```
@@ -116,6 +116,9 @@ gets tight, the chain gets a next link: freeze ttpc.ff as ttpc2.ff.
 
 - A node ending in `:` is a function; its leading leaf children are its
   parameters. Any other node is a call; its children are the arguments.
+- A definition whose name has a space and whose first child is a bit string
+  is a register (`x10 a0:` / `01010`, its number), each word one of its
+  names. Any other name with a space is just a name (`else if:`).
 - The root's children are pages. Every page but the last holds definitions;
   the last page is the program: its functions are **placed** labels whose
   children are emitted where they stand (block form, nested ones are local
@@ -138,11 +141,14 @@ gets tight, the chain gets a next link: freeze ttpc.ff as ttpc2.ff.
   definitions (a page, a section, a group) and among the fields of an
   encoding ttpc passes it by. It comes after a function's parameters, which
   are its leading leaves. stage0 has none and ttpc1 knows it only in code,
-  so the bootstrap hands ttpc1 `shared.ff` without comments (`uncomment.pl`).
-  All of them are declared on the shared page (`shared.ff.txt`: `comment:` /
-  `text`, `ascii:` / `bytes`, `align:` / `n`, ..., `size:` / `label`) like any
-  function, so that each is defined before it is called; ttpc takes their
-  calls itself, before it looks up a name.
+  so the bootstrap hands ttpc1 `shared.ff` without comments (`frozen.pl`).
+  Every name ttpc takes by itself, these builtins and the C layer's keywords,
+  types and operators (`cc_kw`, `cc_tynames`, `cc_ops`), is declared like any
+  function directly on the shared page (`shared.ff.txt`: `comment:` / `text`,
+  `if:` / `condition` / `body`, `else if:`, `long:` / `value`, `+:` / `left` /
+  `right`, ...), in scope, so that each is defined before it is called. ttpc
+  takes these calls itself and never runs the declarations. In asm a C word
+  is a function with an empty body: a stray `if` expands to nothing.
 - **Range checks** (pass 2): every operand must fit its slices, sign- or
   zero-extended from the highest bit they take; an `imm` below bit 31 only
   sign-extended (the U-type's 32-bit pattern aside), `rd'` and friends not

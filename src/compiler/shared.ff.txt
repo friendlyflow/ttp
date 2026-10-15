@@ -1,7 +1,9 @@
 comment
   The shared page: what every target has (the data words, bits, rel), the targets as sections, and the choice of one of them by --target. Operands go in the reverse order of GNU as, the destination last, as in the instructions.
 comment
-  The builtins, declared here like any function so that each is defined before it is called. ttpc takes these calls itself, before it looks up a name: their arguments are not bound as a function's are.
+  Every name ttpc takes by itself, the builtins of asm and the words of C, declared like any function so that each is defined before it is called. ttpc takes these calls itself: the declarations are never run.
+comment
+  In asm a C word is a function with an empty body: a stray if expands to nothing (a wrong number of arguments still dies).
 comment
   comment text: a comment, anywhere (code, assemble time, C, beside definitions, among the fields of an encoding); its text is never evaluated.
 comment:
@@ -29,6 +31,251 @@ comment
   size label: at assemble time, the size of what label holds.
 size:
   label
+comment
+  : items: C, an anonymous function run in place: a block with its own scope, or parentheses (its value is its last item).
+::
+  items
+comment
+  if condition body: C, the condition is the leading run of nodes the operators join, the rest is the body; the next item may be else or else if.
+if:
+  condition
+  body
+comment
+  else body: C, after an if or an else if.
+else:
+  body
+comment
+  else if condition body: C, after an if, chains.
+else if:
+  condition
+  body
+comment
+  while condition body: C, the condition is the leading run of nodes the operators join, the rest is the body.
+while:
+  condition
+  body
+comment
+  return value: C, leaves the function, with its value if it has one.
+return:
+  value
+comment
+  break: C, leaves the innermost while.
+break:
+comment
+  continue: C, to the next round of the innermost while.
+continue:
+comment
+  syscall number arguments: C, a system call of the target, number SYS_write, SYS_exit, ...
+syscall:
+  number
+  arguments
+comment
+  address of: C, the address of a variable (C's &x); as a type, address T is a pointer to T, a word of the target.
+address:
+  of
+comment
+  content address: C, what the address holds (C's *p), read, or written on the left of =.
+content:
+  address
+comment
+  array type count: C, a type of count elements of type.
+array:
+  type
+  count
+comment
+  struct fields: C, a type laid out as C does, its fields name: type.
+struct:
+  fields
+comment
+  number value: compile time, emit makes value a number in the program.
+number:
+  value
+comment
+  target: compile time, the section --target names (riscv64 without it).
+target:
+comment
+  compile time: first in a named function or a lambda, its code runs while compiling.
+compile time:
+comment
+  emit items: compile time, puts items into the program.
+emit:
+  items
+comment
+  fail message: compile time, stops compiling with message.
+fail:
+  message
+comment
+  char value: C, an unsigned byte; called with a value, converts it. char with a leaf that names nothing is text: its bytes and a NUL.
+char:
+  value
+comment
+  short value: C, a signed 2 bytes; called with a value, converts it.
+short:
+  value
+comment
+  int value: C, a signed 4 bytes; called with a value, converts it.
+int:
+  value
+comment
+  long value: C, a signed word of the target (8 bytes, 4 on arm); called with a value, converts it.
+long:
+  value
+comment
+  i8 value: C, signed 1 byte; called with a value, converts it.
+i8:
+  value
+comment
+  i16 value: C, signed 2 bytes; called with a value, converts it.
+i16:
+  value
+comment
+  i32 value: C, signed 4 bytes; called with a value, converts it.
+i32:
+  value
+comment
+  i64 value: C, signed 8 bytes (not on arm); called with a value, converts it.
+i64:
+  value
+comment
+  u8 value: C, unsigned 1 byte; called with a value, converts it.
+u8:
+  value
+comment
+  u16 value: C, unsigned 2 bytes; called with a value, converts it.
+u16:
+  value
+comment
+  u32 value: C, unsigned 4 bytes; called with a value, converts it.
+u32:
+  value
+comment
+  u64 value: C, unsigned 8 bytes (not on arm); called with a value, converts it.
+u64:
+  value
+comment
+  void: C, no value, the type of a function that returns none.
+void:
+comment
+  left = right: C, an operator between its neighbours: right is stored in left.
+=:
+  left
+  right
+comment
+  left += right: C, adds right to left.
++=:
+  left
+  right
+comment
+  left -= right: C, subtracts right from left.
+-=:
+  left
+  right
+comment
+  left || right: C, 1 when either is not 0, right only when left is 0.
+||:
+  left
+  right
+comment
+  left && right: C, 1 when both are not 0, right only when left is not.
+&&:
+  left
+  right
+comment
+  left | right: C, bitwise or.
+|:
+  left
+  right
+comment
+  left ^ right: C, bitwise exclusive or.
+^:
+  left
+  right
+comment
+  left & right: C, bitwise and.
+&:
+  left
+  right
+comment
+  left == right: C, 1 when equal.
+==:
+  left
+  right
+comment
+  left != right: C, 1 when not equal.
+!=:
+  left
+  right
+comment
+  left < right: C, 1 when less.
+<:
+  left
+  right
+comment
+  left > right: C, 1 when greater.
+>:
+  left
+  right
+comment
+  left <= right: C, 1 when not greater.
+<=:
+  left
+  right
+comment
+  left >= right: C, 1 when not less.
+>=:
+  left
+  right
+comment
+  left << right: C, shifts left.
+<<:
+  left
+  right
+comment
+  left >> right: C, shifts right.
+>>:
+  left
+  right
+comment
+  left + right: C, adds.
++:
+  left
+  right
+comment
+  left - right: C, subtracts; leading, - value negates.
+-:
+  left
+  right
+comment
+  left * right: C, multiplies.
+*:
+  left
+  right
+comment
+  left / right: C, divides.
+/:
+  left
+  right
+comment
+  left % right: C, the remainder.
+%:
+  left
+  right
+comment
+  name ++: C, adds 1 to name.
+++:
+  name
+comment
+  name --: C, subtracts 1 from name.
+--:
+  name
+comment
+  ! value: C, 1 when value is 0.
+!:
+  value
+comment
+  ~ value: C, the bitwise complement.
+~:
+  value
 comment
   bits value left right pos: a0 = ((value << left) >> right) << pos, moves bits hi:lo of value to bit pos for left = 63-hi, right = 63-hi+lo. It runs while assembling, on the ops of the machine ttpc runs on (riscv64).
 bits:

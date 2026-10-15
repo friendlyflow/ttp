@@ -101,8 +101,9 @@ run: $(P)/exit42.elf $(P)/hello.elf
 # assemble itself into itself, assemble every asm program and print
 # ttpc1.ff exactly as stage0 does. ttpc1 assembles ttpc (TTPC_SRC) into
 # stage1, stage1 assembles it into stage2: they must be the same, the fixed
-# point. ttpc1 knows comment only in code, so it gets shared.ff without its
-# comments (uncomment.pl); they emit nothing, stage1 is the same.
+# point. ttpc1 gets shared.ff in its own language (frozen.pl): without the
+# comments, which it knows only in code, and without else if:, which it
+# would take for a register. Neither emits anything: stage1 is the same.
 BOOT := $(BUILD)/boot
 
 $(BOOT):
@@ -114,8 +115,8 @@ $(BOOT)/ttpc1: $(TTPC1_FF) $(BIN) | $(BOOT)
 $(BOOT)/ttpc1.self: $(TTPC1_FF) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 $< $@ > $@.lst
 
-$(BOOT)/shared.ff: $(SHARED) uncomment.pl FF.pm | $(BOOT)
-	perl uncomment.pl $< > $@
+$(BOOT)/shared.ff: $(SHARED) frozen.pl FF.pm | $(BOOT)
+	perl frozen.pl $< > $@
 
 $(BOOT)/stage1: $(BOOT)/shared.ff $(filter-out $(SHARED),$(TTPC_SRC)) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(BOOT)/shared.ff $(filter-out $(SHARED),$(TTPC_SRC)) $@ > $@.lst

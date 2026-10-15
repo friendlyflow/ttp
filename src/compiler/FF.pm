@@ -23,7 +23,7 @@ use warnings;
 use Digest::SHA qw(sha256);
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(node call uncomment read_ff write_ff read_txt write_txt);
+our @EXPORT_OK = qw(node call uncomment frozen read_ff write_ff read_txt write_txt);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
@@ -37,6 +37,21 @@ sub uncomment {
     node($n->{content},
         map { uncomment($_) } grep { !($_->{content} eq "comment" && @{ $_->{children} }) }
             @{ $n->{children} });
+}
+
+# The tree under n in the language of the frozen ttpc1 and stage0: without
+# comments, and without a definition whose name has a space unless it is a
+# register (its first child a bit string). They take any such definition
+# with children for a register: else if: / condition would name registers
+# else and if.
+sub frozen {
+    my ($n) = @_;
+    node($n->{content},
+        map { frozen($_) } grep {
+            my $c = $_->{children};
+            !($_->{content} eq "comment" && @$c)
+                && !($_->{content} =~ / .*:$/ && @$c && !($c->[0]{content} =~ /^[01]+$/ && !@{ $c->[0]{children} }))
+        } @{ $n->{children} });
 }
 
 # ---------------------------------------------------------------------------
