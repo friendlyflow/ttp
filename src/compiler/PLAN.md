@@ -146,9 +146,9 @@ called with values known while compiling), and code that writes code:
 inside it `emit` subtree... puts subtrees where it stands, a `number` / expr
 in them becoming that number; `fail` text stops the compile.
 
-It runs natively, so it can do anything: ttpc assembles it, with the C
-functions and variables of the page, into its own memory past what is
-emitted (programs ttpc makes have one RWX segment), in a space of labels
+It runs natively, so it can do anything: ttpc assembles it, with the
+whole program page (C and asm, which it may call), into its own memory past
+what is emitted (`origin` and `bss` do nothing there) (programs ttpc makes have one RWX segment), in a space of labels
 of its own, and calls it. Its value and what it emits are kept per node:
 it runs once, in pass 1. stage0 cannot do this (GNU ld gives it no
 executable bss); stage1 and later can.

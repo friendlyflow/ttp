@@ -36,6 +36,5 @@ RAM NODE:
 - de C-laag in ff-stijl en `compile time` (native, in ttpc zelf): klaar, zie PLAN.md
 - conditionals en loops in exec context: `compile time` doet het nu; exec zelf blijft de seed
 - ttpc.ff tegen 1 MiB (stage0): de versieketen, ttpc in de C-laag schrijven
-- `compile time` kan nog geen asm-labels oproepen (alleen C-functies en -variabelen)
 - structs: geen kopie per waarde, als parameter enkel via address
 - includes / meerdere files, secties als aparte segments, het os in ff

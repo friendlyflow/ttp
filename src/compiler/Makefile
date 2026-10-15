@@ -27,7 +27,7 @@ OBJ := $(BUILD)/ttpc.o
 # assembles), edited in sicompass. progs/<name>.s is a program's GNU twin.
 TTPC_FF := ttpc.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cunroll
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cunroll ctasm
 TREES := $(TTPC_FF) $(PROGS:%=progs/%.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff
 P := $(BUILD)/progs
 
@@ -126,11 +126,12 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 	done
 
 # compile time: cnow prints while it is compiled and none of that is in
-# the program, cct keeps only the branch its condition takes, cnowfail
-# fails to compile with its message, and so does creserved, which names a
-# variable content.
-ctime: $(P)/cnow.celf $(P)/cct.celf
+# the program, ctasm does so by calling asm of its page, cct keeps only
+# the branch its condition takes, cnowfail fails to compile with its
+# message, and so does creserved, which names a variable content.
+ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf
 	grep -qx compiling $(P)/cnow.lst
+	grep -qx "asm at compile time" $(P)/ctasm.lst
 	! grep -aq compiling $(P)/cnow.celf
 	! grep -aq other $(P)/cct.celf
 	! $(QEMU) $(BOOT)/stage2 progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
