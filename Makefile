@@ -8,8 +8,10 @@
 #   make os-console boot the OS with its serial console in this terminal
 #   make compiler-test  print the tree of src/compiler/ttpc.ff with ttpc
 #   make compiler-check assemble the programs in src/compiler/progs, compare
-#                       them with GNU as and run them
-#   make bootstrap  ttpc assembles itself from ff: stage1 == stage2
+#                       them with GNU as and run them, for riscv64, x86_64,
+#                       aarch64 and arm
+#   make bootstrap  ttpc assembles itself from ff: ttpc1 == ttpc1(ttpc1.ff),
+#                   stage1 == stage2
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
@@ -39,7 +41,7 @@ compiler-test: compiler
 # Assemble the programs, check them against GNU as and run them; build and
 # run the C programs.
 compiler-check: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check run ctest ctime
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check run ctest ctime targets
 
 # ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
 # stage2: they must be the same.

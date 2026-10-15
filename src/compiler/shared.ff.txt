@@ -1,0 +1,100 @@
+comment:
+  The shared page: what every target has (the data words, bits, rel), the targets as sections, and the choice of one of them by --target. Operands go in the reverse order of GNU as, the destination last, as in the instructions.
+comment:
+  bits value left right pos: a0 = ((value << left) >> right) << pos, moves bits hi:lo of value to bit pos for left = 63-hi, right = 63-hi+lo. It runs while assembling, on the ops of the machine ttpc runs on (riscv64).
+bits:
+  value
+  left
+  right
+  pos
+  slli
+    left
+    value
+    a0
+  srli
+    right
+    a0
+    a0
+  slli
+    pos
+    a0
+    a0
+byte:
+  value
+  value[7:0]
+    value
+half:
+  value
+  value[15:0]
+    value
+word:
+  value
+  value[31:0]
+    value
+dword:
+  value
+  value[63:0]
+    value
+value[7:0]:
+  value
+  bits
+    value
+    56
+    56
+    0
+value[15:0]:
+  value
+  bits
+    value
+    48
+    48
+    0
+value[31:0]:
+  value
+  bits
+    value
+    32
+    32
+    0
+value[63:0]:
+  value
+  bits
+    value
+    0
+    0
+    0
+rel:
+  target
+  sub
+    pc
+    target
+    a0
+comment:
+  The target: a section is a function whose children are groups of definitions. Calling one while compiling puts its definitions in scope for the program; target is the section --target names (riscv64 without it). Compile time itself always runs on riscv64.
+:
+  compile time
+  if
+    target
+    ==
+    riscv64
+    riscv64
+  else if
+    target
+    ==
+    x86_64
+    x86_64
+  else if
+    target
+    ==
+    aarch64
+    aarch64
+  else if
+    target
+    ==
+    arm
+    arm
+  else
+    fail
+      target
+      char
+        is not a target

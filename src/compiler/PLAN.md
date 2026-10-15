@@ -49,36 +49,42 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | file | what |
 |---|---|
 | `ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
-| `ttpc.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a whole tree, the shared pages, ttpc's constants (page `3:`) and ttpc itself (page `4:`, the last). |
-| `progs/*.ff` | test programs: `exit42`, `hello`, `wide` in asm-level ff, whole trees, each with a GNU twin `.s`; the `c*` ones in the C layer, only their program (no pages, no frame), each with its `.expect` (`exit N`, then its output). |
-| `shared.ff` | the shared pages alone (`perl mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc shared.ff prog.ff out`. |
-| `mkff.pl` | the shared pages every tree starts with: the RV64GC instruction set (pages `0:`, `1:`) and `macros.ff.txt` (page `2:`). `perl mkff.pl a.ff.txt ... > new.ff` starts a new tree; `make refresh` puts changed shared pages into every tree. |
-| `macros.ff.txt` | the source of shared page `2:`: `byte`/`half`/`word`/`dword`, `rel`, `pcrel_hi/lo`, the pseudo-instructions (`li`, `la`, `call`, `j`, `beqz`, ...), `elf_header` and `frame`. |
-| `ff.ld` | the layout ttpc gives a program, for linking the GNU twins. |
+| `ttpc1.ff` | **ttpc1**, frozen too: ttpc in ff as it was when it learned targets, a whole tree (the RV64GC pages `0:` `1:` `2:` of then, its constants `3:`, itself `4:`) in the language of stage0 and below stage0's 1 MiB. |
+| `ttpc.ff`, `ttpc.defs.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a program of only its own (`ttpc.ff`), its constants and messages' lengths on a page of their own (`ttpc.defs.ff`), assembled on the shared page: `ttpc --target riscv64 shared.ff ttpc.defs.ff ttpc.ff out`. |
+| `shared.ff` | the shared page (`perl mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc [--target t] shared.ff prog.ff out`. |
+| `mkff.pl`, `shared.ff.txt` | make `shared.ff`: what every target has and the choice of one (`shared.ff.txt`), then a section per target. |
+| `ISA.pm`, `isa/<target>.pl` | the instructions of each target (riscv64: RV64GC; x86_64; aarch64; arm), its registers and slices. |
+| `macros/<target>.ff.txt` | each target's pseudo-instructions, `elf_header` and `frame`, its Linux system calls, and the primitives of the C layer. |
+| `progs/*.ff` | test programs: `exit42`, `hello`, `wide` in riscv64 asm, whole trees (the pages of then), each with a GNU twin `.s`; the `c*` ones in the C layer, only their program, each with its `.expect` (`exit N`, then its output; `<name>.<target>.expect` where a target differs). |
+| `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, program-only, with GNU twins; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
+| `ff.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
 | `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
 
 ```
 stage0 = GNU as(ttpc.s)
-stage1 = stage0(ttpc.ff)
-stage2 = stage1(ttpc.ff)        == stage1, byte for byte: the fixed point
+ttpc1  = stage0(ttpc1.ff)       == ttpc1(ttpc1.ff)
+stage1 = ttpc1(shared.ff ttpc.defs.ff ttpc.ff)
+stage2 = stage1(shared.ff ttpc.defs.ff ttpc.ff)
+                                == stage1, byte for byte: the fixed point
 ```
 
 ```sh
-make bootstrap        # stage1 == stage2, stage1 behaves as stage0
+make bootstrap        # ttpc1 assembles itself, stage1 == stage2
 make compiler-check   # every asm program == its GNU twin, they run; the C
-                      # programs (built by stage2) do what .expect says
+                      # programs (built by stage2) do what .expect says, on
+                      # every target (make targets)
 ```
 
-A change to ttpc is a change to `ttpc.ff` that keeps `make bootstrap`
-green: stage0 builds the new stage1, which must then rebuild itself
-identically. ttpc reads `.ff` directly; the text form is only for the host
-tools (`perl fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl fftext.pl ff
-t.ff.txt > ttpc.ff`). ttpc reads several trees too: `ttpc a.ff b.ff ... prog.ff out` takes the
-pages of all but the last, then the last whole as the program (its root is
-the page): a C program file is just its program, with `shared.ff` before
-it. One tree alone is read as before. Whatever ttpc.ff uses, stage0 must know: new
-features (the C layer, compile time) are for the programs, ttpc itself is
-still written in the language of stage0. stage0 also bounds ttpc.ff to 1 MiB.
+A change to ttpc is a change to `ttpc.ff` (or `ttpc.defs.ff`) that keeps
+`make bootstrap` green: ttpc1 builds the new stage1, which must then
+rebuild itself identically. ttpc reads `.ff` directly; the text form is only
+for the host tools (`perl fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl
+fftext.pl ff t.ff.txt > ttpc.ff`). ttpc reads several trees: `ttpc a.ff
+b.ff ... prog.ff out` takes the pages of all but the last, then the last
+whole as the program (its root is the page); one tree alone is read as
+before. Whatever ttpc.ff uses, ttpc1 must know (it knows targets, sections,
+the C layer and compile time); ttpc1 reads at most 4 MiB in all. When that
+gets tight, the chain gets a next link: freeze ttpc.ff as ttpc2.ff.
 
 ### The language ttpc assembles
 
@@ -97,7 +103,7 @@ still written in the language of stage0. stage0 also bounds ttpc.ff to 1 MiB.
 - **Arguments**: a nested call (run in exec, its value is `a0`), a number
   (decimal or `0x`), a parameter, a register, `pc`, a label or a constant.
 - **The frame.** A program page without an `origin` or `elf_header` of
-  its own is assembled inside `frame:` (macros.ff.txt): `origin`, the ELF
+  its own is assembled inside the target's `frame:` (`elf:`): `origin`, the ELF
   header, its children where `frame:` says `program`, then `file_end:`,
   `bss`, `mem_end:`. A page that lays itself out is left as it is.
 - **Builtins**: `ascii`, `align`, `reserve`, `origin`, `bss`, `size`, and
@@ -113,9 +119,9 @@ still written in the language of stage0. stage0 also bounds ttpc.ff to 1 MiB.
 
 A function on the program page whose first child is a type is C, in ff
 style: no text to parse, the tree is the syntax, a node holds one thing.
-ttpc lowers it straight to the instructions of the tree (pages `0:`, `1:`),
-encoding them by name: values go through `a0`, the left operand of an
-operator through the stack, locals below the frame pointer `s0`.
+ttpc lowers it to the **primitives** of the target (see Targets): values go
+through V, the left operand of an operator through the stack, locals below
+the frame pointer. The C layer is written once, for every target.
 
 - **Items.** An operator node joins its neighbours into one infix
   expression, with C precedence: `een variabele` / `*` / `3`. Siblings
@@ -132,24 +138,31 @@ operator through the stack, locals below the frame pointer `s0`.
   `name:` with only a type (or, untyped, a leaf that names nothing).
 - **Types** `char` (u8) `short` `int` `long` `i8`..`i64` `u8`..`u64` `void`,
   `address` T, `array` T n, and structs: `point:` `struct` `x:` `int` ...,
-  laid out as C does. A type called with a value converts it.
+  laid out as C does. `long` and `address` are a word of the target (8
+  bytes; 4 on arm, where `i64` and `u64` are refused: "not on this target"). A type called with a value converts it.
 - **Paths** by calling: `xs` / `i` an element, `p` / `x` a field (also
   through an address), `r` / `b` / `x` both in a row. `address` / x is C's
   `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
-- **Reserved**: the keywords (`address`, `content`, `if`, `while`, ...,
-  `compile time`), the type names and the register names name no variable,
-  function or struct.
-- **Statements** `if` cond body... (the next item `else` body...), `while`
-  cond body..., `break`, `continue`, `return` [expr], `syscall` n args...,
+- **Reserved**: the keywords (`address`, `content`, `if`, `else if`,
+  `while`, ..., `compile time`, `target`), the type names and the register
+  names of the target name no variable, function or struct.
+- **Statements** `if` cond body... (the next item `else` body..., or `else
+  if` cond body..., which chains), `while` cond body..., `break`,
+  `continue`, `return` [expr], `syscall` n args... (n: `SYS_write`,
+  `SYS_exit`, ... of the target),
   `comment` .... The condition is the leading run of nodes the operators
   join; the rest is the body.
 - **Text** `char` with a leaf that names nothing: its bytes and a NUL.
-- **asm**: a node naming an instruction or macro of the tree is emitted as
-  it is (`ecall`, `li` / `5` / `a0`).
+- **asm**: a node naming an instruction or macro of the target is emitted
+  as it is (`ecall`, `li` / `5` / `a0`). asm belongs to one target: guard
+  it with compile time (`progs/casm.ff`: `if` / `target` / `==` / `x86_64`
+  / `emit` ...).
 - **Registers** are names in C too: reading `t2` is its value now, `t2` /
   `=` (`+=`, `-=`) / expr writes it, which is how values pass between C and
-  asm. C itself uses `a0`, `t0`, `t1` (reading them gives what it left
-  there), `sp`, `s0`, `ra`; it does not write `zero`, `ra`, `sp`, `s0`.
+  asm. C itself uses V, L, X (on riscv64 `a0`, `t0`, `t1`: reading them
+  gives what it left there) and SP, FP; it does not write the registers of
+  `cc_fixed` (on riscv64 `zero`, `ra`, `sp`, `s0`). Register names, too,
+  belong to one target.
 
 ### compile time
 
@@ -158,7 +171,8 @@ it is an error. That function or lambda is metaprogramming: it runs while
 compiling and is not in the program. Inside it is ordinary code (`if`,
 `else`, `while`, calls) and `emit` subtree..., which puts those subtrees in
 the program where the lambda stands (a `number` / expr in them becomes that
-number); `fail` text stops the compile.
+number); `fail` item... stops the compile, printing its items (text, or
+`target`: the name --target gave).
 
 - `#define`: a named function, `LINES:` / `compile time` / `3`; a use of
   `LINES` is its value.
@@ -174,4 +188,108 @@ program page (C and asm, which it may call), into its own memory past what
 is emitted (programs ttpc makes have one RWX segment; `origin` and `bss` do
 nothing there), in a space of labels of its own, and calls it. Its value
 and what it emits are kept per node: it runs once, in pass 1. stage0
-cannot do this (GNU ld gives it no executable bss); stage1 and later can.
+cannot do this (GNU ld gives it no executable bss); ttpc1 and later can.
+Compile time runs on the machine ttpc runs on, riscv64, whatever the
+target: the asm it calls is riscv64 asm, and asm on the program page it
+would assemble with it must be riscv64 too (`ctasm`, `ctmix` are riscv64
+only).
+
+### Targets
+
+`ttpc --target <name> shared.ff prog.ff out` (riscv64 without it) builds
+for riscv64, x86_64, aarch64 or arm. ttpc itself runs on riscv64 (under
+qemu elsewhere); that is the *host*, what --target names the *target*.
+
+- **The shared page** (`shared.ff`, from `mkff.pl`): what every target has
+  (`shared.ff.txt`: `byte` `half` `word` `dword`, `bits`, `rel`), then one
+  **section** per target, a function whose children are **groups**
+  (`registers:`, `integer:`, `float:`, ..., `macros:`, `elf:`, `linux:`,
+  `c:`), each holding definitions (a node holds at most 255 children). The
+  instructions come from `isa/<target>.pl` (with `ISA.pm`), the rest from
+  `macros/<target>.ff.txt`.
+- **Choosing**: the shared page ends in a compile-time lambda, `if` /
+  `target` / `==` / `riscv64` / `riscv64` / `else if` ... / `else` / `fail`.
+  `target` is the section `--target` names (0 if there is none); calling a
+  section while compiling puts its definitions in scope, like an include.
+  A section, as a value, is its node.
+- **Scopes**: the program is assembled with the target's definitions, then
+  the shared ones; compile time with the host's (riscv64). The assemble-time
+  ops (`exec`: `add` `addi` `slli` ... on `a0` `t0` `t1`) are always the
+  host's, so `bits`, `rel` and the slices work for every target.
+- **Linux**: each section names its system calls, `SYS_write`, `SYS_exit`,
+  ...; a C program says `syscall` / `SYS_exit` / n.
+- **frame:**, `elf_header`, `elf_base`, `from_base` are per target (`elf:`).
+
+#### The primitives of the C layer
+
+ttpc's C layer is written once: it emits **primitives**, macros each target
+defines in its `c:` group, called with numbers (or, for a register, the
+name of a constant). Its machine: **V** the value (and what a function
+returns), **L** the left operand, **X** a scale or a count, **FP** the
+frame, **SP** the stack, whose **slot** is what a push takes. V, L, X are
+registers of the target, named by the constants `cc_v` `cc_l` `cc_x` (their
+numbers); L and X are not argument registers. Sizes never vary with the
+operands: pass 1 and pass 2 must lay out the same.
+
+| primitive | does |
+|---|---|
+| `cc_v` `cc_l` `cc_x` | constants: the register numbers of V, L, X |
+| `cc_slot` | constant: bytes per push (8; 16 on aarch64, 4 on arm) |
+| `cc_word` | constant: bytes of a `long` and an `address` (8; 4 on arm) |
+| `cc_fixed` | constant: a bit per register C must not write (sp, fp, ...) |
+| `cc_push` / `cc_pop` | SP -= slot, [SP] = V / L = [SP], SP += slot |
+| `cc_drop n` | SP += n |
+| `cc_spfp` | SP = FP + L |
+| `cc_enter` / `cc_leave` | prologue (save the return address and FP, FP = SP) / epilogue and return |
+| `cc_jz t` `cc_jnz t` `cc_jmp t` | to the address t if V == 0, V != 0, always |
+| `cc_call t` | call the address t |
+| `cc_global t` | V = the address t |
+| `cc_text n` | V = the address right after this primitive, then go on n bytes further (the text in between) |
+| `cc_li_pos v r` `cc_li_neg v r` `cc_li_big v r` | register r = v, for 0..2047, -2048..-1, anything |
+| `cc_getreg r` `cc_setreg r` | V = register r / register r = V |
+| `cc_addreg r` `cc_subreg r` | V = r + V / V = r - V |
+| `cc_param i` | V = the i-th argument register |
+| `cc_arg i off` / `cc_sysarg i off` | the i-th argument register of a call / of a system call = [SP + off] |
+| `cc_syscall` | pop the number into the system call's register, make the call, V = its result |
+| `cc_addfp` / `cc_addfp_l` | V += FP / L += FP |
+| `cc_addx` `cc_mulx` `cc_mulx_l` | V += X, V *= X, L *= X |
+| `cc_ptrdiff` | V = (L - V) / X |
+| `cc_zero` | X bytes at L = 0 (X >= 1; L, X change) |
+| `cc_bool` `cc_neg` `cc_not` `cc_inv` | V = V != 0, -V, V == 0, ~V |
+| `cc_add` `cc_sub` `cc_mul` `cc_div` `cc_divu` `cc_rem` `cc_remu` `cc_and` `cc_or` `cc_xor` `cc_shl` `cc_shr` `cc_sar` | V = L op V |
+| `cc_eq` `cc_ne` `cc_lt` `cc_ltu` `cc_gt` `cc_gtu` `cc_le` `cc_leu` `cc_ge` `cc_geu` | V = L op V, 1 or 0 |
+| `cc_load_i8` ... `cc_load_i64`, `cc_load_u8` ... `cc_load_u64` | V = the value at the address V, extended |
+| `cc_store_8` ... `cc_store_64` | [L] = V |
+
+riscv64 also has `cc_ctargs` and `cc_call_l`, which only compile time
+(the host) uses.
+
+The targets' choices (see each `c:` group):
+
+| | V L X | FP | slot, word | call arguments | system call |
+|---|---|---|---|---|---|
+| riscv64 | a0 t0 t1 | s0 | 8, 8 | a0..a7 | a7, a0..a5, `ecall` |
+| x86_64 | rax r10 r11 | rbp | 8, 8 | rdi rsi rdx rcx r8 r9 r12 r13 | rax, rdi rsi rdx r10 r8 r9, `syscall` |
+| aarch64 | x0 x9 x10 | x29 | 16, 8 | x0..x7 | x8, x0..x5, `svc 0` |
+| arm (A32) | r0 r12 r8 | r11 | 4, 4 | r0..r7 | r7, r0..r6, `svc 0` |
+
+A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
+arm 0, x86_64 traps), nor a shift by the word size or more.
+
+#### Known limits
+
+- In a macro's arguments a label of the program comes before a constant of
+  the target: a C variable named like a target constant (`hs`, `eq`, ...)
+  hides it there. The primitives of the C layer use only numbers and
+  register names, which C cannot take.
+- Range checks know an operand's reach from the brackets of its slices, and
+  sign only from the name `imm` (checked as signed, below bit 31): operands
+  that are unsigned, or computed by fields of their own, are checked
+  loosely or by naming tricks (x86's `reg'`, arm's `up[12]`).
+- Register names in C stand for their numbers: only the general registers
+  mean what they say (x86's `xmm4` is register 4, rsp, and refused; names
+  starting with `f` are not C registers at all, a riscv64 rule).
+- A node holds 255 children: a big program page is split into placed
+  labels (the `wide` programs do).
+- `shared.ff` holds all four targets (about 2.6 MB); every build reads it,
+  and symbol lookup is linear.

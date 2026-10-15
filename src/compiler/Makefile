@@ -22,17 +22,21 @@ BUILD ?= build
 BIN := $(BUILD)/ttpc
 OBJ := $(BUILD)/ttpc.o
 
-# The ff sources, edited in sicompass. ttpc itself and the asm programs in
-# progs/ are whole trees (the shared pages from mkff.pl, then their own;
-# the last page is what ttpc assembles); progs/<name>.s is the GNU twin of
-# one. shared.ff is the shared pages alone, and a C program is its program
-# alone: ttpc shared.ff prog.ff out.
+# The ff sources, edited in sicompass. ttpc is a program of only its own,
+# ttpc.ff, with its constants in ttpc.defs.ff, on the shared page
+# (shared.ff, from mkff.pl): ttpc --target riscv64 shared.ff ttpc.defs.ff
+# ttpc.ff out. A C program is its program alone too: ttpc shared.ff prog.ff
+# out. ttpc1.ff (the frozen ttpc of the chain) and the asm programs in
+# progs/ are whole trees (the shared pages of then, their own; the last
+# page is what ttpc assembles); progs/<name>.s is the GNU twin of one.
 TTPC_FF := ttpc.ff
+TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
+TTPC1_FF := ttpc1.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cunroll ctasm ctmix
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cunroll ctasm ctmix celse casm
 SHARED := shared.ff
-WHOLE := $(TTPC_FF) $(PROGS:%=progs/%.ff)
-TREES := $(WHOLE) $(SHARED) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff
+WHOLE := $(TTPC1_FF) $(PROGS:%=progs/%.ff)
+TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(wildcard progs/*/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff
 P := $(BUILD)/progs
 
 all: $(BIN)
@@ -86,31 +90,42 @@ run: $(P)/exit42.elf $(P)/hello.elf
 	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/hello.out
 	@echo "hello: prints its three lines"
 
-# The bootstrap. ttpc.s, assembled by GNU as, is stage0. ttpc.ff is
-# assembled by stage0 into stage1 and by stage1 into stage2, which must be
-# the same: the fixed point. stage1 must also assemble every program and
-# print ttpc.ff exactly as stage0 does.
+# The bootstrap, a chain of versions. ttpc.s, assembled by GNU as, is
+# stage0. ttpc1.ff, frozen like ttpc.s, is ttpc in the language of stage0,
+# a whole tree below its 1 MiB: stage0 assembles it into ttpc1, which must
+# assemble itself into itself, assemble every asm program and print
+# ttpc1.ff exactly as stage0 does. ttpc1 assembles ttpc (TTPC_SRC) into
+# stage1, stage1 assembles it into stage2: they must be the same, the fixed
+# point.
 BOOT := $(BUILD)/boot
 
 $(BOOT):
 	mkdir -p $@
 
-$(BOOT)/stage1: $(TTPC_FF) $(BIN) | $(BOOT)
+$(BOOT)/ttpc1: $(TTPC1_FF) $(BIN) | $(BOOT)
 	$(QEMU) $(BIN) $< $@ > $@.lst
 
-$(BOOT)/stage2: $(TTPC_FF) $(BOOT)/stage1
-	$(QEMU) $(BOOT)/stage1 $< $@ > $@.lst
+$(BOOT)/ttpc1.self: $(TTPC1_FF) $(BOOT)/ttpc1
+	$(QEMU) $(BOOT)/ttpc1 $< $@ > $@.lst
 
-bootstrap: $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
+$(BOOT)/stage1: $(TTPC_SRC) $(BOOT)/ttpc1
+	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(TTPC_SRC) $@ > $@.lst
+
+$(BOOT)/stage2: $(TTPC_SRC) $(BOOT)/stage1
+	$(QEMU) $(BOOT)/stage1 --target riscv64 $(TTPC_SRC) $@ > $@.lst
+
+bootstrap: $(BOOT)/ttpc1.self $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
+	cmp $(BOOT)/ttpc1 $(BOOT)/ttpc1.self
+	@echo "bootstrap: ttpc1 assembles itself"
 	cmp $(BOOT)/stage1 $(BOOT)/stage2
 	@echo "bootstrap: stage1 == stage2"
 	@for p in $(PROGS); do \
-	    $(QEMU) $(BOOT)/stage1 progs/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
+	    $(QEMU) $(BOOT)/ttpc1 progs/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
 	    cmp $(BOOT)/$$p.elf $(P)/$$p.elf && cmp $(BOOT)/$$p.lst $(P)/$$p.lst || exit 1; \
 	done
-	$(QEMU) $(BIN) $(TTPC_FF) > $(BOOT)/tree0.txt
-	$(QEMU) $(BOOT)/stage1 $(TTPC_FF) | cmp - $(BOOT)/tree0.txt
-	@echo "bootstrap: stage1 assembles and prints like stage0"
+	$(QEMU) $(BIN) $(TTPC1_FF) > $(BOOT)/tree0.txt
+	$(QEMU) $(BOOT)/ttpc1 $(TTPC1_FF) | cmp - $(BOOT)/tree0.txt
+	@echo "bootstrap: ttpc1 assembles and prints like stage0"
 
 # The C programs (progs/c*.ff) use the C layer, which ttpc.s predates:
 # stage2, ttpc as ttpc.ff makes it, assembles them. Each must exit with the
@@ -150,13 +165,85 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
 	@echo "ctime: compile time runs and stays out of the program"
 
-# Put the current shared pages (the ISA from mkff.pl, macros.ff.txt) into
-# every whole tree and into shared.ff, after changing either of them.
+# The other targets ttpc builds for (--target). Per target: its asm
+# programs (progs/<target>/*.ff, program-only trees) must be byte-identical
+# to their GNU twins (progs/<target>/*.s) after the ELF header, exit42 and
+# hello must run, and every C program that is not riscv64 asm must do what
+# its .expect says (progs/<name>.<target>.expect where the target differs),
+# compile time still running on riscv64.
+TARGETS := x86_64 aarch64 arm
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cunroll celse casm
+# cexpr computes with u64, which a target of 4-byte words does not have.
+CSKIP_arm := cexpr
+
+CROSS_x86_64 := x86_64-elf-
+TASFLAGS_x86_64 := -mindex-reg
+TLDS_x86_64 := ff.ld
+THDR_x86_64 := 120
+
+CROSS_aarch64 := aarch64-none-elf-
+TASFLAGS_aarch64 := -march=armv8.1-a
+TLDS_aarch64 := ff.ld
+THDR_aarch64 := 120
+
+CROSS_arm := arm-none-eabi-
+TASFLAGS_arm :=
+TLDS_arm := ff32.ld
+THDR_arm := 84
+
+define target
+$(P)/$(1):
+	mkdir -p $$@
+
+$(P)/$(1)/%.elf: progs/$(1)/%.ff $(SHARED) $(BOOT)/stage2 | $(P)/$(1)
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
+
+$(P)/$(1)/%.twin.bin: progs/$(1)/%.s $(TLDS_$(1)) | $(P)/$(1)
+	$(CROSS_$(1))as $(TASFLAGS_$(1)) $$< -o $(P)/$(1)/$$*.twin.o
+	$(CROSS_$(1))ld --no-relax --no-warn-rwx-segments -T $(TLDS_$(1)) $(P)/$(1)/$$*.twin.o -o $(P)/$(1)/$$*.twin
+	$(CROSS_$(1))objcopy -O binary $(P)/$(1)/$$*.twin $$@
+
+$(P)/$(1)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)/$(1)
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
+
+check-$(1): $(PROGS:%=$(P)/$(1)/%.elf) $(PROGS:%=$(P)/$(1)/%.twin.bin)
+	@for p in $(PROGS); do \
+	    tail -c +$$$$(($(THDR_$(1)) + 1)) $(P)/$(1)/$$$$p.elf | cmp - $(P)/$(1)/$$$$p.twin.bin || exit 1; \
+	    echo "check-$(1): $$$$p: ttpc and GNU as agree"; \
+	done
+	qemu-$(1) $(P)/$(1)/exit42.elf; test $$$$? -eq 42
+	qemu-$(1) $(P)/$(1)/hello.elf > $(P)/$(1)/hello.out
+	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/$(1)/hello.out
+	@echo "check-$(1): exit42 and hello run"
+
+ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE)))
+	@for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)); do \
+	    e=progs/$$$$p.$(1).expect; test -f $$$$e || e=progs/$$$$p.expect; \
+	    tail -n +2 $$$$e > $(P)/$(1)/$$$$p.want; \
+	    qemu-$(1) $(P)/$(1)/$$$$p.celf > $(P)/$(1)/$$$$p.out; s=$$$$?; \
+	    want=$$$$(head -n 1 $$$$e | cut -d" " -f2); \
+	    test $$$$s -eq $$$$want || { echo "ctest-$(1): $$$$p: exit status $$$$s, not $$$$want"; exit 1; }; \
+	    cmp $(P)/$(1)/$$$$p.out $(P)/$(1)/$$$$p.want || { echo "ctest-$(1): $$$$p: wrong output"; exit 1; }; \
+	    echo "ctest-$(1): $$$$p"; \
+	done
+	grep -qx compiling $(P)/$(1)/cnow.lst
+	! grep -aq compiling $(P)/$(1)/cnow.celf
+
+.PHONY: check-$(1) ctest-$(1)
+endef
+$(foreach t,$(TARGETS),$(eval $(call target,$(t))))
+
+targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%)
+	! $(QEMU) $(BOOT)/stage2 --target mips $(SHARED) progs/cexit.ff $(P)/mips.celf 2> $(P)/mips.err
+	grep -q "compile time: mips is not a target" $(P)/mips.err
+	@echo "targets: $(TARGETS) and riscv64"
+
+# Make shared.ff again from mkff.pl, shared.ff.txt, isa/ and macros/, after
+# changing any of them. The whole trees keep the shared pages they have.
 refresh:
-	perl mkff.pl --refresh $(WHOLE)
 	perl mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip check run bootstrap ctest ctime refresh clean
+.PHONY: all test roundtrip check run bootstrap ctest ctime targets refresh clean

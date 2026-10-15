@@ -23,6 +23,14 @@
         binutils
       ];
 
+      # GNU as for the other targets ttpc assembles for: the twins of the
+      # ff programs it checks its encodings against.
+      twins = pkgs: with pkgs.pkgsCross; [
+        x86_64-embedded.buildPackages.binutils
+        aarch64-embedded.buildPackages.binutils
+        arm-embedded.buildPackages.binutils
+      ];
+
       # RAD Debugger, built from source with upstream's build.sh. Its Linux
       # port is x86_64-only (hand-written BLAKE3 asm, -msse2/-mcx16).
       raddbg = pkgs: pkgs.clangStdenv.mkDerivation {
@@ -61,9 +69,9 @@
     {
       devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
-          packages = (toolchain pkgs) ++ (with pkgs; [
+          packages = (toolchain pkgs) ++ (twins pkgs) ++ (with pkgs; [
             gnumake
-            qemu # qemu-system-riscv64 for `make os-test`
+            qemu # qemu-system-riscv64 for `make os-test`, qemu-<arch> for the programs
             perl # src/compiler/mkff.pl generates test.ff
             fish
           ]) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);

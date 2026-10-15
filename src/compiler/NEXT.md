@@ -38,3 +38,8 @@ RAM NODE:
 - ttpc.ff tegen 1 MiB (stage0): de versieketen, ttpc in de C-laag schrijven
 - structs: geen kopie per waarde, als parameter enkel via address
 - includes / meerdere files, secties als aparte segments, het os in ff
+## targets (15 okt 2026)
+- `--target riscv64|x86_64|aarch64|arm`: shared.ff heeft een sectie per target, de keuze is een compile time lambda op de gedeelde pagina
+- de C-laag bestaat één keer: primitieven (`cc_push`, `cc_jz`, ...) per target in `c:`
+- versieketen: ttpc1.ff bevroren (stage0 bouwt het), ttpc.ff + ttpc.defs.ff bouwt ttpc1
+- nog te doen: i64/u64 op arm (registerparen), bereikcontrole per operand i.p.v. via namen, labels die constanten van een target verbergen, symbolen sneller opzoeken (shared.ff is 2.6 MB), ttpc zelf in de C-laag (dan ook ttpc voor andere targets)

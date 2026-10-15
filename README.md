@@ -7,19 +7,26 @@ that grows organically from a minimal seed.
 ## Build
 
 A [Nix](https://nixos.org) flake provides the cross toolchain
-(`riscv64-none-elf-gcc`, `qemu`, …):
+(`riscv64-none-elf-gcc`, `qemu`, …) and GNU as for x86_64, aarch64 and arm
+(to check ttpc's encodings against):
 
 ```sh
 nix develop          # enter a shell with the toolchain
 make                 # build everything  -> build/
 make os              # build the OS       -> build/os/os.elf
 make compiler        # build the compiler -> build/compiler/ttpc
-make compiler-check  # assemble the ff test programs, compare with GNU as, run them; build and run the C ones
+make compiler-check  # assemble the ff test programs, compare with GNU as, run them; build and run the C ones,
+                     # for riscv64, x86_64, aarch64 and arm
 make bootstrap       # ttpc assembles itself from ff (see src/compiler/PLAN.md)
 make os-test         # boot the OS in a qemu-system-riscv64 window (Ctrl-D to quit)
 make os-console      # same, serial console in this terminal (Ctrl-D or Ctrl-A X)
 make clean           # remove build/
 ```
+
+ttpc builds for four targets: `ttpc --target x86_64 shared.ff prog.ff out`
+(riscv64, x86_64, aarch64, arm; riscv64 without `--target`). It runs on
+riscv64 itself, under `qemu-riscv64` elsewhere; see
+[src/compiler/PLAN.md](src/compiler/PLAN.md).
 
 The root [Makefile](Makefile) calls the per-component Makefiles in
 [src/os](src/os/Makefile) and [src/compiler](src/compiler/Makefile),
