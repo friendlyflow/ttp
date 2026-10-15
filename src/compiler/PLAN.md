@@ -137,7 +137,8 @@ operator through the stack, locals below the frame pointer `s0`.
   through an address), `r` / `b` / `x` both in a row. `address` / x is C's
   `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
 - **Reserved**: the keywords (`address`, `content`, `if`, `while`, ...,
-  `compile time`) and the type names name no variable, function or struct.
+  `compile time`), the type names and the register names name no variable,
+  function or struct.
 - **Statements** `if` cond body... (the next item `else` body...), `while`
   cond body..., `break`, `continue`, `return` [expr], `syscall` n args...,
   `comment` .... The condition is the leading run of nodes the operators
@@ -145,21 +146,32 @@ operator through the stack, locals below the frame pointer `s0`.
 - **Text** `char` with a leaf that names nothing: its bytes and a NUL.
 - **asm**: a node naming an instruction or macro of the tree is emitted as
   it is (`ecall`, `li` / `5` / `a0`).
+- **Registers** are names in C too: reading `t2` is its value now, `t2` /
+  `=` (`+=`, `-=`) / expr writes it, which is how values pass between C and
+  asm. C itself uses `a0`, `t0`, `t1` (reading them gives what it left
+  there), `sp`, `s0`, `ra`; it does not write `zero`, `ra`, `sp`, `s0`.
 
 ### compile time
 
-`compile time`, as the first child of a function, a lambda `:`, an `if` or
-any call, is metaprogramming: that runs while compiling and is not in the
-program. It replaces `#define` (`LINES:` / `compile time` / `3`), `#if` (`if`
-/ `compile time` / `OS` / `==` / `Android` ...: only the taken branch is
-compiled), macros (`square:` / `compile time` / `x` / `x` / `*` / `x`,
-called with values known while compiling), and code that writes code:
-inside it `emit` subtree... puts subtrees where it stands, a `number` / expr
-in them becoming that number; `fail` text stops the compile.
+`compile time` goes only first in a function or a lambda `:`; anywhere else
+it is an error. That function or lambda is metaprogramming: it runs while
+compiling and is not in the program. Inside it is ordinary code (`if`,
+`else`, `while`, calls) and `emit` subtree..., which puts those subtrees in
+the program where the lambda stands (a `number` / expr in them becomes that
+number); `fail` text stops the compile.
 
-It runs natively, so it can do anything: ttpc assembles it, with the
-whole program page (C and asm, which it may call), into its own memory past
-what is emitted (`origin` and `bss` do nothing there) (programs ttpc makes have one RWX segment), in a space of labels
-of its own, and calls it. Its value and what it emits are kept per node:
-it runs once, in pass 1. stage0 cannot do this (GNU ld gives it no
-executable bss); stage1 and later can.
+- `#define`: a named function, `LINES:` / `compile time` / `3`; a use of
+  `LINES` is its value.
+- macros: a named function with parameters, `square:` / `compile time` /
+  `x` / `x` / `*` / `x`; a call `square` / `7` in the program runs while
+  compiling (its arguments known then) and is its value.
+- `#if`, generated code: a lambda, `:` / `compile time` / `if` / `OS` /
+  `==` / `Android` / `emit` ... / `else` / `emit` ...: only what it emits
+  is in the program. A lambda also has a value, its last item.
+
+It runs natively, so it can do anything: ttpc assembles it, with the whole
+program page (C and asm, which it may call), into its own memory past what
+is emitted (programs ttpc makes have one RWX segment; `origin` and `bss` do
+nothing there), in a space of labels of its own, and calls it. Its value
+and what it emits are kept per node: it runs once, in pass 1. stage0
+cannot do this (GNU ld gives it no executable bss); stage1 and later can.

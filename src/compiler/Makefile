@@ -32,7 +32,7 @@ PROGS := exit42 hello wide
 CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cunroll ctasm ctmix
 SHARED := shared.ff
 WHOLE := $(TTPC_FF) $(PROGS:%=progs/%.ff)
-TREES := $(WHOLE) $(SHARED) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff
+TREES := $(WHOLE) $(SHARED) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff
 P := $(BUILD)/progs
 
 all: $(BIN)
@@ -133,8 +133,9 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # compile time: cnow prints while it is compiled and none of that is in
 # the program, ctasm does so by calling asm of its page, ctmix with asm
 # and C mixed in one compile-time function, cct keeps only the branch its
-# condition takes, cnowfail fails to compile with its message, and so does
-# creserved, which names a variable content.
+# condition takes (a lambda with if, else and emit), cnowfail fails to
+# compile with its message, and so do creserved, which names a variable
+# content, and cmisplaced, with compile time on a while.
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
 	grep -qx "asm at compile time" $(P)/ctasm.lst
@@ -145,6 +146,8 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -q "compile time: no" $(P)/cnowfail.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
 	grep -q "a reserved word: content" $(P)/creserved.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
+	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
 	@echo "ctime: compile time runs and stays out of the program"
 
 # Put the current shared pages (the ISA from mkff.pl, macros.ff.txt) into
