@@ -9,24 +9,36 @@
 #
 # Assembling: a node whose content ends in ':' is a function, its leading
 # children that are leaves are its parameters. Any other node is a call, its
-# children are the arguments. The functions are the children of the root's
-# children (the pages 0:, 1:, ...), the calls among those children are the
-# program, assembled in order. A function with a fixed field (funct3:, ...)
-# among its children is an instruction. The calls run in one of three
-# contexts:
+# children are the arguments. The root's children are pages. The functions
+# on every page but the last are definitions: instructions, macros,
+# constants. The last page is the program: its functions are placed, they
+# are labels whose children are emitted where they stand (nested ones are
+# local labels, found innermost scope first), and its calls are emitted in
+# order. Pass 1 finds every label's address, pass 2 emits.
 #
-#   code   a call of an instruction is encoded and emitted, a call of any
-#          other function expands its body in code context. An argument is
-#          a parameter, a register name (its number) or a decimal number.
-#   field  encoding: the instruction's fields, MSB first. A fixed field is
-#          its bits; a slice call (imm[11:0] imm) runs in exec context and
-#          leaves its value in a0, its width is in its name.
-#   exec   runs at assemble time on vregs: a register name is that vreg.
-#          Only addi, slli, srli and or are built in, the seed; everything
-#          else is defined by the tree.
+# A function whose body (the children after its parameters) holds only
+# fields, fixed fields (funct3:, ...) and slice calls (imm[11:0] imm), is an
+# encoding: an instruction or a data word of 8 to 64 bits. A call runs in
+# one of three contexts:
+#
+#   code   a call of an encoding is encoded and emitted, a call of any
+#          other function expands its body in code context.
+#   field  encoding: the fields, MSB first. A fixed field is its bits; a
+#          slice call runs in exec context and leaves its value in a0, its
+#          width is in its name.
+#   exec   runs at assemble time on vregs. The ops of exec_ops are built
+#          in, the seed; everything else is defined by the tree.
+#
+# An argument with children is a call, run in exec context: its value is
+# a0. A leaf argument is a decimal or 0x number, a parameter, a register
+# (its number in code context, its vreg in exec context), pc, a label (its
+# address) or a constant (a function without parameters, run in exec
+# context). The builtins: ascii, align, reserve, origin, bss (see
+# code_call) and size (see exec_call).
 #
 # Registers are the functions "x10 a0:", their number is their child "01010".
-# The output is the code behind a fixed ELF header (one RWX PT_LOAD).
+# The output file is exactly what the program emits: its ELF header is ff
+# too (elf_header in macros.ff.txt).
 #
 # ff on disk, one node, depth-first (children inline, before the content):
 #   hash          byte[32]
@@ -62,6 +74,8 @@
     .equ CH_lbracket, 91
     .equ CH_rbracket, 93
     .equ CH_bar, 124
+    .equ CH_a, 97
+    .equ CH_x, 120
 
     # A frame binds the parameters of a call: count, then (param NODE*,
     # value) pairs.
@@ -72,8 +86,18 @@
 
     .equ VREG_a0, 10
     .equ OUT_SIZE, 1 << 16
-    .equ ELF_size, 64 + 56              # ELF header + one program header
-    .equ ELF_base, 0x10000
+    .equ MAX_DEPTH, 64                  # nesting of placed functions
+
+    # A label: a placed function, its address and the address after it.
+    .equ LABEL_node, 0
+    .equ LABEL_addr, 8
+    .equ LABEL_end, 16
+    .equ LABEL_size, 24
+
+    # An exec op: its name, NUL-padded, and its code.
+    .equ OP_name, 0
+    .equ OP_code, 8
+    .equ OP_size, 16
 
     .equ NODE_hash, 0
     .equ NODE_children_len, 32
@@ -123,16 +147,26 @@ msg_field:      .ascii "ttpc: fixed field without bits: "
     .equ msg_field_len, . - msg_field
 msg_slice:      .ascii "ttpc: bad slice: "
     .equ msg_slice_len, . - msg_slice
-msg_width:      .ascii "ttpc: width is not 16 or 32: "
+msg_width:      .ascii "ttpc: width is not 8, 16, 32 or 64 bits: "
     .equ msg_width_len, . - msg_width
+msg_moved:      .ascii "ttpc: label moved between the passes: "
+    .equ msg_moved_len, . - msg_moved
+msg_depth:      .ascii "ttpc: nested too deep: "
+    .equ msg_depth_len, . - msg_depth
+msg_bss:        .ascii "ttpc: emitted after bss\n"
+    .equ msg_bss_len, . - msg_bss
 hexdigits:      .ascii "0123456789abcdef"
 indent:         .ascii "  "
 newline:        .ascii "\n"
 str_rd:         .ascii "rd"
-str_addi:       .ascii "addi"
-str_slli:       .ascii "slli"
-str_srli:       .ascii "srli"
-str_or:         .ascii "or"
+str_pc:         .ascii "pc"
+str_size:       .ascii "size"
+str_ascii:      .ascii "ascii"
+str_align:      .ascii "align"
+str_reserve:    .ascii "reserve"
+str_origin:     .ascii "origin"
+str_bss:        .ascii "bss"
+zero_byte:      .byte 0
 
     .section .data
 hexbuf:         .ascii "00000000  "         # hash prefix of a printed line
@@ -140,40 +174,60 @@ hexbuf:         .ascii "00000000  "         # hash prefix of a printed line
 out_path:       .dword 0                    # argv[2], 0 when only printing
 out_end:        .dword outbuf               # next free byte in outbuf
 syms_end:       .dword syms                 # next free slot in syms
+labels_end:     .dword labels               # next free LABEL (pass 1)
+label_next:     .dword labels               # next LABEL to check (pass 2)
+pass:           .dword 0                    # 1 or 2
+cur_pc:         .dword 0                    # address of the next byte
+in_bss:         .dword 0                    # 1 after the builtin bss
+scope_depth:    .dword 0                    # placed functions in scopes
 
-# The ELF header and its one program header: the whole file is loaded RWX
-# at ELF_base, the code follows the headers. write_elf fills in the sizes.
-# Kept here until the header can be written in ff itself.
-elf_header:
-    .byte   0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0  # "\177ELF", 64-bit, LE, SysV
-    .dword  0
-    .half   2                               # e_type: ET_EXEC
-    .half   243                             # e_machine: EM_RISCV
-    .word   1                               # e_version
-    .dword  ELF_base + ELF_size             # e_entry
-    .dword  64                              # e_phoff
-    .dword  0                               # e_shoff
-    .word   1                               # e_flags: EF_RISCV_RVC
-    .half   64                              # e_ehsize
-    .half   56                              # e_phentsize
-    .half   1                               # e_phnum
-    .half   64, 0, 0                        # e_shentsize, e_shnum, e_shstrndx
-    .word   1                               # p_type: PT_LOAD
-    .word   7                               # p_flags: RWX
-    .dword  0                               # p_offset
-    .dword  ELF_base                        # p_vaddr
-    .dword  ELF_base                        # p_paddr
-elf_filesz:     .dword 0
-elf_memsz:      .dword 0
-    .dword  0x1000                          # p_align
+# The exec seed: the instructions that exec context runs itself, rd = v1 op
+# v0, with v0 and v1 the other operands in parameter order (rs2 rs1, or imm
+# rs1, or shamt rs1).
+exec_ops:
+    .ascii "add\0\0\0\0\0"
+    .dword op_add
+    .ascii "addi\0\0\0\0"
+    .dword op_add
+    .ascii "sub\0\0\0\0\0"
+    .dword op_sub
+    .ascii "and\0\0\0\0\0"
+    .dword op_and
+    .ascii "andi\0\0\0\0"
+    .dword op_and
+    .ascii "or\0\0\0\0\0\0"
+    .dword op_or
+    .ascii "ori\0\0\0\0\0"
+    .dword op_or
+    .ascii "xor\0\0\0\0\0"
+    .dword op_xor
+    .ascii "xori\0\0\0\0"
+    .dword op_xor
+    .ascii "sll\0\0\0\0\0"
+    .dword op_sll
+    .ascii "slli\0\0\0\0"
+    .dword op_sll
+    .ascii "srl\0\0\0\0\0"
+    .dword op_srl
+    .ascii "srli\0\0\0\0"
+    .dword op_srl
+    .ascii "sra\0\0\0\0\0"
+    .dword op_sra
+    .ascii "srai\0\0\0\0"
+    .dword op_sra
+    .ascii "mul\0\0\0\0\0"
+    .dword op_mul
+exec_ops_end:
 
     .section .bss
     .balign 8
 nodes:          .skip MAX_NODES * NODE_size
 ptrs:           .skip MAX_NODES * 8
 syms:           .skip MAX_NODES * 8         # the function NODEs, see collect_syms
+labels:         .skip MAX_NODES * LABEL_size
+scopes:         .skip MAX_DEPTH * 8         # the placed functions around pc
 vregs:          .skip 32 * 8                # the registers of exec context
-linebuf:        .skip 16                    # hex of an emitted instruction
+linebuf:        .skip 24                    # hex of an emitted word
 outbuf:         .skip OUT_SIZE
 buf:            .skip BUF_SIZE
 
@@ -186,11 +240,6 @@ buf:            .skip BUF_SIZE
     .section .text
     .globl _start
 _start:
-    .option push
-    .option norelax
-    la      gp, __global_pointer$
-    .option pop
-
     ld      t0, 0(sp)                   # argc
     li      t1, 2
     blt     t0, t1, usage
@@ -244,23 +293,42 @@ read_done:
     li      a0, 0
     j       exit
 
-# assemble: runs the calls of every page of root a0 in code context and
-# writes the output file.
+# assemble: places the last page of root a0, the program, twice: pass 1
+# finds the address of every label, pass 2 emits with them. Then writes
+# the output file.
 assemble:
     mv      s6, a0                      # root
     call    collect_syms
-    lbu     s7, NODE_children_len(s6)   # pages left
-    ld      s8, NODE_children(s6)       # next page
-1:  beqz    s7, 2f
-    ld      a0, 0(s8)
-    li      a1, 0                       # no frame: a page has no parameters
-    la      a2, code_call
-    li      a3, 0
-    call    run_body
-    addi    s8, s8, 8
-    addi    s7, s7, -1
-    j       1b
-2:  call    write_elf
+    lbu     t0, NODE_children_len(s6)
+    beqz    t0, 2f
+    ld      t1, NODE_children(s6)
+    slli    t0, t0, 3
+    add     t1, t1, t0
+    ld      s7, -8(t1)                  # the program page
+    li      s8, 1                       # pass
+1:  la      t0, pass
+    sd      s8, 0(t0)
+    la      t0, cur_pc
+    sd      zero, 0(t0)
+    la      t0, in_bss
+    sd      zero, 0(t0)
+    la      t0, out_end
+    la      t1, outbuf
+    sd      t1, 0(t0)
+    la      t0, label_next
+    la      t1, labels
+    sd      t1, 0(t0)
+    la      t0, scopes                  # the page is the outermost scope
+    sd      s7, 0(t0)
+    la      t0, scope_depth
+    li      t1, 1
+    sd      t1, 0(t0)
+    mv      a0, s7
+    call    run_placed
+    addi    s8, s8, 1
+    li      t0, 3
+    bne     s8, t0, 1b
+2:  call    write_output
     li      a0, 0
     j       exit
 
@@ -445,31 +513,61 @@ param_count:
     addi    sp, sp, 32
     ret
 
-# is_insn: a0 = 1 when function NODE a0 is an instruction, that is when it
-# has a fixed field (a function) among its children, else 0.
+# is_insn: a0 = 1 when function NODE a0 is an encoding (an instruction or
+# a data word), else 0: its body, the children after its parameters, is not
+# empty and holds only fields, fixed fields (functions) and slice calls (a
+# '[' in the name).
 is_insn:
     addi    sp, sp, -32
     sd      ra, 0(sp)
-    sd      s4, 8(sp)                   # children left
-    sd      s5, 16(sp)                  # next child
-    lbu     s4, NODE_children_len(a0)
-    ld      s5, NODE_children(a0)
-1:  li      a0, 0
-    beqz    s4, 2f
+    sd      s4, 8(sp)                   # fields left
+    sd      s5, 16(sp)                  # next field
+    sd      s6, 24(sp)                  # the function
+    mv      s6, a0
+    call    param_count
+    lbu     s4, NODE_children_len(s6)
+    sub     s4, s4, a0
+    ld      s5, NODE_children(s6)
+    slli    a0, a0, 3
+    add     s5, s5, a0
+    li      a0, 0
+    beqz    s4, 3f
+1:  li      a0, 1
+    beqz    s4, 3f
     ld      a0, 0(s5)
     call    is_fn
     bnez    a0, 2f
-    addi    s5, s5, 8
+    ld      t0, 0(s5)
+    ld      a0, NODE_content(t0)
+    lbu     a1, NODE_content_len(t0)
+    li      a2, CH_lbracket
+    call    has_byte
+    beqz    a0, 3f
+2:  addi    s5, s5, 8
     addi    s4, s4, -1
     j       1b
-2:  ld      ra, 0(sp)
+3:  ld      ra, 0(sp)
     ld      s4, 8(sp)
     ld      s5, 16(sp)
+    ld      s6, 24(sp)
     addi    sp, sp, 32
     ret
 
+# has_byte: a0 = 1 when byte a2 is among the a1 bytes at a0, else 0.
+has_byte:
+1:  beqz    a1, 2f
+    lbu     t0, 0(a0)
+    beq     t0, a2, 3f
+    addi    a0, a0, 1
+    addi    a1, a1, -1
+    j       1b
+2:  li      a0, 0
+    ret
+3:  li      a0, 1
+    ret
+
 # collect_syms: stores every function among the children of the pages of
-# root a0 in syms.
+# root a0 in syms, but for the last page: the program, it is placed.
 collect_syms:
     addi    sp, sp, -64
     sd      ra, 0(sp)
@@ -481,6 +579,8 @@ collect_syms:
     lbu     s4, NODE_children_len(a0)
     ld      s5, NODE_children(a0)
     la      s6, syms
+    beqz    s4, 4f
+    addi    s4, s4, -1                  # not the last page: it is placed
 1:  beqz    s4, 4f
     ld      t0, 0(s5)
     lbu     s7, NODE_children_len(t0)
@@ -646,8 +746,29 @@ parse_dec:
     mv      a0, t0
     ret
 
-# parse_num: a0 = the a1 bytes at a0 as a decimal number with an optional
-# '-', and a1 = 1; or a1 = 0 when they are no number.
+# parse_hex: reads the hex digits (0-9, a-f) from a0 up to at most a1;
+# a0 = their value, a1 = just past them.
+parse_hex:
+    li      t0, 0
+1:  beq     a0, a1, 3f
+    lbu     t1, 0(a0)
+    addi    t2, t1, -CH_zero
+    li      t3, 10
+    bltu    t2, t3, 2f
+    addi    t2, t1, -CH_a
+    li      t3, 6
+    bgeu    t2, t3, 3f
+    addi    t2, t2, 10
+2:  slli    t0, t0, 4
+    or      t0, t0, t2
+    addi    a0, a0, 1
+    j       1b
+3:  mv      a1, a0
+    mv      a0, t0
+    ret
+
+# parse_num: a0 = the a1 bytes at a0 as a number, decimal or 0x hex, with
+# an optional '-', and a1 = 1; or a1 = 0 when they are no number.
 parse_num:
     addi    sp, sp, -32
     sd      ra, 0(sp)
@@ -664,8 +785,21 @@ parse_num:
     li      s4, 1
     addi    a0, a0, 1
 1:  mv      s5, a0
-    call    parse_dec
-    beq     a1, s5, 2f                  # no digits
+    sub     t0, a1, a0                  # 0x and a digit at least?
+    li      t1, 3
+    blt     t0, t1, 5f
+    lbu     t0, 0(a0)
+    li      t1, CH_zero
+    bne     t0, t1, 5f
+    lbu     t0, 1(a0)
+    li      t1, CH_x
+    bne     t0, t1, 5f
+    addi    a0, a0, 2
+    addi    s5, s5, 2
+    call    parse_hex
+    j       6f
+5:  call    parse_dec
+6:  beq     a1, s5, 2f                  # no digits
     bne     a1, s6, 2f                  # something after them
     beqz    s4, 3f
     neg     a0, a0
@@ -782,46 +916,97 @@ frame_lookup:
     addi    sp, sp, 48
     ret
 
-# eval_arg: a0 = the value of the argument named by the a2 bytes at a1, in
-# frame a0: a parameter, a register or a decimal number. A register is its
-# number in code context (a3 = 0), its vreg in exec context (a3 = 1).
+# eval_arg: a0 = the value of argument NODE a1 in frame a0, in context a2
+# (0 code, 1 exec). An argument with children is a call that runs in exec
+# context, its value is what it leaves in a0. A leaf is, in this order: a
+# decimal or 0x number, a parameter, a register (its number in code
+# context, its vreg in exec context), pc (the address being assembled), a
+# label (its address) or a constant (a function without parameters, run in
+# exec context).
 eval_arg:
-    addi    sp, sp, -32
+    addi    sp, sp, -64
     sd      ra, 0(sp)
-    sd      s4, 8(sp)                   # name
-    sd      s5, 16(sp)                  # name length
+    sd      s4, 8(sp)                   # frame
+    sd      s5, 16(sp)                  # the argument
     sd      s6, 24(sp)                  # context
-    mv      s4, a1
-    mv      s5, a2
-    mv      s6, a3
+    sd      s7, 32(sp)                  # its name
+    sd      s8, 40(sp)                  # name length
+    sd      s9, 48(sp)                  # a function of that name
+    mv      s4, a0
+    mv      s5, a1
+    mv      s6, a2
+    lbu     t0, NODE_children_len(s5)
+    beqz    t0, 1f
+    mv      a0, s5                      # a call
+    mv      a1, s4
+    call    exec_call
+    j       7f
+1:  ld      s7, NODE_content(s5)
+    lbu     s8, NODE_content_len(s5)
+    mv      a0, s7
+    mv      a1, s8
+    call    parse_num
+    bnez    a1, 9f
+    mv      a0, s4
+    mv      a1, s7
+    mv      a2, s8
     call    frame_lookup
-    beqz    a0, 1f
+    beqz    a0, 2f
     mv      a0, a1
-    j       3f
-1:  mv      a0, s4
-    mv      a1, s5
+    j       9f
+2:  mv      a0, s7
+    mv      a1, s8
     call    find_reg
-    bltz    a0, 2f
-    beqz    s6, 3f
+    bltz    a0, 3f
+    beqz    s6, 9f
     la      t0, vregs
     slli    a0, a0, 3
     add     t0, t0, a0
     ld      a0, 0(t0)
-    j       3f
-2:  mv      a0, s4
-    mv      a1, s5
-    call    parse_num
-    beqz    a1, 4f
-3:  ld      ra, 0(sp)
+    j       9f
+3:  mv      a0, s7
+    mv      a1, s8
+    la      a2, str_pc
+    li      a3, 2
+    call    streq
+    beqz    a0, 4f
+    la      t0, cur_pc
+    ld      a0, 0(t0)
+    j       9f
+4:  mv      a0, s7
+    mv      a1, s8
+    call    find_label
+    beqz    a0, 5f
+    call    label_addr
+    j       9f
+5:  mv      a0, s7
+    mv      a1, s8
+    call    find_fn
+    beqz    a0, 8f
+    mv      s9, a0
+    call    is_insn
+    bnez    a0, 8f
+    mv      a0, s9
+    call    param_count
+    bnez    a0, 8f
+    mv      a0, s5                      # a constant
+    mv      a1, s4
+    call    exec_call
+7:  la      t0, vregs
+    ld      a0, VREG_a0*8(t0)
+9:  ld      ra, 0(sp)
     ld      s4, 8(sp)
     ld      s5, 16(sp)
     ld      s6, 24(sp)
-    addi    sp, sp, 32
+    ld      s7, 32(sp)
+    ld      s8, 40(sp)
+    ld      s9, 48(sp)
+    addi    sp, sp, 64
     ret
-4:  la      a1, msg_name
+8:  la      a1, msg_name
     li      a2, msg_name_len
-    mv      a3, s4
-    mv      a4, s5
+    mv      a3, s7
+    mv      a4, s8
     j       die_name
 
 # bind: fills frame a4 for call a1 of function a0: each parameter with the
@@ -857,11 +1042,9 @@ bind:
 1:  beqz    s9, 2f
     ld      t0, 0(s4)
     sd      t0, 0(s8)
-    ld      t0, 0(s5)
     mv      a0, s6
-    ld      a1, NODE_content(t0)
-    lbu     a2, NODE_content_len(t0)
-    mv      a3, s7
+    ld      a1, 0(s5)
+    mv      a2, s7
     call    eval_arg
     sd      a0, 8(s8)
     addi    s4, s4, 8
@@ -916,6 +1099,180 @@ run_body:
     addi    sp, sp, 48
     ret
 
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+
+# run_placed: runs the children of NODE a0, the program page or a placed
+# function, in order: a function is placed, a call runs in code context.
+run_placed:
+    addi    sp, sp, -32
+    sd      ra, 0(sp)
+    sd      s4, 8(sp)                   # children left
+    sd      s5, 16(sp)                  # next child
+    lbu     s4, NODE_children_len(a0)
+    ld      s5, NODE_children(a0)
+1:  beqz    s4, 4f
+    ld      a0, 0(s5)
+    call    is_fn
+    beqz    a0, 2f
+    ld      a0, 0(s5)
+    call    place
+    j       3f
+2:  ld      a0, 0(s5)
+    li      a1, 0                       # no frame: placed code has no parameters
+    call    code_call
+3:  addi    s5, s5, 8
+    addi    s4, s4, -1
+    j       1b
+4:  ld      ra, 0(sp)
+    ld      s4, 8(sp)
+    ld      s5, 16(sp)
+    addi    sp, sp, 32
+    ret
+
+# place: places function a0 at cur_pc. Pass 1 adds it to labels, pass 2
+# checks that it is still there; then its children run in its scope, and
+# its end is recorded.
+place:
+    addi    sp, sp, -32
+    sd      ra, 0(sp)
+    sd      s4, 8(sp)                   # the function
+    sd      s5, 16(sp)                  # its LABEL
+    mv      s4, a0
+    la      t0, scope_depth             # push its scope
+    ld      t1, 0(t0)
+    li      t2, MAX_DEPTH
+    beq     t1, t2, 3f
+    la      t2, scopes
+    slli    t3, t1, 3
+    add     t2, t2, t3
+    sd      s4, 0(t2)
+    addi    t1, t1, 1
+    sd      t1, 0(t0)
+    la      t4, cur_pc
+    ld      t4, 0(t4)
+    la      t0, pass
+    ld      t0, 0(t0)
+    li      t1, 1
+    bne     t0, t1, 1f
+    la      t0, labels_end              # pass 1: a new label
+    ld      s5, 0(t0)
+    addi    t1, s5, LABEL_size
+    sd      t1, 0(t0)
+    sd      s4, LABEL_node(s5)
+    sd      t4, LABEL_addr(s5)
+    j       2f
+1:  la      t0, label_next              # pass 2: the same, at the same place
+    ld      s5, 0(t0)
+    addi    t1, s5, LABEL_size
+    sd      t1, 0(t0)
+    ld      t1, LABEL_node(s5)
+    bne     t1, s4, 4f
+    ld      t1, LABEL_addr(s5)
+    bne     t1, t4, 4f
+2:  mv      a0, s4
+    call    run_placed
+    la      t0, cur_pc
+    ld      t0, 0(t0)
+    sd      t0, LABEL_end(s5)
+    la      t0, scope_depth
+    ld      t1, 0(t0)
+    addi    t1, t1, -1
+    sd      t1, 0(t0)
+    ld      ra, 0(sp)
+    ld      s4, 8(sp)
+    ld      s5, 16(sp)
+    addi    sp, sp, 32
+    ret
+3:  la      a1, msg_depth
+    li      a2, msg_depth_len
+    j       5f
+4:  la      a1, msg_moved
+    li      a2, msg_moved_len
+5:  ld      a3, NODE_content(s4)
+    lbu     a4, NODE_content_len(s4)
+    j       die_name
+
+# find_label: a0 = the placed function named by the a1 bytes at a0, or 0:
+# among the functions in the innermost scope first, then outward to the
+# program page.
+find_label:
+    addi    sp, sp, -48
+    sd      ra, 0(sp)
+    sd      s4, 8(sp)                   # name
+    sd      s5, 16(sp)                  # name length
+    sd      s6, 24(sp)                  # just past the scope being searched
+    sd      s7, 32(sp)                  # its children left
+    sd      s8, 40(sp)                  # next child
+    mv      s4, a0
+    mv      s5, a1
+    la      t0, scope_depth
+    ld      t0, 0(t0)
+    slli    t0, t0, 3
+    la      s6, scopes
+    add     s6, s6, t0
+1:  la      t0, scopes
+    beq     s6, t0, 4f
+    addi    s6, s6, -8
+    ld      t0, 0(s6)
+    lbu     s7, NODE_children_len(t0)
+    ld      s8, NODE_children(t0)
+2:  beqz    s7, 1b
+    ld      a0, 0(s8)
+    call    is_fn
+    beqz    a0, 3f
+    ld      t0, 0(s8)
+    ld      a2, NODE_content(t0)
+    lbu     a3, NODE_content_len(t0)
+    addi    a3, a3, -1
+    mv      a0, s4
+    mv      a1, s5
+    call    streq
+    beqz    a0, 3f
+    ld      a0, 0(s8)
+    j       5f
+3:  addi    s8, s8, 8
+    addi    s7, s7, -1
+    j       2b
+4:  li      a0, 0
+5:  ld      ra, 0(sp)
+    ld      s4, 8(sp)
+    ld      s5, 16(sp)
+    ld      s6, 24(sp)
+    ld      s7, 32(sp)
+    ld      s8, 40(sp)
+    addi    sp, sp, 48
+    ret
+
+# label_entry: a0 = the LABEL of placed function a0, or 0 when pass 1 has
+# not met it yet.
+label_entry:
+    la      t0, labels
+    la      t1, labels_end
+    ld      t1, 0(t1)
+1:  beq     t0, t1, 2f
+    ld      t2, LABEL_node(t0)
+    beq     t2, a0, 3f
+    addi    t0, t0, LABEL_size
+    j       1b
+2:  li      a0, 0
+    ret
+3:  mv      a0, t0
+    ret
+
+# label_addr: a0 = the address of placed function a0 (0 when pass 1 has
+# not met it yet).
+label_addr:
+    addi    sp, sp, -16
+    sd      ra, 0(sp)
+    call    label_entry
+    beqz    a0, 1f
+    ld      a0, LABEL_addr(a0)
+1:  ld      ra, 0(sp)
+    addi    sp, sp, 16
+    ret
+
 # lookup_call: a0 = the function that call a0 calls; dies when unknown.
 lookup_call:
     addi    sp, sp, -16
@@ -940,7 +1297,12 @@ lookup_call:
     .equ CALL_stack, (CALL_frame + FRAME_size + 15) & ~15
 
 # code_call: runs call a0 in code context, in frame a1: an instruction is
-# encoded and emitted, any other function expands its body.
+# encoded and emitted, any other function expands its body. The builtins:
+#   ascii <bytes>   emits the content of its argument as it is
+#   align n         pads with zeros up to a multiple of n
+#   reserve n       n zero bytes
+#   origin n        the address of what follows
+#   bss             from here on align and reserve only move the address
 code_call:
     addi    sp, sp, -CALL_stack
     sd      ra, 0(sp)
@@ -949,6 +1311,31 @@ code_call:
     sd      s6, 24(sp)                  # the function
     mv      s4, a0
     mv      s5, a1
+    la      a1, str_ascii
+    li      a2, 5
+    call    is_named
+    bnez    a0, 3f
+    mv      a0, s4
+    la      a1, str_align
+    li      a2, 5
+    call    is_named
+    bnez    a0, 4f
+    mv      a0, s4
+    la      a1, str_reserve
+    li      a2, 7
+    call    is_named
+    bnez    a0, 5f
+    mv      a0, s4
+    la      a1, str_origin
+    li      a2, 6
+    call    is_named
+    bnez    a0, 6f
+    mv      a0, s4
+    la      a1, str_bss
+    li      a2, 3
+    call    is_named
+    bnez    a0, 7f
+    mv      a0, s4
     call    lookup_call
     mv      s6, a0
     mv      a1, s4
@@ -978,9 +1365,82 @@ code_call:
     ld      s6, 24(sp)
     addi    sp, sp, CALL_stack
     ret
+3:  lbu     t0, NODE_children_len(s4)   # ascii
+    li      t1, 1
+    bne     t0, t1, wrong_args
+    ld      t0, NODE_children(s4)
+    ld      t0, 0(t0)
+    ld      a0, NODE_content(t0)
+    lbu     a1, NODE_content_len(t0)
+    call    emit_raw
+    j       2b
+4:  mv      a0, s4                      # align
+    mv      a1, s5
+    call    one_arg
+    la      t0, cur_pc
+    ld      t0, 0(t0)
+    remu    t1, t0, a0
+    beqz    t1, 2b
+    sub     a0, a0, t1
+    call    skip
+    j       2b
+5:  mv      a0, s4                      # reserve
+    mv      a1, s5
+    call    one_arg
+    call    skip
+    j       2b
+6:  mv      a0, s4                      # origin
+    mv      a1, s5
+    call    one_arg
+    la      t0, cur_pc
+    sd      a0, 0(t0)
+    j       2b
+7:  lbu     t0, NODE_children_len(s4)   # bss
+    bnez    t0, wrong_args
+    la      t0, in_bss
+    li      t1, 1
+    sd      t1, 0(t0)
+    j       2b
+
+# wrong_args: dies about call s4 having the wrong number of arguments.
+wrong_args:
+    la      a1, msg_args
+    li      a2, msg_args_len
+    ld      a3, NODE_content(s4)
+    lbu     a4, NODE_content_len(s4)
+    j       die_name
+
+# one_arg: a0 = the value of the one argument of builtin call a0, in frame
+# a1 and code context.
+one_arg:
+    addi    sp, sp, -16
+    sd      ra, 0(sp)
+    sd      s4, 8(sp)                   # the call
+    mv      s4, a0
+    lbu     t0, NODE_children_len(s4)
+    li      t1, 1
+    bne     t0, t1, wrong_args
+    mv      a0, a1
+    ld      a1, NODE_children(s4)
+    ld      a1, 0(a1)
+    li      a2, 0
+    call    eval_arg
+    ld      ra, 0(sp)
+    ld      s4, 8(sp)
+    addi    sp, sp, 16
+    ret
+
+# is_named: a0 = 1 when the content of NODE a0 is the a2 bytes at a1.
+is_named:
+    mv      a3, a2
+    mv      a2, a1
+    lbu     a1, NODE_content_len(a0)
+    ld      a0, NODE_content(a0)
+    j       streq
 
 # exec_call: runs call a0 in exec context, in frame a1: an instruction is
-# executed on vregs, any other function runs its body.
+# executed on vregs, any other function runs its body. The builtin
+# size <label> leaves the size of the label in a0.
 exec_call:
     addi    sp, sp, -CALL_stack
     sd      ra, 0(sp)
@@ -989,6 +1449,11 @@ exec_call:
     sd      s6, 24(sp)                  # the function
     mv      s4, a0
     mv      s5, a1
+    la      a1, str_size
+    li      a2, 4
+    call    is_named
+    bnez    a0, 3f
+    mv      a0, s4
     call    lookup_call
     mv      s6, a0
     call    is_insn
@@ -1017,11 +1482,34 @@ exec_call:
     ld      s6, 24(sp)
     addi    sp, sp, CALL_stack
     ret
+3:  lbu     t0, NODE_children_len(s4)   # size
+    li      t1, 1
+    bne     t0, t1, wrong_args
+    ld      t0, NODE_children(s4)
+    ld      s6, 0(t0)                   # the label
+    ld      a0, NODE_content(s6)
+    lbu     a1, NODE_content_len(s6)
+    call    find_label
+    beqz    a0, 5f
+    call    label_entry
+    li      t0, 0                       # not met yet in pass 1
+    beqz    a0, 4f
+    ld      t0, LABEL_end(a0)
+    ld      t1, LABEL_addr(a0)
+    sub     t0, t0, t1
+4:  la      t1, vregs
+    sd      t0, VREG_a0*8(t1)
+    j       2b
+5:  la      a1, msg_name
+    li      a2, msg_name_len
+    ld      a3, NODE_content(s6)
+    lbu     a4, NODE_content_len(s6)
+    j       die_name
 
 # execute: executes call a1 of instruction a0 in frame a2, on vregs: the
 # parameter rd names the destination register, the other two give the
-# values v0 and v1 in parameter order, and rd = v1 op v0. The seed: only
-# addi, slli, srli and or.
+# values v0 and v1 in parameter order, and rd = v1 op v0, op found by name
+# in exec_ops (the seed).
 execute:
     addi    sp, sp, -96
     sd      ra, 0(sp)
@@ -1051,12 +1539,10 @@ execute:
     la      a2, str_rd
     li      a3, 2
     call    streq
-    ld      t0, 0(s7)
-    ld      a1, NODE_content(t0)
-    lbu     a2, NODE_content_len(t0)
     beqz    a0, 2f
-    mv      a0, a1                      # rd: a register name
-    mv      a1, a2
+    ld      t0, 0(s7)                   # rd: a register name
+    ld      a0, NODE_content(t0)
+    lbu     a1, NODE_content_len(t0)
     call    find_reg
     bltz    a0, 7f
     mv      s9, a0
@@ -1064,7 +1550,8 @@ execute:
 2:  li      t0, 2
     beq     s10, t0, 9f                 # more than two values: no seed op
     mv      a0, s5
-    li      a3, 1
+    ld      a1, 0(s7)
+    li      a2, 1
     call    eval_arg
     slli    t0, s10, 3
     add     t0, sp, t0
@@ -1074,47 +1561,59 @@ execute:
     addi    s7, s7, 8
     addi    s8, s8, -1
     j       1b
-3:  ld      s6, NODE_content(s4)        # pick the op by name
-    lbu     s7, NODE_content_len(s4)
-    mv      a0, s6
-    mv      a1, s7
-    la      a2, str_addi
-    li      a3, 4
-    call    streq
-    ld      t0, 64(sp)
-    ld      t1, 72(sp)
-    add     t2, t1, t0
-    bnez    a0, 4f
-    mv      a0, s6
-    mv      a1, s7
-    la      a2, str_slli
-    li      a3, 4
-    call    streq
-    ld      t0, 64(sp)
-    ld      t1, 72(sp)
-    sll     t2, t1, t0
-    bnez    a0, 4f
-    mv      a0, s6
-    mv      a1, s7
-    la      a2, str_srli
-    li      a3, 4
-    call    streq
-    ld      t0, 64(sp)
-    ld      t1, 72(sp)
-    srl     t2, t1, t0
-    bnez    a0, 4f
-    mv      a0, s6
-    mv      a1, s7
-    la      a2, str_or
-    li      a3, 2
-    call    streq
-    ld      t0, 64(sp)
-    ld      t1, 72(sp)
-    or      t2, t1, t0
-    beqz    a0, 9f
-4:  li      t0, 2
+3:  li      t0, 2
     bne     s10, t0, 9f
-    beqz    s9, 5f                      # x0 stays 0
+    ld      s6, NODE_content(s4)        # find the op by name
+    lbu     s7, NODE_content_len(s4)
+    li      t0, 8
+    bgtu    s7, t0, 9f
+    la      s8, exec_ops
+10: la      t0, exec_ops_end
+    beq     s8, t0, 9f
+    mv      a0, s6
+    mv      a1, s7
+    mv      a2, s8
+    mv      a3, s7
+    call    streq
+    beqz    a0, 11f
+    li      t0, 8                       # and the op's name ends there
+    beq     s7, t0, 12f
+    add     t0, s8, s7
+    lbu     t0, 0(t0)
+    beqz    t0, 12f
+11: addi    s8, s8, OP_size
+    j       10b
+12: ld      t0, 64(sp)
+    ld      t1, 72(sp)
+    ld      t3, OP_code(s8)
+    jr      t3
+op_add:
+    add     t2, t1, t0
+    j       4f
+op_sub:
+    sub     t2, t1, t0
+    j       4f
+op_and:
+    and     t2, t1, t0
+    j       4f
+op_or:
+    or      t2, t1, t0
+    j       4f
+op_xor:
+    xor     t2, t1, t0
+    j       4f
+op_sll:
+    sll     t2, t1, t0
+    j       4f
+op_srl:
+    srl     t2, t1, t0
+    j       4f
+op_sra:
+    sra     t2, t1, t0
+    j       4f
+op_mul:
+    mul     t2, t1, t0
+4:  beqz    s9, 5f                      # x0 stays 0
     la      t0, vregs
     slli    t1, s9, 3
     add     t0, t0, t1
@@ -1135,12 +1634,10 @@ execute:
     ld      a3, NODE_content(t0)
     lbu     a4, NODE_content_len(t0)
     j       die_name
-8:  la      a1, msg_args
-    li      a2, msg_args_len
-    j       1f
+8:  j       wrong_args
 9:  la      a1, msg_execute
     li      a2, msg_execute_len
-1:  ld      a3, NODE_content(s4)
+    ld      a3, NODE_content(s4)
     lbu     a4, NODE_content_len(s4)
     j       die_name
 
@@ -1149,8 +1646,8 @@ execute:
 # ---------------------------------------------------------------------------
 
 # encode: encodes instruction a0, its parameters bound in frame a1: a0 =
-# the machine word, a1 = its width (16 or 32). The fields come MSB first:
-# word = word << width | value.
+# the word, a1 = its width in bits (8, 16, 32 or 64). The fields come MSB
+# first: word = word << width | value.
 encode:
     addi    sp, sp, -80
     sd      ra, 0(sp)
@@ -1195,19 +1692,25 @@ encode:
     mv      s10, a0
     la      t0, vregs
     ld      a0, VREG_a0*8(t0)
-3:  li      t0, 1
+3:  li      t0, 64
+    beq     s10, t0, 10f                # a 64-bit field is the whole word
+    li      t0, 1
     sll     t0, t0, s10
     addi    t0, t0, -1
     and     a0, a0, t0
     sll     s8, s8, s10
-    or      s8, s8, a0
+10: or      s8, s8, a0
     add     s9, s9, s10
     addi    s7, s7, 8
     addi    s6, s6, -1
     j       1b
-4:  li      t0, 16
+4:  li      t0, 8
+    beq     s9, t0, 5f
+    li      t0, 16
     beq     s9, t0, 5f
     li      t0, 32
+    beq     s9, t0, 5f
+    li      t0, 64
     bne     s9, t0, 9f
 5:  mv      a0, s8
     mv      a1, s9
@@ -1232,33 +1735,26 @@ encode:
     lbu     a4, NODE_content_len(s4)
     j       die_name
 
-# emit: appends the a1-bit word a0 to outbuf, little endian, and prints it
+# emit: emits the a1-bit word a0, little endian, and in pass 2 prints it
 # as "<hex>  <name of call a2>".
 emit:
-    addi    sp, sp, -32
+    addi    sp, sp, -48
     sd      ra, 0(sp)
     sd      s4, 8(sp)                   # word
     sd      s5, 16(sp)                  # width
     sd      s6, 24(sp)                  # the call
+    # 32(sp): the word in memory
     mv      s4, a0
     mv      s5, a1
     mv      s6, a2
-    la      t6, out_end
-    ld      t0, 0(t6)
-    la      t1, outbuf
-    li      t2, OUT_SIZE
-    add     t1, t1, t2
-    srli    t3, s5, 3                   # bytes
-    add     t4, t0, t3
-    bgtu    t4, t1, out_full
-    mv      t5, s4
-1:  beqz    t3, 2f
-    sb      t5, 0(t0)
-    srli    t5, t5, 8
-    addi    t0, t0, 1
-    addi    t3, t3, -1
-    j       1b
-2:  sd      t0, 0(t6)
+    sd      s4, 32(sp)
+    addi    a0, sp, 32
+    srli    a1, s5, 3
+    call    emit_raw
+    la      t0, pass
+    ld      t0, 0(t0)
+    li      t1, 2
+    bne     t0, t1, 5f
     la      t0, linebuf
     la      t1, hexdigits
     srli    t2, s5, 2                   # hex digits
@@ -1286,29 +1782,71 @@ emit:
     la      a1, newline
     li      a2, 1
     call    write_out
-    ld      ra, 0(sp)
+5:  ld      ra, 0(sp)
     ld      s4, 8(sp)
     ld      s5, 16(sp)
     ld      s6, 24(sp)
-    addi    sp, sp, 32
+    addi    sp, sp, 48
     ret
 
-# write_elf: writes elf_header with its sizes filled in, then outbuf, to
-# the file out_path.
-write_elf:
-    addi    sp, sp, -32
+# emit_raw: appends the a1 bytes at a0 to outbuf and moves cur_pc past
+# them.
+emit_raw:
+    la      t0, in_bss
+    ld      t0, 0(t0)
+    bnez    t0, emitted_in_bss
+    la      t6, out_end
+    ld      t0, 0(t6)
+    la      t1, outbuf
+    li      t2, OUT_SIZE
+    add     t1, t1, t2
+    add     t3, t0, a1
+    bgtu    t3, t1, out_full
+    la      t4, cur_pc
+    ld      t5, 0(t4)
+    add     t5, t5, a1
+    sd      t5, 0(t4)
+1:  beqz    a1, 2f
+    lbu     t2, 0(a0)
+    sb      t2, 0(t0)
+    addi    a0, a0, 1
+    addi    t0, t0, 1
+    addi    a1, a1, -1
+    j       1b
+2:  sd      t0, 0(t6)
+    ret
+
+# skip: moves cur_pc a0 bytes on: by emitting zero bytes, or after bss
+# only the address.
+skip:
+    addi    sp, sp, -16
+    sd      ra, 0(sp)
+    sd      s4, 8(sp)                   # bytes left
+    mv      s4, a0
+    la      t0, in_bss
+    ld      t0, 0(t0)
+    beqz    t0, 1f
+    la      t0, cur_pc
+    ld      t1, 0(t0)
+    add     t1, t1, s4
+    sd      t1, 0(t0)
+    j       2f
+1:  beqz    s4, 2f
+    la      a0, zero_byte
+    li      a1, 1
+    call    emit_raw
+    addi    s4, s4, -1
+    j       1b
+2:  ld      ra, 0(sp)
+    ld      s4, 8(sp)
+    addi    sp, sp, 16
+    ret
+
+# write_output: writes outbuf, everything emitted, to the file out_path.
+write_output:
+    addi    sp, sp, -16
     sd      ra, 0(sp)
     sd      s4, 8(sp)                   # fd
-    sd      s5, 16(sp)                  # code size
-    la      t0, out_end
-    ld      t0, 0(t0)
-    la      t1, outbuf
-    sub     s5, t0, t1
-    addi    t0, s5, ELF_size
-    la      t1, elf_filesz
-    sd      t0, 0(t1)
-    la      t1, elf_memsz
-    sd      t0, 0(t1)
     li      a0, AT_FDCWD
     la      a1, out_path
     ld      a1, 0(a1)
@@ -1318,20 +1856,17 @@ write_elf:
     ecall
     bltz    a0, create_failed
     mv      s4, a0
-    la      a1, elf_header
-    li      a2, ELF_size
-    call    write_all
-    mv      a0, s4
     la      a1, outbuf
-    mv      a2, s5
+    la      t0, out_end
+    ld      a2, 0(t0)
+    sub     a2, a2, a1
     call    write_all
     mv      a0, s4
     li      a7, SYS_close
     ecall
     ld      ra, 0(sp)
     ld      s4, 8(sp)
-    ld      s5, 16(sp)
-    addi    sp, sp, 32
+    addi    sp, sp, 16
     ret
 
 # write_all: writes the a2 bytes at a1 to fd a0, however many writes it
@@ -1390,6 +1925,10 @@ write_failed:
 out_full:
     la      a1, msg_full
     li      a2, msg_full_len
+    j       die
+emitted_in_bss:
+    la      a1, msg_bss
+    li      a2, msg_bss_len
     j       die
 
 # die_name: writes the a2-byte message at a1 and the a4-byte name at a3 to

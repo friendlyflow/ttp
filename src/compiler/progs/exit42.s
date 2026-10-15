@@ -1,13 +1,13 @@
-# check.s — the program in the last page of test.ff (see mkff.pl), written
-# for GNU as. `make check` assembles it and compares the bytes with the code
-# ttpc wrote behind its ELF header.
+# exit42.s — progs/exit42.ff.txt for GNU as, linked with ff.ld: `make check`
+# compares the bytes. The c.* lines only check encodings: exit(42) comes
+# first.
 #
 # ff is explicit about compressed code, GNU as is not: norvc keeps it from
-# compressing the 32-bit instructions, rvc allows the c.* ones. norelax
-# makes it resolve the branch offsets itself instead of leaving relocations.
+# compressing the 32-bit instructions, rvc allows the c.* ones.
 
-    .option norelax
     .option norvc
+    .globl  _start
+_start:
     addi    a0, zero, 42
     addi    a7, zero, 93
     ecall

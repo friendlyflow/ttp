@@ -19,7 +19,7 @@
 # number as child), bits:, the slice functions, then every instruction
 # (RV64I, Zifencei, Zicsr, the privileged mret/sret/wfi/sfence.vma, M, A, F,
 # D, C). A node holds at most 255 children, so the list is split over the
-# root.s children 0:, 1:, ... Each text file given becomes the next page,
+# root's children 0:, 1:, ... Each text file given becomes the next page,
 # the last one is the program that ttpc assembles.
 #
 # An instruction is a function: its operands (rd, rs1, imm, ...) are its

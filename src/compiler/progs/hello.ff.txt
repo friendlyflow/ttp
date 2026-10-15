@@ -1,0 +1,63 @@
+origin
+  elf_base
+elf_header
+  _start
+  file_end
+  mem_end
+_start:
+  li
+    3
+    s1
+  loop:
+    call
+      print
+    la
+      count
+      t0
+    sd
+      0
+      s1
+      t0
+    addi
+      -1
+      s1
+      s1
+    bnez
+      loop
+      s1
+    li
+      0
+      a0
+    li
+      SYS_exit
+      a7
+    ecall
+print:
+  li
+    STDOUT
+    a0
+  la
+    msg
+    a1
+  li
+    size
+      msg
+    a2
+  li
+    SYS_write
+    a7
+  ecall
+  ret
+align
+  8
+msg:
+  ascii
+    hello, ff\n
+file_end:
+bss
+align
+  8
+count:
+  reserve
+    8
+mem_end:

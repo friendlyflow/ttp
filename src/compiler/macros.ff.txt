@@ -1,0 +1,309 @@
+comment:
+  The shared page: data words, the address helpers, the pseudo-instructions and the ELF header. Operands go in the reverse order of GNU as, the destination last, as in the instructions.
+byte:
+  value
+  value[7:0]
+    value
+half:
+  value
+  value[15:0]
+    value
+word:
+  value
+  value[31:0]
+    value
+dword:
+  value
+  value[63:0]
+    value
+value[7:0]:
+  value
+  bits
+    value
+    56
+    56
+    0
+value[15:0]:
+  value
+  bits
+    value
+    48
+    48
+    0
+value[31:0]:
+  value
+  bits
+    value
+    32
+    32
+    0
+value[63:0]:
+  value
+  bits
+    value
+    0
+    0
+    0
+rel:
+  target
+  sub
+    pc
+    target
+    a0
+pcrel_hi:
+  target
+  sub
+    pc
+    target
+    a0
+  addi
+    2048
+    a0
+    a0
+pcrel_lo:
+  target
+  sub
+    pc
+    target
+    a0
+  addi
+    4
+    a0
+    a0
+hi:
+  value
+  addi
+    2048
+    value
+    a0
+nop:
+  addi
+    0
+    zero
+    zero
+mv:
+  rs
+  rd
+  addi
+    0
+    rs
+    rd
+li:
+  imm
+  rd
+  addi
+    imm
+    zero
+    rd
+li32:
+  imm
+  rd
+  lui
+    hi
+      imm
+    rd
+  addiw
+    imm
+    rd
+    rd
+neg:
+  rs
+  rd
+  sub
+    rs
+    zero
+    rd
+seqz:
+  rs
+  rd
+  sltiu
+    1
+    rs
+    rd
+j:
+  target
+  jal
+    rel
+      target
+    zero
+jr:
+  rs
+  jalr
+    0
+    rs
+    zero
+ret:
+  jalr
+    0
+    ra
+    zero
+call:
+  target
+  auipc
+    pcrel_hi
+      target
+    ra
+  jalr
+    pcrel_lo
+      target
+    ra
+    ra
+la:
+  sym
+  rd
+  auipc
+    pcrel_hi
+      sym
+    rd
+  addi
+    pcrel_lo
+      sym
+    rd
+    rd
+beqz:
+  target
+  rs
+  beq
+    rel
+      target
+    zero
+    rs
+bnez:
+  target
+  rs
+  bne
+    rel
+      target
+    zero
+    rs
+bltz:
+  target
+  rs
+  blt
+    rel
+      target
+    zero
+    rs
+bgez:
+  target
+  rs
+  bge
+    rel
+      target
+    zero
+    rs
+blez:
+  target
+  rs
+  bge
+    rel
+      target
+    rs
+    zero
+bgtz:
+  target
+  rs
+  blt
+    rel
+      target
+    rs
+    zero
+bgt:
+  target
+  rt
+  rs
+  blt
+    rel
+      target
+    rs
+    rt
+ble:
+  target
+  rt
+  rs
+  bge
+    rel
+      target
+    rs
+    rt
+bgtu:
+  target
+  rt
+  rs
+  bltu
+    rel
+      target
+    rs
+    rt
+bleu:
+  target
+  rt
+  rs
+  bgeu
+    rel
+      target
+    rs
+    rt
+elf_base:
+  addi
+    0x10000
+    zero
+    a0
+from_base:
+  addr
+  addi
+    -65536
+    addr
+    a0
+elf_header:
+  entry
+  file_end
+  mem_end
+  dword
+    0x00010102464c457f
+  dword
+    0
+  half
+    2
+  half
+    243
+  word
+    1
+  dword
+    entry
+  dword
+    64
+  dword
+    0
+  word
+    0
+  half
+    64
+  half
+    56
+  half
+    1
+  half
+    64
+  half
+    0
+  half
+    0
+  word
+    1
+  word
+    7
+  dword
+    0
+  dword
+    elf_base
+  dword
+    elf_base
+  dword
+    from_base
+      file_end
+  dword
+    from_base
+      mem_end
+  dword
+    0x1000
