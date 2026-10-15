@@ -110,9 +110,10 @@ bootstrap: $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
 	$(QEMU) $(BOOT)/stage1 $(FF) | cmp - $(BOOT)/tree0.txt
 	@echo "bootstrap: stage1 assembles and prints like stage0"
 
-# As long as ttpc.ff.txt is the translation of ttpc.s (s2ff.pl), stage1 is
-# byte-identical to GNU as assembling ttpc.s, uncompressed, into the layout
-# of ff.ld.
+# As long as ttpc.ff.txt is the translation of ttpc.s (made by s2ff.pl, see
+# git history), stage1 is byte-identical to GNU as assembling ttpc.s,
+# uncompressed, into the layout of ff.ld. Drop this with the first change
+# to ttpc.ff.txt.
 $(BOOT)/oracle.bin: ttpc.s ff.ld | $(BOOT)
 	$(AS) -march=rv64ima -mabi=lp64 -mno-relax $< -o $(BOOT)/oracle.o
 	$(LD) $(TWIN_LDFLAGS) $(BOOT)/oracle.o -o $(BOOT)/oracle
@@ -122,10 +123,6 @@ oracle: $(BOOT)/stage1 $(BOOT)/oracle.bin
 	tail -c +121 $(BOOT)/stage1 | cmp - $(BOOT)/oracle.bin
 	@echo "oracle: stage1 and GNU as agree"
 
-# Translate ttpc.s into the ff source of ttpc again.
-s2ff:
-	perl s2ff.pl ttpc.s $(TTPC_FF)
-
 # Regenerate test.ff: the RV64GC node tree, the macros and the exit-42
 # program (host Perl, see mkff.pl and FF.pm).
 ff:
@@ -134,4 +131,4 @@ ff:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip check run bootstrap oracle s2ff ff clean
+.PHONY: all test roundtrip check run bootstrap oracle ff clean

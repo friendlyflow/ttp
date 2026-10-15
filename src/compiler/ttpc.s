@@ -1,5 +1,9 @@
 # ttpc.s — the trust project compiler, in RISC-V assembly, without libc.
 #
+# FROZEN: this is stage0, the seed of the bootstrap (see PLAN.md). ttpc's
+# source is ttpc.ff.txt now; this file only has to assemble it, and stays
+# as it is so that the chain starts from something small and auditable.
+#
 # A static Linux riscv64 program (run it with qemu-riscv64 on another host).
 # It talks to the kernel only through ecall: it opens the ff file named by
 # its first argument and loads it into memory as a tree of NODEs.

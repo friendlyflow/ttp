@@ -14,6 +14,8 @@ nix develop          # enter a shell with the toolchain
 make                 # build everything  -> build/
 make os              # build the OS       -> build/os/os.elf
 make compiler        # build the compiler -> build/compiler/ttpc
+make compiler-check  # assemble the ff test programs, compare with GNU as, run them
+make bootstrap       # ttpc assembles itself from ff (see src/compiler/PLAN.md)
 make os-test         # boot the OS in a qemu-system-riscv64 window (Ctrl-D to quit)
 make os-console      # same, serial console in this terminal (Ctrl-D or Ctrl-A X)
 make clean           # remove build/

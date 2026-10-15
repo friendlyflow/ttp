@@ -42,59 +42,54 @@ RAM NODE:
 
 id = hash(content + child_ids_in_order)
 
-## Build / run / verify
+## Bootstrap
 
-The bootstrap compiler reads `src/os/boot_flow.txt` (the objdump of the RISC-V
-OS, see `src/os/DISASSEMBLY.md`), breaks each instruction into its fields and
-writes the bytes into a binary image at each line's file offset. Decoding is
-driven by one opcode table (`rv_ops` in `encode.c`, RV64IMAC + Zicsr +
-Zifencei): a 32-bit instruction becomes opcode, funct3/funct7, rd/rs1/rs2 and
-its un-scrambled immediate; a compressed (RVC) one its quadrant, funct bits,
-registers and immediate, described as its 32-bit expansion. The fields are
-reassembled and must reproduce the original bytes (PASS). Words that are no
-such instruction (the `unimp` padding, `.insn`, reserved/HINT encodings, the
-`.rodata` strings shown as code) are passed through verbatim, so the image is
-faithful regardless.
+ttpc assembles itself from ff. The pieces, all in this folder:
 
-Every decoded `.text` line is also re-encoded from objdump's *text* through the
-node-tree assembler (`encode()`) and must give the same bytes: the encoder is
-checked against the real toolchain on every run.
+| file | what |
+|---|---|
+| `ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
+| `ttpc.consts.ff.txt`, `ttpc.ff.txt` | **ttpc in ff**, the source from now on: its constants and its program page, in the text form (`fftext.pl` converts to and from `.ff`). |
+| `mkff.pl` | writes an ff tree: the RV64GC instruction set (pages `0:`, `1:`), then one page per `.ff.txt` file. |
+| `macros.ff.txt` | the shared page: `byte`/`half`/`word`/`dword`, `rel`, `pcrel_hi/lo`, the pseudo-instructions (`li`, `la`, `call`, `j`, `beqz`, ...) and `elf_header`. |
+| `progs/` | test programs (`exit42`, `hello`, `wide`), each with a GNU twin `.s`. |
+| `ff.ld` | the layout ttpc gives a program, for linking the GNU twins. |
+| `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`. |
 
-```sh
-make os compiler && make -C src/os bin      # os.elf, flat os.bin, ttpc
-
-# Expect 0 failed and every .text line re-encoded, e.g.:
-#   ttpc: assembled 342 instruction(s) ... (304 decoded, 38 passed through,
-#         0 failed; 265/265 .text lines re-encoded)
-./build/compiler/ttpc src/os/boot_flow.txt build/compiler/ttpos.img
-./build/compiler/ttpc -v src/os/boot_flow.txt /dev/null | less   # field breakdown
-
-# The image must be byte-identical to os.bin (ttpc pads to 1 MiB, hence -n):
-cmp -n $(stat -c%s build/os/os.bin) build/os/os.bin build/compiler/ttpos.img
-make compiler-test                                     # boot it in QEMU
+```
+stage0 = GNU as(ttpc.s)
+stage1 = stage0(ttpc.ff)        == GNU as(ttpc.s) in ff.ld's layout (make oracle)
+stage2 = stage1(ttpc.ff)        == stage1, byte for byte: the fixed point
 ```
 
-## Assembler mode (`-a`): node tree -> machine code
-
-The inverse direction. Code is written as a **node tree** (the "ff", see
-`include/node.h`): an instruction is a node whose content is the mnemonic and
-whose children are its operands. Operands are leaves (a register `a0`/`x10`, a
-CSR name like `mtvec`, an immediate) or a `mem` node with children
-`base offset` for a load/store address: `ld a0, 8(sp)` is the node `ld` with
-children `a0` and `mem(sp, 8)`. Branch and jump targets are pc-relative
-offsets. The common pseudo-instructions (`li` with a 12-bit value, `mv`, `j`,
-`ret`, `beqz`, `csrr`, `sext.w`, ...) are accepted, and so are explicit `c.*`
-mnemonics. By default the encoder picks the compressed form whenever one fits,
-as GNU as does; an `option` node with child `norvc` / `rvc` turns that off/on.
-
-`ttpc -a` reads a serialized node program and prints each instruction's machine
-code as hex, in memory order. It shares `struct insn`, the opcode table and
-`assemble()` with the decoder, so the encoder and decoder agree on instruction
-shape. (The x86 node program `src/os/ff/program.nodes` went away with the x86
-OS; until a RISC-V one exists, the `.text` re-encode check above is the
-encoder's test.)
-
 ```sh
-./build/compiler/ttpc -a program.nodes       # hex, one insn per line
-./build/compiler/ttpc -a -v program.nodes    # + mnemonic/operands
+make bootstrap        # stage1 == stage2, stage1 behaves as stage0, the oracle
+make compiler-check   # every program == its GNU twin, exit42 and hello run
 ```
+
+A change to ttpc is a change to `ttpc.ff.txt` (eventually `ttpc.ff` in
+sicompass) that keeps `make bootstrap` green: stage0 builds the new stage1,
+which must then rebuild itself identically. `make oracle` holds only while
+`ttpc.ff.txt` is still the translation of `ttpc.s`; drop it from the root
+`bootstrap` target with the first change to `ttpc.ff.txt`.
+
+### The language ttpc assembles
+
+- A node ending in `:` is a function; its leading leaf children are its
+  parameters. Any other node is a call; its children are the arguments.
+- The root's children are pages. Every page but the last holds definitions;
+  the last page is the program: its functions are **placed** labels whose
+  children are emitted where they stand (block form, nested ones are local
+  labels), its calls are emitted in order. Two passes: the first finds the
+  labels, the second emits.
+- A function whose body holds only fields (fixed `name:` bits and slice
+  calls `imm[11:0] imm`) is an **encoding**: an instruction or a data word.
+- **Contexts**: code (encode and emit, or expand a macro), field (the fields
+  of an encoding, MSB first) and exec (assemble time, on virtual registers;
+  the ALU ops of `exec_ops` are the seed).
+- **Arguments**: a nested call (run in exec, its value is `a0`), a number
+  (decimal or `0x`), a parameter, a register, `pc`, a label or a constant.
+- **Builtins**: `ascii`, `align`, `reserve`, `origin`, `bss`, `size`.
+- No range checks yet: a branch farther than its reach is silently wrong.
+  The oracle caught nine of those in `ttpc.s`; keep error stubs near their
+  users.

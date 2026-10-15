@@ -27,6 +27,9 @@ RAM NODE:
 ## !! compiler in riscv c met encode.c compileren --> binary --> decode.c aanpassen naar ff op sicompass met goede struct !!
 ## = bootstrap
 
+## bootstrap: klaar (15 okt 2026)
+- ttpc.s is stage0 en bevroren, ttpc.ff.txt is de bron, `make bootstrap` moet groen blijven
+
 ## na de bootstrap (ttpc.ff assembleert zichzelf)
 - Merkle hashes: sha256 in ttpc, de hashes van de nodes nakijken
 - range checks op immediates (tot dan vangt de GNU oracle overflow)
