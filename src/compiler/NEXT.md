@@ -26,3 +26,10 @@ RAM NODE:
 
 ## !! compiler in riscv c met encode.c compileren --> binary --> decode.c aanpassen naar ff op sicompass met goede struct !!
 ## = bootstrap
+
+## na de bootstrap (ttpc.ff assembleert zichzelf)
+- Merkle hashes: sha256 in ttpc, de hashes van de nodes nakijken
+- range checks op immediates (tot dan vangt de GNU oracle overflow)
+- conditionals en loops in exec context (li die zelf zijn expansie kiest)
+- native exec in plaats van de seed tabel (addi, slli, ...)
+- includes / meerdere files, secties als aparte segments, het os in ff

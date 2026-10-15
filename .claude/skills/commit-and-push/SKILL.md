@@ -31,12 +31,14 @@ Commit the working-tree changes and push them to the remote.
 
 5. Push the current branch. On first push of a branch, set upstream:
    `git push -u origin <branch>`; otherwise `git push`.
-6. **Auth:** this repo pushes over SSH (`git@github.com:friendlyflow/ttp.git`).
-   If a push fails with "could not read Username for https://github.com", the
-   remote is on HTTPS without credentials — switch it with
-   `git remote set-url origin git@github.com:friendlyflow/ttp.git` and retry.
-   There is no `gh` CLI and no HTTPS credential helper; SSH (key
-   `~/.ssh/id_ed25519`) is the working path.
+6. **Auth:** this repo pushes over HTTPS
+   (`https://github.com/friendlyflow/ttp.git`). The `gh auth git-credential`
+   helper is already set machine-wide (home-manager), so a plain `git push`
+   works. There is no SSH key by design: if a push fails with
+   `Permission denied (publickey)`, the remote is on SSH — switch it with
+   `git remote set-url origin https://github.com/friendlyflow/ttp.git` and
+   retry. Never run `gh auth setup-git` or `git config --global`: the global
+   git config is a read-only Nix store symlink.
 7. Verify with `git log --oneline -1` and `git status` (should show
    "up to date with origin/<branch>"). Report the hash, subject, and that it
    pushed.
