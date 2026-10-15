@@ -11,13 +11,32 @@
 #
 # with hash = sha256(child_0.hash ‖ … ‖ child_n.hash ‖ sha256(content)).
 #
+# Functions and calls: a node ending in ':' is a function, its leading
+# children without ':' are its parameters. A node without ':' is a call, its
+# children are the arguments, bound by position to the parameters of the
+# function of that name. An argument is a parameter name of the enclosing
+# function, a register (a0, t0, ...) or a decimal number. A function returns
+# its value in a0; t0 and t1 are scratch. A call of an instruction (addi,
+# slli, ...) assembles to that instruction's machine word, a call of any
+# other function expands in place.
+#
 # The tree: comment:, the registers (x0..x31, f0..f31, each with its 5-bit
-# number as child), then every instruction (RV64I, Zifencei, Zicsr, the
-# privileged mret/sret/wfi/sfence.vma, M, A, F, D, C). An instruction's
-# children are its encoding fields in bit order, MSB first. A fixed field
-# (opcode, funct*, ...) has its bits as child; an operand field (rd, rs1,
-# imm, ...) has no child yet. A node holds at most 255 children, so the list
-# is split over the root's children 0:, 1:, ...
+# number as child), bits:, the slice functions, then every instruction
+# (RV64I, Zifencei, Zicsr, the privileged mret/sret/wfi/sfence.vma, M, A, F,
+# D, C). A node holds at most 255 children, so the list is split over the
+# root's children 0:, 1:, ...
+#
+# An instruction is a function: its operands (rd, rs1, imm, ...) are its
+# parameters, in field order, followed by its encoding fields in bit order,
+# MSB first. A fixed field (opcode, funct*, ...) is a definition with its bits
+# as child; an operand field is a call: rd refers to the parameter rd,
+# imm[20|10:1|11|19:12] calls the slice function of that name with arg imm.
+#
+#   bits: value left right pos   a0 = ((value << left) >> right) << pos
+#
+# moves bits hi:lo of value to bit pos for left = 63-hi, right = 63-hi+lo.
+# A slice function base[seg|seg|...]: base returns its field: one bits call
+# per segment, or-ed together, the first segment in the field's top bits.
 
 use strict;
 use warnings;
@@ -25,13 +44,62 @@ use Digest::SHA qw(sha256);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
-# "funct3=000" -> funct3: with child 000; "rd" -> rd: without children.
+sub call { my ($name, @args) = @_; node($name, map { node($_) } @args) }
+
+# Slice names (imm[11:0], ...) in order of first use, each gets a function.
+my (@slices, %slices);
+
+# "funct3=000" -> funct3: with child 000; "rd" -> call rd;
+# "imm[11:0]" -> call imm[11:0] with arg imm.
 sub field {
     my ($name, $bits) = split /=/, $_[0], 2;
-    defined $bits ? node("$name:", node($bits)) : node("$name:");
+    return node("$name:", node($bits)) if defined $bits;
+    return call($name) unless $name =~ /^(.+)\[/;
+    push @slices, $name unless $slices{$name}++;
+    call($name, $1);
 }
 
-sub insn { my ($name, @fields) = @_; node("$name:", map { field($_) } @fields) }
+# The operand fields' base names, in field order, are the parameters.
+sub insn {
+    my ($name, @fields) = @_;
+    my (%seen, @params);
+    for (grep { !/=/ } @fields) {
+        (my $p = $_) =~ s/\[.*//;
+        push @params, $p unless $seen{$p}++;
+    }
+    node("$name:", (map { node($_) } @params), map { field($_) } @fields);
+}
+
+# ---------------------------------------------------------------------------
+# Bit slices
+# ---------------------------------------------------------------------------
+
+my $bits = node("bits:", (map { node($_) } qw(value left right pos)),
+    call("slli", qw(left value a0)),        # drop the bits above hi
+    call("srli", qw(right a0 a0)),          # hi:lo down to bit 0
+    call("slli", qw(pos a0 a0)));           # and up to pos
+
+# "imm[20|10:1|11|19:12]" -> its function with parameter imm.
+sub slice {
+    my ($name) = @_;
+    my ($base, $list) = $name =~ /^(.+)\[(.+)\]$/ or die "mkff: bad slice $name\n";
+    my @segs = map { /^(\d+)(?::(\d+))?$/ or die "mkff: bad slice $name\n"; [$1, $2 // $1] }
+        split /\|/, $list;
+    my $pos = 0;
+    $pos += $_->[0] - $_->[1] + 1 for @segs;
+    my @args;
+    for (@segs) {
+        my ($hi, $lo) = @$_;
+        $pos -= $hi - $lo + 1;
+        push @args, [63 - $hi, 63 - $hi + $lo, $pos];
+    }
+    return node("$name:", node($base), call("bits", $base, @{ $args[0] })) if @args == 1;
+    node("$name:", node($base),
+        call("addi", 0, $base, "t1"),       # keep base, a0 is overwritten
+        (map { (call("bits", "t1", @{ $args[$_] }),
+                $_ ? call("or", qw(a0 t0 t0)) : call("addi", qw(0 a0 t0))) } 0 .. $#args),
+        call("addi", qw(0 t0 a0)));
+}
 
 # ---------------------------------------------------------------------------
 # Registers
@@ -234,7 +302,7 @@ def("c.sdsp",  "funct3=111", "uimm[5:3|8:6]", "rs2", "op=10");
 # Tree, hashes, bytes
 # ---------------------------------------------------------------------------
 
-my @items = (node("comment:"), @registers, @insns);
+my @items = (node("comment:"), @registers, $bits, (map { slice($_) } @slices), @insns);
 my @pages;
 push @pages, node(scalar(@pages) . ":", splice(@items, 0, 255)) while @items;
 my $root = node("", @pages);
