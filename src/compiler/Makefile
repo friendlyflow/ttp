@@ -49,15 +49,21 @@ $(BUILD)/check.bin: check.s | $(BUILD)
 	$(AS) $(ASFLAGS) $< -o $(BUILD)/check.o
 	$(OBJCOPY) -O binary -j .text $(BUILD)/check.o $@
 
-check: asm $(BUILD)/check.bin
+# The text form of test.ff must read back to the same bytes.
+roundtrip: | $(BUILD)
+	perl fftext.pl txt $(FF) > $(BUILD)/roundtrip.ff.txt
+	perl fftext.pl ff $(BUILD)/roundtrip.ff.txt | cmp - $(FF)
+
+check: roundtrip asm $(BUILD)/check.bin
 	tail -c +121 $(OUT) | cmp - $(BUILD)/check.bin
 	@echo "check: ttpc and GNU as agree"
 
-# Regenerate the RV64GC node tree in test.ff (host Perl, see mkff.pl).
+# Regenerate test.ff: the RV64GC node tree plus the exit-42 program (host
+# Perl, see mkff.pl and FF.pm).
 ff:
-	perl mkff.pl > test.ff.tmp && mv test.ff.tmp test.ff
+	perl mkff.pl progs/exit42.ff.txt > test.ff.tmp && mv test.ff.tmp test.ff
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test asm run check ff clean
+.PHONY: all test asm run roundtrip check ff clean

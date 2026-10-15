@@ -1,15 +1,10 @@
 #!/usr/bin/env perl
-# mkff.pl — writes test.ff: the RV64GC instruction set as an ff node tree.
+# mkff.pl — writes an ff tree: the RV64GC instruction set, then one page per
+# text file given (see FF.pm for both formats).
 #
-#   perl mkff.pl > test.ff
+#   perl mkff.pl progs/exit42.ff.txt > test.ff
 #
-# A host tool (core Perl only), not part of ttpc. The ff format is the one of
-# the sicompass text editor (texteditor-plugin-sicompass/src/ff.rs): a node
-# is written depth-first as
-#
-#   hash[32] · children_len u8 · children · content_len u8 · content
-#
-# with hash = sha256(child_0.hash ‖ … ‖ child_n.hash ‖ sha256(content)).
+# A host tool (core Perl only), not part of ttpc.
 #
 # Functions and calls: a node ending in ':' is a function, its leading
 # children without ':' are its parameters. A node without ':' is a call, its
@@ -24,8 +19,8 @@
 # number as child), bits:, the slice functions, then every instruction
 # (RV64I, Zifencei, Zicsr, the privileged mret/sret/wfi/sfence.vma, M, A, F,
 # D, C). A node holds at most 255 children, so the list is split over the
-# root's children 0:, 1:, ... The last root child holds the program: the
-# calls that ttpc assembles, in order.
+# root.s children 0:, 1:, ... Each text file given becomes the next page,
+# the last one is the program that ttpc assembles.
 #
 # An instruction is a function: its operands (rd, rs1, imm, ...) are its
 # parameters, in field order, followed by its encoding fields in bit order,
@@ -43,11 +38,9 @@
 
 use strict;
 use warnings;
-use Digest::SHA qw(sha256);
-
-sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
-
-sub call { my ($name, @args) = @_; node($name, map { node($_) } @args) }
+use FindBin;
+use lib $FindBin::Bin;
+use FF qw(node call read_txt write_ff);
 
 # Slice names (imm[11:0], ...) in order of first use, each gets a function.
 my (@slices, %slices);
@@ -315,53 +308,17 @@ def("c.swsp",  "funct3=110", "uimm[5:2|7:6]", "rs2", "op=10");
 def("c.sdsp",  "funct3=111", "uimm[5:3|8:6]", "rs2", "op=10");
 
 # ---------------------------------------------------------------------------
-# Program: the calls ttpc assembles, after the definitions
-# ---------------------------------------------------------------------------
-
-my @program = (
-    call("addi", qw(42 zero a0)),           # li a0, 42
-    call("addi", qw(93 zero a7)),           # li a7, SYS_exit
-    call("ecall"),                          # exit(42); the rest only checks encodings
-    call("sd", qw(-8 a0 sp)),               # sd a0, -8(sp)
-    call("ld", qw(16 sp s0)),               # ld s0, 16(sp)
-    call("lui", qw(305418240 t0)),          # lui t0, 0x12345
-    call("beq", qw(16 a1 a0)),              # beq a0, a1, .+16
-    call("jal", qw(-12 ra)),                # jal ra, .-12
-    call("slli", qw(3 a0 a0)),              # slli a0, a0, 3
-    call("sub", qw(a1 a0 a0)),              # sub a0, a0, a1
-    call("c.addi", qw(-1 a0)),              # c.addi a0, -1
-    call("c.ld", qw(8 s0 a0)),              # c.ld a0, 8(s0)
-    call("c.mv", qw(a0 a1)),                # c.mv a0, a1
-);
-
-# ---------------------------------------------------------------------------
 # Tree, hashes, bytes
 # ---------------------------------------------------------------------------
 
 my @items = (node("comment:"), @registers, $bits, (map { slice($_) } @slices), @insns);
 my @pages;
 push @pages, node(scalar(@pages) . ":", splice(@items, 0, 255)) while @items;
-push @pages, node(scalar(@pages) . ":", @program);
-my $root = node("", @pages);
-
-sub rehash {
-    my ($n) = @_;
-    my $d = Digest::SHA->new(256);
-    $d->add(rehash($_)) for @{ $n->{children} };
-    $d->add(sha256($n->{content}));
-    $n->{hash} = $d->digest;
+for my $file (@ARGV) {
+    open my $in, "<:raw", $file or die "mkff: cannot open $file: $!\n";
+    my $text = do { local $/; <$in> };
+    push @pages, node(scalar(@pages) . ":", read_txt($text, $file));
 }
 
-sub emit {
-    my ($n) = @_;
-    my $count = @{ $n->{children} };
-    my $len = length $n->{content};
-    die "mkff: $n->{content} has $count children (max 255)\n" if $count > 255;
-    die "mkff: $n->{content} is $len bytes (max 255)\n" if $len > 255;
-    join "", $n->{hash}, chr($count), (map { emit($_) } @{ $n->{children} }),
-        chr($len), $n->{content};
-}
-
-rehash($root);
 binmode STDOUT;
-print emit($root);
+print write_ff(node("", @pages));
