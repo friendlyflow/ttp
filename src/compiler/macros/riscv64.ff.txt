@@ -834,9 +834,42 @@ c:
       0
       t0
       ra
+  comment:
+    jitcall rs: call the code that compile time made, at rs; its value is in a0 (V). On riscv64 that is jalr, a host of ttpc that is not (rv64:) also moves V to a0.
+  jitcall:
+    rs
+    jalr
+      0
+      rs
+      ra
+  comment:
+    ldword off base rd: rd = a word of C at base + off (the bridge reads its arguments with it): ld on riscv64. cc_ctreg: the register the C layer gives ttpc's a1 in, for cc_ctargs: a1 itself.
+  ldword:
+    off
+    base
+    rd
+    ld
+      off
+      base
+      rd
+  cc_ctreg:
+    addi
+      11
+      zero
+      a0
 linux:
   comment:
     The Linux system calls by name, for syscall: riscv64 has the generic numbers.
+  comment:
+    host_name, host_name_len: the name of this section, NUL-terminated, and its length without the NUL: what ttpc built for riscv64 takes as its host, the section compile time is assembled with.
+  host_name:
+    ascii
+      riscv64\x00
+  host_name_len:
+    addi
+      7
+      zero
+      a0
   SYS_read:
     addi
       63

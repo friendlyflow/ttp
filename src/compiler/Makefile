@@ -1,12 +1,16 @@
 # ttpc is plain RISC-V assembly, no libc: assembled and linked with the
 # bare-metal cross binutils into a static Linux riscv64 executable that only
-# makes raw syscalls. On a non-RISC-V host it runs under qemu-riscv64.
-CROSS   ?= riscv64-none-elf-
+# makes raw syscalls. On riscv64 it runs natively, elsewhere under qemu-riscv64.
+# Without the cross binutils (no Nix) a host's own as and ld do for it.
+ARCH := $(shell uname -m)
+have = $(shell command -v $(1) 2>/dev/null)
+native_or = $(if $(call have,$(2)as),$(2),$(if $(filter $(1),$(ARCH)),,$(2)))
+CROSS   ?= $(call native_or,riscv64,riscv64-none-elf-)
 AS      := $(CROSS)as
 LD      := $(CROSS)ld
 OBJCOPY := $(CROSS)objcopy
 ASFLAGS ?= -march=rv64imac -mabi=lp64
-QEMU    ?= qemu-riscv64
+QEMU    ?= $(if $(filter riscv64,$(ARCH)),,qemu-riscv64)
 
 # The GNU twins of the ff programs (progs/*.s): every extension ff encodes,
 # no relaxation, linked with ff.ld into ttpc's layout.
@@ -17,7 +21,8 @@ TWIN_LDFLAGS := --no-relax --no-warn-rwx-segments -T ff.ld
 # no-libc binary has no use for (ld warns). A non-Nix ld ignores this.
 export NIX_HARDENING_ENABLE :=
 
-BUILD ?= build
+# Everything built goes under the build folder of the repository.
+BUILD ?= ../../build/compiler
 
 BIN := $(BUILD)/ttpc
 OBJ := $(BUILD)/ttpc.o
@@ -238,6 +243,114 @@ targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%)
 	grep -q "compile time: mips is not a target" $(P)/mips.err
 	@echo "targets: $(TARGETS) and riscv64"
 
+# The bootstrap on the other hosts, without riscv64. hosts/<host>/ttpc.s is
+# the seed there, a port of ttpc.s (with OUT_SIZE 1 MiB): it must agree
+# with ttpc.s on everything ttpc.s does (seed-<host>). ttpc is written in
+# RV64: mkhost.pl makes its ops rv.op, which the host's rv64: group defines
+# in the host's instructions, and mkwhole.pl makes of that a whole tree in
+# the language of the seed. The seed assembles it into stage1, stage1
+# assembles ttpc into stage2: the same, and the same as what the riscv64
+# chain makes with --target <host> (cross), two chains that share nothing
+# but the source. Then stage2 builds the C programs for its own host, which
+# must do what their .expect says. On the host itself all of it runs
+# without qemu.
+HOSTS := x86_64 aarch64 arm
+RUN_x86_64 := $(if $(filter x86_64,$(ARCH)),,qemu-x86_64)
+RUN_aarch64 := $(if $(filter aarch64 arm64,$(ARCH)),,qemu-aarch64)
+RUN_arm := $(if $(filter armv7l armv8l,$(ARCH)),,qemu-arm)
+# What this machine runs: a host natively or under its qemu; riscv64 the same.
+# Without qemu only its own host is bootstrapped, and not compared with the
+# riscv64 chain. The seed takes the cross binutils, or the host's own.
+can = $(if $(RUN_$(1)),$(call have,$(RUN_$(1))),yes)
+CAN_RISCV := $(if $(QEMU),$(call have,$(QEMU)),yes)
+RUNNABLE := $(foreach h,$(HOSTS),$(if $(call can,$(h)),$(h)))
+SEEDCROSS_x86_64 := $(call native_or,x86_64,x86_64-elf-)
+SEEDCROSS_aarch64 := $(call native_or,aarch64,aarch64-none-elf-)
+SEEDCROSS_arm := $(call native_or,armv7l,arm-none-eabi-)
+SASFLAGS_x86_64 :=
+SASFLAGS_aarch64 :=
+SASFLAGS_arm := -march=armv7-a
+SEED_FF := ttpc1.ff $(PROGS:%=progs/%.ff)
+
+define host
+
+$(BUILD)/$(1):
+	mkdir -p $$@
+
+$(BUILD)/$(1)/seed: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
+	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
+	$(SEEDCROSS_$(1))ld -static -e _start $$@.o -o $$@
+
+$(BUILD)/$(1)/ttpc.ff: $(TTPC_FF) ttpc.defs.ff $(SHARED) mkhost.pl | $(BUILD)/$(1)
+	perl mkhost.pl $(1) $(BUILD)/$(1) ttpc.defs.ff $(TTPC_FF)
+
+$(BUILD)/$(1)/ttpc.defs.ff: $(BUILD)/$(1)/ttpc.ff
+
+$(BUILD)/$(1)/whole.ff: $(BUILD)/$(1)/ttpc.ff $(BUILD)/$(1)/ttpc.defs.ff mkwhole.pl
+	perl mkwhole.pl $(1) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff > $$@
+
+$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/whole.ff $(BUILD)/$(1)/seed
+	$(RUN_$(1)) $(BUILD)/$(1)/seed $$< $$@ > $$@.lst
+
+$(BUILD)/$(1)/stage2: $(BUILD)/$(1)/stage1
+	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+
+$(BUILD)/$(1)/cross: $(BOOT)/stage2 $(BUILD)/$(1)/ttpc.ff
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+
+# The seed against ttpc.s: the same output, listing, errors and status.
+seed-$(1): $(BUILD)/$(1)/seed $(BIN) | $(BUILD)/$(1)
+	@set -e; d=$(BUILD)/$(1)/seedcheck; mkdir -p $$$$d; \
+	head -c 1000 progs/exit42.ff > $$$$d/truncated.ff; \
+	cat progs/exit42.ff progs/exit42.ff > $$$$d/trailing.ff; \
+	run() { n=$$$$1; shift; \
+	    s=0; $(QEMU) $(BIN) "$$$$@" $$$$d/$$$$n.out0 > $$$$d/$$$$n.1 2> $$$$d/$$$$n.2 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.3; \
+	    s=0; $(RUN_$(1)) $(BUILD)/$(1)/seed "$$$$@" $$$$d/$$$$n.out1 > $$$$d/$$$$n.4 2> $$$$d/$$$$n.5 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.6; \
+	    cmp $$$$d/$$$$n.1 $$$$d/$$$$n.4; cmp $$$$d/$$$$n.2 $$$$d/$$$$n.5; cmp $$$$d/$$$$n.3 $$$$d/$$$$n.6; \
+	    if test -f $$$$d/$$$$n.out0; then cmp $$$$d/$$$$n.out0 $$$$d/$$$$n.out1; else test ! -f $$$$d/$$$$n.out1; fi; \
+	    echo "seed-$(1): $$$$n: as ttpc.s"; }; \
+	for f in $(SEED_FF); do run $$$$(basename $$$$f .ff) $$$$f; done; \
+	pr() { n=$$$$1; shift; \
+	    s=0; $(QEMU) $(BIN) "$$$$@" > $$$$d/$$$$n.1 2> $$$$d/$$$$n.2 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.3; \
+	    s=0; $(RUN_$(1)) $(BUILD)/$(1)/seed "$$$$@" > $$$$d/$$$$n.4 2> $$$$d/$$$$n.5 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.6; \
+	    cmp $$$$d/$$$$n.1 $$$$d/$$$$n.4; cmp $$$$d/$$$$n.2 $$$$d/$$$$n.5; cmp $$$$d/$$$$n.3 $$$$d/$$$$n.6; \
+	    echo "seed-$(1): $$$$n: as ttpc.s"; }; \
+	pr print-ttpc1 ttpc1.ff; pr print-hello progs/hello.ff; pr toolarge $(SHARED); pr usage; \
+	pr toomany a b c; pr missing $$$$d/none.ff; pr truncated $$$$d/truncated.ff; pr trailing $$$$d/trailing.ff
+
+bootstrap-$(1): $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),$(BUILD)/$(1)/cross)
+	cmp $(BUILD)/$(1)/stage1 $(BUILD)/$(1)/stage2
+	@echo "bootstrap-$(1): from its seed, stage1 == stage2"
+	$(if $(CAN_RISCV),cmp $(BUILD)/$(1)/stage1 $(BUILD)/$(1)/cross,@echo "bootstrap-$(1): no $(QEMU) here, not compared with the riscv64 chain")
+	$(if $(CAN_RISCV),@echo "bootstrap-$(1): == the riscv64 chain's ttpc for $(1)")
+
+# The C programs, built by stage2 for its own host and run there.
+chello-$(1): $(BUILD)/$(1)/stage2
+	@set -e; d=$(BUILD)/$(1)/c; mkdir -p $$$$d; \
+	for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)); do \
+	    e=progs/$$$$p.$(1).expect; test -f $$$$e || e=progs/$$$$p.expect; \
+	    $(RUN_$(1)) $(BUILD)/$(1)/stage2 --target $(1) $(SHARED) progs/$$$$p.ff $$$$d/$$$$p > $$$$d/$$$$p.lst; \
+	    tail -n +2 $$$$e > $$$$d/$$$$p.want; \
+	    s=0; $(RUN_$(1)) $$$$d/$$$$p > $$$$d/$$$$p.out || s=$$$$?; \
+	    want=$$$$(head -n 1 $$$$e | cut -d" " -f2); \
+	    test $$$$s -eq $$$$want || { echo "chello-$(1): $$$$p: exit status $$$$s, not $$$$want"; exit 1; }; \
+	    cmp $$$$d/$$$$p.out $$$$d/$$$$p.want; \
+	    echo "chello-$(1): $$$$p"; \
+	done; \
+	grep -qx compiling $$$$d/cnow.lst; ! grep -aq compiling $$$$d/cnow
+	@echo "chello-$(1): the C programs, built on $(1) by its own ttpc, run"
+
+.PHONY: seed-$(1) bootstrap-$(1) chello-$(1)
+endef
+$(foreach h,$(HOSTS),$(eval $(call host,$(h))))
+
+# seeds needs ttpc.s to compare with; bootstraps is riscv64 (make bootstrap)
+# and every other host this machine runs, from its own seed.
+seeds: $(if $(CAN_RISCV),$(RUNNABLE:%=seed-%))
+	@echo "seeds: $(if $(CAN_RISCV),$(RUNNABLE) agree with ttpc.s,no $(QEMU) here to run ttpc.s)"
+bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=chello-%)
+	@echo "bootstraps: $(strip $(if $(CAN_RISCV),riscv64) $(RUNNABLE))$(if $(filter-out $(RUNNABLE),$(HOSTS)),; not here (no qemu): $(filter-out $(RUNNABLE),$(HOSTS)))"
+
 # Make shared.ff again from mkff.pl, shared.ff.txt, isa/ and macros/, after
 # changing any of them. The whole trees keep the shared pages they have.
 refresh:
@@ -246,4 +359,4 @@ refresh:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip check run bootstrap ctest ctime targets refresh clean
+.PHONY: all test roundtrip check run bootstrap ctest ctime targets seeds bootstraps refresh clean

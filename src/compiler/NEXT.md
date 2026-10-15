@@ -43,3 +43,8 @@ RAM NODE:
 - de C-laag bestaat één keer: primitieven (`cc_push`, `cc_jz`, ...) per target in `c:`
 - versieketen: ttpc1.ff bevroren (stage0 bouwt het), ttpc.ff + ttpc.defs.ff bouwt ttpc1
 - nog te doen: i64/u64 op arm (registerparen), bereikcontrole per operand i.p.v. via namen, labels die constanten van een target verbergen, symbolen sneller opzoeken (shared.ff is 2.6 MB), ttpc zelf in de C-laag (dan ook ttpc voor andere targets)
+## andere hosts (15 okt 2026)
+- seeds `hosts/x86_64|aarch64|arm/ttpc.s`: ports van ttpc.s, byte voor byte gelijk (`make seeds`), enkel `OUT_SIZE` 1 MiB
+- `make bootstraps`: per host seed -> stage1 == stage2 == de riscv64-keten met --target, zonder riscv64; de C-programma's draaien
+- ttpc.ff blijft RV64: `mkhost.pl` maakt er `rv.<op>` van, `rv64:` per host; ttpc1 enkel op riscv64 (zijn C-laag is RV64)
+- nog te doen: echte aarch64/arm hardware (cache flush van compile time is enkel onder qemu getest), riscv64 ook als host in dezelfde vorm (`hosts/`, `progs/riscv64/`)

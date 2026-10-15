@@ -59,6 +59,10 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, program-only, with GNU twins; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
 | `ff.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
 | `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
+| `hosts/<host>/ttpc.s` | **the seeds of the other hosts** (x86_64, aarch64, arm), frozen: ports of `ttpc.s`, function by function, that must agree with it byte for byte (`make seeds`), with one difference: `OUT_SIZE` 1 MiB, since ttpc for those hosts is larger than stage0's 64 KiB. |
+| `rv64:` in `macros/<host>.ff.txt` | ttpc's own ops of RV64 (`rv.add`, `rv.ld`, ..., 50 or so) and its registers (`rv.a0`, ...) in the host's instructions: on x86_64 and arm the registers are 8-byte slots in memory, on aarch64 registers of its own. Also per host: `host_name`, `cc_ctargs` / `cc_call_l` / `cc_ctreg` (the bridge from compile time to ttpc), `ldword`. |
+| `mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host. |
+| `mkwhole.pl` | a whole tree in the language of stage0: the target's section as pages, the shared definitions, the given pages, the exec ops, the program; only what the program reaches (stage0 reads 1 MiB). |
 
 ```
 stage0 = GNU as(ttpc.s)
@@ -68,8 +72,29 @@ stage2 = stage1(shared.ff ttpc.defs.ff ttpc.ff)
                                 == stage1, byte for byte: the fixed point
 ```
 
+On x86_64, aarch64 and arm the chain starts from that host's seed and
+never runs riscv64 (`make bootstraps`; natively on the host itself, under
+`qemu-<host>` elsewhere). ttpc1 is not in it: its C layer still emits
+RV64 by name, so its compile time can only run on riscv64. The seed builds
+today's ttpc.ff directly (stage0 builds it too, into exactly stage1):
+
+```
+seed   = GNU as(hosts/<host>/ttpc.s)
+stage1 = seed(mkwhole(<host>, mkhost(<host>, ttpc.defs.ff ttpc.ff)))
+stage2 = stage1(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
+                                == stage1 == what the riscv64 chain makes
+                                   with --target <host>: two chains that
+                                   share only the source
+```
+
 ```sh
 make bootstrap        # ttpc1 assembles itself, stage1 == stage2
+make bootstraps       # the same from the seed of x86_64, aarch64, arm; the
+                      # C programs built there by stage2 run there
+make seeds            # each seed agrees with ttpc.s
+                      # (both run what this machine can: its own host
+                      # natively, the others only if their qemu is there;
+                      # without qemu-riscv64 no comparison with riscv64)
 make compiler-check   # every asm program == its GNU twin, they run; the C
                       # programs (built by stage2) do what .expect says, on
                       # every target (make targets)
@@ -197,8 +222,9 @@ only).
 ### Targets
 
 `ttpc --target <name> shared.ff prog.ff out` (riscv64 without it) builds
-for riscv64, x86_64, aarch64 or arm. ttpc itself runs on riscv64 (under
-qemu elsewhere); that is the *host*, what --target names the *target*.
+for riscv64, x86_64, aarch64 or arm. ttpc itself runs on any of them (see
+Bootstrap): the one it was built for is its *host* (`host_name` of that
+section), what --target names the *target*.
 
 - **The shared page** (`shared.ff`, from `mkff.pl`): what every target has
   (`shared.ff.txt`: `byte` `half` `word` `dword`, `bits`, `rel`), then one
@@ -213,9 +239,10 @@ qemu elsewhere); that is the *host*, what --target names the *target*.
   section while compiling puts its definitions in scope, like an include.
   A section, as a value, is its node.
 - **Scopes**: the program is assembled with the target's definitions, then
-  the shared ones; compile time with the host's (riscv64). The assemble-time
-  ops (`exec`: `add` `addi` `slli` ... on `a0` `t0` `t1`) are always the
-  host's, so `bits`, `rel` and the slices work for every target.
+  the shared ones; compile time with the host's, since it runs natively.
+  The assemble-time ops (`exec`: `add` `addi` `slli` ... on `a0` `t0` `t1`)
+  are always riscv64's: ttpc interprets them, on any host, so `bits`, `rel`
+  and the slices work for every target.
 - **Linux**: each section names its system calls, `SYS_write`, `SYS_exit`,
   ...; a C program says `syscall` / `SYS_exit` / n.
 - **frame:**, `elf_header`, `elf_base`, `from_base` are per target (`elf:`).
@@ -261,8 +288,8 @@ operands: pass 1 and pass 2 must lay out the same.
 | `cc_load_i8` ... `cc_load_i64`, `cc_load_u8` ... `cc_load_u64` | V = the value at the address V, extended |
 | `cc_store_8` ... `cc_store_64` | [L] = V |
 
-riscv64 also has `cc_ctargs` and `cc_call_l`, which only compile time
-(the host) uses.
+Every section also has `cc_ctargs`, `cc_call_l` and `cc_ctreg`, which only
+compile time uses, on that host: the bridge from its code back into ttpc.
 
 The targets' choices (see each `c:` group):
 
