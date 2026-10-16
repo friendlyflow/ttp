@@ -70,7 +70,7 @@ syscall:
   number
   arguments
 comment
-  address of: C, the address of a variable (C's &x); as a type, address T is a pointer to T, a word of the target.
+  address of: C, the address of a variable (C's &x). As a type, address and then a type, siblings, is a pointer to it, a word of the target; address alone points to nothing. address with a type and a value as its children converts the value.
 address:
   of
 comment
@@ -78,12 +78,12 @@ comment
 content:
   address
 comment
-  array type count: C, a type of count elements of type.
+  array element count: C, a type, siblings: count elements of the type element; the items of a declaration come after count.
 array:
-  type
+  element
   count
 comment
-  struct fields: C, a type laid out as C does, its fields name: type.
+  struct fields: C, a type laid out as C does, its fields name: and a type.
 struct:
   fields
 comment
@@ -131,7 +131,7 @@ comment
 compile:
   w
 comment
-  char value: C, an unsigned byte; called with a value, converts it. char with a leaf that names nothing is text: its bytes and a NUL.
+  char value: C, an unsigned byte; called with a value, converts it. Text is address char with a leaf that names nothing: its bytes and a NUL, the value their address.
 char:
   value
 comment
@@ -181,6 +181,9 @@ u64:
 comment
   void: C, no value, the type of a function that returns none.
 void:
+comment
+  type: C, compile time only, a word of any type, as C++'s T: the type of a parameter of a compile time function.
+type:
 comment
   left = right: C, an operator between its neighbours: right is stored in left.
 =:
@@ -398,5 +401,6 @@ comment
   else
     fail
       target
-      char
+      address
+        char
         is not a target

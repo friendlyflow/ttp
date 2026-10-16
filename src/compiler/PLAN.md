@@ -59,6 +59,7 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, program-only, with GNU twins; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
 | `ff.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
 | `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
+| `language.ff.txt`, `language.ff` | the language, asm and C, described as an ff tree: what can be written and what it means. |
 | `hosts/<host>/ttpc.s` | **the seeds of the other hosts** (x86_64, aarch64, arm), frozen: ports of `ttpc.s`, function by function, that must agree with it byte for byte (`make seeds`), with one difference: `OUT_SIZE` 1 MiB, since ttpc for those hosts is larger than stage0's 64 KiB. |
 | `rv64:` in `macros/<host>.ff.txt` | ttpc's own ops of RV64 (`rv.add`, `rv.ld`, ..., 50 or so) and its registers (`rv.a0`, ...) in the host's instructions: on x86_64 and arm the registers are 8-byte slots in memory, on aarch64 registers of its own. Also per host: `host_name`, `cc_ctargs` / `cc_call_l` / `cc_ctreg` (the bridge from compile time to ttpc), `ldword`. |
 | `mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host. |
@@ -164,8 +165,9 @@ A function on the program page whose first child is a type is C, in ff
 style: no text to parse, the tree is the syntax, a node holds one thing.
 ttpc lowers it to the **primitives** of the target (see Targets): values go
 through V, the left operand of an operator through the stack, locals below
-the frame pointer. The C layer is written once, for every target.
-
+the frame pointer. The C layer is written once, for every target. All of
+the language, asm and C, is described as an ff tree in `language.ff.txt`
+(`language.ff` for sicompass).
 - **Items.** An operator node joins its neighbours into one infix
   expression, with C precedence: `een variabele` / `*` / `3`. Siblings
   without an operator between them are separate items: statements,
@@ -174,28 +176,39 @@ the frame pointer. The C layer is written once, for every target.
   `and` and `or` are the instructions of the tree (bitwise, with operands).
 - **`:`** is an anonymous function run in place: a block with its own
   scope, or parentheses (its value is its last item).
-- **Declarations** `name:` [type] items: a local in a function, a global at
-  the top of the page. Without a type it takes the type of its value; more
-  items make an array, one element each; none is zero.
+- **Declarations** `name:` type items: a local in a function, a global at
+  the top of the page. The type is required and nothing is derived from the
+  value ("needs a type"). No item is zero, one is the value; several only
+  on an array (one element each, the rest zero, no more than its count) or
+  a struct (one field each), elsewhere "several items need array".
 - **Functions** `name:` type params... statements...: a parameter is
-  `name:` with only a type (or, untyped, a leaf that names nothing).
-- **Types** `char` (u8) `short` `int` `long` `i8`..`i64` `u8`..`u64` `void`,
-  `address` T, `array` T n, and structs: `point:` `struct` `x:` `int` ...,
-  laid out as C does. `long` and `address` are a word of the target (8
-  bytes; 4 on arm, where `i64` and `u64` are refused: "not on this target"). A type called with a value converts it.
+  `name:` with a type and nothing else.
+- **Types** are a run of leaf siblings, one word per node: `char` (u8)
+  `short` `int` `long` `i8`..`i64` `u8`..`u64` `void`, `address` T (alone,
+  the address of nothing), `array` T n (`array` `array` `int` `3` `4`), and
+  structs: `point:` `struct` `x:` `int` ..., laid out as C does; `type`
+  only in compile time. `long` and `address` are a word of the target (8
+  bytes; 4 on arm, where `i64` and `u64` are refused: "not on this
+  target"). A type with a value converts it, the first word of the type on
+  top, the rest of the type and the value its children: `long` / x,
+  `address` / `char` / p. A struct cannot yet hold an address of itself.
 - **Paths** by calling: `xs` / `i` an element, `p` / `x` a field (also
-  through an address), `r` / `b` / `x` both in a row. `address` / x is C's
-  `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
+  through an address), `r` / `b` / `x` both in a row. `address` / x, x not a
+  type, is C's `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
 - **Reserved**: the keywords (`address`, `content`, `if`, `else if`,
   `while`, ..., `compile time`, `target`), the type names and the register
-  names of the target name no variable, function or struct.
+  names of the target name no variable, function or struct (`type` among
+  the type names).
 - **Statements** `if` cond body... (the next item `else` body..., or `else
   if` cond body..., which chains), `while` cond body..., `break`,
   `continue`, `return` [expr], `syscall` n args... (n: `SYS_write`,
   `SYS_exit`, ... of the target),
   `comment` .... The condition is the leading run of nodes the operators
   join; the rest is the body.
-- **Text** `char` with a leaf that names nothing: its bytes and a NUL.
+- **Text** `address` `char` and a leaf that names nothing: its bytes and a
+  NUL, the value their address; a declaration `my string:` / `address` /
+  `char` / `this is a string`, an argument `address` / `char` / text.
+  `char` with text is an error ("text needs address char").
 - **asm**: a node naming an instruction or macro of the target is emitted
   as it is (`ecall`, `li` / `5` / `a0`). asm belongs to one target: guard
   it with compile time (`progs/casm.ff`: `if` / `target` / `==` / `x86_64`
@@ -220,8 +233,9 @@ number); `fail` item... stops the compile, printing its items (text, or
 - `#define`: a named function, `LINES:` / `compile time` / `3`; a use of
   `LINES` is its value.
 - macros: a named function with parameters, `square:` / `compile time` /
-  `x` / `x` / `*` / `x`; a call `square` / `7` in the program runs while
-  compiling (its arguments known then) and is its value.
+  `x:` / `type` / `x` / `*` / `x`; a call `square` / `7` in the program runs
+  while compiling (its arguments known then) and is its value. `type`, C++'s
+  T, is a word of any type: the function is assembled once, not per type.
 - `#if`, generated code: a lambda, `:` / `compile time` / `if` / `OS` /
   `==` / `Android` / `emit` ... / `else` / `emit` ...: only what it emits
   is in the program. A lambda also has a value, its last item.

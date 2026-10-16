@@ -46,6 +46,10 @@ sub uncomment {
 # else and if.
 sub frozen {
     my ($n) = @_;
+    my $k = $n->{children};
+    return node("char", frozen($k->[1]))
+        if $n->{content} eq "address" && @$k == 2 && $k->[0]{content} eq "char"
+        && !@{ $k->[0]{children} } && !@{ $k->[1]{children} };
     node($n->{content},
         map { frozen($_) } grep {
             my $c = $_->{children};

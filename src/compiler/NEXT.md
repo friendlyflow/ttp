@@ -57,3 +57,24 @@ RAM NODE:
 - opgelost: een lambda die liep terwijl een andere geassembleerd werd, kwam ook in diens splices terecht (`cct2`)
 - ttpc.ff groeit: arm `whole.ff` is 859 KB van de 1 MiB die de seeds lezen; de pagina van ttpc.ff heeft 248 van de 255 kinderen (mkhost voegt er 4 toe), nieuwe code gaat in groepen zoals `cc:`
 - nog te doen, stap 2, de message loop van Jai: compile time code die de compile van de build file overleeft. Daarvoor moet compile time een eigen code-ruimte krijgen in plaats van `outbuf` (die elke compile overschrijft), en moeten de passes van ttpc aparte, oproepbare stappen worden. Dan kan een workspace een hook noemen die elke gecompileerde functie of de afgewerkte output krijgt en er subtrees aan kan toevoegen, zoals `add_build_string` in Jai.
+## expliciete types (16 okt 2026)
+- een declaratie moet een type hebben, niets wordt afgeleid; een type is een rij bladeren als broers (`address` / `char`, `array` / `int` / `4`), een conversie heeft het eerste woord bovenaan; `type` (de T van C++) enkel in compile time; heel de taal staat in `language.ff.txt`
+- zelf beslist, na te kijken:
+  - tekst als argument is `address` / `char` / tekst (vroeger `char` / tekst)
+  - een `array` / `char` / n gevuld met tekst (C's `char s[16] = "hi"`) kan nog niet
+  - een compile time functie heeft geen returntype, haar waarde is een `long`
+  - een workspace is een `long`: `w:` / `long` / `workspace`
+- nog te doen: een struct met een adres van zichzelf laat ttpc crashen (was al zo vóór de expliciete types)
+  - waarom het telt: zo maak je lijsten, bomen, grafen; de gelinkte lijst van C, `struct node { long value; struct node *next; }`, is in ff:
+    ```
+    node:
+      struct
+      value:
+        long
+      next:
+        address
+        node
+    ```
+    `node` is de naam van de struct, `next` het adres van de volgende `node`. ff zelf is zo'n boom: NODE heeft `children`, adressen van andere NODEs; ttpc of sicompass in de C-laag heeft dus een veld als `children:` / `address` / `address` / `node` nodig
+  - waarom het crasht: voor de layout van `node` leest ttpc zijn velden (`struct` -> `fields`), bij `next` lost het het type `node` op, dat opnieuw zijn velden leest, zonder einde
+  - de oplossing: een adres is altijd één woord, wat het ook aanwijst; achter `address` moet een struct dus niet opgelost worden, enkel benoemd. De velden pas opzoeken wanneer een pad ze gebruikt (`p` / `next` / `value`)

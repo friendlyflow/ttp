@@ -38,11 +38,12 @@ TTPC_FF := ttpc.ff
 TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(wildcard progs/*/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
-	progs/cws.ff progs/cimport.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cimportlate.ff
+	progs/cws.ff progs/cimport.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cimportlate.ff \
+	progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff language.ff
 P := $(BUILD)/progs
 
 all: $(BIN)
@@ -161,7 +162,9 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # and C mixed in one compile-time function, cct keeps only the branch its
 # condition takes (a lambda with if, else and emit), cnowfail fails to
 # compile with its message, and so do creserved, which names a variable
-# content, and cmisplaced, with compile time on a while.
+# content, cmisplaced, with compile time on a while, cuntyped, a declaration
+# without a type, citems, several items on a long, cchartext, text in a
+# char, and ctypeout, type outside compile time.
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
 	grep -qx "asm at compile time" $(P)/ctasm.lst
@@ -174,6 +177,14 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -q "a reserved word: content" $(P)/creserved.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
 	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cuntyped.ff $(P)/cuntyped.celf 2> $(P)/cuntyped.err
+	grep -q "needs a type: n$$" $(P)/cuntyped.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/citems.ff $(P)/citems.celf 2> $(P)/citems.err
+	grep -q "several items need array: n$$" $(P)/citems.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cchartext.ff $(P)/cchartext.celf 2> $(P)/cchartext.err
+	grep -q "text needs address char: oops$$" $(P)/cchartext.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/ctypeout.ff $(P)/ctypeout.celf 2> $(P)/ctypeout.err
+	grep -q "type goes only in compile time: type$$" $(P)/ctypeout.err
 	@echo "ctime: compile time runs and stays out of the program"
 
 # Build files. progs/cws.ff is one, run as ttpc progs/cws.ff with nothing
@@ -210,7 +221,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring
 # cexpr computes with u64, which a target of 4-byte words does not have.
 CSKIP_arm := cexpr
 

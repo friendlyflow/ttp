@@ -8,7 +8,8 @@
 # whose name has a space and which has children for a register, so the
 # declaration else if: / condition would name registers else and if. The
 # bootstrap hands it shared.ff without either (see FF.pm frozen, the
-# Makefile); neither emits anything.
+# Makefile); neither emits anything. Text, address / char / text, is char /
+# text to them.
 #
 # A host tool (core Perl only), not part of ttpc.
 
