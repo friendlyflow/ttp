@@ -92,3 +92,9 @@ RAM NODE:
 - fase 0 stap 9 klaar: TLS, `thread local` vóór het type (`progs/ctls.ff`); met één thread is het een globale, echte blokken per thread komen met threads
 - fase 0 klaar (16 okt 2026). `make decls` controleert dat elk woord, elke operator en elk type van ttpc op de gedeelde pagina gedeclareerd is: wat de editor als calls aanbiedt (zoals comment:, dat niets doet)
 - versieketen (16 okt 2026): ttpc2.ff + ttpc2.defs.ff bevroren (ttpc.ff na stap 2, arm whole.ff 949 KB van de 1 MiB van de seeds). stage0 -> ttpc1 -> ttpc2 -> stage1 -> stage2; op elke host seed -> ttpc2 -> stage1 -> stage2. ttpc.ff mag nu alles wat ttpc2 kent (comment, de C-laag) en groeien tot 4 MiB invoer samen met shared.ff (2.8 MB)
+## glibc.ff, de pijplijn (16 okt 2026)
+- flake.nix pint glibc-2.44 van ftp.gnu.org (narHash in flake.lock) en geeft de riscv64 cross gcc (zonder wrapper, GLIBC_CC), de kernel headers, bison, python3 en clang zonder wrapper (C2FF_CLANG)
+- `make -C src/glibc glibc-ref` bouwt de referentie-glibc in ~/.cache/ttp/glibc (niet in Dropbox: die hernoemt stamp.os naast stamp.oS); `src/glibc/mki.pl` maakt de .i van een object met zijn commando uit build.log en -E
+- de C-laag compileert C van een geïmporteerde boom als het programma ze bereikt (`progs/clib.ff`): wat glibc.ff nodig heeft
+- gekozen: multi-arch blijft (strlen e.a. kiezen bij het laden: ifunc met riscv_hwprobe, vector-asm of generieke C); ttpc krijgt `naam:` / `alias` / doel en `naam:` / `ifunc` / resolver; de resolvers lopen vóór `_start` met hwcap (auxv) en glibc's __riscv_hwprobe, zoals glibc's eigen opstart
+- nog te doen: alias en ifunc in ttpc; de vector-instructies (RVV) in ttpc's riscv64 (de vector-asm van glibc); c2ff.pl (gen/c2ff.pl: de C-types zijn er, de rest nog niet); s2ff voor glibc's .S; M1 string

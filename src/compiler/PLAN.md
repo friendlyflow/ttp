@@ -224,6 +224,16 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   `va_start` / ap points it at the first argument after the parameters,
   `va_arg` / ap / type reads one and steps ap down a slot, `va_end` does
   nothing, `va_copy` / to / from copies.
+- **Library C** (`progs/clib.ff`, `progs/clibdefs.ff`): a C function or
+  global on a definition page (an imported tree, as glibc.ff will be) is
+  compiled when the program reaches it, and only then. Where `find_label`
+  (the scopes being placed) finds nothing, the C layer's lookups (`cfind`)
+  take the definition pages' C definition of that name (`libsym`: never a
+  word, operator or type of ttpc; `libtype` for a type, `enumlib` for an
+  enum's constant), and put a function or global on a list. `cc_frame`
+  puts a marker after the program's items, and there `cc` compiles the
+  list, which grows as its definitions reach more. The list lives across
+  passes, so each pass emits the same definitions in the same order.
 - **Thread-local** (`progs/ctls.ff`): `thread local` first under a global's
   name, before its type (`errno:` / `thread local` / `int` / `0`). A ttpc
   program has one thread, so it is laid out as a global; per-thread blocks

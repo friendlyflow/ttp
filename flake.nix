@@ -7,9 +7,16 @@
       url = "github:EpicGamesExt/raddebugger";
       flake = false;
     };
+    # glibc as released upstream, pinned by its narHash in flake.lock: the
+    # source src/glibc translates into ff (not nixpkgs' glibc, which is
+    # patched).
+    glibc-src = {
+      url = "https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, raddebugger }:
+  outputs = { self, nixpkgs, raddebugger, glibc-src }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -29,6 +36,19 @@
         x86_64-embedded.buildPackages.binutils
         aarch64-embedded.buildPackages.binutils
         arm-embedded.buildPackages.binutils
+      ];
+
+      # glibc for riscv64 Linux, built from glibc-src (src/glibc): the
+      # cross gcc and binutils of riscv64-unknown-linux-gnu, the kernel's
+      # headers, what glibc's build needs, and clang (unwrapped: its .i are
+      # already preprocessed, and the wrapper's host flags are no riscv64
+      # flags) to read its C as a tree.
+      glibcTools = pkgs: with pkgs; [
+        pkgsCross.riscv64.buildPackages.gcc
+        pkgsCross.riscv64.buildPackages.binutils
+        bison
+        python3
+        llvmPackages.clang-unwrapped
       ];
 
       # RAD Debugger, built from source with upstream's build.sh. Its Linux
@@ -74,7 +94,15 @@
             qemu # qemu-system-riscv64 for `make os-test`, qemu-<arch> for the programs
             perl # src/compiler/gen/mkff.pl generates test.ff
             fish
-          ]) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
+          ]) ++ (glibcTools pkgs) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
+
+          # For src/glibc: the pinned source, the kernel's headers, and the
+          # cross gcc without nixpkgs' wrapper (which would add nixpkgs'
+          # own glibc to every compile).
+          GLIBC_SRC = "${glibc-src}";
+          GLIBC_HEADERS = "${pkgs.pkgsCross.riscv64.linuxHeaders}/include";
+          GLIBC_CC = "${pkgs.pkgsCross.riscv64.buildPackages.gcc.cc}/bin/riscv64-unknown-linux-gnu-gcc";
+          C2FF_CLANG = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
 
           # `nix develop` always starts bash; drop into fish instead.
           # Guard against re-exec loops and non-interactive invocations
