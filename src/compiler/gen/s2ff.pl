@@ -16,15 +16,16 @@
 #
 #   label:          a function (a global label) or, inside one, a block
 #                   label holding the instructions up to the next label
-#   directives      .globl .type .size .cfi_* .option .align .text give no
-#                   bytes of their own here and are dropped (ttpc places a
+#   directives      .globl .type .size .cfi_* .option .attribute .align .text
+#                   give no bytes of their own here and are dropped (ttpc places a
 #                   function on a 2-byte boundary, as RVC allows); any other
 #                   stops the translation
 #   instructions    GNU's operands reversed (loads off base rd, stores off
 #                   rs2 base, a branch target as rel label), the macros of
 #                   macros/riscv64.ff.txt as they are; vector ones vm first
 #                   (1, or 0 under v0.t), then their sources in GNU's order,
-#                   the destination last; a vtype is its number
+#                   the destination last; a vtype is its number, a constant
+#                   expression its value
 #
 # A host tool (core Perl only), not part of ttpc.
 use strict;
@@ -75,12 +76,16 @@ sub split_ops {
 my %abi = (fp => 's0', map { ("x$_" => (qw(zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7
     s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6))[$_]) } 0 .. 31);
 sub reg { my ($r) = @_; $abi{$r} // $r }
+# a number, or a constant expression of numbers, as GNU as takes it
+sub isnum { $_[0] =~ /\d/ && $_[0] =~ /^[\s\da-fx()+\-*\/%<>&|~^]+$/i }
 sub num {
     my ($v) = @_;
-    return hex($v) if $v =~ /^0x[0-9a-f]+$/i;
-    return -hex($1) if $v =~ /^-0x([0-9a-f]+)$/i;
-    return $v if $v =~ /^-?\d+$/;
-    fail "not a number: $v";
+    isnum($v) or fail "not a number: $v";
+    (my $e = $v) =~ s/\b0x([0-9a-f]+)\b/hex($1)/gie;
+    $e =~ /^[\s\d()+\-*\/%<>&|~^]+$/ or fail "not a number: $v";
+    my $n = eval "use integer; $e";
+    defined $n or fail "not a number: $v";
+    $n;
 }
 # off(base) of a load or store
 sub mem { my ($m) = @_; $m =~ /^(.*)\((\w+)\)$/ or fail "not off(base): $m"; (num($1 eq '' ? 0 : $1), reg($2)) }
@@ -99,7 +104,7 @@ sub vtype {
 sub leaf {
     my ($o) = @_;
     return node(reg($o)) if $o =~ /^[a-z][a-z0-9]*$/ && !exists $csr{$o};
-    return node(num($o)) if $o =~ /^-?(0x)?[0-9a-f]+$/i;
+    return node(num($o)) if isnum($o);
     return node($o);
 }
 sub ins { my ($op, @a) = @_; node($op, map { ref $_ ? $_ : leaf($_) } @a) }
@@ -192,7 +197,7 @@ while (my $l = <$s>) {
         next if $st eq '';
         my ($op, $rest) = $st =~ /^(\S+)\s*(.*)$/;
         if ($op =~ /^\./) {
-            next if $op =~ /^\.(globl|global|type|size|align|p2align|text|cfi_\w+)$/;
+            next if $op =~ /^\.(globl|global|type|size|align|p2align|text|attribute|cfi_\w+)$/;
             next if $op eq '.option' && $rest =~ /^(push|pop|arch\b.*|norelax|relax)$/;
             fail "a directive with no ff form: $st";
         }

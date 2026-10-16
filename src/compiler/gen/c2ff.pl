@@ -5,6 +5,7 @@
 # C layer has no form for stops the translation, named, with where it is.
 #
 #   perl c2ff.pl [--page name] tu.json=tu.i ... -- root ... > out.ff.txt
+#   perl c2ff.pl --program tree tu.json=tu.i -- main > prog.ff.txt
 #   perl c2ff.pl --types        (the type words, for a look)
 #
 # Each translation unit is its AST (from $C2FF_CLANG -x c -include
@@ -17,6 +18,11 @@
 # Two idioms of glibc are recognized as what they are: its system call (a
 # statement expression of register variables and scall) is ff's syscall, and
 # __builtin_expect (a hint to the compiler) is its first argument.
+#
+# With --program, what the roots reach is a program: its definitions on the
+# page itself, after import / tree (glibc in ff, which has the rest), and a
+# _start that exits with what main returns, which is what C's startup does
+# for main without arguments.
 #
 # A host tool (core Perl only), not part of ttpc.
 use strict;
@@ -175,15 +181,17 @@ if (@ARGV && $ARGV[0] eq '--types') {
 # ---- the units --------------------------------------------------------------
 
 my $page = 'glibc';
+my $program;
 my (@units, @roots);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
+    if ($a eq '--program') { $program = shift @ARGV; next }
     if ($a eq '--') { @roots = @ARGV; last }
     my ($json, $i) = split /=/, $a, 2;
     push @units, { json => $json, i => $i };
 }
-die "usage: c2ff.pl [--page name] tu.json=tu.i ... -- root ...\n" unless @units && @roots;
+die "usage: c2ff.pl [--page name | --program tree] tu.json=tu.i ... -- root ...\n" unless @units && @roots;
 
 my (%fn, %var, %rec, %enumd, %alias, %ifunc);
 my %recid;                  # complete records by id, the anonymous ones too
@@ -242,6 +250,7 @@ sub resolver {
 
 my (@out, %done, @todo);
 our %local;                 # the ids of the locals and parameters of the function
+our %label;                 # the names of its labels, by id
 sub want { my ($n) = @_; push @todo, $n unless $done{$n}++ }
 
 sub where { my ($n) = @_; my $l = $n->{range}{begin} // $n->{loc} // {}; $l = $l->{expansionLoc} // $l; ($l->{file} // '') . ':' . ($l->{line} // '?') }
@@ -300,10 +309,7 @@ sub expr {
         return node('content', expr($e)) if $op eq '*';
         return node('address', expr($e)) if $op eq '&';
         return (node($op), atom($e)) if $op eq '-' || $op eq '!' || $op eq '~';
-        if ($op eq '++' || $op eq '--') {
-            return (atom($e), node($op)) unless $n->{isPostfix};
-            stop("$op after, as a value", $n);
-        }
+        return $n->{isPostfix} ? (atom($e), node($op)) : (node($op), atom($e)) if $op eq '++' || $op eq '--';
         return expr($e) if $op eq '+';
         stop("the operator $op", $n);
     }
@@ -373,6 +379,8 @@ sub operand {
 }
 
 our $cur_unit;
+# The LabelStmts under a node.
+sub labels { my ($n) = @_; (($n->{kind} // '') eq 'LabelStmt' ? $n : ()), map { labels($_) } kids($n) }
 # The ParmVarDecls and VarDecls under a node (a function's own).
 sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n : ()), map { locals($_) } kids($n) }
 
@@ -440,11 +448,61 @@ sub stmt {
     return ifs('if', $n) if $k eq 'IfStmt';
     if ($k eq 'WhileStmt') { my ($c, $b) = kids($n); return node('while', item(expr($c)), sub_body($b)) }
     if ($k eq 'DoStmt') { my ($b, $c) = kids($n); return node('do while', item(expr($c)), sub_body($b)) }
+    if ($k eq 'ForStmt') {
+        # clang's parts: init, a condition variable, cond, inc, body ({} when absent)
+        my ($i, undef, $c, $s, $b) = kids($n);
+        return node('for', clause($i, 1), clause($c), clause($s, 1), sub_body($b));
+    }
+    if ($k eq 'SwitchStmt') {
+        my ($v, $b) = kids($n);
+        return node('switch', item(expr($v)), cases($b->{kind} eq 'CompoundStmt' ? kids($b) : $b));
+    }
+    return labelled($n) if $k eq 'CaseStmt' || $k eq 'DefaultStmt';
+    return node(ffname($n->{name}) . ':', stmt((kids($n))[0])) if $k eq 'LabelStmt';
+    return node('goto', node(ffname($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     return node('break') if $k eq 'BreakStmt';
     return node('continue') if $k eq 'ContinueStmt';
     return () if $k eq 'NullStmt';
-    return item(expr($n)) if $k =~ /Expr$|Operator$/;
+    return effect($n) if $k =~ /Expr$|Operator$/;
     stop($k, $n);
+}
+# An expression for what it does, its value unused: x++ is ++x then.
+sub effect {
+    my ($n) = @_;
+    my $s = strip($n);
+    return (atom((kids($s))[0]), node($s->{opcode})) if $s->{kind} eq 'UnaryOperator' && $s->{opcode} =~ /^(\+\+|--)$/;
+    return node(':', map { effect($_) } kids($s)) if $s->{kind} eq 'BinaryOperator' && $s->{opcode} eq ',';
+    item(expr($n));
+}
+# One part of a for: one item (a declaration, or an expression), an empty
+# : when there is none.
+sub clause {
+    my ($n, $effect) = @_;
+    return node(':') unless $n && $n->{kind};
+    return stmt($n) if $n->{kind} eq 'DeclStmt';
+    $effect ? effect($n) : item(expr($n));
+}
+# The body of a switch: each case holds the statements up to the next one,
+# as clang has them after it; case 2: case 3: is two cases, the first empty.
+sub cases {
+    my @out;
+    for my $s (@_) {
+        if ($s->{kind} eq 'CaseStmt' || $s->{kind} eq 'DefaultStmt') { push @out, labelled($s); next }
+        stop('a statement before the first case', $s) unless @out;
+        push @{ $out[-1]{children} }, stmt($s);
+    }
+    @out;
+}
+# A case or default and what clang puts under it: its first statement, or
+# the next case.
+sub labelled {
+    my ($n) = @_;
+    my @k = kids($n);
+    my $sub = pop @k;
+    my @head = $n->{kind} eq 'CaseStmt' ? node('case', item(expr($k[0]))) : node('default');
+    return (@head, labelled($sub)) if $sub->{kind} eq 'CaseStmt' || $sub->{kind} eq 'DefaultStmt';
+    push @{ $head[0]{children} }, stmt($sub);
+    @head;
 }
 sub sub_body { my ($s) = @_; $s->{kind} eq 'CompoundStmt' ? body($s) : stmt($s) }
 sub ifs {
@@ -476,6 +534,7 @@ sub init_item { my ($n) = @_; my $s = strip($n); $s->{kind} eq 'InitListExpr' ? 
 sub function {
     my ($name, $d) = @_;
     local %local = map { ($_->{id} => 1) } locals($d);
+    local %label = map { ($_->{declId} => $_->{name}) } labels($d);
     my ($ret) = split_fn(expand(qt($d)));
     defined $ret or die "c2ff: not a function type: " . qt($d) . "\n";
     my @p = grep { $_->{kind} eq 'ParmVarDecl' } kids($d);
@@ -532,5 +591,10 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
     }
 }
 
-print write_txt(node("$page:", @types, @out));
+if (defined $program) {
+    print write_txt(node('import', node($program)), @types, @out,
+        node('_start:', node('void'), node('syscall', node('SYS_exit'), node('main'))));
+} else {
+    print write_txt(node("$page:", @types, @out));
+}
 warn "c2ff: renamed: " . join(', ', map { "$_ -> $renamed{$_}" } sort keys %renamed) . "\n" if %renamed;

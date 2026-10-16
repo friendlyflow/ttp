@@ -254,6 +254,13 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   address, as a long (`dtype`). `asm` itself is a word of the shared page
   that emits nothing. glibc's `.S` functions come this way, by
   `gen/s2ff.pl`.
+- **++ and -- as in C** (`progs/cincdec.ff`): `x` / `++` is C's x++, its
+  value the old x; a leading `++` / `x` is C's ++x, its value the new x
+  (the user's choice, 16 Oct 2026). `unary` stores the new value either
+  way, and for x ++ takes the step back in V.
+- **Parenthesized lvalues** (`progs/cparen.ff`): a `:` holding one item
+  stands for that item where an address is needed (`addr`), as C's `(len)
+  = len % 8` in glibc's memcpy.
 - **Compound literals** (`progs/ccomplit.ff`): a struct or union name with
   items, used as a value, is a temporary of that type, C's `(point){1, 2}`
   as `point` / `1` / `2`: its space is reserved at the start of the

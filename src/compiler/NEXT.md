@@ -108,4 +108,7 @@ RAM NODE:
 - asm-functies in de C-laag: `naam:` / `asm` / instructies, geplaatst als asm, op een definitiepagina alleen als C ze bereikt; C roept ze aan en neemt hun adres (`progs/casmfn.ff`)
 - `gen/s2ff.pl` vertaalt glibc's .s (mki.pl maakt die nu ook van een .S) naar asm-functies: elke instructie één op één, en waar GNU as een gecomprimeerde koos (te zien in zijn objdump zonder relaxatie) dezelfde c.*; `make -C src/glibc asm-check`: ttpc maakt dezelfde 38 bytes als glibc's compiler voor `__strlen_vector`
 - `make -C src/glibc strlen-check` geeft nu ook met V 12: de resolver kiest glibc's eigen vector-asm (de stand-in is weg)
-- nog te doen: de andere stringfuncties van M1 (memcpy, memset, strcmp, strchr), en het vergelijken met gcc + libc.a
+- M1 klaar: strlen, memcpy, memset, strcmp en strchr, elk zijn ifunc, generieke C (met wordcopy en strchrnul) en asm (vector; memcpy ook zonder alignment); `make -C src/glibc string-check`: progs/string.c met gcc + libc.a en via `c2ff --program` met ttpc + glibc in ff geven met en zonder V dezelfde 38; `asm-check`: alle zes asm-delen byte voor byte gelijk
+- daarvoor nieuw: in c2ff for, switch/case/default, labels en goto, x++ als waarde; in s2ff constante expressies en .attribute; in ttpc `++ x` vóór de naam (C's ++x), `x ++` met de oude waarde (C's x++, keuze van de gebruiker), en `:` om één lvalue
+- zonder V kiest memcpy's resolver onder qemu memcpy_noalignment (qemu meldt snelle misaligned toegang), dus progs/string.c roept ook `__memcpy_generic` zelf aan: zo loopt ook de generieke C (wordcopy, met goto in de lus)
+- nog te doen: M2 stdlib (atoi, strtol, qsort, abs); het adres van een ifunc (`address` / memcpy) geeft nog "needs a type"

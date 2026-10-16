@@ -61,7 +61,8 @@ ff, the language ttpc compiles
     items
       siblings without an operator between them are separate items: statements, arguments, elements
       an operator node joins its neighbours into one expression, with C precedence
-      precedence, low to high: = += -= *= /= %= &= |= ^= <<= >>=, ||, &&, |, ^, &, == !=, < > <= >=, << >>, + -, * / %; leading - ! ~; after a name ++ --
+      precedence, low to high: = += -= *= /= %= &= |= ^= <<= >>=, ||, &&, |, ^, &, == !=, < > <= >=, << >>, + -, * / %; leading - ! ~; ++ -- after a name, or before one
+      x ++ is C's x++: x grows by one (an element, for an address), the value is the old x; ++ x is C's ++x, the value the new x; -- likewise
       && and || short-circuit; and, or are instructions (bitwise, with operands), never operators
       an operator first in an item starts an expression, also first in a lambda: - ! ~
       example
@@ -393,6 +394,7 @@ ff, the language ttpc compiles
             x
     lambda
       a node : alone is an anonymous function run in place: a block with its own scope, or parentheses; its value is its last item
+      as parentheses around one item it stands for that item, also on the left of = and under ++: : / x / = / 1 is C's (x) = 1
       example
         d:
           long

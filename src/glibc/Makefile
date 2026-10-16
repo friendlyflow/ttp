@@ -68,12 +68,14 @@ TTPC ?= ../../build/compiler/boot/stage2
 SHARED := ../compiler/shared.ff
 CAP := ulimit -v 4000000;
 
-# M1, strlen: its ifunc, the generic C, the vector asm and glibc's
-# __riscv_hwprobe (which the init routine hands the resolver, as glibc's own
-# startup does)
-OBJS_strlen := string/strlen string/strlen-generic misc/hwprobe elf/dl-support
-ASMS_strlen := string/strlen-vector
-ROOTS_strlen := strlen __riscv_hwprobe
+# M1, string: strlen, memcpy, memset, strcmp and strchr, each its ifunc, its
+# generic C and its asm (vector; memcpy also for fast misaligned access),
+# and glibc's __riscv_hwprobe (which the init routine hands the resolvers,
+# as glibc's own startup does)
+M1 := strlen memcpy memset strcmp strchr
+OBJS_string := $(foreach f,$(M1),string/$(f) string/$(f)-generic) string/wordcopy string/strchrnul misc/hwprobe elf/dl-support
+ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment
+ROOTS_string := $(M1) __riscv_hwprobe
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin
 
@@ -96,21 +98,21 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $< > $@
 
-$(FF)/strlen.ff: $(OBJS_strlen:%=$(I)/%.json) $(ASMS_strlen:%=$(I)/%.dump) ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+$(FF)/string.ff: $(OBJS_string:%=$(I)/%.json) $(ASMS_string:%=$(I)/%.dump) ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
-	$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $(foreach o,$(OBJS_strlen),$(I)/$(o).json=$(I)/$(o).i) \
-	    -- $(ROOTS_strlen) > $(FF)/strlen.ff.txt
-	for a in $(ASMS_strlen); do \
-	    $(CAP) timeout 60 perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump >> $(FF)/strlen.ff.txt || exit 1; \
+	$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $(foreach o,$(OBJS_string),$(I)/$(o).json=$(I)/$(o).i) \
+	    -- $(ROOTS_string) > $(FF)/string.ff.txt
+	for a in $(ASMS_string); do \
+	    $(CAP) timeout 60 perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump >> $(FF)/string.ff.txt || exit 1; \
 	done
-	perl ../compiler/gen/fftext.pl ff $(FF)/strlen.ff.txt > $@
+	perl ../compiler/gen/fftext.pl ff $(FF)/string.ff.txt > $@
 
 # Each asm part, assembled by ttpc alone (with a _start after it), is the
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end.
-asm-check: $(ASMS_strlen:%=$(I)/%.dump) $(ASMS_strlen:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
+asm-check: $(ASMS_string:%=$(I)/%.dump) $(ASMS_string:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
-	@for a in $(ASMS_strlen); do \
+	@for a in $(ASMS_string); do \
 	    n=$$(basename $$a); \
 	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
 	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
@@ -121,8 +123,8 @@ asm-check: $(ASMS_strlen:%=$(I)/%.dump) $(ASMS_strlen:%=$(I)/%.bin) ../compiler/
 	    echo "asm-check: $$a: ttpc and glibc's compiler agree ($$size bytes)"; \
 	done
 
-# progs/strlen.ff imports strlen.ff from its own folder, so both go there
-strlen-check: $(FF)/strlen.ff progs/strlen.ff asm-check
+# progs/strlen.ff imports string.ff from its own folder, so both go there
+strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 	cp progs/strlen.ff $(FF)/strlen-prog.ff
 	$(CAP) timeout 120 qemu-riscv64 $(TTPC) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
 	s=0; $(CAP) timeout 30 qemu-riscv64 -cpu rv64,v=false $(FF)/strlen-prog || s=$$?; test $$s -eq 12
@@ -130,4 +132,38 @@ strlen-check: $(FF)/strlen.ff progs/strlen.ff asm-check
 	s=0; $(CAP) timeout 30 qemu-riscv64 $(FF)/strlen-prog || s=$$?; test $$s -eq 12
 	@echo "strlen-check: with V its resolver picks glibc's vector asm: 12"
 
-.PHONY: strlen-check asm-check
+# A test program in C, progs/NAME.c, built two ways: with gcc against
+# libc.a (glibc's own startup, no builtins: each call reaches glibc), and
+# through c2ff --program, with ttpc against glibc in ff. Both run with V and
+# without; all four must exit with the status in progs/NAME.expect.
+CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
+CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
+
+$(FF)/%.ref: progs/%.c $(OBJ)/libc.a
+	mkdir -p $(FF)
+	$(CAP) timeout 120 $(GLIBC_CC) -O2 -fno-builtin -c $< -o $(FF)/$*.ref.o
+	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
+	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
+
+$(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
+	mkdir -p $(FF)
+	$(CAP) timeout 60 $(GLIBC_CC) -E -P $< -o $(FF)/$*-prog.i
+	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program string.ff $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
+
+$(FF)/%-prog: $(FF)/%-prog.ff $(FF)/string.ff $(TTPC)
+	$(CAP) timeout 300 qemu-riscv64 $(TTPC) $(SHARED) $< $@ > $@.lst
+
+string-check: $(FF)/string.ref $(FF)/string-prog progs/string.expect asm-check
+	@want=$$(head -n 1 progs/string.expect | cut -d" " -f2); \
+	for b in string.ref string-prog; do \
+	    for cpu in rv64 rv64,v=false; do \
+	        s=0; $(CAP) timeout 60 qemu-riscv64 -cpu $$cpu $(FF)/$$b || s=$$?; \
+	        test $$s -eq $$want || { echo "string-check: $$b on $$cpu: exit status $$s, not $$want"; exit 1; }; \
+	    done; \
+	done; \
+	echo "string-check: gcc + libc.a and ttpc + glibc in ff agree, with V and without: exit $$want"
+
+.PHONY: strlen-check asm-check string-check
