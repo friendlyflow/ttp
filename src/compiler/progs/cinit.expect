@@ -1,0 +1,20 @@
+exit 0
+ok a negative global
+ok a global worked out while compiling
+ok the address of a global
+ok the address of a function
+ok a text
+ok texts in an array
+ok and their letters
+ok a struct in a struct
+ok a text in a struct
+ok an array of structs
+ok what has no item is zero
+ok an enum's constant
+ok a global bitfield
+ok and its neighbour
+ok a local struct in a struct
+ok the rest of a local is zero
+ok a local with fewer items
+ok a local array of structs
+ok a local bitfield

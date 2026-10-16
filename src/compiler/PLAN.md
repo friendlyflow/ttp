@@ -189,7 +189,15 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   the top of the page. The type is required and nothing is derived from the
   value ("needs a type"). No item is zero, one is the value; several only
   on an array (one element each, the rest zero, no more than its count) or
-  a struct (one field each), elsewhere "several items need array".
+  a struct (one field each), elsewhere "several items need array". A field
+  or element that is a struct, union or array takes a `:` holding its items
+  (C's inner braces, `progs/cinit.ff`), and what has no item is zero (a
+  local aggregate is zeroed first). A global is built in a staging buffer
+  and written at once, the texts its items name right after it; its items
+  are worked out while compiling: a number or constant, `-` and one,
+  `address` / a global or function, a text, or a `:` expression (run by
+  compile time). A page item whose items have children only as `:` or
+  `address` is a global; any other is a function.
 - **Functions** `name:` type params... statements...: a parameter is
   `name:` with a type and nothing else. A function without parameters is
   called by its name alone (`address` / f is its address); `name:` in a

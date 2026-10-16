@@ -86,5 +86,6 @@ RAM NODE:
 - fase 0 stap 3 klaar: *= /= %= &= |= ^= <<= >>= (via binop, ook += -=), sizeof / alignof, enums (`kleur:` / `enum` / `rood:` ...), function types (`binary:` / `function` / ...) en calls via een adres (`progs/ctypes.ff`)
 - fase 0 stap 4 klaar: een struct met een adres van zichzelf
 - fase 0 stap 5 klaar: unions (`naam:` / `union`), bitfields (`mode:` / `u32` / `3`, zoals gcc ze legt: nagekeken met riscv64-none-elf-gcc), `progs/cunion.ff`, `progs/cbits.ff`
-- nog te doen in fase 0: globale initializers met adressen; meer dan 8 argumenten, structs by value; varargs; TLS
+- fase 0 stap 6 klaar: initializers: adressen (`address` / naam), teksten, `-` getal, `:` als expressie (compile time) of als de items van een struct, union of array erin; een globale wordt in een buffer gebouwd, een lokale eerst op nul gezet (`progs/cinit.ff`)
+- nog te doen in fase 0: meer dan 8 argumenten, structs by value; varargs; TLS
 - versieketen (16 okt 2026): ttpc2.ff + ttpc2.defs.ff bevroren (ttpc.ff na stap 2, arm whole.ff 949 KB van de 1 MiB van de seeds). stage0 -> ttpc1 -> ttpc2 -> stage1 -> stage2; op elke host seed -> ttpc2 -> stage1 -> stage2. ttpc.ff mag nu alles wat ttpc2 kent (comment, de C-laag) en groeien tot 4 MiB invoer samen met shared.ff (2.8 MB)

@@ -164,10 +164,24 @@ ff, the language ttpc compiles
       not yet on arm, where long is 4 bytes: an unsigned int with a long is a long, not C's unsigned long
     declarations
       name:, a type run, then its items; the type is required, nothing is derived from the value
-      a local in a function, a global at the top of the page; a global's items are constants
+      a local in a function, a global at the top of the page
+      a global's items are worked out while compiling: a number or constant, - and one, address name (of a global or a function), a text (address char text, or the text alone where the field is an address), or a : with an expression
       no items: zero
       one item on a scalar or an address: its value, converted to the type
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
+      a field or element that is a struct, union or array takes a : holding its items, as C's inner braces; what has no item is zero, in a local too
+      example
+        pts:
+          array
+          point
+          2
+          :
+            1
+            2
+          :
+            3
+            4
+      a page item whose items have children only as : or address is a global, any other is a function
       a scalar with several items is an error, so is a declaration without a type
       example
         n:
