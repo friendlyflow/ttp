@@ -1,0 +1,18 @@
+exit 0
+ok *= /= %= <<= |= &= ^= >>=
+ok += on an address counts elements
+ok *= on a u8 wraps
+ok sizeof long, a word as an address
+ok sizeof a struct
+ok alignof a struct
+ok sizeof an array
+ok sizeof an enum
+ok enum, the first is 0
+ok enum, a value
+ok enum, one more
+ok enum, a negative value
+ok an enum as a type
+ok a call through a local
+ok a call through a global
+ok a pointer as an argument
+ok sizeof a variable

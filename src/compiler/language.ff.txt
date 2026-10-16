@@ -61,7 +61,7 @@ ff, the language ttpc compiles
     items
       siblings without an operator between them are separate items: statements, arguments, elements
       an operator node joins its neighbours into one expression, with C precedence
-      precedence, low to high: = += -=, ||, &&, |, ^, &, == !=, < > <= >=, << >>, + -, * / %; leading - ! ~; after a name ++ --
+      precedence, low to high: = += -= *= /= %= &= |= ^= <<= >>=, ||, &&, |, ^, &, == !=, < > <= >=, << >>, + -, * / %; leading - ! ~; after a name ++ --
       && and || short-circuit; and, or are instructions (bitwise, with operands), never operators
       an operator first in an item starts an expression, also first in a lambda: - ! ~
       example
@@ -98,6 +98,35 @@ ff, the language ttpc compiles
             address
             point
       not yet: a struct holding an address of itself (next: address node) crashes ttpc, as it did before
+      an enum name is a type, an int: color:, enum, then its constants, each name:, with a value (a number or a constant, - before it) or one more than the one before, the first 0; a constant is seen where the enum is, on the page
+      example
+        color:
+          enum
+          red:
+          green:
+            5
+          blue:
+      a function type: compare:, function, its return type run, its parameters name: and a type; address compare is a pointer to such a function
+      a variable or a global holding one, called with arguments, calls the function it points to; address f is a function's address
+      example
+        binary:
+          function
+          long
+          a:
+            long
+          b:
+            long
+        f:
+          address
+          binary
+          address
+            add
+        x:
+          long
+          f
+            3
+            4
+      sizeof and alignof: of a type run or a variable, an unsigned long
     arithmetic, as in C
       char and short, signed or not, become int first
       then both operands get one type: of 8 bytes if either is (unsigned if an 8-byte one is), else unsigned int if either is one, else int
@@ -308,7 +337,7 @@ ff, the language ttpc compiles
       a node naming an instruction or macro of the target is emitted as it is; asm belongs to one target, guard it with compile time
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
-      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, compile time, emit, fail, number, target
+      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program

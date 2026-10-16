@@ -779,6 +779,11 @@ c:
     movl
       r10d
       r10d
+  comment
+    cc_calll: call the address in L (a pointer to a function), its arguments already in their registers.
+  cc_calll:
+    call.r
+      r10
   cc_load_i8:
     movsbq.m
       0

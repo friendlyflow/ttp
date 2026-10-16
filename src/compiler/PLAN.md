@@ -177,7 +177,9 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   expression, with C precedence: `een variabele` / `*` / `3`. Siblings
   without an operator between them are separate items: statements,
   arguments, elements. Operators: `+ - * / % << >> & | ^ == != < <= > >=`,
-  `&& || ! ~` (&&, || short-circuit), `= += -=`, `++ --`, a leading `-`. An
+  `&& || ! ~` (&&, || short-circuit), `= += -= *= /= %= &= |= ^= <<= >>=`
+  (a compound one is the operator on the variable and the value, so `p` /
+  `+=` / `2` counts elements of an address), `++ --`, a leading `-`. An
   operator first in an item starts an expression, in a lambda too
   (`:` / `-` / `16` ...).
   `and` and `or` are the instructions of the tree (bitwise, with operands).
@@ -208,6 +210,15 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   target"). A type with a value converts it, the first word of the type on
   top, the rest of the type and the value its children: `long` / x,
   `address` / `char` / p. A struct cannot yet hold an address of itself.
+- **Enums** (`progs/ctypes.ff`): `color:` / `enum` / `red:` / `green:` / `5`
+  ...: the name is a type, an `int`; a constant has its value (a number or
+  a constant, `-` before it) or one more than the one before, and is seen
+  where the enum is (enums on the page; in a function a `name:` without a
+  type is a label). **Function types**: `binary:` / `function` / return
+  type / parameters; `address` / `binary` points to one, and a variable or
+  global of that type with arguments calls through it (`cc_calll`: the
+  address is pushed, then the arguments, then it goes to L). `sizeof` and
+  `alignof` / a type run or a variable: an unsigned long.
 - **Arithmetic** is C's (`progs/cint.ff`, `cint64.ff`): `char` and `short`
   become `int`, then the usual conversions give both operands one type (8
   bytes if either has them, unsigned if an 8-byte one is; else `u32` if
@@ -405,6 +416,7 @@ operands: pass 1 and pass 2 must lay out the same.
 | `cc_eq` `cc_ne` `cc_lt` `cc_ltu` `cc_gt` `cc_gtu` `cc_le` `cc_leu` `cc_ge` `cc_geu` | V = L op V, 1 or 0 |
 | `cc_ext_i8` `cc_ext_i16` `cc_ext_i32`, `cc_ext_u8` `cc_ext_u16` `cc_ext_u32` | V = V as that type, sign- or zero-extended from its size (on arm the 32-bit ones are empty) |
 | `cc_uw` | V and L zero-extended from 32 bits (empty on arm) |
+| `cc_calll` | call the address in L, the arguments in their registers |
 | `cc_load_i8` ... `cc_load_i64`, `cc_load_u8` ... `cc_load_u64` | V = the value at the address V, extended |
 | `cc_store_8` ... `cc_store_64` | [L] = V |
 

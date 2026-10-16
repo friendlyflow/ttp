@@ -1204,6 +1204,11 @@ c:
     movw
       w9
       w9
+  comment
+    cc_calll: call the address in L (a pointer to a function), its arguments already in their registers.
+  cc_calll:
+    blr
+      x9
   cc_load_i8:
     ldrsb
       0

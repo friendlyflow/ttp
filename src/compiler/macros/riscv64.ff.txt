@@ -827,6 +827,13 @@ c:
       32
       t0
       t0
+  comment
+    cc_calll: call the address in L (a pointer to a function), its arguments already in their registers.
+  cc_calll:
+    jalr
+      0
+      t0
+      ra
   cc_load_i8:
     lb
       0

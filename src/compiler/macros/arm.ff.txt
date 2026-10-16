@@ -757,6 +757,11 @@ c:
       r0
   cc_ext_u32:
   cc_uw:
+  comment
+    cc_calll: call the address in L (a pointer to a function), its arguments already in their registers.
+  cc_calll:
+    blx
+      r12
   cc_load_i8:
     ldrsb
       0

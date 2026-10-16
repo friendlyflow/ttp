@@ -117,6 +117,23 @@ comment
 struct:
   fields
 comment
+  enum constants: C, a type that is an int, its constants name: (with a value, or one more than the one before), seen where the enum is.
+enum:
+  constants
+comment
+  function return parameters: C, the type of a function, for an address of one: called with arguments, a variable of that address calls it.
+function:
+  return
+  parameters
+comment
+  sizeof type: C, the bytes of a type or of a variable, an unsigned long.
+sizeof:
+  type
+comment
+  alignof type: C, the alignment of a type or of a variable, an unsigned long.
+alignof:
+  type
+comment
   number value: compile time, emit makes value a number in the program.
 number:
   value
@@ -227,6 +244,46 @@ comment
 comment
   left -= right: C, subtracts right from left.
 -=:
+  left
+  right
+comment
+  left *= right: C, multiplies left by right.
+*=:
+  left
+  right
+comment
+  left /= right: C, divides left by right.
+/=:
+  left
+  right
+comment
+  left %= right: C, left becomes what dividing it by right leaves.
+%=:
+  left
+  right
+comment
+  left &= right: C, left and right, bit by bit, into left.
+&=:
+  left
+  right
+comment
+  left |= right: C, left or right, bit by bit, into left.
+|=:
+  left
+  right
+comment
+  left ^= right: C, left xor right, bit by bit, into left.
+^=:
+  left
+  right
+comment
+  left <<= right: C, shifts left to the left by right.
+<<=:
+  left
+  right
+comment
+  left >>= right: C, shifts left to the right by right.
+>>=:
   left
   right
 comment
