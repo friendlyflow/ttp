@@ -50,6 +50,7 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 |---|---|
 | `hosts/riscv64/ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
 | `ttpc1.ff` | **ttpc1**, frozen too: ttpc in ff as it was when it learned targets, a whole tree (the RV64GC pages `0:` `1:` `2:` of then, its constants `3:`, itself `4:`) in the language of stage0 and below stage0's 1 MiB. |
+| `ttpc2.ff`, `ttpc2.defs.ff` | **ttpc2**, frozen: `ttpc.ff` and `ttpc.defs.ff` as they were when the seeds' 1 MiB got tight (16 Oct 2026, with C's integers and control flow), program-only. ttpc1 builds it on riscv64, each seed on its host (its whole tree is 949 KB on arm); it builds `ttpc.ff`, which may now use anything ttpc2 knows (`comment`, the C layer) and grow to its 4 MiB of input. |
 | `ttpc.ff`, `ttpc.defs.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a program of only its own (`ttpc.ff`), its constants and messages' lengths on a page of their own (`ttpc.defs.ff`), assembled on the shared page: `ttpc --target riscv64 shared.ff ttpc.defs.ff ttpc.ff out`. |
 | `shared.ff` | the shared page (`perl gen/mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc [--target t] shared.ff prog.ff out`. |
 | `gen/mkff.pl`, `shared.ff.txt` | make `shared.ff`: what every target has and the choice of one (`shared.ff.txt`), then a section per target. |
@@ -69,7 +70,9 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 ```
 stage0 = GNU as(hosts/riscv64/ttpc.s)
 ttpc1  = stage0(ttpc1.ff)       == ttpc1(ttpc1.ff)
-stage1 = ttpc1(frozen shared.ff, ttpc.defs.ff ttpc.ff)
+ttpc2  = ttpc1(frozen shared.ff, ttpc2.defs.ff ttpc2.ff)
+                                == ttpc2(shared.ff ttpc2.defs.ff ttpc2.ff)
+stage1 = ttpc2(shared.ff ttpc.defs.ff ttpc.ff)
 stage2 = stage1(shared.ff ttpc.defs.ff ttpc.ff)
                                 == stage1, byte for byte: the fixed point
 ```
@@ -78,11 +81,13 @@ On x86_64, aarch64 and arm the chain starts from that host's seed and
 never runs riscv64 (`make bootstraps`; natively on the host itself, under
 `qemu-<host>` elsewhere). ttpc1 is not in it: its C layer still emits
 RV64 by name, so its compile time can only run on riscv64. The seed builds
-today's ttpc.ff directly (stage0 builds it too, into exactly stage1):
+ttpc2, which builds today's ttpc.ff:
 
 ```
 seed   = GNU as(hosts/<host>/ttpc.s)
-stage1 = seed(mkwhole(<host>, mkhost(<host>, ttpc.defs.ff ttpc.ff)))
+ttpc2  = seed(mkwhole(<host>, mkhost(<host>, ttpc2.defs.ff ttpc2.ff)))
+                                == ttpc2(--target <host> shared.ff ttpc2.defs.ff' ttpc2.ff')
+stage1 = ttpc2(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
 stage2 = stage1(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
                                 == stage1 == what the riscv64 chain makes
                                    with --target <host>: two chains that
@@ -90,7 +95,7 @@ stage2 = stage1(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
 ```
 
 ```sh
-make bootstrap        # ttpc1 assembles itself, stage1 == stage2
+make bootstrap        # ttpc1 and ttpc2 assemble themselves, stage1 == stage2
 make bootstraps       # the same from the seed of x86_64, aarch64, arm; the
                       # C programs built there by stage2 run there
 make seeds            # each seed agrees with ttpc.s
@@ -103,7 +108,7 @@ make compiler-check   # every asm program == its GNU twin, they run; the C
 ```
 
 A change to ttpc is a change to `ttpc.ff` (or `ttpc.defs.ff`) that keeps
-`make bootstrap` green: ttpc1 builds the new stage1, which must then
+`make bootstrap` green: ttpc2 builds the new stage1, which must then
 rebuild itself identically. ttpc reads `.ff` directly; the text form is only
 for the host tools (`perl gen/fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl
 gen/fftext.pl ff t.ff.txt > ttpc.ff`). ttpc reads several trees: `ttpc a.ff
@@ -112,9 +117,9 @@ whole as the program (its root is the page); one tree alone is read as
 before, unless it begins with `import`. One tree and no output is a build
 file (`ttpc build.ff`, see Build files); `ttpc --print tree.ff` prints a
 tree (stage0, ttpc1 and the seeds print one tree alone). Whatever ttpc.ff
-uses, ttpc1 must know (it knows targets, sections,
-the C layer and compile time); ttpc1 reads at most 4 MiB in all. When that
-gets tight, the chain gets a next link: freeze ttpc.ff as ttpc2.ff.
+uses, ttpc2 must know (all of the language up to 16 Oct 2026); ttpc2
+reads at most 4 MiB in all, shared.ff (2.8 MB) with it. When that gets
+tight, the chain gets a next link: freeze ttpc.ff as ttpc3.ff.
 
 ### The language ttpc assembles
 
@@ -186,7 +191,7 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
 - **Functions** `name:` type params... statements...: a parameter is
   `name:` with a type and nothing else. A function without parameters is
   called by its name alone (`address` / f is its address); `name:` in a
-  body is a declaration, never a function. `return` is a value too: as an
+  body is a declaration (a label without a type), never a function. `return` is a value too: as an
   item it leaves the function there.
 - **Scope** is the tree: a name is looked up from where it stands, up
   through its ancestors, innermost first. The page's functions and globals
@@ -218,7 +223,8 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   through an address), `r` / `b` / `x` both in a row. `address` / x, x not a
   type, is C's `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
 - **Reserved**: the keywords (`address`, `content`, `if`, `else if`,
-  `while`, ..., `compile time`, `target`), the type names and the register
+  `while`, `for`, `do while`, `switch`, `case`, `default`, `goto`, ...,
+  `compile time`, `target`), the type names and the register
   names of the target name no variable, function or struct (`type` among
   the type names).
 - **Statements** `if` cond body... (the next item `else` body..., or `else
@@ -226,7 +232,17 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   `continue`, `return` [expr], `syscall` n args... (n: `SYS_write`,
   `SYS_exit`, ... of the target),
   `comment` .... The condition is the leading run of nodes the operators
-  join; the rest is the body.
+  join; the rest is the body. `for` first condition step body...: three
+  items, then the body (`progs/cflow.ff`); a declaration as the first is
+  the loop's own, an empty `:` is an empty part (an empty condition loops
+  for ever). `do while` cond body...: the body first. `switch` value
+  body...: `case` value body..., `default` body..., fall through as in C,
+  `break` leaves the switch; each case tests where it stands, the first
+  test is jumped to, a failed one jumps to the next, the last to the
+  default. A label is `name:` without a type in a function: it holds its
+  statements and `goto` / name jumps to it, from anywhere in the
+  function (a label sets SP for its block). `if`/`else` are a value too,
+  C's `?:` (the last item of the branch taken); C's comma is a lambda.
 - **Text** `address` `char` and a leaf that names nothing: its bytes and a
   NUL, the value their address; a declaration `my string:` / `address` /
   `char` / `this is a string`, an argument `address` / `char` / text.

@@ -59,11 +59,41 @@ comment
 return:
   value
 comment
-  break: C, leaves the innermost while.
+  break: C, leaves the innermost while, for, do while or switch.
 break:
 comment
-  continue: C, to the next round of the innermost while.
+  continue: C, to the next round of the innermost while, for or do while.
 continue:
+comment
+  for first condition step body: C, three items and then the body: first runs once (a declaration in it is seen in the loop only), the condition before each round (an empty : is none, round after round), the step after each round.
+for:
+  first
+  condition
+  step
+  body
+comment
+  do while condition body: C, the body first, then the condition, round after round while it holds.
+do while:
+  condition
+  body
+comment
+  switch value body: C, to the case with that value, else to the default, else past the body; a case falls through to the next one, break leaves.
+switch:
+  value
+  body
+comment
+  case value body: C, in a switch.
+case:
+  value
+  body
+comment
+  default body: C, in a switch.
+default:
+  body
+comment
+  goto label: C, to the label of that name in the function, a name: without a type, which holds its statements.
+goto:
+  label
 comment
   syscall number arguments: C, a system call of the target, number SYS_write, SYS_exit, ...
 syscall:

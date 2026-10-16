@@ -1,0 +1,24 @@
+exit 0
+ok for sums
+ok for, break, continue
+ok for with empty parts
+ok for's declaration is its own
+ok for with a lambda as its step
+ok do while runs its body first
+ok do while with continue
+ok switch, return in a case
+ok switch, an empty case falls through
+ok switch, case and break
+ok switch, a case falls through
+ok switch, the next case
+ok switch, a negative case
+ok switch, default
+ok switch without default
+ok switch in a for, continue and break
+ok goto forward
+ok goto back to a label
+ok goto out of a loop and a block
+ok if else as a value
+ok else if as a value
+ok else if as a value, the middle
+ok a lambda as the comma

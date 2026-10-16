@@ -168,7 +168,7 @@ ff, the language ttpc compiles
       a parameter is name: with a type run as its only children; no untyped leaf parameters
       a call is name with its arguments in order (at most 8, in the argument registers); its value is what return gives
       a function without parameters is called by its name alone, a leaf; address name is its address
-      a function holds no functions: name: in a body is a declaration
+      a function holds no functions: name: in a body is a declaration, or a label when no type follows
       example
         three:
           long
@@ -196,10 +196,63 @@ ff, the language ttpc compiles
     statements
       a declaration, an expression (an assignment, a call), a lambda, or one of these
       if condition body, then optionally else body or else if condition body, which chains
-      while condition body; break; continue
+      while condition body; break leaves a while, for, do while or switch; continue goes to the next round of a while, for or do while
       the condition is the leading run of nodes the operators join, the rest is the body
+      for first condition step body: three items, then the body; first runs once, its declaration seen in the loop only; an empty : is an empty part, an empty condition never ends the loop
+      example
+        for
+          i:
+            long
+            0
+          i
+          <
+          n
+          i
+          ++
+          sum
+          +=
+          i
+      do while condition body: the body first, then the condition, as C's do body while (condition)
+      switch value body: to the case with that value, else the default, else past the body; case value body..., default body..., anywhere in the switch, fall through to the next one; break leaves the switch
+      example
+        switch
+          c
+          case
+            1
+          case
+            2
+            r
+            =
+            12
+            break
+          default
+            r
+            =
+            0
+      a label is a name: without a type in a function; it holds its statements, which run when the code before it ends or a goto names it
+      goto name: to that label, anywhere in the function, into and out of blocks
+      example
+        goto
+          done
+        r
+        =
+        1
+        done:
+          return
+            r
       return, with a value or without
       return is a value too: as an item (of a declaration, an argument, an expression) it leaves the function there
+      if and else are a value too, C's c ? a : b: the last item of the branch taken; the comma of C is a lambda, : a b
+      example
+        m:
+          long
+          if
+            a
+            >
+            b
+            a
+          else
+            b
       example
         answer:
           long
@@ -255,7 +308,7 @@ ff, the language ttpc compiles
       a node naming an instruction or macro of the target is emitted as it is; asm belongs to one target, guard it with compile time
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
-      the keywords: if, else, else if, while, return, break, continue, comment, address, content, syscall, array, struct, compile time, emit, fail, number, target
+      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program
