@@ -1,0 +1,13 @@
+exit 0
+ok ten arguments
+ok nine arguments, recursively
+ok = copies a struct
+ok the copy has every field
+ok a declaration copies a struct
+ok a struct argument is a copy
+ok the caller's struct stays
+ok a struct result
+ok a struct result assigned
+ok a struct result as an argument
+ok a struct result inside an expression
+ok a struct result past eight arguments

@@ -36,7 +36,7 @@ RAM NODE:
 - de C-laag in ff-stijl en `compile time` (native, in ttpc zelf): klaar, zie PLAN.md
 - conditionals en loops in exec context: `compile time` doet het nu; exec zelf blijft de seed
 - ttpc.ff tegen 1 MiB (stage0): de versieketen, ttpc in de C-laag schrijven
-- structs: geen kopie per waarde, als parameter enkel via address
+- structs: per waarde zoals in C (16 okt 2026): `=` kopieert, een argument is een kopie (de callee kopieert van het adres dat hij krijgt), een resultaat gaat in ruimte die de caller bij het begin van zijn functie vrijhoudt; daaronder blijft het een adres
 - includes / meerdere files: `import` klaar (zie build files); nog: secties als aparte segments, het os in ff
 ## targets (15 okt 2026)
 - `--target riscv64|x86_64|aarch64|arm`: shared.ff heeft een sectie per target, de keuze is een compile time lambda op de gedeelde pagina
@@ -87,5 +87,6 @@ RAM NODE:
 - fase 0 stap 4 klaar: een struct met een adres van zichzelf
 - fase 0 stap 5 klaar: unions (`naam:` / `union`), bitfields (`mode:` / `u32` / `3`, zoals gcc ze legt: nagekeken met riscv64-none-elf-gcc), `progs/cunion.ff`, `progs/cbits.ff`
 - fase 0 stap 6 klaar: initializers: adressen (`address` / naam), teksten, `-` getal, `:` als expressie (compile time) of als de items van een struct, union of array erin; een globale wordt in een buffer gebouwd, een lokale eerst op nul gezet (`progs/cinit.ff`)
-- nog te doen in fase 0: meer dan 8 argumenten, structs by value; varargs; TLS
+- fase 0 stap 7 klaar: meer dan 8 argumenten (de rest op de stack), structs per waarde (`progs/ccalls.ff`). De regel blijft: de eerste `naam:` met enkel een type zijn de parameters, een lokale vooraan heeft een waarde nodig
+- nog te doen in fase 0: varargs; TLS
 - versieketen (16 okt 2026): ttpc2.ff + ttpc2.defs.ff bevroren (ttpc.ff na stap 2, arm whole.ff 949 KB van de 1 MiB van de seeds). stage0 -> ttpc1 -> ttpc2 -> stage1 -> stage2; op elke host seed -> ttpc2 -> stage1 -> stage2. ttpc.ff mag nu alles wat ttpc2 kent (comment, de C-laag) en groeien tot 4 MiB invoer samen met shared.ff (2.8 MB)

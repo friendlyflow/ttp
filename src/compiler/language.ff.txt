@@ -228,7 +228,18 @@ ff, the language ttpc compiles
     functions
       name:, its return type run, its parameters, its statements
       a parameter is name: with a type run as its only children; no untyped leaf parameters
-      a call is name with its arguments in order (at most 8, in the argument registers); its value is what return gives
+      the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0)
+      a call is name with its arguments in order, the first 8 in the argument registers, the others on the stack; its value is what return gives
+      a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy, an argument is the callee's own copy, a result is copied into space the caller keeps for it
+      example
+        b:
+          point
+          a
+        b
+        =
+        mid
+          a
+          b
       a function without parameters is called by its name alone, a leaf; address name is its address
       a function holds no functions: name: in a body is a declaration, or a label when no type follows
       example

@@ -202,7 +202,18 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   `name:` with a type and nothing else. A function without parameters is
   called by its name alone (`address` / f is its address); `name:` in a
   body is a declaration (a label without a type), never a function. `return` is a value too: as an
-  item it leaves the function there.
+  item it leaves the function there. The parameters are the leading
+  `name:` nodes with only a type, so a local first in a body needs a value
+  (`r:` / `point` / `0`) or a statement before it (the user kept this rule,
+  16 Oct 2026). A call puts its first 8 arguments in registers and leaves
+  the others on its stack during the call: the callee reads one at FP +
+  `cc_argoff` + (n-1-i) slots (`progs/ccalls.ff`). Structs go by value:
+  `=` copies (`copyst`, a word at a time where the alignment allows), `a:`
+  / `point` / `b` starts as a copy, a struct argument is passed by address
+  and the callee copies it into its parameter, and a struct result goes
+  into space the caller keeps for it (all of a function's, reserved at its
+  start by `treserve`), its address pushed after the arguments; `return`
+  copies into it.
 - **Scope** is the tree: a name is looked up from where it stands, up
   through its ancestors, innermost first. The page's functions and globals
   are seen everywhere on it; a body, an `if`/`else`/`while` body and a
