@@ -36,6 +36,9 @@ TOOLS := $(foreach t,AR:ar NM:nm OBJCOPY:objcopy OBJDUMP:objdump READELF:readelf
 
 .PHONY: glibc-ref clean
 
+# A step that fails leaves nothing behind that make would take as made.
+.DELETE_ON_ERROR:
+
 glibc-ref: $(OBJ)/libc.a
 
 $(OBJ)/config.status:
@@ -57,7 +60,8 @@ clean:
 
 # ---- glibc in ff, step by step ----------------------------------------------
 # An object's .i (mki.pl), its AST (clang with clang-prelude.h, which gives
-# clang the _FloatN types and builtins gcc has), and from the ASTs of the
+# clang the _FloatN types and builtins gcc has, and -fgnu89-inline as
+# glibc's build has it), and from the ASTs of the
 # objects a milestone needs, the ff of what its roots reach (c2ff.pl). Every
 # step runs under a memory cap and a timeout: an unbounded run of c2ff once
 # took the machine down.
@@ -76,6 +80,17 @@ M1 := strlen memcpy memset strcmp strchr
 OBJS_string := $(foreach f,$(M1),string/$(f) string/$(f)-generic) string/wordcopy string/strchrnul misc/hwprobe elf/dl-support
 ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment
 ROOTS_string := $(M1) __riscv_hwprobe
+
+# M2, stdlib: atoi, strtol and abs, with M1. strtol takes the locale (the C
+# locale's tables, reached through the thread's locale pointer), errno, the
+# grouping check and memcmp. qsort waits for malloc (M3): it reaches it.
+M2 := atoi strtol abs
+OBJS_stdlib := $(OBJS_string) $(M2:%=stdlib/%) stdlib/strtol_l stdlib/grouping csu/errno ctype/ctype_l \
+	locale/C-ctype locale/C_name locale/global-locale locale/xlocale string/memcmp string/memcmp-generic
+ASMS_stdlib := $(ASMS_string) string/memcmp-vector
+ROOTS_stdlib := $(ROOTS_string) $(M2)
+
+MILESTONES := string stdlib
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin
 
@@ -96,23 +111,28 @@ $(I)/%.dump $(I)/%.bin: $(I)/%.s
 
 $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $< > $@
+	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w $< > $@
 
-$(FF)/string.ff: $(OBJS_string:%=$(I)/%.json) $(ASMS_string:%=$(I)/%.dump) ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
-	mkdir -p $(FF)
-	$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $(foreach o,$(OBJS_string),$(I)/$(o).json=$(I)/$(o).i) \
-	    -- $(ROOTS_string) > $(FF)/string.ff.txt
-	for a in $(ASMS_string); do \
-	    $(CAP) timeout 60 perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump >> $(FF)/string.ff.txt || exit 1; \
+# A milestone's ff: c2ff's from its objects' ASTs, from its roots, then
+# s2ff's of its asm parts.
+define milestone
+$$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+	mkdir -p $$(FF)
+	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $$(foreach o,$$(OBJS_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	    -- $$(ROOTS_$(1)) > $$(FF)/$(1).ff.txt
+	for a in $$(ASMS_$(1)); do \
+	    $$(CAP) timeout 60 perl ../compiler/gen/s2ff.pl $$(I)/$$$$a.s $$(I)/$$$$a.dump >> $$(FF)/$(1).ff.txt || exit 1; \
 	done
-	perl ../compiler/gen/fftext.pl ff $(FF)/string.ff.txt > $@
+	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
+endef
+$(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 
 # Each asm part, assembled by ttpc alone (with a _start after it), is the
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end.
-asm-check: $(ASMS_string:%=$(I)/%.dump) $(ASMS_string:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
+asm-check: $(ASMS_stdlib:%=$(I)/%.dump) $(ASMS_stdlib:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
-	@for a in $(ASMS_string); do \
+	@for a in $(ASMS_stdlib); do \
 	    n=$$(basename $$a); \
 	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
 	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
@@ -134,8 +154,9 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 
 # A test program in C, progs/NAME.c, built two ways: with gcc against
 # libc.a (glibc's own startup, no builtins: each call reaches glibc), and
-# through c2ff --program, with ttpc against glibc in ff. Both run with V and
-# without; all four must exit with the status in progs/NAME.expect.
+# through c2ff --program, with ttpc against NAME.ff, the milestone of that
+# name (each takes in the ones before it). Both run with V and without; all
+# four must exit with the status in progs/NAME.expect.
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
@@ -150,20 +171,24 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program string.ff $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program $*.ff $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
-$(FF)/%-prog: $(FF)/%-prog.ff $(FF)/string.ff $(TTPC)
+$(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)
 	$(CAP) timeout 300 qemu-riscv64 $(TTPC) $(SHARED) $< $@ > $@.lst
 
-string-check: $(FF)/string.ref $(FF)/string-prog progs/string.expect asm-check
-	@want=$$(head -n 1 progs/string.expect | cut -d" " -f2); \
-	for b in string.ref string-prog; do \
+define check
+$(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog progs/$(1).expect asm-check
+	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); \
+	for b in $(1).ref $(1)-prog; do \
 	    for cpu in rv64 rv64,v=false; do \
-	        s=0; $(CAP) timeout 60 qemu-riscv64 -cpu $$cpu $(FF)/$$b || s=$$?; \
-	        test $$s -eq $$want || { echo "string-check: $$b on $$cpu: exit status $$s, not $$want"; exit 1; }; \
+	        s=0; $$(CAP) timeout 60 qemu-riscv64 -cpu $$$$cpu $$(FF)/$$$$b || s=$$$$?; \
+	        test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b on $$$$cpu: exit status $$$$s, not $$$$want"; exit 1; }; \
 	    done; \
 	done; \
-	echo "string-check: gcc + libc.a and ttpc + glibc in ff agree, with V and without: exit $$want"
+	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree, with V and without: exit $$$$want"
+.PHONY: $(1)-check
+endef
+$(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 
-.PHONY: strlen-check asm-check string-check
+.PHONY: strlen-check asm-check

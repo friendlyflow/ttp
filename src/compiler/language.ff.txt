@@ -76,6 +76,7 @@ ff, the language ttpc compiles
       address T: a word, the address of a T; address alone, the address of nothing (C's void *)
       array T n: n elements of T; n a number or a constant; arrays of arrays nest, array array int 3 4
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
+      a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       type (compile time only): a word of any type, as C++'s T
       example
         my string:
@@ -209,24 +210,27 @@ ff, the language ttpc compiles
           3
           4
     text
-      address char with one leaf that names nothing (not a number, variable, label, register or function): its bytes and a NUL are put in the program, the value is their address
+      under address char a leaf is text, whatever it reads as (a number, a name): its bytes and a NUL are put in the program, the value is their address; address char 3 is "3"
+      a text holds at most 255 bytes, a node's text: text leaves in a row are one text, as C's "ab" "cd"
+      an array char n takes text leaves in a row for its items, as C's char s[16] = "hi", the rest 0 (in a global)
       char with text is an error (a local was silently an address char, a global a char array)
-      as a value (an argument) it is a conversion: address on top, char and the text its children
+      as a value (an argument) it is address on top, char and the text its children; a value that is a variable goes in a : there, or a cast:
       example
         print
           address
             char
             hello\n
-      not yet: an array char n filled from text, as C's char s[16] = "hi"
     conversions
-      a type with a value converts it; the first word of the type on top, the rest of the type and then the value as its children
+      cast: type value is C's cast, the value converted to the type: cast: / address / char / p is (char *) p; as a statement it is (void) x
+      a type with a value converts it too, the first word of the type on top, the rest of the type and then the value as its children (not address char, whose leaf is text)
+      example
+        cast:
+          address
+          char
+          p
       example
         long
           x
-      example
-        address
-          char
-          p
       address whose first child is not a type is the address of that variable, C's &x
       example
         long
@@ -406,6 +410,7 @@ ff, the language ttpc compiles
           4
     paths
       calling a variable indexes or selects: xs i an element, p x a field (also through an address), r b x both in a row
+      a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is cast: / address / point / p / . / y
       address x is C's &x, content p is C's *p, read, or written on the left of =
     registers
       a register name in C is that register: reading t2 is its value now, t2 = expr writes it; values pass between C and asm this way

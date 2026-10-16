@@ -104,6 +104,18 @@ comment
 address:
   of
 comment
+  cast: type value: C's cast, the value converted to the type: cast: / address / char / p is (char *) p. Under address / char a leaf is text, whatever it reads as: address / char / 3 is "3".
+cast::
+  type
+  value
+comment
+  items values: C, a group of a declaration's items, at most 255 of them: the items of a list longer than a node holds come in groups, in a row.
+items:
+  values
+comment
+  .: C, a leaf among a node's children: the node before it (cut there) is a value, after it come fields and indexes as after a variable; C's ((point *) p)->y is address / point / p / . / y.
+.:
+comment
   content address: C, what the address holds (C's *p), read, or written on the left of =.
 content:
   address

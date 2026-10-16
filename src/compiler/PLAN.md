@@ -261,6 +261,26 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
 - **Parenthesized lvalues** (`progs/cparen.ff`): a `:` holding one item
   stands for that item where an address is needed (`addr`), as C's `(len)
   = len % 8` in glibc's memcpy.
+- **Casts and text** (`progs/ccast.ff`, the user's rule, 16 Oct 2026):
+  `cast:` / type / value is C's cast (`primary` converts the value; as a
+  statement it is `(void) x`), and under `address` / `char` a leaf is
+  text whatever it reads as, so `address` / `char` / `3` is "3" (`textof`).
+  `cast` is a reserved word (`KW_cast`, its word `cast:` in `cc_kw`).
+- **A path from an expression** (`progs/cdot.ff`): a `.` leaf among a
+  node's children; the node cut there is the value (`index` evaluates a
+  copy of the node with fewer children), the path after it walks on.
+- **Items groups and char arrays from text** (`progs/cgroups.ff`): a list
+  longer than a node holds comes in `items` groups (a declaration's items,
+  a `:` group's, an enum's constants: `ginit` splices them, `enumfind`
+  looks inside); text leaves in a row fill a char array (`gtext`).
+- **Address constants** (`progs/caddrc.ff`): in a global, a name in an
+  address field is its address, `cast:` to an address type is its value's,
+  `:` / X / `+` / N adds N of what X points at, and `address` of a path is
+  its label and offsets (`gpath`, a block of `gval`'s own). A flexible
+  array member takes the items after it: `gput` keeps how far the global
+  reaches and `global` lays it out again at that size. A global's `:` item
+  is assembled without the program page (`ctconst`, as `ctexpr` but `jit`
+  leaves the page out): a glibc page made each item cost the whole page.
 - **Compound literals** (`progs/ccomplit.ff`): a struct or union name with
   items, used as a value, is a temporary of that type, C's `(point){1, 2}`
   as `point` / `1` / `2`: its space is reserved at the start of the

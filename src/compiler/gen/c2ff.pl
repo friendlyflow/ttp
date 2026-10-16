@@ -17,7 +17,11 @@
 #
 # Two idioms of glibc are recognized as what they are: its system call (a
 # statement expression of register variables and scall) is ff's syscall, and
-# __builtin_expect (a hint to the compiler) is its first argument.
+# __builtin_expect (a hint to the compiler) is its first argument; __extension__
+# (which only quiets -pedantic) is what it marks; __builtin_constant_p is 1
+# for a literal, else 0, as gcc may answer where it cannot tell.
+# __builtin_memcpy and the like are calls of memcpy and the like, as gcc makes
+# them where it does not expand them.
 #
 # With --program, what the roots reach is a program: its definitions on the
 # page itself, after import / tree (glibc in ff, which has the rest), and a
@@ -56,6 +60,8 @@ my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
 my %typeof;                 # declared names and their types, for typeof
 my %wanttag;                # the tags whose definitions the output needs
+my (%fn, %var, %rec, %enumd, %alias, %ifunc);   # the units' definitions, by name
+my %anon;                   # anonymous types of fields, by clang's spelling: [tag, ff name]
 
 sub trim { my ($s) = @_; $s =~ s/^\s+|\s+$//g; $s }
 
@@ -70,9 +76,11 @@ sub ctype {
     $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
     $t = trim($t);
     $t =~ s/\s+/ /g;
-    if ($t =~ /^(.*?)\s*\[(\d+)\]((?:\[\d+\])*)$/) {
+    if ($t =~ /^(.*?)\s*\[(\d*)\]((?:\[\d+\])*)$/) {
+        # T[] (a flexible array member, an extern array) has no elements of
+        # its own: 0
         my ($base, $n, $rest) = ($1, $2, $3);
-        return ('array', ctype($base . $rest), $n);
+        return ('array', ctype($base . $rest), $n eq '' ? 0 : $n);
     }
     return ('address', fntype($1, $2)) if $t =~ /^(.*?)\s*\(\*\)\s*\((.*)\)$/;
     if ($t =~ /^(.*)\*$/) {
@@ -83,9 +91,16 @@ sub ctype {
     return $scalar{$t} if exists $scalar{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($typeof{$1}) if $t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1};
+    if (my $a = $anon{ anon_key($t) // '' }) {
+        my ($tag, $name) = @$a;
+        $wanttag{$tag} = 1;
+        return $tagname{$tag} //= $name;
+    }
     if ($t =~ /^(struct|union|enum) (\S+)$/) {
         $wanttag{"$1 $2"} = 1;
-        return $tagname{"$1 $2"} //= ffname($2);
+        # C keeps tags apart from other names, ff does not: a tag that is
+        # also a global's or a function's name is named with its kind
+        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} ? "$2 $1" : ffname($2);
     }
     die "c2ff: no ff type for C's '$t'\n";
 }
@@ -161,7 +176,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target import workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc zero ra sp gp tp fp pc
+    alias ifunc asm items cast zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
 my %renamed;
 sub ffname {
@@ -193,7 +208,8 @@ while (@ARGV) {
 }
 die "usage: c2ff.pl [--page name | --program tree] tu.json=tu.i ... -- root ...\n" unless @units && @roots;
 
-my (%fn, %var, %rec, %enumd, %alias, %ifunc);
+my %enumof;                 # each enum constant's enum, as a tag
+my $lastanon;               # the last anonymous record or enum at the top of a unit
 my %recid;                  # complete records by id, the anonymous ones too
 for my $u (@units) {
     open my $h, '<', $u->{json} or die "c2ff: cannot open $u->{json}: $!\n";
@@ -209,12 +225,33 @@ for my $u (@units) {
         $d->{file} = $file;
         next if $d->{isImplicit};
         $recid{$d->{id}} = $d if $d->{kind} eq 'RecordDecl' && $d->{completeDefinition};
+        if ($d->{kind} eq 'EnumDecl') {
+            # an enum's constants bring it in where they are used; one with no
+            # name is named after its first constant
+            my @c = grep { $_->{kind} eq 'EnumConstantDecl' } @{ $d->{inner} || [] };
+            my $tag = defined $d->{name} ? "enum $d->{name}" : @c ? "enum $c[0]{name} enum" : undef;
+            if (defined $tag) {
+                $enumd{$tag} //= $d;
+                $tagname{$tag} //= defined $d->{name} ? ffname($d->{name}) : "$c[0]{name} enum";
+                $enumof{ $_->{name} } //= $tag for @c;
+            }
+        }
+        # an anonymous struct, union or enum that is a global's type is named
+        # after it (_nl_C_LC_CTYPE_class_upper struct)
+        if ($d->{kind} =~ /^(RecordDecl|EnumDecl)$/ && ($d->{name} // '') eq '') { $lastanon = $d; next }
+        if ($d->{kind} eq 'VarDecl' && $lastanon && defined $d->{name} && (my $key = anon_key($d->{type}{qualType} // ''))) {
+            my $kind = $lastanon->{kind} eq 'EnumDecl' ? 'enum' : $lastanon->{tagUsed};
+            my $tn = "$d->{name} $kind";
+            $anon{$key} //= ["$kind $tn", $tn];
+            if ($kind eq 'enum') { $enumd{"enum $tn"} //= $lastanon } else { $rec{"$kind $tn"} //= $lastanon; anon_fields($lastanon, $tn) }
+        }
         my $name = $d->{name} // next;
         if ($d->{kind} eq 'TypedefDecl') {
             my $own = $d->{inner} && $d->{inner}[0]{ownedTagDecl};
             if ($own && ($own->{name} // '') eq '' && $recid{ $own->{id} }) {
                 # a typedef of an anonymous struct or union: the record is its tag
                 $rec{ $d->{type}{qualType} } //= $recid{ $own->{id} };
+                anon_fields($recid{ $own->{id} }, $name);
                 $typedef{$name} //= $d->{type}{qualType};
             } else {
                 $typedef{$name} //= qt($d);
@@ -227,14 +264,47 @@ for my $u (@units) {
             if (my ($r) = grep { $_->{kind} eq 'IFuncAttr' } @in) { $ifunc{$name} = [$d, $u, resolver($u, $r)]; next }
             $fn{$name} //= [$d, $u] if grep { $_->{kind} eq 'CompoundStmt' } @in;
         } elsif ($d->{kind} eq 'VarDecl') {
+            if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
             $var{$name} //= [$d, $u] if ($d->{storageClass} // '') ne 'extern';
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
             $rec{"$d->{tagUsed} $name"} //= $d;
+            anon_fields($d, $name);
         } elsif ($d->{kind} eq 'EnumDecl') {
             $enumd{"enum $name"} //= $d;
         }
     }
 }
+
+# The anonymous enum, struct or union that is the type of a field gets a name
+# from where it stands: the record's, then the field's (__locale_data
+# alloc). Records inside records too.
+sub anon_fields {
+    my ($r, $rname) = @_;
+    my $last;
+    for my $k (@{ $r->{inner} || [] }) {
+        if ($k->{kind} =~ /^(RecordDecl|EnumDecl)$/) {
+            $last = $k;
+            # a named record or enum inside a record is seen as one outside it, as in C
+            if (($k->{name} // '') ne '') {
+                if ($k->{kind} eq 'EnumDecl') { $enumd{"enum $k->{name}"} //= $k }
+                elsif ($k->{completeDefinition}) { $rec{"$k->{tagUsed} $k->{name}"} //= $k; anon_fields($k, $k->{name}) }
+            }
+            next;
+        }
+        next unless $k->{kind} eq 'FieldDecl' && defined $k->{name} && $last && ($last->{name} // '') eq '';
+        my $key = anon_key($k->{type}{qualType} // '') // next;
+        my $kind = $last->{kind} eq 'EnumDecl' ? 'enum' : $last->{tagUsed};
+        my $name = "$rname $k->{name}";
+        $anon{$key} = ["$kind $name", $name];
+        if ($kind eq 'enum') { $enumd{"enum $name"} //= $last } else { $rec{"$kind $name"} //= $last; anon_fields($last, $name) }
+        undef $last;
+    }
+}
+
+# Clang spells one anonymous type in more than one way (enum (unnamed enum at
+# ../include/../locale/localeinfo.h:54:3), enum __locale_data::(unnamed at
+# ../locale/localeinfo.h:54:3)): what they share is where it is.
+sub anon_key { $_[0] =~ /\((?:unnamed|anonymous)(?: \w+)? at (?:[^():]*\/)?([^\/():]+):(\d+):(\d+)\)/ ? "$1:$2:$3" : undef }
 
 # The resolver of an ifunc: clang's JSON does not print it, the .i has it.
 sub resolver {
@@ -254,7 +324,8 @@ our %label;                 # the names of its labels, by id
 sub want { my ($n) = @_; push @todo, $n unless $done{$n}++ }
 
 sub where { my ($n) = @_; my $l = $n->{range}{begin} // $n->{loc} // {}; $l = $l->{expansionLoc} // $l; ($l->{file} // '') . ':' . ($l->{line} // '?') }
-sub stop { my ($what, $n) = @_; die "c2ff: not yet: $what (at " . where($n) . ")\n" }
+our $cur_fn = '';           # the function being translated, for messages
+sub stop { my ($what, $n) = @_; die "c2ff: not yet: $what (at " . where($n) . ($cur_fn ne '' ? ", in $cur_fn" : '') . ")\n" }
 
 my %prec = ('=' => 1, '+=' => 1, '-=' => 1, '*=' => 1, '/=' => 1, '%=' => 1, '&=' => 1, '|=' => 1,
     '^=' => 1, '<<=' => 1, '>>=' => 1, '||' => 2, '&&' => 3, '|' => 4, '^' => 5, '&' => 6,
@@ -284,16 +355,12 @@ sub expr {
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
     return node(':', expr((kids($n))[0])) if $k eq 'ParenExpr';
     return node($n->{value}) if $k eq 'IntegerLiteral' || $k eq 'CharacterLiteral';
-    if ($k eq 'StringLiteral') {
-        my $s = $n->{value};
-        $s =~ s/^"|"$//g;
-        $s =~ s/\\([ntr"\\])/{ n => "\n", t => "\t", r => "\r", '"' => '"', '\\' => '\\' }->{$1}/ge;
-        return node('address', node('char'), node($s));
-    }
+    return node('address', node('char'), texts($n)) if $k eq 'StringLiteral';
     if ($k eq 'DeclRefExpr') {
         my $d = $n->{referencedDecl};
+        $wanttag{ $enumof{ $d->{name} } } = 1 if $d->{kind} eq 'EnumConstantDecl' && $enumof{ $d->{name} };
         # a function, or a variable that is not this function's own: a global
-        want($d->{name}) if $d->{kind} eq 'FunctionDecl' || ($d->{kind} eq 'VarDecl' && !$local{ $d->{id} } && $var{ $d->{name} });
+        want($d->{name}) if $d->{kind} eq 'FunctionDecl' || ($d->{kind} eq 'VarDecl' && !$local{ $d->{id} });
         return node(ffname($d->{name}));
     }
     if ($k eq 'BinaryOperator' || $k eq 'CompoundAssignOperator') {
@@ -311,34 +378,65 @@ sub expr {
         return (node($op), atom($e)) if $op eq '-' || $op eq '!' || $op eq '~';
         return $n->{isPostfix} ? (atom($e), node($op)) : (node($op), atom($e)) if $op eq '++' || $op eq '--';
         return expr($e) if $op eq '+';
+        return expr($e) if $op eq '__extension__';     # only quiets gcc's -pedantic
         stop("the operator $op", $n);
     }
     if ($k eq 'CStyleCastExpr') {
-        my @t = ctype(qt($n));
-        my $first = shift @t;
-        return node($first, map({ node($_) } @t), expr((kids($n))[0]));
+        return node('cast:', map({ node($_) } ctype(qt($n))), item(expr((kids($n))[0])));
     }
-    if ($k eq 'ArraySubscriptExpr') {
-        my ($b, $i) = kids($n);
-        my $base = strip($b);
-        return node(ffname($base->{referencedDecl}{name}), item(expr($i))) if $base->{kind} eq 'DeclRefExpr';
-        return node('content', node(':', expr($b), node('+'), item(expr($i))));
-    }
-    if ($k eq 'MemberExpr') {
-        my @path = (ffname($n->{name}));
-        my $base = strip((kids($n))[0]);
-        while ($base->{kind} eq 'MemberExpr') { unshift @path, ffname($base->{name}); $base = strip((kids($base))[0]) }
-        return node(ffname($base->{referencedDecl}{name}), map { node($_) } @path) if $base->{kind} eq 'DeclRefExpr';
-        stop('a field of ' . $base->{kind}, $n);
+    if ($k eq 'ArraySubscriptExpr' || $k eq 'MemberExpr') {
+        # a path from a variable: its elements and fields in a row, xs i x
+        my @path;
+        my $base = $n;
+        while (1) {
+            if ($base->{kind} eq 'MemberExpr') { unshift @path, node(ffname($base->{name})); $base = strip((kids($base))[0]); next }
+            if ($base->{kind} eq 'ArraySubscriptExpr' && strip((kids($base))[0])->{kind} =~ /^(DeclRefExpr|MemberExpr|ArraySubscriptExpr)$/) {
+                my ($b, $i) = kids($base);
+                unshift @path, item(expr($i));
+                $base = strip($b);
+                next;
+            }
+            last;
+        }
+        # parentheses around the base say nothing more here, and a : holds
+        # only its items
+        $base = strip((kids($base))[0]) while $base->{kind} eq 'ParenExpr';
+        if ($base->{kind} eq 'DeclRefExpr' && @path) {
+            my ($b) = expr($base);      # which also wants a global
+            push @{ $b->{children} }, @path;
+            return $b;
+        }
+        # a path from an expression: after a . among the base node's children
+        if (@path && $base != $n) {
+            my @b = expr($base);
+            @b == 1 or stop('a path from ' . $base->{kind} . ' of several nodes', $n);
+            push @{ $b[0]{children} }, node('.'), @path;
+            return @b;
+        }
+        if ($k eq 'ArraySubscriptExpr' && $base == $n) {
+            my ($b, $i) = kids($n);
+            return node('content', node(':', expr($b), node('+'), item(expr($i))));
+        }
+        stop('a path from ' . $base->{kind}, $n);
     }
     if ($k eq 'CallExpr') {
         my ($callee, @args) = kids($n);
         my $c = strip($callee);
+        # (*f) (...) calls what f points at, as f (...) does
+        $c = strip((kids($c))[0]) while $c->{kind} eq 'ParenExpr' || ($c->{kind} eq 'UnaryOperator' && $c->{opcode} eq '*');
         $c->{kind} eq 'DeclRefExpr' or stop('a call through ' . $c->{kind}, $n);
         my $name = $c->{referencedDecl}{name};
         return expr($args[0]) if $name eq '__builtin_expect';
+        if ($name eq '__builtin_constant_p') {
+            # gcc's answer where it cannot tell is 0, and code that asks must
+            # mean the same either way: 1 for a literal, else 0
+            return node(strip($args[0])->{kind} =~ /^(IntegerLiteral|CharacterLiteral)$/ ? 1 : 0);
+        }
+        # a builtin of a libc function is a call of it, as gcc makes one
+        # where it does not expand the builtin
+        $name = $1 if $name =~ /^__builtin_((?:mem|str|stp)\w+)$/;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
-        want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
+        want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl' && $name !~ /^__builtin_/;
         return node(ffname($name), map { item(expr($_)) } @args);
     }
     if ($k eq 'ConditionalOperator') {
@@ -358,10 +456,65 @@ sub expr {
     if ($k eq 'UnaryExprOrTypeTraitExpr') {
         my $w = $n->{name};
         my $t = $n->{argType} ? ($n->{argType}{desugaredQualType} // $n->{argType}{qualType}) : qt((kids($n))[0]);
+        $w = 'alignof' if $w eq '__alignof' || $w eq '_Alignof';   # GNU's and C11's spellings, one on riscv64
         return node($w, map { node($_) } ctype($t)) if $w eq 'sizeof' || $w eq 'alignof';
         stop("the trait $w", $n);
     }
     stop($k, $n);
+}
+
+# A string literal's bytes, C's escapes undone, as text leaves of at most 255
+# bytes each (a node's text holds no more), which ff reads in a row as one,
+# like C's "ab" "cd".
+my %esc = (n => "\n", t => "\t", r => "\r", a => "\a", b => "\b", f => "\f", v => "\x0b",
+    '"' => '"', "'" => "'", '\\' => '\\', '?' => '?', e => "\e");
+sub bytes {
+    my ($n) = @_;
+    my $s = $n->{value};
+    $s =~ s/^"|"$//g;
+    $s =~ s/\\(?:([0-7]{1,3})|x([0-9a-fA-F]+)|(.))/defined $1 ? chr(oct $1) : defined $2 ? chr(hex $2) : ($esc{$3} \/\/ stop("the escape \\$3", $n))/ge;
+    $s;
+}
+# Text leaves hold UTF-8 (an ff node's text is): the pieces, or nothing when
+# they cannot be text. Under address / char any leaf is text; among a char
+# array's items one that reads as a number is a number ($array).
+sub pieces {
+    my ($s, $array) = @_;
+    my @p = unpack '(a255)*', $s;
+    for (@p) { return () unless utf8::decode(my $u = $_) && !($array && /^-?(?:0x[0-9a-f]+|\d+)$/i) }
+    @p;
+}
+sub texts {
+    my ($n) = @_;
+    my $s = bytes($n);
+    return node('') if $s eq '';
+    my @p = pieces($s) or stop('a text that is not UTF-8 text', $n);
+    map { node($_) } @p;
+}
+# What sets a char array: its text, or where that cannot be text, its bytes
+# as numbers; the zeros at the end are the rest, which is 0.
+sub array_text {
+    my ($n) = @_;
+    my $s = bytes($n);
+    $s =~ s/\0+$//;
+    return () if $s eq '';
+    my @p = pieces($s, 1);
+    @p ? map({ node($_) } @p) : map({ node($_) } unpack 'C*', $s);
+}
+# A string literal that sets a char array: under no decay to an address.
+sub bare_string {
+    my ($n) = @_;
+    $n = (kids($n))[0] while $n->{kind} eq 'ParenExpr' || ($n->{kind} eq 'ImplicitCastExpr' && ($n->{castKind} // '') ne 'ArrayToPointerDecay');
+    $n->{kind} eq 'StringLiteral' ? $n : undef;
+}
+# Items for a node that holds $room more children: as they are, or in items
+# groups of at most 255 when there are more.
+sub grouped {
+    my ($room, @items) = @_;
+    return @items if @items <= $room;
+    my @g;
+    push @g, node('items', splice @items, 0, 255) while @items;
+    @g;
 }
 
 # An operand of a binary operator: in a : where it binds less than the
@@ -443,7 +596,8 @@ sub stmt {
     my ($n) = @_;
     my $k = $n->{kind};
     return node(':', body($n)) if $k eq 'CompoundStmt';
-    return map { decl($_) } kids($n) if $k eq 'DeclStmt';
+    # a local extern declaration names the global: nothing of its own
+    return map { ($_->{storageClass} // '') eq 'extern' ? do { want($_->{name}); () } : decl($_) } kids($n) if $k eq 'DeclStmt';
     return node('return', $n->{inner} ? item(expr((kids($n))[0])) : ()) if $k eq 'ReturnStmt';
     return ifs('if', $n) if $k eq 'IfStmt';
     if ($k eq 'WhileStmt') { my ($c, $b) = kids($n); return node('while', item(expr($c)), sub_body($b)) }
@@ -515,24 +669,56 @@ sub ifs {
 }
 
 sub decl {
-    my ($v) = @_;
+    my ($v, $global) = @_;
     $v->{kind} eq 'VarDecl' or stop('a declaration of ' . $v->{kind}, $v);
     my @t = ctype(qt($v));
     my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
-    node(ffname($v->{name}) . ':', map({ node($_) } @t), $init ? init($init) : ());
+    my @i = $init ? init($init) : ();
+    # a global takes each item as one node
+    @i = node(':', @i) if $global && @i > 1 && strip($init)->{kind} ne 'InitListExpr' && !bare_string($init);
+    # under address / char a leaf is text: a value that is a leaf goes in a :
+    @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i == 1 && !@{ $i[0]{children} } && !bare_string($init);
+    node(ffname($v->{name}) . ':', map({ node($_) } @t), grouped(255 - @t, @i));
 }
 sub init {
     my ($n) = @_;
     my $s = strip($n);
-    return map { init_item($_) } kids($s) if $s->{kind} eq 'InitListExpr';
+    return init_items($s) if $s->{kind} eq 'InitListExpr';
+    if (my $str = bare_string($n)) { return array_text($str) }
     item(expr($n));
 }
-sub init_item { my ($n) = @_; my $s = strip($n); $s->{kind} eq 'InitListExpr' ? node(':', map { init_item($_) } kids($s)) : item(expr($n)) }
+# The items of an initializer list. Clang fills the fields not named with
+# ImplicitValueInitExpr: at the end they are the zero ff gives the rest, in
+# between a 0 (or an empty : for an aggregate) keeps the places.
+sub init_items {
+    my ($l) = @_;
+    my @k = kids($l);
+    # clang's JSON puts a list's items after its filler, in array_filler, when
+    # it has one; an implicit filler is the zero ff gives the rest
+    if (!@k && $l->{array_filler}) {
+        my ($f, @i) = @{ $l->{array_filler} };
+        $f->{kind} eq 'ImplicitValueInitExpr' or stop('an array filler of ' . $f->{kind}, $l);
+        @k = @i;
+    }
+    pop @k while @k && $k[-1]{kind} eq 'ImplicitValueInitExpr';
+    map { init_item($_) } @k;
+}
+sub init_item {
+    my ($n) = @_;
+    my $s = strip($n);
+    return node(':', grouped(255, init_items($s))) if $s->{kind} eq 'InitListExpr';
+    if (my $str = bare_string($n)) { return array_text($str) }
+    if ($s->{kind} eq 'ImplicitValueInitExpr') { my @t = ctype(qt($s)); return @t == 1 && $scalar_word{$t[0]} || $t[0] eq 'address' ? node(0) : node(':') }
+    # an item of a list is one node
+    my @e = item(expr($n));
+    @e > 1 ? node(':', @e) : @e;
+}
 
 # ---- definitions ----------------------------------------------------------------
 
 sub function {
     my ($name, $d) = @_;
+    local $cur_fn = $name;
     local %local = map { ($_->{id} => 1) } locals($d);
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);
     my ($ret) = split_fn(expand(qt($d)));
@@ -564,31 +750,39 @@ while (defined(my $name = next_name())) {
         next;
     }
     if (my $f = $fn{$name}) { local $cur_unit = $f->[1]; push @out, function($name, $f->[0]); next }
-    if (my $v = $var{$name}) { push @out, decl($v->[0]); next }
+    if (my $v = $var{$name}) { push @out, decl($v->[0], 1); next }
     warn "c2ff: no definition of $name, left out\n";
 }
 
 # the types the definitions use, before them
 my @types;
-for my $f (@fntypes) {
-    my ($name, $ret, $ps) = @$f;
+# the function types and the tags bring in more of each other: until none
+# is new
+my ($fdone, %tdone) = (0);
+while ($fdone < @fntypes || grep { !$tdone{$_} } keys %wanttag) {
+while ($fdone < @fntypes) {
+    my ($name, $ret, $ps) = @{ $fntypes[$fdone++] };
     my $i = 0;
     push @types, node("$name:", node('function'), map({ node($_) } ctype($ret)),
         map({ $i++; node("p$i:", map { node($_) } ctype($_)) } params($ps)));
 }
-my %tdone;
 while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
     for my $tag (@t) {
         $tdone{$tag} = 1;
         my $d = $rec{$tag} // $enumd{$tag} or do { warn "c2ff: no definition of $tag\n"; next };
         my ($kind) = $tag =~ /^(\S+)/;
         if ($kind eq 'enum') {
-            unshift @types, node($tagname{$tag} . ':', node('enum'), map { node(ffname($_->{name}) . ':') } grep { $_->{kind} eq 'EnumConstantDecl' } kids($d));
+            # a constant keeps its value where C gives it one (clang has worked it out)
+            unshift @types, node($tagname{$tag} . ':', node('enum'), grouped(254, map {
+                my ($v) = grep { $_->{kind} eq 'ConstantExpr' } kids($_);
+                node(ffname($_->{name}) . ':', defined $v && defined $v->{value} ? node($v->{value}) : ())
+            } grep { $_->{kind} eq 'EnumConstantDecl' } kids($d)));
         } else {
             unshift @types, node($tagname{$tag} . ':', node($kind),
                 map { node(ffname($_->{name}) . ':', map { node($_) } ctype(qt($_))) } grep { $_->{kind} eq 'FieldDecl' } kids($d));
         }
     }
+}
 }
 
 if (defined $program) {
