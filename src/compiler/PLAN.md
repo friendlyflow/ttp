@@ -246,6 +246,14 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   began with (FP + `cc_entryoff`); without ifuncs the routine is empty.
   The routine's place among the library definitions is fixed the first
   time, so that both passes emit the same.
+- **Asm functions** (`progs/casmfn.ff`, `progs/casmfndefs.ff`): `name:` /
+  `asm` / instructions is a function in asm, its instructions and block
+  labels placed as the asm of a page is. On a definition page it goes on
+  the library list when C reaches it (`libsym`) and is placed at the
+  marker (`libcc`), as library C is. C calls it by name and takes its
+  address, as a long (`dtype`). `asm` itself is a word of the shared page
+  that emits nothing. glibc's `.S` functions come this way, by
+  `gen/s2ff.pl`.
 - **Compound literals** (`progs/ccomplit.ff`): a struct or union name with
   items, used as a value, is a temporary of that type, C's `(point){1, 2}`
   as `point` / `1` / `2`: its space is reserved at the start of the

@@ -14,7 +14,7 @@ QEMU    ?= $(if $(filter riscv64,$(ARCH)),,qemu-riscv64)
 
 # The GNU twins of the ff programs (progs/riscv64/*.s): every extension ff
 # encodes, no relaxation, linked with ff64.ld into ttpc's layout.
-TWIN_ASFLAGS := -march=rv64imafdc -mabi=lp64 -mno-relax
+TWIN_ASFLAGS := -march=rv64imafdcv -mabi=lp64 -mno-relax
 TWIN_LDFLAGS := --no-relax --no-warn-rwx-segments -T ff64.ld
 
 # The Nix ld-wrapper injects -z relro / -z now hardening, which this static
@@ -40,12 +40,12 @@ TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cimport.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cimportlate.ff \
-	progs/clibdefs.ff progs/cifuncdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff language.ff
+	progs/clibdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff language.ff
 P := $(BUILD)/progs
 
 all: $(BIN)
@@ -165,6 +165,17 @@ bootstrap: $(BOOT)/ttpc1.self $(BOOT)/ttpc2.self $(BOOT)/stage2 $(PROGS:%=$(P)/%
 # shared.ff.
 $(P)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)
 	$(QEMU) $(BOOT)/stage2 $(SHARED) $< $@ > $(P)/$*.lst
+
+# The vector instructions (RVV 1.0), which ttpc.s predates: stage2
+# assembles progs/riscv64/rvv.ff, a program-only tree that mkrvv.pl writes
+# with its GNU twin rvv.s, every instruction unmasked and under v0.t. They
+# must be byte-identical after the ELF header.
+$(P)/rvv.velf: progs/riscv64/rvv.ff $(SHARED) $(BOOT)/stage2 | $(P)
+	$(QEMU) $(BOOT)/stage2 $(SHARED) $< $@ > $(P)/rvv.lst
+
+rvv: $(P)/rvv.velf $(P)/rvv.twin.bin
+	tail -c +121 $(P)/rvv.velf | cmp - $(P)/rvv.twin.bin
+	@echo "rvv: ttpc and GNU as agree on the vector instructions"
 
 ctest: $(CPROGS:%=$(P)/%.celf)
 	@for p in $(CPROGS); do \
@@ -440,4 +451,4 @@ refresh:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check run bootstrap ctest ctime cws targets seeds bootstraps refresh clean
+.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh clean

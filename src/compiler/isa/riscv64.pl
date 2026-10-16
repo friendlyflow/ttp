@@ -1,6 +1,7 @@
 # isa/riscv64.pl — the riscv64 section of the shared page (mkff.pl does it):
 # RV64GC (RV64I, Zifencei, Zicsr, the privileged mret/sret/wfi/sfence.vma,
-# M, A, F, D, C), its registers, and macros/riscv64.ff.txt.
+# M, A, F, D, C), the vector instructions (V) that glibc's string functions
+# use and their kin, its registers, and macros/riscv64.ff.txt.
 #
 # An instruction is a function: its operands (rd, rs1, imm, ...) are its
 # parameters, in field order, followed by its encoding fields in bit order,
@@ -20,6 +21,8 @@ my $isa = ISA->new(width => sub {
     my ($name) = @_;
     return "2:0"  if $name =~ /'/ || $name eq "rm";
     return "4:0"  if $name =~ m{^(rd|rs1|rs2|rs3|rd/rs1)$};
+    return "4:0"  if $name =~ m{^(vd|vs1|vs2|vs3)$};
+    return "0"    if $name eq "vm";
     return "11:0" if $name eq "csr";
     return "3:0"  if $name =~ /^(fm|pred|succ)$/;
     return "0"    if $name =~ /^(aq|rl)$/;
@@ -36,6 +39,7 @@ my @fabi = qw(ft0 ft1 ft2 ft3 ft4 ft5 ft6 ft7 fs0 fs1 fa0 fa1 fa2 fa3 fa4 fa5
 $isa->add("registers",
     (map { node("x$_ $xabi[$_]:", node(sprintf "%05b", $_)) } 0 .. 31),
     (map { node("f$_ $fabi[$_]:", node(sprintf "%05b", $_)) } 0 .. 31),
+    (map { node("v$_ v$_:", node(sprintf "%05b", $_)) } 0 .. 31),
 );
 
 # ---------------------------------------------------------------------------
@@ -182,6 +186,54 @@ for my $p (["s", "00", "010", "w"], ["d", "01", "011", "d"]) {
     def("fmv.x.$mv", FUX("11100$fmt", "000"));
     def("fmv.$mv.x", FUX("11110$fmt", "000"));
 }
+
+$isa->group("vector");
+
+# V (RVV 1.0): what glibc's sysdeps/riscv/rvv uses, and its kin. vm is the
+# mask bit: 1 unmasked, 0 under v0.t. A vtype (vsetvli's zimm) is
+# vma<<7 | vta<<6 | sew<<3 | lmul: e8, m2, ta, ma is 193.
+sub VV { my ($f6, $f3) = @_; ("funct6=$f6", "vm", "vs2", "vs1", "funct3=$f3", "vd", "opcode=1010111") }
+sub VX { my ($f6, $f3) = @_; ("funct6=$f6", "vm", "vs2", "rs1", "funct3=$f3", "vd", "opcode=1010111") }
+sub VI { my ($f6) = @_; ("funct6=$f6", "vm", "vs2", "imm[4:0]", "funct3=011", "vd", "opcode=1010111") }
+sub VMM { my ($f6) = @_; ("funct6=$f6", "vm=1", "vs2", "vs1", "funct3=010", "vd", "opcode=1010111") }
+def("vsetvli",  "bit31=0", "zimm[10:0]", "rs1", "funct3=111", "rd", "opcode=1010111");
+def("vsetivli", "bits=11", "zimm[9:0]", "uimm[4:0]", "funct3=111", "rd", "opcode=1010111");
+def("vsetvl",   "funct7=1000000", "rs2", "rs1", "funct3=111", "rd", "opcode=1010111");
+for my $w ([8, "000"], [16, "101"], [32, "110"], [64, "111"]) {
+    my ($n, $wd) = @$w;
+    def("vle$n.v",   "nf=000", "mew=0", "mop=00", "vm", "lumop=00000", "rs1", "width=$wd", "vd", "opcode=0000111");
+    def("vle${n}ff.v", "nf=000", "mew=0", "mop=00", "vm", "lumop=10000", "rs1", "width=$wd", "vd", "opcode=0000111");
+    def("vse$n.v",   "nf=000", "mew=0", "mop=00", "vm", "sumop=00000", "rs1", "width=$wd", "vs3", "opcode=0100111");
+}
+for my $c ([vmseq => "011000"], [vmsne => "011001"]) {
+    my ($n, $f6) = @$c;
+    def("$n.vv", VV($f6, "000")); def("$n.vx", VX($f6, "100")); def("$n.vi", VI($f6));
+}
+def("vmsltu.vv", VV("011010", "000")); def("vmsltu.vx", VX("011010", "100"));
+def("vmsleu.vv", VV("011100", "000")); def("vmsleu.vx", VX("011100", "100")); def("vmsleu.vi", VI("011100"));
+def("vmsgtu.vx", VX("011110", "100")); def("vmsgtu.vi", VI("011110"));
+def("vadd.vv", VV("000000", "000")); def("vadd.vx", VX("000000", "100")); def("vadd.vi", VI("000000"));
+def("vsub.vv", VV("000010", "000")); def("vsub.vx", VX("000010", "100"));
+def("vand.vv", VV("001001", "000")); def("vand.vx", VX("001001", "100")); def("vand.vi", VI("001001"));
+def("vor.vv",  VV("001010", "000")); def("vor.vx",  VX("001010", "100")); def("vor.vi",  VI("001010"));
+def("vxor.vv", VV("001011", "000")); def("vxor.vx", VX("001011", "100")); def("vxor.vi", VI("001011"));
+def("vrgather.vv", VV("001100", "000")); def("vrgather.vx", VX("001100", "100")); def("vrgather.vi", "funct6=001100", "vm", "vs2", "uimm[4:0]", "funct3=011", "vd", "opcode=1010111");
+def("vredmaxu.vs", VV("000110", "010")); def("vredminu.vs", VV("000100", "010"));
+def("vredsum.vs", VV("000000", "010")); def("vredor.vs", VV("000010", "010"));
+def("vmv.v.v", "funct6=010111", "vm=1", "vs2=00000", "vs1", "funct3=000", "vd", "opcode=1010111");
+def("vmv.v.x", "funct6=010111", "vm=1", "vs2=00000", "rs1", "funct3=100", "vd", "opcode=1010111");
+def("vmv.v.i", "funct6=010111", "vm=1", "vs2=00000", "imm[4:0]", "funct3=011", "vd", "opcode=1010111");
+def("vmv.x.s", "funct6=010000", "vm=1", "vs2", "vs1=00000", "funct3=010", "rd", "opcode=1010111");
+def("vmv.s.x", "funct6=010000", "vm=1", "vs2=00000", "rs1", "funct3=110", "vd", "opcode=1010111");
+def("vcpop.m",  "funct6=010000", "vm", "vs2", "vs1=10000", "funct3=010", "rd", "opcode=1010111");
+def("vfirst.m", "funct6=010000", "vm", "vs2", "vs1=10001", "funct3=010", "rd", "opcode=1010111");
+def("vmsbf.m", "funct6=010100", "vm", "vs2", "vs1=00001", "funct3=010", "vd", "opcode=1010111");
+def("vmsof.m", "funct6=010100", "vm", "vs2", "vs1=00010", "funct3=010", "vd", "opcode=1010111");
+def("vmsif.m", "funct6=010100", "vm", "vs2", "vs1=00011", "funct3=010", "vd", "opcode=1010111");
+def("vid.v",   "funct6=010100", "vm", "vs2=00000", "vs1=10001", "funct3=010", "vd", "opcode=1010111");
+def("vmandn.mm", VMM("011000")); def("vmand.mm", VMM("011001")); def("vmor.mm", VMM("011010"));
+def("vmxor.mm", VMM("011011")); def("vmorn.mm", VMM("011100")); def("vmnand.mm", VMM("011101"));
+def("vmnor.mm", VMM("011110")); def("vmxnor.mm", VMM("011111"));
 
 $isa->group("compressed");
 

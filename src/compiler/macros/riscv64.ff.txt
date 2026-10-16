@@ -59,6 +59,13 @@ macros:
       0
       rs
       rd
+  csrr:
+    csr
+    rd
+    csrrs
+      csr
+      zero
+      rd
   li:
     imm
     rd

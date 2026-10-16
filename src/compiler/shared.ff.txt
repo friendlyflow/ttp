@@ -172,6 +172,9 @@ ifunc:
   type
   parameters
 comment
+  asm: C, first under a name: an asm function, its instructions after it (as the asm of a page), placed where it stands, or on a definition page when C reaches it; C calls it and takes its address, as a long.
+asm:
+comment
   ifunc hwcap stack: C, the AT_HWCAP of the auxiliary vector a program starts with (stack its first word, argc), for the resolvers of ifuncs; compiled where it is used.
 ifunc hwcap:
   long

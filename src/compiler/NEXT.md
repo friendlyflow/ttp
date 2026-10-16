@@ -104,4 +104,8 @@ RAM NODE:
 - de reach van `strlen` + `__riscv_hwprobe` (de alias, de ifunc en zijn resolver, de generieke C, glibc's hwprobe met zijn syscall, `_dl_vdso_riscv_hwprobe` uit dl-support) loopt: `make -C src/glibc strlen-check` geeft 12 met `-cpu rv64,v=false` en kiest met V de vector-variant (nog een stand-in die 99 geeft, in `src/glibc/progs/strlen.ff`, niet in glibc)
 - daarvoor nieuw in ttpc: compound literals (`point` / 1 / 2), want glibc geeft NULL aan een transparent union
 - c2ff liep 3 keer eindeloos (een typedef die naar zichzelf wees) en legde de machine plat: alles draait nu met een geheugenlimiet en timeout, ctype heeft een dieptegrens
-- nog te doen: glibc's strlen-vector.S (s2ff en RVV in ttpc's riscv64), dan de andere stringfuncties van M1, en het vergelijken met gcc + libc.a
+- RVV 1.0 in ttpc's riscv64 (`isa/riscv64.pl`, groep `vector`: vsetvli, laden en opslaan, vergelijken, rekenen, reducties, maskers, vmv, vfirst/vcpop) en `csrr`: `progs/riscv64/rvv.ff` met GNU-tweeling `rvv.s` (beide uit `mkrvv.pl`, 146 instructies, met en zonder v0.t), `make rvv`
+- asm-functies in de C-laag: `naam:` / `asm` / instructies, geplaatst als asm, op een definitiepagina alleen als C ze bereikt; C roept ze aan en neemt hun adres (`progs/casmfn.ff`)
+- `gen/s2ff.pl` vertaalt glibc's .s (mki.pl maakt die nu ook van een .S) naar asm-functies: elke instructie één op één, en waar GNU as een gecomprimeerde koos (te zien in zijn objdump zonder relaxatie) dezelfde c.*; `make -C src/glibc asm-check`: ttpc maakt dezelfde 38 bytes als glibc's compiler voor `__strlen_vector`
+- `make -C src/glibc strlen-check` geeft nu ook met V 12: de resolver kiest glibc's eigen vector-asm (de stand-in is weg)
+- nog te doen: de andere stringfuncties van M1 (memcpy, memset, strcmp, strchr), en het vergelijken met gcc + libc.a

@@ -68,33 +68,66 @@ TTPC ?= ../../build/compiler/boot/stage2
 SHARED := ../compiler/shared.ff
 CAP := ulimit -v 4000000;
 
-# M1, strlen: its ifunc, the generic C and glibc's __riscv_hwprobe (which
-# the init routine hands the resolver, as glibc's own startup does)
+# M1, strlen: its ifunc, the generic C, the vector asm and glibc's
+# __riscv_hwprobe (which the init routine hands the resolver, as glibc's own
+# startup does)
 OBJS_strlen := string/strlen string/strlen-generic misc/hwprobe elf/dl-support
+ASMS_strlen := string/strlen-vector
 ROOTS_strlen := strlen __riscv_hwprobe
 
-.PRECIOUS: $(I)/%.i $(I)/%.json
+.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+
+# An object of a .S: its .s (mki.pl again), and what glibc's compiler makes
+# of it without relaxation, as instructions (for s2ff.pl, which takes the
+# compressed ones GNU as picked) and as the bytes of its .text, which ttpc
+# must make too.
+$(I)/%.s: $(OBJ)/libc.a mki.pl
+	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+
+$(I)/%.dump $(I)/%.bin: $(I)/%.s
+	$(CAP) timeout 60 $(GLIBC_CC) -c -mno-relax -x assembler $< -o $(I)/$*.ref.o
+	riscv64-unknown-linux-gnu-objdump -d -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
+	riscv64-unknown-linux-gnu-objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
 
 $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $< > $@
 
-$(FF)/strlen.ff: $(OBJS_strlen:%=$(I)/%.json) ../compiler/gen/c2ff.pl
+$(FF)/strlen.ff: $(OBJS_strlen:%=$(I)/%.json) $(ASMS_strlen:%=$(I)/%.dump) ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
 	$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $(foreach o,$(OBJS_strlen),$(I)/$(o).json=$(I)/$(o).i) \
 	    -- $(ROOTS_strlen) > $(FF)/strlen.ff.txt
+	for a in $(ASMS_strlen); do \
+	    $(CAP) timeout 60 perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump >> $(FF)/strlen.ff.txt || exit 1; \
+	done
 	perl ../compiler/gen/fftext.pl ff $(FF)/strlen.ff.txt > $@
 
+# Each asm part, assembled by ttpc alone (with a _start after it), is the
+# bytes glibc's compiler made of it, its .text without the padding at its
+# end.
+asm-check: $(ASMS_strlen:%=$(I)/%.dump) $(ASMS_strlen:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
+	mkdir -p $(FF)
+	@for a in $(ASMS_strlen); do \
+	    n=$$(basename $$a); \
+	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
+	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
+	    $(CAP) timeout 60 qemu-riscv64 $(TTPC) $(SHARED) $(FF)/$$n.asm.ff $(FF)/$$n.asm > $(FF)/$$n.asm.lst || exit 1; \
+	    size=$$(perl ../compiler/gen/s2ff.pl --size $(I)/$$a.s $(I)/$$a.dump) || exit 1; \
+	    head -c $$size $(I)/$$a.bin > $(FF)/$$n.want; \
+	    tail -c +121 $(FF)/$$n.asm | head -c $$size | cmp - $(FF)/$$n.want || exit 1; \
+	    echo "asm-check: $$a: ttpc and glibc's compiler agree ($$size bytes)"; \
+	done
+
 # progs/strlen.ff imports strlen.ff from its own folder, so both go there
-strlen-check: $(FF)/strlen.ff progs/strlen.ff
+strlen-check: $(FF)/strlen.ff progs/strlen.ff asm-check
 	cp progs/strlen.ff $(FF)/strlen-prog.ff
 	$(CAP) timeout 120 qemu-riscv64 $(TTPC) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
 	s=0; $(CAP) timeout 30 qemu-riscv64 -cpu rv64,v=false $(FF)/strlen-prog || s=$$?; test $$s -eq 12
 	@echo "strlen-check: glibc's strlen, generic C (-cpu rv64,v=false): 12"
-	s=0; $(CAP) timeout 30 qemu-riscv64 $(FF)/strlen-prog || s=$$?; test $$s -eq 99
-	@echo "strlen-check: with V its resolver picks the vector variant (the stand-in, 99)"
+	s=0; $(CAP) timeout 30 qemu-riscv64 $(FF)/strlen-prog || s=$$?; test $$s -eq 12
+	@echo "strlen-check: with V its resolver picks glibc's vector asm: 12"
 
-.PHONY: strlen-check
+.PHONY: strlen-check asm-check

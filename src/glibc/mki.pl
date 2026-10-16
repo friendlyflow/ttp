@@ -2,7 +2,8 @@
 # mki.pl — the .i of an object of the reference glibc: the command that
 # compiled it (from build.log) run again with -E, in the source folder it ran
 # in, its output next to the build in i/. That is the C exactly as glibc's
-# build compiled it for this configuration.
+# build compiled it for this configuration; an object of a .S gets its .s,
+# the asm exactly as glibc's build assembled it.
 #
 #   perl mki.pl <obj dir> <glibc source> string/strlen.o ...
 #
@@ -29,7 +30,8 @@ my $bad = 0;
 for my $o (@want) {
     my $c = $cmd{$o} or do { warn "mki: no command for $o in build.log\n"; $bad = 1; next };
     chomp $c;
-    (my $i = "$obj/../i/$o") =~ s/\.o$/.i/;
+    my $ext = $c =~ m{\.S\s} ? "s" : "i";
+    (my $i = "$obj/../i/$o") =~ s/\.o$/.$ext/;
     make_path(dirname($i));
     $c =~ s/ -c / -E /;
     $c =~ s/ -o \S+\.o / -o $i /;

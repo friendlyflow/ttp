@@ -410,10 +410,21 @@ ff, the language ttpc compiles
       C itself uses V, L, X (on riscv64 a0 t0 t1) and SP, FP; it does not write the fixed ones (on riscv64 zero ra sp s0)
     asm in C
       a node naming an instruction or macro of the target is emitted as it is; asm belongs to one target, guard it with compile time
+    asm functions
+      name: / asm / instructions is an asm function: its instructions (and block labels) are placed as the asm of a page, on a definition page only when C reaches it
+      C calls it by name and takes its address, as a long; it keeps the calling convention itself (glibc's .S functions, by gen/s2ff.pl)
+      example
+        seven:
+          asm
+          addi
+            7
+            a0
+            a0
+          ret
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
       the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, union
-      and: ..., va_start, va_arg, va_end, va_copy, thread local, compile time, emit, fail, number, target
+      and: ..., va_start, va_arg, va_end, va_copy, thread local, alias, ifunc, asm, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program
