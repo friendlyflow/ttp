@@ -70,7 +70,7 @@ ff, the language ttpc compiles
         3
     types
       a type is a run of leaf siblings, one word per node, the first word first; a node with children ends the run
-      scalars: char (unsigned 1 byte), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void
+      scalars: char (unsigned 1 byte), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void, va_list (a word)
       i64 and u64 are refused on arm
       address T: a word, the address of a T; address alone, the address of nothing (C's void *)
       array T n: n elements of T; n a number or a constant; arrays of arrays nest, array array int 3 4
@@ -230,6 +230,23 @@ ff, the language ttpc compiles
       a parameter is name: with a type run as its only children; no untyped leaf parameters
       the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0)
       a call is name with its arguments in order, the first 8 in the argument registers, the others on the stack; its value is what return gives
+      a leaf ... after the parameters takes more arguments: va_list is a word, va_start ap points it at the first after the parameters, va_arg ap type takes one, va_end ap, va_copy to from
+      example
+        sum:
+          long
+          n:
+            long
+          ...
+          ap:
+            va_list
+            0
+          va_start
+            ap
+          s:
+            long
+            va_arg
+              ap
+              long
       a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy, an argument is the callee's own copy, a result is copied into space the caller keeps for it
       example
         b:
@@ -381,7 +398,8 @@ ff, the language ttpc compiles
       a node naming an instruction or macro of the target is emitted as it is; asm belongs to one target, guard it with compile time
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
-      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, union, compile time, emit, fail, number, target
+      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, union
+      and: ..., va_start, va_arg, va_end, va_copy, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program

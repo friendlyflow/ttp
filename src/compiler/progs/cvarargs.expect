@@ -1,0 +1,8 @@
+exit 0
+ok three longs after the count
+ok none after the count
+ok ten after the count
+ok ints, va_arg in a loop
+ok va_copy walks again
+ok a small printf, its length
+n=42 s=ok c=! d=-7

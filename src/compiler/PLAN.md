@@ -214,6 +214,14 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   into space the caller keeps for it (all of a function's, reserved at its
   start by `treserve`), its address pushed after the arguments; `return`
   copies into it.
+  A leaf `...` after the parameters makes a function variadic
+  (`progs/cvarargs.ff`): a call to it pushes its arguments, then their
+  count (then a struct result's address) and loads no registers; the
+  callee finds argument i at FP + `cc_argoff` + (1 + result) slots +
+  (n-1-i) slots, n read at run time (`argaddr`). `va_list` is a word,
+  `va_start` / ap points it at the first argument after the parameters,
+  `va_arg` / ap / type reads one and steps ap down a slot, `va_end` does
+  nothing, `va_copy` / to / from copies.
 - **Scope** is the tree: a name is looked up from where it stands, up
   through its ancestors, innermost first. The page's functions and globals
   are seen everywhere on it; a body, an `if`/`else`/`while` body and a

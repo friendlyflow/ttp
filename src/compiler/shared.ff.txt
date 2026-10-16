@@ -138,6 +138,27 @@ comment
 alignof:
   type
 comment
+  ...: C, after a function's parameters: it takes more arguments, which va_start, va_arg and va_end reach.
+...:
+comment
+  va_start ap: C, ap (a va_list) points at the first argument after the parameters.
+va_start:
+  ap
+comment
+  va_arg ap type: C, the argument ap points at, as that type; ap goes to the next.
+va_arg:
+  ap
+  type
+comment
+  va_end ap: C, done with ap.
+va_end:
+  ap
+comment
+  va_copy to from: C, to points where from does.
+va_copy:
+  to
+  from
+comment
   number value: compile time, emit makes value a number in the program.
 number:
   value
@@ -235,6 +256,10 @@ void:
 comment
   type: C, compile time only, a word of any type, as C++'s T: the type of a parameter of a compile time function.
 type:
+comment
+  va_list: C, where the next argument of a variadic function is, a word.
+va_list:
+  value
 comment
   left = right: C, an operator between its neighbours: right is stored in left.
 =:
