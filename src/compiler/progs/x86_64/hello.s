@@ -1,5 +1,5 @@
 # hello.s — progs/x86_64/hello.ff for GNU as (x86_64-elf-as -mindex-reg),
-# linked with ff.ld: the bytes must be the same. li32, la and bnez are
+# linked with ff64.ld: the bytes must be the same. li32, la and bnez are
 # macros of ff (macros/x86_64.ff.txt), written out here.
     .code64
     .section .rodata

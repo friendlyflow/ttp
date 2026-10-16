@@ -1,5 +1,5 @@
 # exit42.s — progs/x86_64/exit42.ff for GNU as (x86_64-elf-as -mindex-reg),
-# linked with ff.ld: the bytes must be the same. exit(42) comes first, the
+# linked with ff64.ld: the bytes must be the same. exit(42) comes first, the
 # lines after it only check encodings. ff always gives a register or memory
 # operand a REX prefix ({rex}) and memory a SIB byte and a disp32
 # ({disp32}, %riz as the index for none).

@@ -57,7 +57,7 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `macros/<target>.ff.txt` | each target's pseudo-instructions, `elf_header` and `frame`, its Linux system calls, and the primitives of the C layer. |
 | `progs/*.ff` | test programs: the `c*` ones in the C layer, only their program, each with its `.expect` (`exit N`, then its output; `<name>.<target>.expect` where a target differs); `cws.ff` is a build file. |
 | `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, each with a GNU twin `.s`: in `progs/riscv64/` whole trees (the pages of then), elsewhere program-only; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
-| `ff.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
+| `ff64.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
 | `gen/FF.pm`, `gen/fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
 | `language.ff.txt`, `language.ff` | the language, asm and C, described as an ff tree: what can be written and what it means. |
 | `hosts/<host>/ttpc.s` | **the seeds of the other hosts** (x86_64, aarch64, arm), frozen: ports of `ttpc.s`, function by function, that must agree with it byte for byte (`make seeds`), with one difference: `OUT_SIZE` 1 MiB, since ttpc for those hosts is larger than stage0's 64 KiB. |

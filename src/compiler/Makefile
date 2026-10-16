@@ -13,9 +13,9 @@ ASFLAGS ?= -march=rv64imac -mabi=lp64
 QEMU    ?= $(if $(filter riscv64,$(ARCH)),,qemu-riscv64)
 
 # The GNU twins of the ff programs (progs/riscv64/*.s): every extension ff
-# encodes, no relaxation, linked with ff.ld into ttpc's layout.
+# encodes, no relaxation, linked with ff64.ld into ttpc's layout.
 TWIN_ASFLAGS := -march=rv64imafdc -mabi=lp64 -mno-relax
-TWIN_LDFLAGS := --no-relax --no-warn-rwx-segments -T ff.ld
+TWIN_LDFLAGS := --no-relax --no-warn-rwx-segments -T ff64.ld
 
 # The Nix ld-wrapper injects -z relro / -z now hardening, which this static
 # no-libc binary has no use for (ld warns). A non-Nix ld ignores this.
@@ -67,7 +67,7 @@ test: $(BIN)
 $(P)/%.elf: progs/riscv64/%.ff $(BIN) | $(P)
 	$(QEMU) $(BIN) $< $@ > $(P)/$*.lst
 
-$(P)/%.twin.bin: progs/riscv64/%.s ff.ld | $(P)
+$(P)/%.twin.bin: progs/riscv64/%.s ff64.ld | $(P)
 	$(AS) $(TWIN_ASFLAGS) $< -o $(P)/$*.twin.o
 	$(LD) $(TWIN_LDFLAGS) $(P)/$*.twin.o -o $(P)/$*.twin
 	$(OBJCOPY) -O binary $(P)/$*.twin $@
@@ -232,12 +232,12 @@ CSKIP_arm := cexpr
 
 CROSS_x86_64 := x86_64-elf-
 TASFLAGS_x86_64 := -mindex-reg
-TLDS_x86_64 := ff.ld
+TLDS_x86_64 := ff64.ld
 THDR_x86_64 := 120
 
 CROSS_aarch64 := aarch64-none-elf-
 TASFLAGS_aarch64 := -march=armv8.1-a
-TLDS_aarch64 := ff.ld
+TLDS_aarch64 := ff64.ld
 THDR_aarch64 := 120
 
 CROSS_arm := arm-none-eabi-

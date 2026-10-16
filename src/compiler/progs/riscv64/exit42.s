@@ -1,4 +1,4 @@
-# exit42.s — progs/riscv64/exit42.ff for GNU as, linked with ff.ld:
+# exit42.s — progs/riscv64/exit42.ff for GNU as, linked with ff64.ld:
 # `make check` compares the bytes. The c.* lines only check encodings:
 # exit(42) comes first.
 #

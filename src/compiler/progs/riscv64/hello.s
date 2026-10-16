@@ -1,4 +1,4 @@
-# hello.s — progs/riscv64/hello.ff for GNU as, linked with ff.ld:
+# hello.s — progs/riscv64/hello.ff for GNU as, linked with ff64.ld:
 # `make check` compares the bytes.
     .option norvc
     .section .rodata

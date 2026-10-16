@@ -1,7 +1,7 @@
 # wide.s — progs/aarch64/wide.ff for GNU as, made with it by mkwide.pl:
 # every instruction of the aarch64 section, offsets at the edges of their
 # range, then the macros GNU has as aliases. Assembled with
-# -march=armv8.1-a (LSE), linked with ff.ld, its bytes must equal what
+# -march=armv8.1-a (LSE), linked with ff64.ld, its bytes must equal what
 # ttpc --target aarch64 makes of wide.ff after the 120-byte ELF header.
     .globl _start
 _start:

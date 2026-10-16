@@ -1,4 +1,4 @@
-// exit42.s — progs/aarch64/exit42.ff for GNU as, linked with ff.ld: the
+// exit42.s — progs/aarch64/exit42.ff for GNU as, linked with ff64.ld: the
 // bytes after ttpc's 120-byte ELF header must be the same. exit(42) comes
 // first, the lines after it only check encodings.
     .globl  _start

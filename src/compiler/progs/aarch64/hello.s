@@ -1,4 +1,4 @@
-// hello.s — progs/aarch64/hello.ff for GNU as, linked with ff.ld: the
+// hello.s — progs/aarch64/hello.ff for GNU as, linked with ff64.ld: the
 // bytes after ttpc's 120-byte ELF header must be the same.
     .section .rodata
 msg:    .ascii "hello, ff\n"

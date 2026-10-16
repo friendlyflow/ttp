@@ -140,7 +140,7 @@ close $out;
 open $out, ">", "$dir/wide.s" or die "mkwide: wide.s: $!\n";
 print $out <<'END';
 # wide.s — progs/x86_64/wide.ff for GNU as (x86_64-elf-as -mindex-reg),
-# linked with ff.ld: the bytes must be the same. Made by mkwide.pl with
+# linked with ff64.ld: the bytes must be the same. Made by mkwide.pl with
 # wide.ff, every form of the x86_64 section once. {rex}, {disp32} and
 # %riz (no index) make GNU as pick the one form ff has.
     .code64
