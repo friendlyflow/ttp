@@ -1,0 +1,8 @@
+exit 0
+ok a thread-local int, zero
+ok a function sets it
+ok and it keeps the value
+ok its address
+ok a thread-local long
+ok a thread-local struct with values
+ok sizeof one

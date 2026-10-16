@@ -89,5 +89,6 @@ RAM NODE:
 - fase 0 stap 6 klaar: initializers: adressen (`address` / naam), teksten, `-` getal, `:` als expressie (compile time) of als de items van een struct, union of array erin; een globale wordt in een buffer gebouwd, een lokale eerst op nul gezet (`progs/cinit.ff`)
 - fase 0 stap 7 klaar: meer dan 8 argumenten (de rest op de stack), structs per waarde (`progs/ccalls.ff`). De regel blijft: de eerste `naam:` met enkel een type zijn de parameters, een lokale vooraan heeft een waarde nodig
 - fase 0 stap 8 klaar: varargs, `...` na de parameters en C's va_list, va_start, va_arg, va_end, va_copy (`progs/cvarargs.ff`, met een kleine printf); de caller duwt ook het aantal argumenten
-- nog te doen in fase 0: TLS
+- fase 0 stap 9 klaar: TLS, `thread local` vóór het type (`progs/ctls.ff`); met één thread is het een globale, echte blokken per thread komen met threads
+- fase 0 klaar (16 okt 2026). `make decls` controleert dat elk woord, elke operator en elk type van ttpc op de gedeelde pagina gedeclareerd is: wat de editor als calls aanbiedt (zoals comment:, dat niets doet)
 - versieketen (16 okt 2026): ttpc2.ff + ttpc2.defs.ff bevroren (ttpc.ff na stap 2, arm whole.ff 949 KB van de 1 MiB van de seeds). stage0 -> ttpc1 -> ttpc2 -> stage1 -> stage2; op elke host seed -> ttpc2 -> stage1 -> stage2. ttpc.ff mag nu alles wat ttpc2 kent (comment, de C-laag) en groeien tot 4 MiB invoer samen met shared.ff (2.8 MB)

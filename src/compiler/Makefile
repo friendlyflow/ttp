@@ -40,7 +40,7 @@ TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
@@ -84,9 +84,15 @@ roundtrip: | $(BUILD)
 	done
 	@echo "roundtrip: $(TREES)"
 
+# Every name ttpc takes itself (its words, operators and types) is declared
+# on the shared page, with its parameters, even one that does nothing
+# (comment:), so that an editor can offer a call of it.
+decls:
+	@perl gen/decls.pl shared.ff.txt $(TTPC_FF)
+
 # Every program, after its 120-byte ELF header, must be byte-identical to
 # its GNU twin.
-check: roundtrip $(PROGS:%=$(P)/%.elf) $(PROGS:%=$(P)/%.twin.bin)
+check: roundtrip decls $(PROGS:%=$(P)/%.elf) $(PROGS:%=$(P)/%.twin.bin)
 	@for p in $(PROGS); do \
 	    tail -c +121 $(P)/$$p.elf | cmp - $(P)/$$p.twin.bin || exit 1; \
 	    echo "check: $$p: ttpc and GNU as agree"; \
@@ -237,7 +243,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls
 # cexpr and cint64 compute with u64, which a target of 4-byte words does not have.
 CSKIP_arm := cexpr cint64
 
@@ -434,4 +440,4 @@ refresh:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip check run bootstrap ctest ctime cws targets seeds bootstraps refresh clean
+.PHONY: all test roundtrip decls check run bootstrap ctest ctime cws targets seeds bootstraps refresh clean

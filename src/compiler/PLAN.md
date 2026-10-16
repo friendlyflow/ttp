@@ -156,7 +156,9 @@ tight, the chain gets a next link: freeze ttpc.ff as ttpc3.ff.
   function directly on the shared page (`shared.ff.txt`: `comment:` / `text`,
   `if:` / `condition` / `body`, `else if:`, `long:` / `value`, `+:` / `left` /
   `right`, ...), in scope, so that each is defined before it is called. ttpc
-  takes these calls itself and never runs the declarations. In asm a C word
+  takes these calls itself and never runs the declarations. `make decls`
+  (`gen/decls.pl`, in `make check`) fails when a word, operator or type of
+  ttpc has no declaration there: they are what an editor offers as calls. In asm a C word
   is a function with an empty body: a stray `if` expands to nothing.
 - **Range checks** (pass 2): every operand must fit its slices, sign- or
   zero-extended from the highest bit they take; an `imm` below bit 31 only
@@ -222,6 +224,10 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   `va_start` / ap points it at the first argument after the parameters,
   `va_arg` / ap / type reads one and steps ap down a slot, `va_end` does
   nothing, `va_copy` / to / from copies.
+- **Thread-local** (`progs/ctls.ff`): `thread local` first under a global's
+  name, before its type (`errno:` / `thread local` / `int` / `0`). A ttpc
+  program has one thread, so it is laid out as a global; per-thread blocks
+  come with threads, the source unchanged.
 - **Scope** is the tree: a name is looked up from where it stands, up
   through its ancestors, innermost first. The page's functions and globals
   are seen everywhere on it; a body, an `if`/`else`/`while` body and a

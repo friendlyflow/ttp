@@ -159,6 +159,9 @@ va_copy:
   to
   from
 comment
+  thread local: C, first under a global's name, before its type: each thread has its own. With one thread it is a global.
+thread local:
+comment
   number value: compile time, emit makes value a number in the program.
 number:
   value

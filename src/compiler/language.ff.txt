@@ -182,6 +182,12 @@ ff, the language ttpc compiles
             3
             4
       a page item whose items have children only as : or address is a global, any other is a function
+      thread local, first under a global's name and before its type, makes it thread-local; with one thread it is a global
+      example
+        errno:
+          thread local
+          int
+          0
       a scalar with several items is an error, so is a declaration without a type
       example
         n:
@@ -399,7 +405,7 @@ ff, the language ttpc compiles
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
       the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, union
-      and: ..., va_start, va_arg, va_end, va_copy, compile time, emit, fail, number, target
+      and: ..., va_start, va_arg, va_end, va_copy, thread local, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program
