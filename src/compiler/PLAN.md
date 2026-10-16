@@ -234,6 +234,18 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   puts a marker after the program's items, and there `cc` compiles the
   list, which grows as its definitions reach more. The list lives across
   passes, so each pass emits the same definitions in the same order.
+- **alias and ifunc** (`progs/cifunc.ff`, `progs/cifunclib.ff`): `name:` /
+  `alias` / target is another name for target (a lookup takes the target).
+  `name:` / `ifunc` / resolver / type / parameters is a function chosen when
+  the program starts: it is a word, and a call goes through it. At the
+  library marker an init routine calls each resolver with (hwcap,
+  `__riscv_hwprobe` or 0, 0), as glibc's riscv startup does, and keeps what
+  it returns in that word; hwcap is AT_HWCAP of the auxiliary vector
+  (`ifunc hwcap`, C on the shared page, compiled where it is used). A C
+  `_start` of a framed program calls the routine first, with the stack it
+  began with (FP + `cc_entryoff`); without ifuncs the routine is empty.
+  The routine's place among the library definitions is fixed the first
+  time, so that both passes emit the same.
 - **Thread-local** (`progs/ctls.ff`): `thread local` first under a global's
   name, before its type (`errno:` / `thread local` / `int` / `0`). A ttpc
   program has one thread, so it is laid out as a global; per-thread blocks

@@ -162,6 +162,65 @@ comment
   thread local: C, first under a global's name, before its type: each thread has its own. With one thread it is a global.
 thread local:
 comment
+  alias target: C, first under a name: another name for target, a function or a global.
+alias:
+  target
+comment
+  ifunc resolver type parameters: C, first under a name: a function chosen when the program starts, by resolver (called with hwcap, __riscv_hwprobe or 0, and 0, as glibc's riscv startup does), its type and parameters after it.
+ifunc:
+  resolver
+  type
+  parameters
+comment
+  ifunc hwcap stack: C, the AT_HWCAP of the auxiliary vector a program starts with (stack its first word, argc), for the resolvers of ifuncs; compiled where it is used.
+ifunc hwcap:
+  long
+  stack:
+    address
+    long
+  p:
+    address
+    long
+    stack
+    +
+    content
+      stack
+    +
+    2
+  while
+    content
+      p
+    !=
+    0
+    p
+    +=
+    1
+  p
+  +=
+  1
+  while
+    content
+      p
+    !=
+    0
+    if
+      content
+        p
+      ==
+      16
+      return
+        long
+          content
+            :
+              p
+              +
+              1
+    p
+    +=
+    2
+  return
+    0
+comment
   number value: compile time, emit makes value a number in the program.
 number:
   value
