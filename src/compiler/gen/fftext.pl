@@ -8,7 +8,7 @@
 # the root's children at the left margin (see FF.pm). Both directions are
 # lossless: ff -> txt -> ff gives the same bytes. As a git diff driver:
 #
-#   git config diff.ff.textconv "perl src/compiler/fftext.pl txt"
+#   git config diff.ff.textconv "perl src/compiler/gen/fftext.pl txt"
 #   echo '*.ff diff=ff' >> .git/info/attributes
 
 use strict;

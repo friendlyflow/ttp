@@ -72,7 +72,7 @@
           packages = (toolchain pkgs) ++ (twins pkgs) ++ (with pkgs; [
             gnumake
             qemu # qemu-system-riscv64 for `make os-test`, qemu-<arch> for the programs
-            perl # src/compiler/mkff.pl generates test.ff
+            perl # src/compiler/gen/mkff.pl generates test.ff
             fish
           ]) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
 

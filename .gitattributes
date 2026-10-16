@@ -1,4 +1,4 @@
-# ff trees are binary; with the textconv driver from src/compiler/fftext.pl
+# ff trees are binary; with the textconv driver from src/compiler/gen/fftext.pl
 # git diffs them as text:
-#   git config diff.ff.textconv "perl src/compiler/fftext.pl txt"
+#   git config diff.ff.textconv "perl src/compiler/gen/fftext.pl txt"
 *.ff diff=ff

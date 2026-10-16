@@ -51,20 +51,20 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `hosts/riscv64/ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
 | `ttpc1.ff` | **ttpc1**, frozen too: ttpc in ff as it was when it learned targets, a whole tree (the RV64GC pages `0:` `1:` `2:` of then, its constants `3:`, itself `4:`) in the language of stage0 and below stage0's 1 MiB. |
 | `ttpc.ff`, `ttpc.defs.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a program of only its own (`ttpc.ff`), its constants and messages' lengths on a page of their own (`ttpc.defs.ff`), assembled on the shared page: `ttpc --target riscv64 shared.ff ttpc.defs.ff ttpc.ff out`. |
-| `shared.ff` | the shared page (`perl mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc [--target t] shared.ff prog.ff out`. |
-| `mkff.pl`, `shared.ff.txt` | make `shared.ff`: what every target has and the choice of one (`shared.ff.txt`), then a section per target. |
-| `ISA.pm`, `isa/<target>.pl` | the instructions of each target (riscv64: RV64GC; x86_64; aarch64; arm), its registers and slices. |
+| `shared.ff` | the shared page (`perl gen/mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc [--target t] shared.ff prog.ff out`. |
+| `gen/mkff.pl`, `shared.ff.txt` | make `shared.ff`: what every target has and the choice of one (`shared.ff.txt`), then a section per target. |
+| `gen/ISA.pm`, `isa/<target>.pl` | the instructions of each target (riscv64: RV64GC; x86_64; aarch64; arm), its registers and slices. |
 | `macros/<target>.ff.txt` | each target's pseudo-instructions, `elf_header` and `frame`, its Linux system calls, and the primitives of the C layer. |
 | `progs/*.ff` | test programs: the `c*` ones in the C layer, only their program, each with its `.expect` (`exit N`, then its output; `<name>.<target>.expect` where a target differs); `cws.ff` is a build file. |
 | `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, each with a GNU twin `.s`: in `progs/riscv64/` whole trees (the pages of then), elsewhere program-only; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
 | `ff.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
-| `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
+| `gen/FF.pm`, `gen/fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
 | `language.ff.txt`, `language.ff` | the language, asm and C, described as an ff tree: what can be written and what it means. |
 | `hosts/<host>/ttpc.s` | **the seeds of the other hosts** (x86_64, aarch64, arm), frozen: ports of `ttpc.s`, function by function, that must agree with it byte for byte (`make seeds`), with one difference: `OUT_SIZE` 1 MiB, since ttpc for those hosts is larger than stage0's 64 KiB. |
 | `rv64:` in `macros/<host>.ff.txt` | ttpc's own ops of RV64 (`rv.add`, `rv.ld`, ..., 50 or so) and its registers (`rv.a0`, ...) in the host's instructions: on x86_64 and arm the registers are 8-byte slots in memory, on aarch64 registers of its own. Also per host: `host_name`, `cc_ctargs` / `cc_call_l` / `cc_ctreg` (the bridge from compile time to ttpc), `ldword`. |
-| `mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host. |
-| `mkwhole.pl` | a whole tree in the language of stage0: the target's section as pages, the shared definitions, the given pages, the exec ops, the program; only what the program reaches (stage0 reads 1 MiB). |
-| `frozen.pl` | a tree in the language of the frozen ttpc1 and stage0: `shared.ff` without comments (known only in code) and without `else if:` (which they take for a register). |
+| `gen/mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host. |
+| `gen/mkwhole.pl` | a whole tree in the language of stage0: the target's section as pages, the shared definitions, the given pages, the exec ops, the program; only what the program reaches (stage0 reads 1 MiB). |
+| `gen/frozen.pl` | a tree in the language of the frozen ttpc1 and stage0: `shared.ff` without comments (known only in code) and without `else if:` (which they take for a register). |
 
 ```
 stage0 = GNU as(hosts/riscv64/ttpc.s)
@@ -105,8 +105,8 @@ make compiler-check   # every asm program == its GNU twin, they run; the C
 A change to ttpc is a change to `ttpc.ff` (or `ttpc.defs.ff`) that keeps
 `make bootstrap` green: ttpc1 builds the new stage1, which must then
 rebuild itself identically. ttpc reads `.ff` directly; the text form is only
-for the host tools (`perl fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl
-fftext.pl ff t.ff.txt > ttpc.ff`). ttpc reads several trees: `ttpc a.ff
+for the host tools (`perl gen/fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl
+gen/fftext.pl ff t.ff.txt > ttpc.ff`). ttpc reads several trees: `ttpc a.ff
 b.ff ... prog.ff out` takes the pages of all but the last, then the last
 whole as the program (its root is the page); one tree alone is read as
 before, unless it begins with `import`. One tree and no output is a build

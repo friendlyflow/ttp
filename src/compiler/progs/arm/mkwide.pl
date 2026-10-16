@@ -21,11 +21,10 @@ use warnings;
 use FindBin;
 my $dir;
 BEGIN { $dir = "$FindBin::Bin/../.." }
-use lib $dir;
+use lib "$dir/gen";
 use FF qw(node write_ff);
 
 my $section = do {
-    local $FindBin::Bin = $dir;
     do "$dir/isa/arm.pl" or die "mkwide: isa/arm.pl: " . ($@ || $!) . "\n";
 };
 

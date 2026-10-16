@@ -12,7 +12,7 @@
 use strict;
 use warnings;
 use FindBin;
-use lib "$FindBin::Bin/../..";
+use lib "$FindBin::Bin/../../gen";
 use FF qw(node read_ff write_ff);
 
 my $dir = $FindBin::Bin;

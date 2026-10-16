@@ -19,12 +19,11 @@
 use strict;
 use warnings;
 use FindBin;
-use lib "$FindBin::Bin/../..";
+use lib "$FindBin::Bin/../../gen";
 use FF qw(node write_ff);
 
 my $dir = $FindBin::Bin;
 my $top = "$FindBin::Bin/../..";
-$FindBin::Bin = $top;                   # ISA.pm reads macros/ from there
 our @X86_WIDE;
 my $section = do "$top/isa/x86_64.pl";
 die "mkwide: $@" if $@;

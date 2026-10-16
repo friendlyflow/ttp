@@ -45,7 +45,7 @@ sub slurp {
 
 sub section {
     my ($target) = @_;
-    my $file = "$FindBin::Bin/isa/$target.pl";
+    my $file = "$FindBin::Bin/../isa/$target.pl";
     my $section = do $file;
     die "mkff: $file: $@" if $@;
     die "mkff: $file: $!\n" unless defined $section;
@@ -53,7 +53,7 @@ sub section {
 }
 
 my $shared = node("shared:",
-    read_txt(slurp("$FindBin::Bin/shared.ff.txt"), "shared.ff.txt"),
+    read_txt(slurp("$FindBin::Bin/../shared.ff.txt"), "shared.ff.txt"),
     map { section($_) } @TARGETS);
 
 binmode STDOUT;

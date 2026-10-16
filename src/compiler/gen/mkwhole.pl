@@ -36,7 +36,7 @@ sub slurp {
     <$in>;
 }
 
-my ($shared) = @{ frozen(read_ff(slurp("$FindBin::Bin/shared.ff")))->{children} };
+my ($shared) = @{ frozen(read_ff(slurp("$FindBin::Bin/../shared.ff")))->{children} };
 my %section = map { ($_->{content}, $_) } grep { $_->{content} =~ /^\w+:$/ && @{ $_->{children} }
     && $_->{children}[0]{content} =~ /^\w+:$/ } @{ $shared->{children} };
 die "mkwhole: $target is not a target\n" unless $section{"$target:"};

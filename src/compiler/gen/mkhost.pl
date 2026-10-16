@@ -43,7 +43,7 @@ sub slurp {
     <$in>;
 }
 
-my ($shared) = @{ read_ff(slurp("$FindBin::Bin/shared.ff"))->{children} };
+my ($shared) = @{ read_ff(slurp("$FindBin::Bin/../shared.ff"))->{children} };
 my %section = map { ($_->{content}, $_) } @{ $shared->{children} };
 die "mkhost: $host is not a target\n" unless $section{"$host:"};
 

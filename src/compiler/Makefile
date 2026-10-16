@@ -78,8 +78,8 @@ $(P)/%.twin.bin: progs/riscv64/%.s ff.ld | $(P)
 # also checks its hashes).
 roundtrip: | $(BUILD)
 	@for t in $(TREES); do \
-	    perl fftext.pl txt $$t > $(BUILD)/roundtrip.ff.txt && \
-	    perl fftext.pl ff $(BUILD)/roundtrip.ff.txt | cmp - $$t || exit 1; \
+	    perl gen/fftext.pl txt $$t > $(BUILD)/roundtrip.ff.txt && \
+	    perl gen/fftext.pl ff $(BUILD)/roundtrip.ff.txt | cmp - $$t || exit 1; \
 	done
 	@echo "roundtrip: $(TREES)"
 
@@ -119,8 +119,8 @@ $(BOOT)/ttpc1: $(TTPC1_FF) $(BIN) | $(BOOT)
 $(BOOT)/ttpc1.self: $(TTPC1_FF) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 $< $@ > $@.lst
 
-$(BOOT)/shared.ff: $(SHARED) frozen.pl FF.pm | $(BOOT)
-	perl frozen.pl $< > $@
+$(BOOT)/shared.ff: $(SHARED) gen/frozen.pl gen/FF.pm | $(BOOT)
+	perl gen/frozen.pl $< > $@
 
 $(BOOT)/stage1: $(BOOT)/shared.ff $(filter-out $(SHARED),$(TTPC_SRC)) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(BOOT)/shared.ff $(filter-out $(SHARED),$(TTPC_SRC)) $@ > $@.lst
@@ -330,13 +330,13 @@ $(BUILD)/$(1)/seed: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
 	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
 	$(SEEDCROSS_$(1))ld -static -e _start $$@.o -o $$@
 
-$(BUILD)/$(1)/ttpc.ff: $(TTPC_FF) ttpc.defs.ff $(SHARED) mkhost.pl | $(BUILD)/$(1)
-	perl mkhost.pl $(1) $(BUILD)/$(1) ttpc.defs.ff $(TTPC_FF)
+$(BUILD)/$(1)/ttpc.ff: $(TTPC_FF) ttpc.defs.ff $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
+	perl gen/mkhost.pl $(1) $(BUILD)/$(1) ttpc.defs.ff $(TTPC_FF)
 
 $(BUILD)/$(1)/ttpc.defs.ff: $(BUILD)/$(1)/ttpc.ff
 
-$(BUILD)/$(1)/whole.ff: $(BUILD)/$(1)/ttpc.ff $(BUILD)/$(1)/ttpc.defs.ff mkwhole.pl
-	perl mkwhole.pl $(1) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff > $$@
+$(BUILD)/$(1)/whole.ff: $(BUILD)/$(1)/ttpc.ff $(BUILD)/$(1)/ttpc.defs.ff gen/mkwhole.pl
+	perl gen/mkwhole.pl $(1) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff > $$@
 
 $(BUILD)/$(1)/stage1: $(BUILD)/$(1)/whole.ff $(BUILD)/$(1)/seed
 	$(RUN_$(1)) $(BUILD)/$(1)/seed $$< $$@ > $$@.lst
@@ -403,7 +403,7 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # Make shared.ff again from mkff.pl, shared.ff.txt, isa/ and macros/, after
 # changing any of them. The whole trees keep the shared pages they have.
 refresh:
-	perl mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
+	perl gen/mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 
 clean:
 	rm -rf $(BUILD)

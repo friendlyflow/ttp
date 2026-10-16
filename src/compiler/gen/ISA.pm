@@ -15,7 +15,7 @@ package ISA;
 
 use strict;
 use warnings;
-use FindBin;
+use File::Basename qw(dirname);
 use FF qw(node call read_txt);
 
 sub new {
@@ -104,7 +104,7 @@ sub section {
     my ($self, $name, $macros) = @_;
     my @groups = @{ $self->{groups} };
     push @groups, node("slices:", map { slice($_) } @{ $self->{slices} }) if @{ $self->{slices} };
-    push @groups, read_txt(slurp("$FindBin::Bin/$macros"), $macros) if $macros;
+    push @groups, read_txt(slurp(dirname(__FILE__) . "/../$macros"), $macros) if $macros;
     for (@groups) {
         my $n = @{ $_->{children} };
         die "ISA: $name: group $_->{content} has $n children (max 255)\n" if $n > 255;
