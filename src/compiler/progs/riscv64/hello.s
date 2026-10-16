@@ -1,5 +1,5 @@
-# hello.s — progs/hello.ff for GNU as, linked with ff.ld: `make check`
-# compares the bytes.
+# hello.s — progs/riscv64/hello.ff for GNU as, linked with ff.ld:
+# `make check` compares the bytes.
     .option norvc
     .section .rodata
 msg:    .ascii "hello, ff\n"

@@ -48,15 +48,15 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 
 | file | what |
 |---|---|
-| `ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
+| `hosts/riscv64/ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
 | `ttpc1.ff` | **ttpc1**, frozen too: ttpc in ff as it was when it learned targets, a whole tree (the RV64GC pages `0:` `1:` `2:` of then, its constants `3:`, itself `4:`) in the language of stage0 and below stage0's 1 MiB. |
 | `ttpc.ff`, `ttpc.defs.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a program of only its own (`ttpc.ff`), its constants and messages' lengths on a page of their own (`ttpc.defs.ff`), assembled on the shared page: `ttpc --target riscv64 shared.ff ttpc.defs.ff ttpc.ff out`. |
 | `shared.ff` | the shared page (`perl mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc [--target t] shared.ff prog.ff out`. |
 | `mkff.pl`, `shared.ff.txt` | make `shared.ff`: what every target has and the choice of one (`shared.ff.txt`), then a section per target. |
 | `ISA.pm`, `isa/<target>.pl` | the instructions of each target (riscv64: RV64GC; x86_64; aarch64; arm), its registers and slices. |
 | `macros/<target>.ff.txt` | each target's pseudo-instructions, `elf_header` and `frame`, its Linux system calls, and the primitives of the C layer. |
-| `progs/*.ff` | test programs: `exit42`, `hello`, `wide` in riscv64 asm, whole trees (the pages of then), each with a GNU twin `.s`; the `c*` ones in the C layer, only their program, each with its `.expect` (`exit N`, then its output; `<name>.<target>.expect` where a target differs); `cws.ff` is a build file. |
-| `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, program-only, with GNU twins; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
+| `progs/*.ff` | test programs: the `c*` ones in the C layer, only their program, each with its `.expect` (`exit N`, then its output; `<name>.<target>.expect` where a target differs); `cws.ff` is a build file. |
+| `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, each with a GNU twin `.s`: in `progs/riscv64/` whole trees (the pages of then), elsewhere program-only; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
 | `ff.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
 | `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
 | `language.ff.txt`, `language.ff` | the language, asm and C, described as an ff tree: what can be written and what it means. |
@@ -67,7 +67,7 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `frozen.pl` | a tree in the language of the frozen ttpc1 and stage0: `shared.ff` without comments (known only in code) and without `else if:` (which they take for a register). |
 
 ```
-stage0 = GNU as(ttpc.s)
+stage0 = GNU as(hosts/riscv64/ttpc.s)
 ttpc1  = stage0(ttpc1.ff)       == ttpc1(ttpc1.ff)
 stage1 = ttpc1(frozen shared.ff, ttpc.defs.ff ttpc.ff)
 stage2 = stage1(shared.ff ttpc.defs.ff ttpc.ff)

@@ -1,8 +1,8 @@
 // ttpc.s (aarch64) — the trust project compiler, in AArch64 assembly,
 // without libc.
 //
-// FROZEN: this is a port of ../../ttpc.s, stage0 of the bootstrap (see
-// PLAN.md), from riscv64 to aarch64. It must agree with ttpc.s byte for
+// FROZEN: this is a port of ../riscv64/ttpc.s, stage0 of the bootstrap
+// (see PLAN.md), from riscv64 to aarch64. It must agree with ttpc.s byte for
 // byte: for every input the same stdout, the same stderr, the same output
 // file and the same exit status. It is a translation, function by function
 // and nearly instruction by instruction, in the same order, with the same

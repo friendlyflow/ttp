@@ -1,6 +1,6 @@
-# exit42.s — progs/exit42.ff for GNU as, linked with ff.ld: `make check`
-# compares the bytes. The c.* lines only check encodings: exit(42) comes
-# first.
+# exit42.s — progs/riscv64/exit42.ff for GNU as, linked with ff.ld:
+# `make check` compares the bytes. The c.* lines only check encodings:
+# exit(42) comes first.
 #
 # ff is explicit about compressed code, GNU as is not: norvc keeps it from
 # compressing the 32-bit instructions, rvc allows the c.* ones.

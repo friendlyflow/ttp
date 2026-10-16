@@ -1,5 +1,6 @@
-# wide.s — progs/wide.ff for GNU as: one instruction of most formats,
-# with offsets at the edges of their range. `make check` compares the bytes.
+# wide.s — progs/riscv64/wide.ff for GNU as: one instruction of most
+# formats, with offsets at the edges of their range. `make check` compares
+# the bytes.
     .option rvc
     .globl _start
 _start:

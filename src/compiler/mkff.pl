@@ -24,8 +24,9 @@
 # node has more than 255 children. ttpc puts the definitions of the section
 # that --target chooses in scope, see the end of shared.ff.txt.
 #
-# The trees made before the targets (ttpc.ff, progs/exit42.ff, hello.ff,
-# wide.ff) keep the shared pages of then, RV64GC alone as pages 0: 1: 2:.
+# The trees made before the targets (ttpc.ff, progs/riscv64/exit42.ff,
+# hello.ff, wide.ff) keep the shared pages of then, RV64GC alone as pages
+# 0: 1: 2:.
 
 use strict;
 use warnings;

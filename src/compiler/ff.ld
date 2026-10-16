@@ -1,7 +1,8 @@
 /* ff.ld — the layout ttpc gives a program, for the GNU twins of the ff
-   programs (progs/*.s, ttpc.s): one segment at 0x10000, the 120-byte ELF
-   header first, then the sections in this order. objcopy -O binary of the
-   result must equal what ttpc writes after its header. */
+   programs (progs/<target>/*.s, hosts/riscv64/ttpc.s): one segment at
+   0x10000, the 120-byte ELF header first, then the sections in this order.
+   objcopy -O binary of the result must equal what ttpc writes after its
+   header. */
 ENTRY(_start)
 SECTIONS
 {

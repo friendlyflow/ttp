@@ -47,7 +47,8 @@ RAM NODE:
 - seeds `hosts/x86_64|aarch64|arm/ttpc.s`: ports van ttpc.s, byte voor byte gelijk (`make seeds`), enkel `OUT_SIZE` 1 MiB
 - `make bootstraps`: per host seed -> stage1 == stage2 == de riscv64-keten met --target, zonder riscv64; de C-programma's draaien
 - ttpc.ff blijft RV64: `mkhost.pl` maakt er `rv.<op>` van, `rv64:` per host; ttpc1 enkel op riscv64 (zijn C-laag is RV64)
-- nog te doen: echte aarch64/arm hardware (cache flush van compile time is enkel onder qemu getest), riscv64 ook als host in dezelfde vorm (`hosts/`, `progs/riscv64/`)
+- nog te doen: echte aarch64/arm hardware (cache flush van compile time is enkel onder qemu getest)
+- riscv64 in dezelfde vorm (16 okt 2026): `hosts/riscv64/ttpc.s` (stage0), `progs/riscv64/` (exit42, hello, wide)
 ## build files (16 okt 2026)
 - `ttpc build.ff`: een build file zoals in Jai, alles staat in de file: `import` / shared.ff, `workspace`, `set target`, `set output`, `add file`, `compile` (zie PLAN.md, `progs/cws.ff`)
 - de workspaces lopen na de build file, één na één, elk als een eigen compile; de bomen die de build file las blijven in het geheugen

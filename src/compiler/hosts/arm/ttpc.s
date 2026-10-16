@@ -1,7 +1,7 @@
 @ ttpc.s (arm) — the trust project compiler, in 32-bit ARM assembly, without
 @ libc.
 @
-@ FROZEN: this is stage0 on an arm host, a port of ../../ttpc.s (riscv64),
+@ FROZEN: this is stage0 on an arm host, a port of ../riscv64/ttpc.s,
 @ the seed of the bootstrap (see PLAN.md). It must agree with ttpc.s byte for
 @ byte: the same stdout, stderr, output file and exit status for every input.
 @ It translates ttpc.s function by function, with the same labels in the same

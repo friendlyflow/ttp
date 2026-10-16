@@ -12,8 +12,8 @@ OBJCOPY := $(CROSS)objcopy
 ASFLAGS ?= -march=rv64imac -mabi=lp64
 QEMU    ?= $(if $(filter riscv64,$(ARCH)),,qemu-riscv64)
 
-# The GNU twins of the ff programs (progs/*.s): every extension ff encodes,
-# no relaxation, linked with ff.ld into ttpc's layout.
+# The GNU twins of the ff programs (progs/riscv64/*.s): every extension ff
+# encodes, no relaxation, linked with ff.ld into ttpc's layout.
 TWIN_ASFLAGS := -march=rv64imafdc -mabi=lp64 -mno-relax
 TWIN_LDFLAGS := --no-relax --no-warn-rwx-segments -T ff.ld
 
@@ -32,16 +32,17 @@ OBJ := $(BUILD)/ttpc.o
 # (shared.ff, from mkff.pl): ttpc --target riscv64 shared.ff ttpc.defs.ff
 # ttpc.ff out. A C program is its program alone too: ttpc shared.ff prog.ff
 # out. ttpc1.ff (the frozen ttpc of the chain) and the asm programs in
-# progs/ are whole trees (the shared pages of then, their own; the last
-# page is what ttpc assembles); progs/<name>.s is the GNU twin of one.
+# progs/riscv64/ are whole trees (the shared pages of then, their own; the
+# last page is what ttpc assembles); progs/riscv64/<name>.s is the GNU twin
+# of one.
 TTPC_FF := ttpc.ff
 TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 PROGS := exit42 hello wide
 CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring
 SHARED := shared.ff
-WHOLE := $(TTPC1_FF) $(PROGS:%=progs/%.ff)
-TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(wildcard progs/*/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
+WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
+TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cimport.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cimportlate.ff \
 	progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff language.ff
 P := $(BUILD)/progs
@@ -51,7 +52,7 @@ all: $(BIN)
 $(BUILD) $(P):
 	mkdir -p $@
 
-$(OBJ): ttpc.s | $(BUILD)
+$(OBJ): hosts/riscv64/ttpc.s | $(BUILD)
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(BIN): $(OBJ)
@@ -63,10 +64,10 @@ test: $(BIN)
 	$(QEMU) $(BIN) $(FF)
 
 # ttpc assembles a program, its listing goes to <name>.lst.
-$(P)/%.elf: progs/%.ff $(BIN) | $(P)
+$(P)/%.elf: progs/riscv64/%.ff $(BIN) | $(P)
 	$(QEMU) $(BIN) $< $@ > $(P)/$*.lst
 
-$(P)/%.twin.bin: progs/%.s ff.ld | $(P)
+$(P)/%.twin.bin: progs/riscv64/%.s ff.ld | $(P)
 	$(AS) $(TWIN_ASFLAGS) $< -o $(P)/$*.twin.o
 	$(LD) $(TWIN_LDFLAGS) $(P)/$*.twin.o -o $(P)/$*.twin
 	$(OBJCOPY) -O binary $(P)/$*.twin $@
@@ -97,15 +98,16 @@ run: $(P)/exit42.elf $(P)/hello.elf
 	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/hello.out
 	@echo "hello: prints its three lines"
 
-# The bootstrap, a chain of versions. ttpc.s, assembled by GNU as, is
-# stage0. ttpc1.ff, frozen like ttpc.s, is ttpc in the language of stage0,
-# a whole tree below its 1 MiB: stage0 assembles it into ttpc1, which must
-# assemble itself into itself, assemble every asm program and print
-# ttpc1.ff exactly as stage0 does. ttpc1 assembles ttpc (TTPC_SRC) into
-# stage1, stage1 assembles it into stage2: they must be the same, the fixed
-# point. ttpc1 gets shared.ff in its own language (frozen.pl): without the
-# comments, which it knows only in code, and without else if:, which it
-# would take for a register. Neither emits anything: stage1 is the same.
+# The bootstrap, a chain of versions. ttpc.s (hosts/riscv64/), assembled
+# by GNU as, is stage0. ttpc1.ff, frozen like ttpc.s, is ttpc in the
+# language of stage0, a whole tree below its 1 MiB: stage0 assembles it
+# into ttpc1, which must assemble itself into itself, assemble every asm
+# program and print ttpc1.ff exactly as stage0 does. ttpc1 assembles ttpc
+# (TTPC_SRC) into stage1, stage1 assembles it into stage2: they must be the
+# same, the fixed point. ttpc1 gets shared.ff in its own language
+# (frozen.pl): without the comments, which it knows only in code, and
+# without else if:, which it would take for a register. Neither emits
+# anything: stage1 is the same.
 BOOT := $(BUILD)/boot
 
 $(BOOT):
@@ -132,7 +134,7 @@ bootstrap: $(BOOT)/ttpc1.self $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
 	cmp $(BOOT)/stage1 $(BOOT)/stage2
 	@echo "bootstrap: stage1 == stage2"
 	@for p in $(PROGS); do \
-	    $(QEMU) $(BOOT)/ttpc1 progs/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
+	    $(QEMU) $(BOOT)/ttpc1 progs/riscv64/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
 	    cmp $(BOOT)/$$p.elf $(P)/$$p.elf && cmp $(BOOT)/$$p.lst $(P)/$$p.lst || exit 1; \
 	done
 	$(QEMU) $(BIN) $(TTPC1_FF) > $(BOOT)/tree0.txt
@@ -314,7 +316,7 @@ SEEDCROSS_arm := $(call native_or,armv7l,arm-none-eabi-)
 SASFLAGS_x86_64 :=
 SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
-SEED_FF := ttpc1.ff $(PROGS:%=progs/%.ff)
+SEED_FF := ttpc1.ff $(PROGS:%=progs/riscv64/%.ff)
 
 define host
 
@@ -345,8 +347,8 @@ $(BUILD)/$(1)/cross: $(BOOT)/stage2 $(BUILD)/$(1)/ttpc.ff
 # The seed against ttpc.s: the same output, listing, errors and status.
 seed-$(1): $(BUILD)/$(1)/seed $(BIN) | $(BUILD)/$(1)
 	@set -e; d=$(BUILD)/$(1)/seedcheck; mkdir -p $$$$d; \
-	head -c 1000 progs/exit42.ff > $$$$d/truncated.ff; \
-	cat progs/exit42.ff progs/exit42.ff > $$$$d/trailing.ff; \
+	head -c 1000 progs/riscv64/exit42.ff > $$$$d/truncated.ff; \
+	cat progs/riscv64/exit42.ff progs/riscv64/exit42.ff > $$$$d/trailing.ff; \
 	run() { n=$$$$1; shift; \
 	    s=0; $(QEMU) $(BIN) "$$$$@" $$$$d/$$$$n.out0 > $$$$d/$$$$n.1 2> $$$$d/$$$$n.2 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.3; \
 	    s=0; $(RUN_$(1)) $(BUILD)/$(1)/seed "$$$$@" $$$$d/$$$$n.out1 > $$$$d/$$$$n.4 2> $$$$d/$$$$n.5 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.6; \
@@ -359,7 +361,7 @@ seed-$(1): $(BUILD)/$(1)/seed $(BIN) | $(BUILD)/$(1)
 	    s=0; $(RUN_$(1)) $(BUILD)/$(1)/seed "$$$$@" > $$$$d/$$$$n.4 2> $$$$d/$$$$n.5 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.6; \
 	    cmp $$$$d/$$$$n.1 $$$$d/$$$$n.4; cmp $$$$d/$$$$n.2 $$$$d/$$$$n.5; cmp $$$$d/$$$$n.3 $$$$d/$$$$n.6; \
 	    echo "seed-$(1): $$$$n: as ttpc.s"; }; \
-	pr print-ttpc1 ttpc1.ff; pr print-hello progs/hello.ff; pr toolarge $(SHARED); pr usage; \
+	pr print-ttpc1 ttpc1.ff; pr print-hello progs/riscv64/hello.ff; pr toolarge $(SHARED); pr usage; \
 	pr toomany a b c; pr missing $$$$d/none.ff; pr truncated $$$$d/truncated.ff; pr trailing $$$$d/trailing.ff
 
 bootstrap-$(1): $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),$(BUILD)/$(1)/cross)
