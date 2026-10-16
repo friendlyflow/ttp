@@ -241,6 +241,7 @@ sub resolver {
 # ---- expressions ----------------------------------------------------------------
 
 my (@out, %done, @todo);
+our %local;                 # the ids of the locals and parameters of the function
 sub want { my ($n) = @_; push @todo, $n unless $done{$n}++ }
 
 sub where { my ($n) = @_; my $l = $n->{range}{begin} // $n->{loc} // {}; $l = $l->{expansionLoc} // $l; ($l->{file} // '') . ':' . ($l->{line} // '?') }
@@ -269,6 +270,8 @@ sub atom { my @e = expr($_[0]); @e == 1 ? @e : node(':', @e) }
 sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
+    # a function as a value is its address (a function name alone is a call in ff)
+    return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
     return node(':', expr((kids($n))[0])) if $k eq 'ParenExpr';
     return node($n->{value}) if $k eq 'IntegerLiteral' || $k eq 'CharacterLiteral';
@@ -280,7 +283,8 @@ sub expr {
     }
     if ($k eq 'DeclRefExpr') {
         my $d = $n->{referencedDecl};
-        want($d->{name}) if $d->{kind} eq 'FunctionDecl' || ($d->{kind} eq 'VarDecl' && $var{ $d->{name} } && $var{ $d->{name} }[0]{id} eq $d->{id});
+        # a function, or a variable that is not this function's own: a global
+        want($d->{name}) if $d->{kind} eq 'FunctionDecl' || ($d->{kind} eq 'VarDecl' && !$local{ $d->{id} } && $var{ $d->{name} });
         return node(ffname($d->{name}));
     }
     if ($k eq 'BinaryOperator' || $k eq 'CompoundAssignOperator') {
@@ -368,6 +372,10 @@ sub operand {
     @e;
 }
 
+our $cur_unit;
+# The ParmVarDecls and VarDecls under a node (a function's own).
+sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n : ()), map { locals($_) } kids($n) }
+
 # glibc's INTERNAL_SYSCALL on riscv: register variables a7 = number, a0 ...
 # = the arguments, the asm scall, the result from a0.
 sub syscall_idiom {
@@ -380,7 +388,10 @@ sub syscall_idiom {
         for my $v (kids($s)) {
             my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
             my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
-            $reg{ $lab->{label} } = $init if $lab && $init;
+            next unless $lab && $init;
+            # glibc's macro names each variable after its register: __a7, __a0, ...
+            my $reg = $lab->{label} // (($v->{name} // '') =~ /^__(a[0-7])$/ ? $1 : undef);
+            $reg{$reg} = $init if defined $reg;
         }
     }
     return () unless $reg{a7};
@@ -464,6 +475,7 @@ sub init_item { my ($n) = @_; my $s = strip($n); $s->{kind} eq 'InitListExpr' ? 
 
 sub function {
     my ($name, $d) = @_;
+    local %local = map { ($_->{id} => 1) } locals($d);
     my ($ret) = split_fn(expand(qt($d)));
     defined $ret or die "c2ff: not a function type: " . qt($d) . "\n";
     my @p = grep { $_->{kind} eq 'ParmVarDecl' } kids($d);
@@ -492,7 +504,7 @@ while (defined(my $name = next_name())) {
         want($r);
         next;
     }
-    if (my $f = $fn{$name}) { push @out, function($name, $f->[0]); next }
+    if (my $f = $fn{$name}) { local $cur_unit = $f->[1]; push @out, function($name, $f->[0]); next }
     if (my $v = $var{$name}) { push @out, decl($v->[0]); next }
     warn "c2ff: no definition of $name, left out\n";
 }

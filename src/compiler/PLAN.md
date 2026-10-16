@@ -246,6 +246,11 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   began with (FP + `cc_entryoff`); without ifuncs the routine is empty.
   The routine's place among the library definitions is fixed the first
   time, so that both passes emit the same.
+- **Compound literals** (`progs/ccomplit.ff`): a struct or union name with
+  items, used as a value, is a temporary of that type, C's `(point){1, 2}`
+  as `point` / `1` / `2`: its space is reserved at the start of the
+  function (`tscan` counts it), zeroed and filled as a declaration is
+  (`complit`); its value is its address, as a struct's is.
 - **Thread-local** (`progs/ctls.ff`): `thread local` first under a global's
   name, before its type (`errno:` / `thread local` / `int` / `0`). A ttpc
   program has one thread, so it is laid out as a global; per-thread blocks

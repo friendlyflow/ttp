@@ -253,6 +253,14 @@ ff, the language ttpc compiles
             va_arg
               ap
               long
+      a struct or union name with items, as a value, is a temporary of that type (a compound literal, C's (point){1, 2}), the rest zero
+      example
+        s:
+          long
+          sum
+            point
+              1
+              2
       a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy, an argument is the callee's own copy, a result is copied into space the caller keeps for it
       example
         b:

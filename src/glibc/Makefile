@@ -54,3 +54,47 @@ $(OBJ)/libc.a: $(OBJ)/config.status
 
 clean:
 	rm -rf $(BUILD)
+
+# ---- glibc in ff, step by step ----------------------------------------------
+# An object's .i (mki.pl), its AST (clang with clang-prelude.h, which gives
+# clang the _FloatN types and builtins gcc has), and from the ASTs of the
+# objects a milestone needs, the ff of what its roots reach (c2ff.pl). Every
+# step runs under a memory cap and a timeout: an unbounded run of c2ff once
+# took the machine down.
+I := $(BUILD)/i
+FF := $(BUILD)/ff
+C2FF_CLANG ?= $(error C2FF_CLANG is not set: run this in `nix develop`)
+TTPC ?= ../../build/compiler/boot/stage2
+SHARED := ../compiler/shared.ff
+CAP := ulimit -v 4000000;
+
+# M1, strlen: its ifunc, the generic C and glibc's __riscv_hwprobe (which
+# the init routine hands the resolver, as glibc's own startup does)
+OBJS_strlen := string/strlen string/strlen-generic misc/hwprobe elf/dl-support
+ROOTS_strlen := strlen __riscv_hwprobe
+
+.PRECIOUS: $(I)/%.i $(I)/%.json
+
+$(I)/%.i: $(OBJ)/libc.a mki.pl
+	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+
+$(I)/%.json: $(I)/%.i clang-prelude.h
+	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $< > $@
+
+$(FF)/strlen.ff: $(OBJS_strlen:%=$(I)/%.json) ../compiler/gen/c2ff.pl
+	mkdir -p $(FF)
+	$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $(foreach o,$(OBJS_strlen),$(I)/$(o).json=$(I)/$(o).i) \
+	    -- $(ROOTS_strlen) > $(FF)/strlen.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/strlen.ff.txt > $@
+
+# progs/strlen.ff imports strlen.ff from its own folder, so both go there
+strlen-check: $(FF)/strlen.ff progs/strlen.ff
+	cp progs/strlen.ff $(FF)/strlen-prog.ff
+	$(CAP) timeout 120 qemu-riscv64 $(TTPC) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
+	s=0; $(CAP) timeout 30 qemu-riscv64 -cpu rv64,v=false $(FF)/strlen-prog || s=$$?; test $$s -eq 12
+	@echo "strlen-check: glibc's strlen, generic C (-cpu rv64,v=false): 12"
+	s=0; $(CAP) timeout 30 qemu-riscv64 $(FF)/strlen-prog || s=$$?; test $$s -eq 99
+	@echo "strlen-check: with V its resolver picks the vector variant (the stand-in, 99)"
+
+.PHONY: strlen-check
