@@ -11,7 +11,23 @@ ff, the language ttpc compiles
       example
         x10 a0:
           01010
-    a name is found in scope, innermost first: local labels, the program, the target's section, the shared page; first the function, then the call
+    scope: a name's place in the tree
+      a definition is seen in the subtree of its parent: by its siblings and everything below them, nowhere else
+      a name is looked up from where it stands, up the tree, innermost first: its siblings, its parent's siblings, and so on; then the program page, the target's section, the shared page
+      an inner definition hides an outer one of the same name; the same name under two parents is two names
+      example
+        a:
+          j
+            done
+          done:
+            ret
+        b:
+          j
+            done
+          done:
+            ret
+      a group's children are local to the group; a section is the exception: calling it puts the definitions of its groups in scope
+      first the function, then the call
   pages
     every page but the last holds definitions: instructions, macros, constants, sections
     the last page is the program: its functions are placed labels, block form, they hold the code up to the next label; nested ones are local
@@ -134,6 +150,16 @@ ff, the language ttpc compiles
       name:, its return type run, its parameters, its statements
       a parameter is name: with a type run as its only children; no untyped leaf parameters
       a call is name with its arguments in order (at most 8, in the argument registers); its value is what return gives
+      a function without parameters is called by its name alone, a leaf; address name is its address
+      a function holds no functions: name: in a body is a declaration
+      example
+        three:
+          long
+          return
+            3
+        x:
+          long
+          three
       example
         strlen:
           long
@@ -156,8 +182,41 @@ ff, the language ttpc compiles
       while condition body; break; continue
       the condition is the leading run of nodes the operators join, the rest is the body
       return, with a value or without
+      return is a value too: as an item (of a declaration, an argument, an expression) it leaves the function there
+      example
+        answer:
+          long
+          x:
+            long
+            return
+              5
+          return
+            99
       syscall number arguments: number SYS_write, SYS_exit, ... of the target
       comment text
+    scope
+      the program page's functions and globals are seen everywhere on it, above and below their definition (two passes)
+      a parameter is seen in its function's body
+      a function's body, an if, else or while body and a lambda are blocks; a declaration is seen from below it to the end of its block, inner blocks too
+      used above its declaration is an error, used after its block an unknown name
+      a local hides a global or a parameter of the same name, an inner block's local hides the outer one; declared twice in one block, the later one counts
+      a function does not see the locals of its caller
+      example
+        x:
+          long
+          1
+        _start:
+          void
+          x:
+            long
+            2
+          :
+            x:
+              long
+              40
+          syscall
+            SYS_exit
+            x
     lambda
       a node : alone is an anonymous function run in place: a block with its own scope, or parentheses; its value is its last item
       example

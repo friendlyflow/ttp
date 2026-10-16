@@ -182,7 +182,16 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   on an array (one element each, the rest zero, no more than its count) or
   a struct (one field each), elsewhere "several items need array".
 - **Functions** `name:` type params... statements...: a parameter is
-  `name:` with a type and nothing else.
+  `name:` with a type and nothing else. A function without parameters is
+  called by its name alone (`address` / f is its address); `name:` in a
+  body is a declaration, never a function. `return` is a value too: as an
+  item it leaves the function there.
+- **Scope** is the tree: a name is looked up from where it stands, up
+  through its ancestors, innermost first. The page's functions and globals
+  are seen everywhere on it; a body, an `if`/`else`/`while` body and a
+  lambda are blocks, a local is seen from below its declaration to the end
+  of its block ("used before it is declared" above it), an inner one hides
+  an outer one, and a callee does not see its caller's locals.
 - **Types** are a run of leaf siblings, one word per node: `char` (u8)
   `short` `int` `long` `i8`..`i64` `u8`..`u64` `void`, `address` T (alone,
   the address of nothing), `array` T n (`array` `array` `int` `3` `4`), and
