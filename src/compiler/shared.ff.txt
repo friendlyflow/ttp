@@ -105,6 +105,32 @@ comment
 fail:
   message
 comment
+  import file: first on a program page, reads the tree in file (each file once), file from the folder of this tree, and puts its pages in front of the program, as the trees before it on the command line; elsewhere it does nothing.
+import:
+  file
+comment
+  workspace: compile time, a new workspace, a compile of its own that runs after this one; its value is the workspace.
+workspace:
+comment
+  set target w section: compile time, workspace w builds for section (riscv64, target, ...); without it, for the target of this compile.
+set target:
+  w
+  section
+comment
+  set output w path: compile time, workspace w writes path; without it, the name of its last file without its folder and .ff, next to the build file. Paths are from the folder of the file whose code runs the word.
+set output:
+  w
+  path
+comment
+  add file w path: compile time, a tree for workspace w; the last one is its program, the ones before it its definitions, as on the command line.
+add file:
+  w
+  path
+comment
+  compile w: compile time, workspace w is assembled and written once this compile is done.
+compile:
+  w
+comment
   char value: C, an unsigned byte; called with a value, converts it. char with a leaf that names nothing is text: its bytes and a NUL.
 char:
   value

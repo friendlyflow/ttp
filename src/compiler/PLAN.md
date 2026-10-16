@@ -55,7 +55,7 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `mkff.pl`, `shared.ff.txt` | make `shared.ff`: what every target has and the choice of one (`shared.ff.txt`), then a section per target. |
 | `ISA.pm`, `isa/<target>.pl` | the instructions of each target (riscv64: RV64GC; x86_64; aarch64; arm), its registers and slices. |
 | `macros/<target>.ff.txt` | each target's pseudo-instructions, `elf_header` and `frame`, its Linux system calls, and the primitives of the C layer. |
-| `progs/*.ff` | test programs: `exit42`, `hello`, `wide` in riscv64 asm, whole trees (the pages of then), each with a GNU twin `.s`; the `c*` ones in the C layer, only their program, each with its `.expect` (`exit N`, then its output; `<name>.<target>.expect` where a target differs). |
+| `progs/*.ff` | test programs: `exit42`, `hello`, `wide` in riscv64 asm, whole trees (the pages of then), each with a GNU twin `.s`; the `c*` ones in the C layer, only their program, each with its `.expect` (`exit N`, then its output; `<name>.<target>.expect` where a target differs); `cws.ff` is a build file. |
 | `progs/<target>/` | `exit42`, `hello`, `wide` (every instruction of the section) for that target, program-only, with GNU twins; `mkwide.pl` writes `wide.ff` and `wide.s` from one table. |
 | `ff.ld`, `ff32.ld` | the layout ttpc gives a program, for linking the GNU twins (ELF64; ELF32 for arm). |
 | `FF.pm`, `fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
@@ -108,7 +108,10 @@ for the host tools (`perl fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl
 fftext.pl ff t.ff.txt > ttpc.ff`). ttpc reads several trees: `ttpc a.ff
 b.ff ... prog.ff out` takes the pages of all but the last, then the last
 whole as the program (its root is the page); one tree alone is read as
-before. Whatever ttpc.ff uses, ttpc1 must know (it knows targets, sections,
+before, unless it begins with `import`. One tree and no output is a build
+file (`ttpc build.ff`, see Build files); `ttpc --print tree.ff` prints a
+tree (stage0, ttpc1 and the seeds print one tree alone). Whatever ttpc.ff
+uses, ttpc1 must know (it knows targets, sections,
 the C layer and compile time); ttpc1 reads at most 4 MiB in all. When that
 gets tight, the chain gets a next link: freeze ttpc.ff as ttpc2.ff.
 
@@ -227,12 +230,59 @@ It runs natively, so it can do anything: ttpc assembles it, with the whole
 program page (C and asm, which it may call), into its own memory past what
 is emitted (programs ttpc makes have one RWX segment; `origin` and `bss` do
 nothing there), in a space of labels of its own, and calls it. Its value
-and what it emits are kept per node: it runs once, in pass 1. stage0
-cannot do this (GNU ld gives it no executable bss); ttpc1 and later can.
-Compile time runs on the machine ttpc runs on, riscv64, whatever the
-target: the asm it calls is riscv64 asm, and asm on the program page it
-would assemble with it must be riscv64 too (`ctasm`, `ctmix` are riscv64
-only).
+and what it emits are kept per node: it runs once, in pass 1. A lambda
+that runs while another one is assembled splices only its own code
+(`cct2`). stage0 cannot do this (GNU ld gives it no executable bss); ttpc1
+and later can. Compile time runs on the machine ttpc runs on, its host,
+whatever the target: the asm it calls is the host's asm, and asm on the
+program page it would assemble with it must be the host's too (`ctasm`,
+`ctmix` are riscv64 asm, so they compile only on riscv64).
+
+### Build files
+
+`ttpc [--target t] build.ff`, one tree and no output, runs a build file,
+as Jai's build programs do: what to read, for which targets, which files,
+where the output goes, all of it is in the file.
+
+- **`import`** / path, first on a program page (comments may come
+  before it), reads that tree and puts its pages in front of the program,
+  as the trees before it on the command line do. ttpc reads each path once:
+  a tree imported or added again is the one already in memory (shared.ff
+  fits only once in ttpc's 4 MiB of input). Elsewhere `import` does
+  nothing; after other items it is an error. Any program may import:
+  `ttpc progs/cimport.ff out` (`import` / `../shared.ff`) is `ttpc
+  shared.ff progs/chello.ff out`.
+- **A build file** is a program page. ttpc runs its top-level lambdas `:`
+  / `compile time`, with the whole page, so they can call its C
+  functions; it assembles and writes nothing of its own.
+- **Workspaces**, words of compile time:
+  - `w:` / `workspace` makes one; its value names it.
+  - `set target` / w / section (`x86_64`, `target`, ...): without it,
+    the target of the build.
+  - `set output` / w / path: without it, the name of its last file without
+    its folder and `.ff`, next to the build file.
+  - `add file` / w / path, as often as needed: the last file is the
+    program, the ones before it its definition pages, as on the command
+    line.
+  - `compile` / w queues it.
+
+  A path in a tree is from that tree's folder: `import` from the file it
+  stands in, `set output` and `add file` from the file of the code that
+  runs them, so `ttpc src/compiler/progs/cws.ff` works from any folder;
+  paths on the command line are from the folder ttpc runs in. Text is
+  copied when the word runs, so a loop or a C function can make the paths (`progs/cws.ff`: a function `hello` / section / path called
+  for two targets).
+- **After the build file** ttpc assembles each compiled workspace, in the
+  order they were made, as a compile of its own (new labels, C and compile
+  time from the start, the trees the build file read kept). Workspaces that
+  their compile time makes run too. At most 16 workspaces, 15 files each,
+  32 different files in all.
+- `make cws`: `progs/cws.ff` builds `chello` for riscv64 and x86_64 and
+  `cexit` by its default name, each byte for byte what the command line
+  makes, on every host, run from the build folder.
+- **Not yet: Jai's message loop**, a hook in the build file that sees each
+  compiled function or the finished output and can add to it while a
+  workspace compiles (see NEXT.md).
 
 ### Targets
 
