@@ -65,7 +65,7 @@ RAM NODE:
   - een `array` / `char` / n gevuld met tekst (C's `char s[16] = "hi"`) kan nog niet
   - een compile time functie heeft geen returntype, haar waarde is een `long`
   - een workspace is een `long`: `w:` / `long` / `workspace`
-- nog te doen: een struct met een adres van zichzelf laat ttpc crashen (was al zo vóór de expliciete types)
+- opgelost (16 okt 2026, `progs/cself.ff`): een struct met een adres van zichzelf liet ttpc crashen. Elke struct heeft nu één type, gemaakt vóór zijn velden: het veld `next` vindt het en de layout eindigt (en een veld opzoeken legt de struct niet meer telkens opnieuw uit)
   - waarom het telt: zo maak je lijsten, bomen, grafen; de gelinkte lijst van C, `struct node { long value; struct node *next; }`, is in ff:
     ```
     node:
@@ -84,5 +84,7 @@ RAM NODE:
 - fase 0, eerst de C-laag afwerken, stap 1 klaar: C's rekenregels (`progs/cint.ff`, `cint64.ff`): int en u32 wrappen op 32 bits (`cc_ext_*` na de operator), de usual arithmetic conversions, getallen getypeerd zoals in C; een operator vooraan in een lambda (`:` / `-` / ...) is een expressie, geen call
 - fase 0 stap 2 klaar: for, do while, switch / case / default, goto en labels (`naam:` zonder type, houdt zijn statements), if / else als waarde (C's ?:), de komma is een lambda (`progs/cflow.ff`)
 - fase 0 stap 3 klaar: *= /= %= &= |= ^= <<= >>= (via binop, ook += -=), sizeof / alignof, enums (`kleur:` / `enum` / `rood:` ...), function types (`binary:` / `function` / ...) en calls via een adres (`progs/ctypes.ff`)
-- nog te doen in fase 0: een struct met een adres van zichzelf (zie hierboven); unions, bitfields; globale initializers met adressen; meer dan 8 argumenten, structs by value; varargs; TLS
+- fase 0 stap 4 klaar: een struct met een adres van zichzelf
+- fase 0 stap 5 klaar: unions (`naam:` / `union`), bitfields (`mode:` / `u32` / `3`, zoals gcc ze legt: nagekeken met riscv64-none-elf-gcc), `progs/cunion.ff`, `progs/cbits.ff`
+- nog te doen in fase 0: globale initializers met adressen; meer dan 8 argumenten, structs by value; varargs; TLS
 - versieketen (16 okt 2026): ttpc2.ff + ttpc2.defs.ff bevroren (ttpc.ff na stap 2, arm whole.ff 949 KB van de 1 MiB van de seeds). stage0 -> ttpc1 -> ttpc2 -> stage1 -> stage2; op elke host seed -> ttpc2 -> stage1 -> stage2. ttpc.ff mag nu alles wat ttpc2 kent (comment, de C-laag) en groeien tot 4 MiB invoer samen met shared.ff (2.8 MB)

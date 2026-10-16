@@ -97,7 +97,26 @@ ff, the language ttpc compiles
           to:
             address
             point
-      not yet: a struct holding an address of itself (next: address node) crashes ttpc, as it did before
+      a struct may hold an address of itself or of a struct that holds one of it (next: address node): an address is a word, whatever it points to
+      example
+        node:
+          struct
+          value:
+            long
+          next:
+            address
+            node
+      a union name is a type: word:, union, then its fields as a struct's, all at 0, as large as the largest one, aligned as the most aligned
+      a bitfield: a field's type run, then its width, a number: mode:, u32, 3; it is packed into units of its type as gcc does (one that does not fit the unit begins the next), read and written as that many bits
+      example
+        flags:
+          struct
+          mode:
+            u32
+            3
+          count:
+            int
+            24
       an enum name is a type, an int: color:, enum, then its constants, each name:, with a value (a number or a constant, - before it) or one more than the one before, the first 0; a constant is seen where the enum is, on the page
       example
         color:
@@ -337,7 +356,7 @@ ff, the language ttpc compiles
       a node naming an instruction or macro of the target is emitted as it is; asm belongs to one target, guard it with compile time
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
-      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, compile time, emit, fail, number, target
+      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, union, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program

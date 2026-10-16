@@ -1,0 +1,7 @@
+exit 0
+ok a list through next
+ok next next value
+ok sizeof a struct with an address of itself
+ok a tree, left and right
+ok two structs that point at each other
+ok and round once more

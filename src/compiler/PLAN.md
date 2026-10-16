@@ -209,7 +209,16 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   bytes; 4 on arm, where `i64` and `u64` are refused: "not on this
   target"). A type with a value converts it, the first word of the type on
   top, the rest of the type and the value its children: `long` / x,
-  `address` / `char` / p. A struct cannot yet hold an address of itself.
+  `address` / `char` / p. A struct may hold an address of itself (`next:` /
+  `address` / `node`, `progs/cself.ff`): each struct has one type, made
+  before its fields are laid out, so the field finds it.
+- **Unions** (`progs/cunion.ff`): `word:` / `union` / fields, as a struct
+  whose fields all start at 0, as large as its largest. **Bitfields**
+  (`progs/cbits.ff`): a field's type and then its width, `mode:` / `u32` /
+  `3`, packed into units of its type as gcc does; a struct is laid out in
+  bits. Its type (`TY_BITS`) is read by loading the unit and shifting it
+  left and back, written by reading the unit, putting the value in its bits
+  and writing it back (`bitload`, `bitstore`).
 - **Enums** (`progs/ctypes.ff`): `color:` / `enum` / `red:` / `green:` / `5`
   ...: the name is a type, an `int`; a constant has its value (a number or
   a constant, `-` before it) or one more than the one before, and is seen

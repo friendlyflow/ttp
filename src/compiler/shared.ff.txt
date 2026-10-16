@@ -117,6 +117,10 @@ comment
 struct:
   fields
 comment
+  union fields: C, a struct whose fields all start at 0, as large as its largest field.
+union:
+  fields
+comment
   enum constants: C, a type that is an int, its constants name: (with a value, or one more than the one before), seen where the enum is.
 enum:
   constants

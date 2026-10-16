@@ -1,0 +1,15 @@
+exit 0
+ok a bitfield holds its value
+ok a one-bit field
+ok a signed bitfield
+ok a bitfield in the next unit
+ok a bitfield wraps at its width
+ok += on a bitfield
+ok ++ on a one-bit field wraps
+ok the next unit stays
+ok the bits of the first unit
+ok two units
+ok a bitfield shares its unit with a char
+ok the value of = on a bitfield
+ok a bitfield given a value
+ok and the next one

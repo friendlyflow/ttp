@@ -1,0 +1,9 @@
+exit 0
+ok the bytes are the int's, from 0
+ok a char at 0 too
+ok writing a byte changes the int
+ok as large as the largest field
+ok a struct in a union
+ok a union in a struct, aligned
+ok the union's offset in the struct
+ok a value for the first field
