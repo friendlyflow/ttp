@@ -746,6 +746,39 @@ c:
       rcx
     popq
       rdx
+  comment
+    cc_ext_<type>: V = V as that type (sign- or zero-extended from its size), what C's value of an expression of a type narrower than a word is. cc_uw: V and L zero-extended from 32 bits, for an operator whose operands convert to unsigned int.
+  cc_ext_i8:
+    movsbq
+      al
+      rax
+  cc_ext_i16:
+    movswq
+      ax
+      rax
+  cc_ext_i32:
+    movslq
+      eax
+      rax
+  cc_ext_u8:
+    movzbq
+      al
+      rax
+  cc_ext_u16:
+    movzwq
+      ax
+      rax
+  cc_ext_u32:
+    movl
+      eax
+      eax
+  cc_uw:
+    movl
+      eax
+      eax
+    movl
+      r10d
+      r10d
   cc_load_i8:
     movsbq.m
       0

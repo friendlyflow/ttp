@@ -63,6 +63,7 @@ ff, the language ttpc compiles
       an operator node joins its neighbours into one expression, with C precedence
       precedence, low to high: = += -=, ||, &&, |, ^, &, == !=, < > <= >=, << >>, + -, * / %; leading - ! ~; after a name ++ --
       && and || short-circuit; and, or are instructions (bitwise, with operands), never operators
+      an operator first in an item starts an expression, also first in a lambda: - ! ~
       example
         een variabele
         *
@@ -97,6 +98,22 @@ ff, the language ttpc compiles
             address
             point
       not yet: a struct holding an address of itself (next: address node) crashes ttpc, as it did before
+    arithmetic, as in C
+      char and short, signed or not, become int first
+      then both operands get one type: of 8 bytes if either is (unsigned if an 8-byte one is), else unsigned int if either is one, else int
+      a shift has the type of its left operand; a comparison and ! are int
+      a value is as wide as its type: an int or an unsigned int wraps at 32 bits; what is stored, the value of = += -= ++ --, and a conversion are cut to their type
+      a number is an int if it fits one, else a long; one in hex is the first that fits of int, unsigned int, long, unsigned long
+      example
+        u:
+          u32
+          0xffffffff
+        zero:
+          u32
+          u
+          +
+          1
+      not yet on arm, where long is 4 bytes: an unsigned int with a long is a long, not C's unsigned long
     declarations
       name:, a type run, then its items; the type is required, nothing is derived from the value
       a local in a function, a global at the top of the page; a global's items are constants

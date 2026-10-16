@@ -732,6 +732,31 @@ c:
       4
       sp
       r8
+  comment
+    cc_ext_<type>: V = V as that type, sign- or zero-extended from its size. An int is a word here: cc_ext_i32, cc_ext_u32 and cc_uw (V and L as unsigned int) have nothing to do.
+  cc_ext_i8:
+    sxtb
+      0
+      r0
+      r0
+  cc_ext_i16:
+    sxth
+      0
+      r0
+      r0
+  cc_ext_i32:
+  cc_ext_u8:
+    uxtb
+      0
+      r0
+      r0
+  cc_ext_u16:
+    uxth
+      0
+      r0
+      r0
+  cc_ext_u32:
+  cc_uw:
   cc_load_i8:
     ldrsb
       0

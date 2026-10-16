@@ -172,7 +172,9 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   expression, with C precedence: `een variabele` / `*` / `3`. Siblings
   without an operator between them are separate items: statements,
   arguments, elements. Operators: `+ - * / % << >> & | ^ == != < <= > >=`,
-  `&& || ! ~` (&&, || short-circuit), `= += -=`, `++ --`, a leading `-`.
+  `&& || ! ~` (&&, || short-circuit), `= += -=`, `++ --`, a leading `-`. An
+  operator first in an item starts an expression, in a lambda too
+  (`:` / `-` / `16` ...).
   `and` and `or` are the instructions of the tree (bitwise, with operands).
 - **`:`** is an anonymous function run in place: a block with its own
   scope, or parentheses (its value is its last item).
@@ -201,6 +203,17 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   target"). A type with a value converts it, the first word of the type on
   top, the rest of the type and the value its children: `long` / x,
   `address` / `char` / p. A struct cannot yet hold an address of itself.
+- **Arithmetic** is C's (`progs/cint.ff`, `cint64.ff`): `char` and `short`
+  become `int`, then the usual conversions give both operands one type (8
+  bytes if either has them, unsigned if an 8-byte one is; else `u32` if
+  either is, else `int`); a shift has its left operand's type, a
+  comparison and `!` are `int`. A value is as wide as its type: `int` and
+  `u32` wrap at 32 bits (`cc_ext_<type>` after the operator), and so are
+  cut a store's value, `= += -= ++ --` and a conversion; operands that
+  meet as `u32` are zero-extended first (`cc_uw`). A number is an `int`
+  if it fits, else a `long`; in hex the first of `int`, `u32`, `long`,
+  `u64` it fits. Not yet on arm (a `long` of 4 bytes): `u32` with `long`
+  is `long` there, not C's unsigned long.
 - **Paths** by calling: `xs` / `i` an element, `p` / `x` a field (also
   through an address), `r` / `b` / `x` both in a row. `address` / x, x not a
   type, is C's `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
@@ -374,6 +387,8 @@ operands: pass 1 and pass 2 must lay out the same.
 | `cc_bool` `cc_neg` `cc_not` `cc_inv` | V = V != 0, -V, V == 0, ~V |
 | `cc_add` `cc_sub` `cc_mul` `cc_div` `cc_divu` `cc_rem` `cc_remu` `cc_and` `cc_or` `cc_xor` `cc_shl` `cc_shr` `cc_sar` | V = L op V |
 | `cc_eq` `cc_ne` `cc_lt` `cc_ltu` `cc_gt` `cc_gtu` `cc_le` `cc_leu` `cc_ge` `cc_geu` | V = L op V, 1 or 0 |
+| `cc_ext_i8` `cc_ext_i16` `cc_ext_i32`, `cc_ext_u8` `cc_ext_u16` `cc_ext_u32` | V = V as that type, sign- or zero-extended from its size (on arm the 32-bit ones are empty) |
+| `cc_uw` | V and L zero-extended from 32 bits (empty on arm) |
 | `cc_load_i8` ... `cc_load_i64`, `cc_load_u8` ... `cc_load_u64` | V = the value at the address V, extended |
 | `cc_store_8` ... `cc_store_64` | [L] = V |
 

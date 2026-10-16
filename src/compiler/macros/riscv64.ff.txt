@@ -762,6 +762,71 @@ c:
       a0
       t0
       a0
+  comment
+    cc_ext_<type>: V = V as that type (sign- or zero-extended from its size), what C's value of an expression of a type narrower than a word is. cc_uw: V and L zero-extended from 32 bits, for an operator whose operands convert to unsigned int.
+  cc_ext_i8:
+    slli
+      56
+      a0
+      a0
+    srai
+      56
+      a0
+      a0
+  cc_ext_i16:
+    slli
+      48
+      a0
+      a0
+    srai
+      48
+      a0
+      a0
+  cc_ext_i32:
+    addiw
+      0
+      a0
+      a0
+  cc_ext_u8:
+    andi
+      255
+      a0
+      a0
+  cc_ext_u16:
+    slli
+      48
+      a0
+      a0
+    srli
+      48
+      a0
+      a0
+  cc_ext_u32:
+    slli
+      32
+      a0
+      a0
+    srli
+      32
+      a0
+      a0
+  cc_uw:
+    slli
+      32
+      a0
+      a0
+    srli
+      32
+      a0
+      a0
+    slli
+      32
+      t0
+      t0
+    srli
+      32
+      t0
+      t0
   cc_load_i8:
     lb
       0

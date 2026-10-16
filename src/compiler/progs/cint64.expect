@@ -1,0 +1,12 @@
+exit 0
+ok u64 compares unsigned
+ok u64 /
+ok u64 >>
+ok u64 %
+ok long >> is signed
+ok long converts to u64 in <
+ok long %
+ok u32 widens with zeros
+ok int + long is long
+ok a decimal literal can be long
+ok u32 + long is long

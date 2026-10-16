@@ -79,3 +79,8 @@ RAM NODE:
     `node` is de naam van de struct, `next` het adres van de volgende `node`. ff zelf is zo'n boom: NODE heeft `children`, adressen van andere NODEs; ttpc of sicompass in de C-laag heeft dus een veld als `children:` / `address` / `address` / `node` nodig
   - waarom het crasht: voor de layout van `node` leest ttpc zijn velden (`struct` -> `fields`), bij `next` lost het het type `node` op, dat opnieuw zijn velden leest, zonder einde
   - de oplossing: een adres is altijd één woord, wat het ook aanwijst; achter `address` moet een struct dus niet opgelost worden, enkel benoemd. De velden pas opzoeken wanneer een pad ze gebruikt (`p` / `next` / `value`)
+## glibc.ff (16 okt 2026)
+- plan: ~/.claude/plans/how-to-incorporate-the-wild-rocket.md: glibc's eigen C (een vaste release, de `.i` van zijn build voor riscv64) mechanisch in de C-laag (c2ff.pl op clang's AST), enkel wat een programma bereikt; exact = AST round trip + hetzelfde gedrag als gcc met libc.a
+- fase 0, eerst de C-laag afwerken, stap 1 klaar: C's rekenregels (`progs/cint.ff`, `cint64.ff`): int en u32 wrappen op 32 bits (`cc_ext_*` na de operator), de usual arithmetic conversions, getallen getypeerd zoals in C; een operator vooraan in een lambda (`:` / `-` / ...) is een expressie, geen call
+- nog te doen in fase 0: for, do while, switch, goto, ?:, de komma; *= /= ...; sizeof; enums; function pointers; een struct met een adres van zichzelf (zie hierboven); unions, bitfields; globale initializers met adressen; meer dan 8 argumenten, structs by value; varargs; TLS
+- arm `whole.ff` is nu 902 KB van de 1 MiB van de seeds: de volgende schakel van de versieketen (ttpc.ff bevriezen als ttpc2.ff) komt eraan

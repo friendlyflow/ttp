@@ -1,0 +1,27 @@
+exit 0
+ok u32 + wraps
+ok u32 - wraps
+ok u32 << wraps
+ok u32 * wraps
+ok u32 ~
+ok u32 unary -
+ok int + wraps
+ok int * wraps
+ok char promotes to int
+ok char promotes signed
+ok u32 compares unsigned
+ok int converts to u32 in <
+ok int converts to u32 in ==
+ok u32 /
+ok u32 >>
+ok int >> by a u32 is signed
+ok int /
+ok int %
+ok i8 is signed
+ok u8 = truncates
+ok u8 += truncates
+ok u32 += wraps
+ok u8 conversion narrows
+ok i8 conversion narrows
+ok a hex literal can be u32
+ok u32 literals wrap

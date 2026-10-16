@@ -39,7 +39,7 @@ TTPC_FF := ttpc.ff
 TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
@@ -226,9 +226,9 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring cscope
-# cexpr computes with u64, which a target of 4-byte words does not have.
-CSKIP_arm := cexpr
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring cscope cint cint64
+# cexpr and cint64 compute with u64, which a target of 4-byte words does not have.
+CSKIP_arm := cexpr cint64
 
 CROSS_x86_64 := x86_64-elf-
 TASFLAGS_x86_64 := -mindex-reg
