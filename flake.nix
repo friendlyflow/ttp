@@ -94,6 +94,10 @@
             qemu # qemu-system-riscv64 for `make os-test`, qemu-<arch> for the programs
             perl # src/compiler/gen/mkff.pl generates test.ff
             fish
+            # profiling and debugging ttpc where it runs natively (the host
+            # builds): perf samples it, gdb looks inside
+            perf
+            gdb
           ]) ++ (glibcTools pkgs) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
 
           # For src/glibc: the pinned source, the kernel's headers, and the

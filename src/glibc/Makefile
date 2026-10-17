@@ -68,7 +68,17 @@ clean:
 I := $(BUILD)/i
 FF := $(BUILD)/ff
 C2FF_CLANG ?= $(error C2FF_CLANG is not set: run this in `nix develop`)
+# ttpc: on an x86_64 machine its own build for x86_64 (make bootstraps makes
+# it), which runs natively (stdlib-prog: 1.6 s, against 6.1 s for riscv64's
+# under qemu); elsewhere riscv64's under qemu. Both make the same bytes.
+# The checks run in parallel: make -j.
+ifeq ($(shell uname -m),x86_64)
+TTPC ?= ../../build/compiler/x86_64/stage2
+TTPC_RUN = $(TTPC)
+else
 TTPC ?= ../../build/compiler/boot/stage2
+TTPC_RUN = qemu-riscv64 $(TTPC)
+endif
 SHARED := ../compiler/shared.ff
 CAP := ulimit -v 4000000;
 
@@ -96,7 +106,7 @@ ROOTS_stdlib := $(ROOTS_string) $(M2)
 
 MILESTONES := string stdlib
 
-.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin
+.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -145,7 +155,7 @@ asm-check: $(ASMS_stdlib:%=$(I)/%.dump) $(ASMS_stdlib:%=$(I)/%.bin) ../compiler/
 	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
 	      riscv64-unknown-linux-gnu-objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
 	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
-	    $(CAP) timeout 60 qemu-riscv64 $(TTPC) $(SHARED) $(FF)/$$n.asm.ff $(FF)/$$n.asm > $(FF)/$$n.asm.lst || exit 1; \
+	    $(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $(FF)/$$n.asm.ff $(FF)/$$n.asm > $(FF)/$$n.asm.lst || exit 1; \
 	    size=$$(perl ../compiler/gen/s2ff.pl --size $(I)/$$a.s $(I)/$$a.dump) || exit 1; \
 	    riscv64-unknown-linux-gnu-objdump -r $(I)/$$a.ref.o > $(FF)/$$n.relocs; \
 	    head -c $$size $(I)/$$a.bin > $(FF)/$$n.want.raw; \
@@ -159,7 +169,7 @@ asm-check: $(ASMS_stdlib:%=$(I)/%.dump) $(ASMS_stdlib:%=$(I)/%.bin) ../compiler/
 # progs/strlen.ff imports string.ff from its own folder, so both go there
 strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 	cp progs/strlen.ff $(FF)/strlen-prog.ff
-	$(CAP) timeout 120 qemu-riscv64 $(TTPC) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
+	$(CAP) timeout 120 $(TTPC_RUN) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
 	s=0; $(CAP) timeout 30 qemu-riscv64 -cpu rv64,v=false $(FF)/strlen-prog || s=$$?; test $$s -eq 12
 	@echo "strlen-check: glibc's strlen, generic C (-cpu rv64,v=false): 12"
 	s=0; $(CAP) timeout 30 qemu-riscv64 $(FF)/strlen-prog || s=$$?; test $$s -eq 12
@@ -188,7 +198,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)
-	$(CAP) timeout 900 qemu-riscv64 $(TTPC) $(SHARED) $< $@ > $@.lst
+	$(CAP) timeout 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
 
 define check
 $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog progs/$(1).expect asm-check

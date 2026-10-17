@@ -117,6 +117,11 @@ RAM NODE:
 - M2 klaar: atoi, strtol en abs: `make -C src/glibc stdlib-check` geeft met en zonder V 120, net als gcc + libc.a; de reach loopt via de C-locale door gconv, assert, abort, signalen, pthread en tunables (45 C-objecten, 12 asm-delen, alle byte voor byte gelijk in asm-check)
 - daarvoor nieuw in ttpc: `weak` (ook functies: weak / function / type), `va_arg_pack`, if zonder body (a ?: b), asm-functies die bereiken wat ze noemen, floating point op riscv64 (float, double, long double als types; + - * /, vergelijkingen, -, cast:), grotere buffers (invoer 32 MiB, knopen 64 MiB)
 - daarvoor nieuw in c2ff/s2ff: groepen per bron (glibc string/strlen, ...), libatomic-aanroepen (atomics.ff.txt uit mkatomics.pl), builtins.ff.txt, getypte literals (2UL is u64 / 2), hex floats, wide literals, ... na de parameters, syscall-stubs, tail/call/li, numerieke labels, val-door tussen functies, la.tls.ie
-- floating point nog te doen: aarch64, x86_64 (SSE2), arm (VFP; double is 8 bytes op een doel van 4) en long double via glibc's soft-fp; een stdlib-prog bouwen duurt nu 5 minuten (jit van de hele pagina per compile-time-lambda)
+- floating point nog te doen: aarch64, x86_64 (SSE2), arm (VFP; double is 8 bytes op een doel van 4) en long double via glibc's soft-fp
 - daarna M3 (malloc, free, realloc) en qsort, dat malloc bereikt
 - het adres van een ifunc (`address` / memcpy) geeft nog "needs a type"
+## bouwtijd (17 okt 2026)
+- de glibc-checks gebruiken op een x86_64-machine ttpc's eigen x86_64-build (TTPC_RUN, door make bootstraps gemaakt), die native loopt; elders riscv64's onder qemu; beide maken dezelfde bytes
+- geprofileerd met perf (perf en gdb staan in flake.nix): 99% van de 32 miljoen lookups (kwof, opof, tyname) kwam uit enumlib, dat voor elke naam alle syms afliep (defkw) op zoek naar de 14 enums
+- nu: lookup, find_fn, find_reg en enumlib hebben een cache van hun antwoord, met als sleutel de bytes van de naam (tot 32, in het item; een langere naam gaat zonder cache), de lengte en de tabel of het bereik; niet de knoop of het adres van de tekst, want prim_node, prim_text en knopen op de stack krijgen andere namen (de eerste cache op de knoop gaf in cdot "unknown name: x"); enumlib vraagt daarachter alleen de enums van syms, een lijst die het na collect_syms één keer maakt
+- stdlib-prog: 17,7 s native (5 minuten onder qemu) wordt 1,6 s (6,1 s onder qemu), dezelfde bytes; `make -j` werkt: compiler-check 20 s, met -j6 12 s; string-check en stdlib-check samen 2 s
