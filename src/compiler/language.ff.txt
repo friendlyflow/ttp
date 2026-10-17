@@ -77,6 +77,8 @@ ff, the language ttpc compiles
       array T n: n elements of T; n a number or a constant; arrays of arrays nest, array array int 3 4
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
+      float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
+      + - * / and the comparisons work on them, - negates, cast: converts to and from the integers (on riscv64 for now; long double later)
       type (compile time only): a word of any type, as C++'s T
       example
         my string:
@@ -185,6 +187,7 @@ ff, the language ttpc compiles
             4
       a page item whose items have children only as : or address is a global, any other is a function
       thread local, first under a global's name and before its type, makes it thread-local; with one thread it is a global
+      weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       example
         errno:
           thread local
@@ -242,6 +245,7 @@ ff, the language ttpc compiles
       the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0)
       a call is name with its arguments in order, the first 8 in the argument registers, the others on the stack; its value is what return gives
       a leaf ... after the parameters takes more arguments: va_list is a word, va_start ap points it at the first after the parameters, va_arg ap type takes one, va_end ap, va_copy to from
+      in such a function va_arg_pack, the last argument of a call to another one, passes its own extra arguments on, and va_arg_pack_len is how many there are (GNU C's __builtin_va_arg_pack), at run time
       example
         sum:
           long
@@ -352,6 +356,7 @@ ff, the language ttpc compiles
       return, with a value or without
       return is a value too: as an item (of a declaration, an argument, an expression) it leaves the function there
       if and else are a value too, C's c ? a : b: the last item of the branch taken; the comma of C is a lambda, : a b
+      an if with only its condition is GNU C's a ?: b: the value of a when it is not 0 (worked out once), else what else gives
       example
         m:
           long
@@ -420,6 +425,7 @@ ff, the language ttpc compiles
     asm functions
       name: / asm / instructions is an asm function: its instructions (and block labels) are placed as the asm of a page, on a definition page only when C reaches it
       C calls it by name and takes its address, as a long; it keeps the calling convention itself (glibc's .S functions, by gen/s2ff.pl)
+      what its instructions name (a library function, C or asm, a C alias) is reached and placed before it, so asm names it by its label
       example
         seven:
           asm

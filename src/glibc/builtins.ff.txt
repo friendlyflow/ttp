@@ -1,0 +1,83 @@
+comment
+  The compiler builtins glibc's C calls that have no C of their own: written by hand, the one part of glibc in ff that is not translated. c2ff keeps a call of one as it is.
+builtins:
+  comment
+    gcc's __builtin_stdc_rotate_right (C23's stdc_rotate_right) on a word: x turned right by n bits; glibc's PTR_DEMANGLE uses it on a uintptr_t.
+  __builtin_stdc_rotate_right:
+    u64
+    x:
+      u64
+    n:
+      u32
+    return
+      :
+        x
+        >>
+        :
+          n
+          %
+          64
+      |
+      :
+        x
+        <<
+        :
+          :
+            64
+            -
+            :
+              n
+              %
+              64
+          %
+          64
+  comment
+    gcc's __builtin_unreachable: reaching it is undefined in C; here it does nothing.
+  __builtin_unreachable:
+    void
+  comment
+    gcc's __atomic_always_lock_free: 1 for what riscv64 swaps whole (1, 2, 4 or 8 bytes); worked out at compile time, in glibc's _Static_assert.
+  __atomic_always_lock_free:
+    int
+    size:
+      u64
+    p:
+      address
+      void
+    return
+      :
+        size
+        ==
+        1
+      ||
+      :
+        size
+        ==
+        2
+      ||
+      :
+        size
+        ==
+        4
+      ||
+      :
+        size
+        ==
+        8
+  comment
+    gcc's __builtin_trap, which it makes ebreak on riscv64.
+  __builtin_trap:
+    asm
+    ebreak
+  comment
+    gcc's __atomic_thread_fence, which it makes fence rw, rw on riscv64; __atomic_signal_fence orders only what the compiler does: nothing to do here.
+  __atomic_thread_fence:
+    asm
+    fence
+      0
+      3
+      3
+    ret
+  __atomic_signal_fence:
+    asm
+    ret

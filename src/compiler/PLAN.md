@@ -281,6 +281,32 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   reaches and `global` lays it out again at that size. A global's `:` item
   is assembled without the program page (`ctconst`, as `ctexpr` but `jit`
   leaves the page out): a glibc page made each item cost the whole page.
+- **Weak** (`progs/cweak.ff`): `name:` / `weak` / type declares a global
+  that may stay undefined, C's `#pragma weak` (`tlskip` skips the word);
+  its address is 0 in code and in a global's items, and `weak` /
+  `function` / type is a function, called through 0 (`call`, `leafval`).
+  c2ff writes one for a weak name, or a function gcc's `error` attribute
+  keeps from being called, that no unit defines.
+- **`va_arg_pack`** (`progs/cvapack.ff`, the user's choice): in a variadic
+  function, the last argument of a call to another passes its own extra
+  arguments on, at run time: `args` pushes them in a loop, `call` pushes
+  the count then and sets sp again with `syncsp`; `va_arg_pack_len` is
+  their count (`vapackm`, which `libcc` made room for in the cc group).
+- **An if with no body** (`progs/cifvalue.ff`) is GNU C's `a ?: b`.
+- **Asm functions reach what they name**: `libsym` looks up each leaf of
+  a reached asm function (`asmreach`) and moves the function after them
+  on the list; `eval_arg` names a placed library definition by its label
+  and a C alias by its target.
+- **Floating point** (`progs/cfloat.ff`, the user's choice: all of it now):
+  `float`, `double` and `long double` are type words, codes 0x24, 0x28 and
+  0x30 (bit 5 marks floating point), 4, 8 and 16 bytes on every target
+  (`tsize` and `talign` read them from the code, not `word8`). A value is
+  its bits in V. `binop` takes a floating path (both operands converted to
+  the wider type, then the target's primitive from the table at `cc_exts`
+  + 121), `fcvt` converts V between two types (`convert`, so `cast:`),
+  `unary` negates, and `hexf` reads a literal, an exact hex float. riscv64
+  has the primitives (macros/riscv64.ff.txt, F and D); aarch64, x86_64
+  (SSE2) and arm (VFP) and long double (glibc's soft-fp) come next.
 - **Compound literals** (`progs/ccomplit.ff`): a struct or union name with
   items, used as a value, is a temporary of that type, C's `(point){1, 2}`
   as `point` / `1` / `2`: its space is reserved at the start of the

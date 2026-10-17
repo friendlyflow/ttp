@@ -16,10 +16,10 @@
 #
 #   label:          a function (a global label) or, inside one, a block
 #                   label holding the instructions up to the next label
-#   directives      .globl .type .size .cfi_* .option .attribute .align .text
+#   directives      .globl .weak .type .size .cfi_* .option .attribute .align .text
 #                   give no bytes of their own here and are dropped (ttpc places a
 #                   function on a 2-byte boundary, as RVC allows); any other
-#                   stops the translation
+#                   stops the translation; X = Y is an alias
 #   instructions    GNU's operands reversed (loads off base rd, stores off
 #                   rs2 base, a branch target as rel label), the macros of
 #                   macros/riscv64.ff.txt as they are; vector ones vm first
@@ -125,6 +125,7 @@ my %vmask = map { $_ => 1 } qw(vmseq vmsne vmsltu vmsleu vmsgtu vadd vsub vand v
 sub full {
     my ($op, @o) = @_;
     return ins($op, $csr{$o[1]} // num($o[1]), $o[0]) if $op eq 'csrr';
+    return ins($op) if $op =~ /^(ecall|ebreak|fence\.i)$/ && !@o;
     my $vm = 1;
     if (@o && $o[-1] eq 'v0.t') { pop @o; $vm = 0 }
     return ins($op, reverse @o) if $rtype{$op} || $itype{$op} || $macro{$op};
@@ -164,15 +165,43 @@ sub short {
     if ($op =~ /^c\.(ld|lw)$/) { my ($off, $base) = mem($o[1]); return ins($op, $off, $base, $o[0]) }
     if ($op =~ /^c\.(sd|sw)$/) { my ($off, $base) = mem($o[1]); return ins($op, $off, $base, $o[0]) }
     if ($op =~ /^c\.(ldsp|lwsp|sdsp|swsp)$/) { my ($off) = mem($o[1]); return ins($op, $off, $o[0]) }
+    if ($op eq 'c.lui') { my $v = num($o[1]) << 12; $v -= 2**32 if $v >= 2**31; return ins($op, $v, $o[0]) }
     return ins($op, num($o[2]), $o[0]) if $op eq 'c.addi4spn';
     return ins($op, num($o[1])) if $op eq 'c.addi16sp';
     return ins($op) if $op =~ /^c\.(nop|ebreak)$/;
     fail "no ff form for $op";
 }
 
+# an instruction of a li as GNU as made it, from its dump
+sub canon {
+    my ($m) = @_;
+    return short($m) if $m->{bytes} == 2;
+    my @o = split_ops($m->{args});
+    if ($m->{op} eq 'lui') { my $v = num($o[1]) << 12; $v -= 2**32 if $v >= 2**31; return ins('lui', $v, $o[0]) }
+    return ins($m->{op}, num($o[2]), $o[1], $o[0]) if $m->{op} =~ /^(addi|addiw)$/;
+    fail "no ff form for $m->{op} in a li";
+}
+
 # ---- the source --------------------------------------------------------------
 my (@fns, $fn, $block, $file, $line);
 my $n = 0;
+my $pos = 0;        # the bytes GNU as made so far
+my $ends = 1;       # the last instruction does not run on (a return, a jump)
+my %tls;            # a function's thread-locals, as la.tls.ie reads them
+my %numeric;        # how many times each numeric label (1:) has come so far
+# GNU as's next instruction, its bytes counted; whether it ends a function
+sub take {
+    my $m = $made[$n++] or fail "GNU as made fewer instructions than $src has";
+    $pos += $m->{bytes};
+    $ends = $m->{op} =~ /^c\.(jr|j)$/ || ($m->{op} =~ /^(jal|jalr)$/ && $m->{args} =~ /^zero\b/) ? 1 : 0;
+    $m;
+}
+# the end of a function: the words its la.tls.ie read
+sub finish {
+    return unless $fn && %tls;
+    push @{ $fn->{children} }, node('align', node(8)), map { node(".Ltls $_:", node('dword', node($_))) } sort keys %tls;
+    %tls = ();
+}
 open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
 while (my $l = <$s>) {
     chomp $l;
@@ -184,26 +213,76 @@ while (my $l = <$s>) {
         next if $st eq '';
         while ($st =~ s/^([.\w]+):\s*//) {
             my $name = $1;
+            # GNU's numeric labels (1:, 1f the next, 1b the one before): each a
+            # label of its own, .L1 1, .L1 2, ...
+            $name = ".L$name " . ++$numeric{$name} if $name =~ /^\d+$/;
             if ($name =~ /^\.L/) {
                 fail "label $name outside a function" unless $fn;
                 $block = node("$name:");
                 push @{$fn->{children}}, $block;
+            } elsif ($fn && !$ends) {
+                # the function before runs on into this one: it holds it, as
+                # a label, so that they are placed together
+                $block = node("$name:", node('comment', node("glibc-2.44 $file:$line")));
+                push @{$fn->{children}}, $block;
             } else {
+                finish();
                 $fn = node("$name:", node('asm'), node('comment', node("glibc-2.44 $file:$line")));
                 push @fns, $fn;
                 undef $block;
+                $ends = 0;      # none of its own yet: it runs on into what follows
             }
         }
         next if $st eq '';
+        # X = Y (a weak_alias): another name for Y
+        if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)); next }
         my ($op, $rest) = $st =~ /^(\S+)\s*(.*)$/;
         if ($op =~ /^\./) {
-            next if $op =~ /^\.(globl|global|type|size|align|p2align|text|attribute|cfi_\w+)$/;
-            next if $op eq '.option' && $rest =~ /^(push|pop|arch\b.*|norelax|relax)$/;
+            # the nops GNU as put in to align a function, kept where it runs
+            # on into it
+            if ($op =~ /^\.(p2)?align$/ && $fn) {
+                my $a = 2**num((split_ops($rest))[0]);
+                while ($pos % $a && $made[$n] && $made[$n]{op} =~ /^(c\.addi|c\.nop|addi)$/ && $made[$n]{args} =~ /^zero,(zero,)?0$/) {
+                    my $m = take();
+                    push @{($block // $fn)->{children}}, $m->{bytes} == 2 ? node('c.nop') : ins('addi', 0, 'zero', 'zero');
+                    $ends = 0;
+                }
+                next;
+            }
+            next if $op =~ /^\.(globl|global|weak|type|size|align|p2align|text|attribute|cfi_\w+)$/;
+            next if $op eq '.option' && $rest =~ /^(push|pop|arch\b.*|norelax|relax|pic|nopic|rvc|norvc)$/;
             fail "a directive with no ff form: $st";
         }
         fail "an instruction outside a function: $st" unless $fn;
-        my $m = $made[$n++] or fail "GNU as made fewer instructions than $src has";
-        my @o = split_ops($rest);
+        $op = { scall => 'ecall', sbreak => 'ebreak' }->{$op} // $op;    # GNU's old names
+        my @o = map { /^(\d+)([fb])$/ ? ".L$1 " . (($numeric{$1} // 0) + ($2 eq 'f' ? 1 : 0)) : $_ } split_ops($rest);
+        my $into = ($block // $fn)->{children};
+        # li is what GNU as made of it for its value (addi, or lui and addiw)
+        if ($op eq 'li') {
+            my $v = num($o[1]);
+            my $count = $v >= -2048 && $v < 2048 ? 1 : ($v & 0xfff) == 0 ? 1 : 2;
+            fail "li of $v, wider than 32 bits" unless $v >= -2**31 && $v < 2**31;
+            if ($count == 1 && $made[$n]{op} =~ /^(addi|c\.li)$/) {
+                my $m = take();
+                push @$into, $m->{bytes} == 2 ? short($m) : full($op, @o);
+            } else {
+                push @$into, canon(take()) for 1 .. $count;
+            }
+            next;
+        }
+        # la.tls.ie: the thread-local's offset from tp, which with tp 0 (one
+        # thread, a thread-local laid out as a global) is its address, from a
+        # word the function carries
+        if ($op eq 'la.tls.ie') {
+            take(); take();
+            my $w = ".Ltls $o[1]";
+            $tls{ $o[1] } = 1;
+            push @$into, ins('auipc', node('pcrel_hi', node($w)), $o[0]), ins('ld', node('pcrel_lo', node($w)), $o[0], $o[0]);
+            next;
+        }
+        my $m = take();
+        # a call or a tail is two instructions, the macro's
+        if ($op =~ /^(call|tail)$/) { take(); push @$into, node($op, node($o[-1])); next }
         my $i;
         if ($m->{bytes} == 2) {
             my ($target) = grep { /^\.L/ } @o;
@@ -211,10 +290,11 @@ while (my $l = <$s>) {
         } else {
             $i = full($op, @o);
         }
-        push @{($block // $fn)->{children}}, $i;
+        push @$into, $i;
     }
 }
 close $s;
+finish();
 # what is left is the padding GNU as puts at the end of the section
 pop @made while @made > $n && $made[-1]{op} =~ /^c\.(addi|nop)$|^addi$/ && $made[-1]{args} =~ /^zero,(zero,)?0$/;
 fail "GNU as made " . scalar(@made) . " instructions, $src has $n" unless $n == @made;

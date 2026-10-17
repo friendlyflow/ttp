@@ -86,8 +86,12 @@ ROOTS_string := $(M1) __riscv_hwprobe
 # grouping check and memcmp. qsort waits for malloc (M3): it reaches it.
 M2 := atoi strtol abs
 OBJS_stdlib := $(OBJS_string) $(M2:%=stdlib/%) stdlib/strtol_l stdlib/grouping csu/errno ctype/ctype_l \
-	locale/C-ctype locale/C_name locale/global-locale locale/xlocale string/memcmp string/memcmp-generic
-ASMS_stdlib := $(ASMS_string) string/memcmp-vector
+	locale/C-ctype locale/C_name locale/global-locale locale/xlocale string/memcmp string/memcmp-generic \
+	wcsmbs/wcsmbsload iconv/gconv_simple iconv/gconv_trans csu/libc-start assert/__libc_assert_fail \
+	stdio-common/_fitoa_word libio/libc_fatal stdio-common/itoa-digits stdio-common/itoa-udigits \
+	misc/mmap64 misc/setvmaname stdlib/abort string/mempcpy locale/lc-ctype \
+	posix/_exit signal/libc_sigaction nptl/pthread_kill nptl/pthread_rwlock_wrlock signal/raise elf/dl-tunables nptl/pthread_self nptl/futex-internal nptl/lowlevellock nptl/cancellation $(EXTRA_C)
+ASMS_stdlib := $(ASMS_string) string/memcmp-vector misc/munmap csu/sysdep posix/getpid misc/gettid nptl/syscall_cancel $(EXTRA_ASM)
 ROOTS_stdlib := $(ROOTS_string) $(M2)
 
 MILESTONES := string stdlib
@@ -114,32 +118,41 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w $< > $@
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots, then
-# s2ff's of its asm parts.
+# s2ff's of its asm parts, then the builtins written by hand and libatomic's
+# functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
+# atomics.ff.txt).
 define milestone
-$$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+$$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) builtins.ff.txt atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
 	mkdir -p $$(FF)
 	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $$(foreach o,$$(OBJS_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
 	    -- $$(ROOTS_$(1)) > $$(FF)/$(1).ff.txt
 	for a in $$(ASMS_$(1)); do \
 	    $$(CAP) timeout 60 perl ../compiler/gen/s2ff.pl $$(I)/$$$$a.s $$(I)/$$$$a.dump >> $$(FF)/$(1).ff.txt || exit 1; \
 	done
+	cat builtins.ff.txt atomics.ff.txt >> $$(FF)/$(1).ff.txt
 	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
 endef
 $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 
 # Each asm part, assembled by ttpc alone (with a _start after it), is the
 # bytes glibc's compiler made of it, its .text without the padding at its
-# end.
+# end; the fields relocations fill in (relmask.pl) are the linker's, not
+# compared, and what it names from elsewhere is a stand-in label after it.
 asm-check: $(ASMS_stdlib:%=$(I)/%.dump) $(ASMS_stdlib:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
 	@for a in $(ASMS_stdlib); do \
 	    n=$$(basename $$a); \
-	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
+	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
+	      riscv64-unknown-linux-gnu-objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
 	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
 	    $(CAP) timeout 60 qemu-riscv64 $(TTPC) $(SHARED) $(FF)/$$n.asm.ff $(FF)/$$n.asm > $(FF)/$$n.asm.lst || exit 1; \
 	    size=$$(perl ../compiler/gen/s2ff.pl --size $(I)/$$a.s $(I)/$$a.dump) || exit 1; \
-	    head -c $$size $(I)/$$a.bin > $(FF)/$$n.want; \
-	    tail -c +121 $(FF)/$$n.asm | head -c $$size | cmp - $(FF)/$$n.want || exit 1; \
+	    riscv64-unknown-linux-gnu-objdump -r $(I)/$$a.ref.o > $(FF)/$$n.relocs; \
+	    head -c $$size $(I)/$$a.bin > $(FF)/$$n.want.raw; \
+	    tail -c +121 $(FF)/$$n.asm | head -c $$size > $(FF)/$$n.got.raw; \
+	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.want.raw > $(FF)/$$n.want || exit 1; \
+	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.got.raw > $(FF)/$$n.got || exit 1; \
+	    cmp $(FF)/$$n.got $(FF)/$$n.want || exit 1; \
 	    echo "asm-check: $$a: ttpc and glibc's compiler agree ($$size bytes)"; \
 	done
 
@@ -175,7 +188,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)
-	$(CAP) timeout 300 qemu-riscv64 $(TTPC) $(SHARED) $< $@ > $@.lst
+	$(CAP) timeout 900 qemu-riscv64 $(TTPC) $(SHARED) $< $@ > $@.lst
 
 define check
 $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog progs/$(1).expect asm-check

@@ -104,6 +104,9 @@ comment
 address:
   of
 comment
+  weak: C, first under a name, before its type: a global that may stay undefined (C's #pragma weak, a weak symbol nothing defines); its address is 0. weak / function / type is a function, called through 0.
+weak:
+comment
   cast: type value: C's cast, the value converted to the type: cast: / address / char / p is (char *) p. Under address / char a leaf is text, whatever it reads as: address / char / 3 is "3".
 cast::
   type
@@ -170,6 +173,12 @@ comment
 va_copy:
   to
   from
+comment
+  va_arg_pack: C, the last argument of a call to a variadic function, in a variadic function: this function's own extra arguments, passed on (GNU C's __builtin_va_arg_pack).
+va_arg_pack:
+comment
+  va_arg_pack_len: C, in a variadic function: how many extra arguments it has (GNU C's __builtin_va_arg_pack_len), an int.
+va_arg_pack_len:
 comment
   thread local: C, first under a global's name, before its type: each thread has its own. With one thread it is a global.
 thread local:
@@ -326,6 +335,18 @@ u32:
 comment
   u64 value: C, unsigned 8 bytes (not on arm); called with a value, converts it.
 u64:
+  value
+comment
+  float value: C, a 4-byte floating point number (IEEE single); called with a value, converts it.
+float:
+  value
+comment
+  double value: C, an 8-byte floating point number (IEEE double); called with a value, converts it.
+double:
+  value
+comment
+  long double value: C, a 16-byte floating point number (IEEE quad, as on riscv64).
+long double:
   value
 comment
   void: C, no value, the type of a function that returns none.
