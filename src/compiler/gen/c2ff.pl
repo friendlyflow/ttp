@@ -335,13 +335,20 @@ sub anon_places {
     my ($ast) = @_;
     my ($file, $line) = ('', 0);
     my $walk;
+    # one location as clang writes it: a macro's spelling, then its expansion
+    my $at = sub {
+        my ($l) = @_;
+        for my $p ($l->{spellingLoc} // (), $l->{expansionLoc} // $l) {
+            # the type's spelling has the place the # line markers give
+            $file = $p->{presumedFile} // $p->{file} if defined($p->{presumedFile} // $p->{file});
+            $line = $p->{presumedLine} // $p->{line} if defined($p->{presumedLine} // $p->{line});
+        }
+    };
     $walk = sub {
         my ($n) = @_;
         my $l = $n->{loc} // {};
+        $at->($l);
         $l = $l->{expansionLoc} // $l;
-        # the type's spelling has the place the # line markers give
-        $file = $l->{presumedFile} // $l->{file} if defined($l->{presumedFile} // $l->{file});
-        $line = $l->{presumedLine} // $l->{line} if defined($l->{presumedLine} // $l->{line});
         if (($n->{kind} // '') eq 'RecordDecl' && ($n->{name} // '') eq '' && $n->{completeDefinition} && defined $l->{col}) {
             (my $base = $file) =~ s{.*/}{};
             my $key = "$base:$line:$l->{col}";
@@ -351,6 +358,9 @@ sub anon_places {
                 $rec{"$n->{tagUsed} $name"} //= $n;
             }
         }
+        # after a node's place, clang writes its range: a line it leaves out
+        # later may be one of these
+        $at->($_) for grep { $_ } $n->{range}{begin}, $n->{range}{end};
         $walk->($_) for @{ $n->{inner} || [] };
     };
     $walk->($ast);
@@ -402,9 +412,103 @@ sub item { my @n = @_; @n && $isop{ $n[0]{content} } && !@{ $n[0]{children} } ? 
 # One node: the value in a : unless it is one already.
 sub atom { my @e = expr($_[0]); @e == 1 ? @e : node(':', @e) }
 
+# long double's arithmetic is glibc's soft-fp (the functions gcc calls from
+# libgcc for it): the one ttpc's C layer calls for an operation, a negation
+# or a conversion is reached as a call is. riscv64 for now (DI: 64 bits).
+my %sfop = ('+' => 'add', '-' => 'sub', '*' => 'mul', '/' => 'div');
+my %sfcmp = ('==' => 'eq', '!=' => 'ne', '<' => 'lt', '>' => 'gt', '<=' => 'le', '>=' => 'ge');
+# its floating type, from clang's spelling (ctype is not asked: it brings in
+# the types it is shown)
+sub tword { my ($n) = @_; return '' unless $n && $n->{type}; (my $q = qt($n)) =~ s/\b(const|volatile)\s+//g; $q =~ /^(float|double|long double)$/ ? $q : '' }
+sub isld { tword($_[0]) eq 'long double' }
+# an integer type of a conversion to or from long double: unsigned?
+sub unsigned_t { my ($n) = @_; my ($t) = ctype(qt($n)); $t =~ /^(u\d+|char)$/ }
+sub softfp {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    if ($k eq 'BinaryOperator' || $k eq 'CompoundAssignOperator') {
+        my $op = $n->{opcode};
+        my $ld = isld((kids($n))[0]) || isld((kids($n))[1]);
+        if ($k eq 'CompoundAssignOperator') { $op =~ s/=$//; $ld ||= ($n->{computeResultType}{qualType} // '') eq 'long double' }
+        want("__$sfop{$op}tf3") if $ld && $sfop{$op};
+        want("__$sfcmp{$op}tf2") if $ld && $sfcmp{$op};
+    } elsif ($k eq 'UnaryOperator' && $n->{opcode} eq '-' && isld($n)) {
+        want('__negtf2');
+    } elsif ($k eq 'CStyleCastExpr' || ($k eq 'ImplicitCastExpr'
+            && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/)) {
+        my ($to, $from) = (tword($n), tword((kids($n))[0]));
+        return if $to eq $from || ($to ne 'long double' && $from ne 'long double');
+        if ($to eq 'long double') {
+            want($from eq 'float' ? '__extendsftf2' : $from eq 'double' ? '__extenddftf2'
+                : '__float' . (unsigned_t((kids($n))[0]) ? 'un' : '') . 'ditf');
+        } else {
+            want($to eq 'float' ? '__trunctfsf2' : $to eq 'double' ? '__trunctfdf2'
+                : '__fix' . (unsigned_t($n) ? 'uns' : '') . 'tfdi');
+        }
+    } elsif ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean' && isld((kids($n))[0])) {
+        want($_) for '__netf2', '__extenddftf2';
+    }
+}
+
+# A GCC asm statement (glibc's own, riscv64). clang's JSON has its operands
+# but not its text: the template and the constraints come from the .i. Its
+# instructions become an asm function of their own, the inputs its
+# arguments (a0 ...), the output (one at most) what it returns (from t0);
+# the statement calls it. The instructions are those of the CSRs (soft-fp's
+# sfp-machine.h reads the rounding mode, sets the exception flags).
+my %asmfn;
+my %csrno = (fflags => 1, frm => 2, fcsr => 3);
+sub csr_ins {
+    my ($n, $op, @a) = @_;
+    my $csr = sub { my ($c) = @_; $csrno{$c} // ($c =~ /^\d+$/ ? $c : stop("the CSR $c", $n)) };
+    return node('csrrs', node(2), node('zero'), node($a[0])) if $op eq 'frrm' && @a == 1;
+    return node('csrrw', node(2), node($a[0]), node('zero')) if $op eq 'fsrm' && @a == 1;
+    return node('csrrs', node(1), node('zero'), node($a[0])) if $op eq 'frflags' && @a == 1;
+    return node('csrrw', node(1), node($a[0]), node('zero')) if $op eq 'fsflags' && @a == 1;
+    return node('csrrs', node($csr->($a[1])), node('zero'), node($a[0])) if $op eq 'csrr' && @a == 2;
+    return node("csrr$1", node($csr->($a[0])), node($a[1]), node('zero')) if $op =~ /^csr([wsc])$/ && @a == 2;
+    stop("the asm instruction $op", $n);
+}
+sub asm_stmt {
+    my ($n) = @_;
+    my $b = $n->{range}{begin}{offset} // $n->{range}{begin}{expansionLoc}{offset};
+    defined $b && $cur_unit or stop('an asm statement without its place in the .i', $n);
+    my $s = substr($cur_unit->{text}, $b, 4000);
+    $s =~ s/^\s*(?:__asm__|__asm|asm)\s*(?:(?:__volatile__|__volatile|volatile)\s*)?\(//
+        or stop('an asm statement: ' . substr($s, 0, 40), $n);
+    # up to its closing parenthesis, in parts at the colons outside strings and parentheses
+    my ($depth, $instr, $esc, @parts) = (0, 0, 0, '');
+    for my $c (split //, $s) {
+        if ($instr) { $parts[-1] .= $c; if ($esc) { $esc = 0 } elsif ($c eq '\\') { $esc = 1 } elsif ($c eq '"') { $instr = 0 } next }
+        if ($c eq '"') { $instr = 1 } elsif ($c eq '(') { $depth++ } elsif ($c eq ')') { last if $depth == 0; $depth-- }
+        if ($c eq ':' && $depth == 0) { push @parts, ''; next }
+        $parts[-1] .= $c;
+    }
+    my ($tmpl, $outs, $ins) = @parts;
+    my $template = join '', $tmpl =~ /"((?:[^"\\]|\\.)*)"/g;
+    my @oc = ($outs // '') =~ /"([^"]*)"/g;
+    my @ic = ($ins // '') =~ /"([^"]*)"/g;
+    my @ops = kids($n);
+    @ops == @oc + @ic or stop('an asm statement whose operands are not its text\'s', $n);
+    @oc <= 1 or stop('an asm statement with more than one output', $n);
+    /^=?[rK]+$/ or stop("the asm constraint $_", $n) for @oc, @ic;
+    my @reg = ((map { 't0' } @oc), (map { "a$_" } 0 .. $#ic));
+    (my $t = $template) =~ s/%(\d+)/$reg[$1] \/\/ stop("the asm operand %$1", $n)/ge;
+    my @code = map { my ($op, @a) = split /[\s,]+/; csr_ins($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /[;\n]/, $t;
+    push @code, node('mv', node('t0'), node('a0')) if @oc;
+    (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
+    $name .= '_' . @oc . @ic;
+    push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
+        unless $asmfn{$name}++;
+    my @args = map { atom($_) } @ops[@oc .. $#ops];
+    my $call = @args ? node($name, @args) : node($name);
+    return @oc ? (item(expr($ops[0])), node('='), $call) : $call;
+}
+
 sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
+    softfp($n);
     # a function as a value is its address (a function name alone is a call in ff)
     return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
     # the conversions C makes between integers and floating types, and
@@ -414,7 +518,8 @@ sub expr {
     }
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean') {
         my ($e) = kids($n);
-        return node(':', item(expr($e)), node('!='), node(hexfloat(0, qt($e))));
+        # long double has no literal of its own: 0, a double, converts
+        return node(':', item(expr($e)), node('!='), node(hexfloat(0, isld($e) ? 'double' : qt($e))));
     }
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
     return node(':', expr((kids($n))[0])) if $k eq 'ParenExpr';
@@ -425,6 +530,13 @@ sub expr {
         return @t == 1 && $t[0] ne 'int' ? node($t[0], node($n->{value})) : node($n->{value});
     }
     return node($n->{value}) if $k eq 'CharacterLiteral';
+    if ($k eq 'FloatingLiteral' && isld($n)) {
+        # a long double literal that a double holds exactly: that double, cast
+        my $v = 0 + $n->{value};
+        sprintf('%.17g', $v) eq $n->{value} || $v == 0 && $n->{value} =~ /^0(\.0*)?$/ or stop("the long double literal $n->{value}", $n);
+        want('__extenddftf2');
+        return node('cast:', node('long double'), node(hexfloat($v, 'double')));
+    }
     return node(hexfloat($n->{value}, qt($n))) if $k eq 'FloatingLiteral';
     return wide_text($n) if $k eq 'StringLiteral' && $n->{value} =~ /^(L|u|U)"/;
     return node('address', node('char'), texts($n)) if $k eq 'StringLiteral';
@@ -517,7 +629,7 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|unreachable|trap)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|unreachable|trap|clz|clzl|clzll)$/ || $name eq '__atomic_always_lock_free';
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
         want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl' && $name !~ /^__builtin_/;
         return node(ffname($name), map { item(expr($_)) } @args);
@@ -767,6 +879,14 @@ sub stmt {
             my (undef, $m) = kids($d);
             my $text = $m ? join('', map { $_->{content} } texts($m)) : '';
             node('comment', node("_Static_assert, checked by clang: $text"));
+        } elsif ($d->{kind} eq 'LabelDecl') {
+            # GNU's __label__ (a local label of a macro's): a label of the
+            # function, as every label in ff is
+            ();
+        } elsif ($d->{kind} =~ /^(RecordDecl|EnumDecl)$/) {
+            # a struct, union or enum declared in a function: a type of the
+            # unit, named for its place as an anonymous one is, where used
+            ();
         } elsif (($d->{storageClass} // '') eq 'extern') {
             $weak{ $d->{name} } //= $d if grep { $_->{kind} =~ /^(WeakAttr|ErrorAttr)$/ } @{ $d->{inner} || [] };
             want($d->{name});
@@ -774,6 +894,7 @@ sub stmt {
         } else { decl($d) }
     } kids($n) if $k eq 'DeclStmt';
     return node('return', $n->{inner} ? item(expr((kids($n))[0])) : ()) if $k eq 'ReturnStmt';
+    return asm_stmt($n) if $k eq 'GCCAsmStmt';
     return ifs('if', $n) if $k eq 'IfStmt';
     if ($k eq 'WhileStmt') { my ($c, $b) = kids($n); return node('while', item(expr($c)), sub_body($b)) }
     if ($k eq 'DoStmt') { my ($b, $c) = kids($n); return node('do while', item(expr($c)), sub_body($b)) }
@@ -828,7 +949,10 @@ sub labelled {
     my ($n) = @_;
     my @k = kids($n);
     my $sub = pop @k;
-    my @head = $n->{kind} eq 'CaseStmt' ? node('case', item(expr($k[0]))) : node('default');
+    # GNU's case range, case lo ... hi: its two values
+    my @head = $n->{kind} ne 'CaseStmt' ? node('default')
+        : @k == 2 ? node('case', item(expr($k[0])), node('...'), item(expr($k[1])))
+        : node('case', item(expr($k[0])));
     return (@head, labelled($sub)) if $sub->{kind} eq 'CaseStmt' || $sub->{kind} eq 'DefaultStmt';
     push @{ $head[0]{children} }, stmt($sub);
     @head;
@@ -967,8 +1091,23 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
                 node(ffname($_->{name}) . ':', defined $v && defined $v->{value} ? node($v->{value}) : ())
             } grep { $_->{kind} eq 'EnumConstantDecl' } kids($d)));
         } else {
-            unshift @types, node($tagname{$tag} . ':', node($kind),
-                map { node(ffname($_->{name}) . ':', map { node($_) } ctype(qt($_))) } grep { $_->{kind} eq 'FieldDecl' } kids($d));
+            # a bitfield: its type run, then its width (one with no name, padding,
+            # takes its bits under a name of its own)
+            my $pad = 0;
+            unshift @types, node($tagname{$tag} . ':', node($kind), map {
+                my $f = $_;
+                my @w;
+                if ($f->{isBitfield}) {
+                    my ($c) = grep { $_->{kind} eq 'ConstantExpr' } kids($f);
+                    defined $c && defined $c->{value} or stop('a bitfield without its width', $f);
+                    $c->{value} > 0 or stop('a bitfield of width 0', $f);
+                    @w = node($c->{value});
+                }
+                # (an unnamed field that is not a bitfield is C11's anonymous struct
+                # or union, its fields the record's own: : as before)
+                my $name = defined $f->{name} && $f->{name} ne '' ? ffname($f->{name}) : $f->{isBitfield} ? 'padding ' . ++$pad : undef;
+                node((defined $name ? "$name:" : ffname($f->{name}) . ':'), (map { node($_) } ctype(qt($f))), @w)
+            } grep { $_->{kind} eq 'FieldDecl' } kids($d));
         }
     }
 }

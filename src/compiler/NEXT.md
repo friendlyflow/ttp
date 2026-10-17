@@ -117,7 +117,7 @@ RAM NODE:
 - M2 klaar: atoi, strtol en abs: `make -C src/glibc stdlib-check` geeft met en zonder V 120, net als gcc + libc.a; de reach loopt via de C-locale door gconv, assert, abort, signalen, pthread en tunables (45 C-objecten, 12 asm-delen, alle byte voor byte gelijk in asm-check)
 - daarvoor nieuw in ttpc: `weak` (ook functies: weak / function / type), `va_arg_pack`, if zonder body (a ?: b), asm-functies die bereiken wat ze noemen, floating point op riscv64 (float, double, long double als types; + - * /, vergelijkingen, -, cast:), grotere buffers (invoer 32 MiB, knopen 64 MiB)
 - daarvoor nieuw in c2ff/s2ff: groepen per bron (glibc string/strlen, ...), libatomic-aanroepen (atomics.ff.txt uit mkatomics.pl), builtins.ff.txt, getypte literals (2UL is u64 / 2), hex floats, wide literals, ... na de parameters, syscall-stubs, tail/call/li, numerieke labels, val-door tussen functies, la.tls.ie
-- floating point nog te doen: aarch64, x86_64 (SSE2), arm (VFP; double is 8 bytes op een doel van 4) en long double via glibc's soft-fp
+- floating point op alle doelen en long double: zie hieronder
 - daarna M3 (malloc, free, realloc) en qsort, dat malloc bereikt
 - het adres van een ifunc (`address` / memcpy) geeft nog "needs a type"
 ## bouwtijd (17 okt 2026)
@@ -125,3 +125,16 @@ RAM NODE:
 - geprofileerd met perf (perf en gdb staan in flake.nix): 99% van de 32 miljoen lookups (kwof, opof, tyname) kwam uit enumlib, dat voor elke naam alle syms afliep (defkw) op zoek naar de 14 enums
 - nu: lookup, find_fn, find_reg en enumlib hebben een cache van hun antwoord, met als sleutel de bytes van de naam (tot 32, in het item; een langere naam gaat zonder cache), de lengte en de tabel of het bereik; niet de knoop of het adres van de tekst, want prim_node, prim_text en knopen op de stack krijgen andere namen (de eerste cache op de knoop gaf in cdot "unknown name: x"); enumlib vraagt daarachter alleen de enums van syms, een lijst die het na collect_syms één keer maakt
 - stdlib-prog: 17,7 s native (5 minuten onder qemu) wordt 1,6 s (6,1 s onder qemu), dezelfde bytes; `make -j` werkt: compiler-check 20 s, met -j6 12 s; string-check en stdlib-check samen 2 s
+## floating point overal (17 okt 2026)
+- x86_64 (SSE2: xmm0 L, xmm1 V; naar en van u64 met halveren en de sticky bit, of min 2^63) en aarch64 (s16/d16, s17/d17; fcmp en cset met mi en ls voor < en <=) hebben de 33 primitieven van riscv64
+- arm: een float in een woord (VFP s14, s15); een double is groter dan een woord en staat in het geheugen, zoals een struct (keuze van de gebruiker): V is zijn adres, de primitieven cc_fadd_dm ... laden d6 en d7 en schrijven in een tijdelijke plaats in het frame (X + fp)
+- long double (16 bytes) staat overal in het geheugen; + - * /, vergelijken, - en de conversies roepen soft-fp aan, zoals gcc libgcc aanroept (__addtf3 ... __trunctfdf2, keuze van de gebruiker: glibc's soft-fp)
+- in de C-laag: inmem (struct, of een floating type groter dan een woord) waar isstruct over de waarde ging; een functie die zo'n type noemt (wgate: het woord, of een global of functie ervan) reserveert 16 bytes per operator, cast:, floating literal en declaratie met waarde (wcount, in tscan); wtemp stopt met een melding als dat niet zo is
+- tests: progs/cfloats (mkcfloats.pl: 233 waarden tegen Perl's IEEE, rond 2^63, NaN, -0, afronding met de sticky bit) op de 64-bit-doelen, cfloats32 (228, zonder u64) ook op arm; een mutant zonder sticky bit faalt
+- glibc: milestone ldouble, 16 bestanden van glibc's soft-fp (mki.pl maakt hun .i met het commando van libm's e_sqrtl, in libc en zonder __SIZEOF_INT128__: u128 is dan glibc's eigen twee woorden); `make -C src/glibc ldouble-check`: progs/ldouble.c (39 resultaten, hun bits gehasht) geeft 115, net als gcc + libc.a + libgcc
+- daarvoor in c2ff: asm-statements (de tekst uit de .i, operanden in registers) worden asm-functies (CSR's: frrm, csrs fflags, ...), __label__, lokale struct/union, bitfields met hun breedte (die ontbraken!), case-bereiken (case 1 ... 63), long double-operaties bereiken hun soft-fp-functie, long double literals die een double exact is
+- daarvoor in ttpc: case lo ... hi; een global met een getypte literal (u64 / 2) is een variabele (was een functie); het masker van een bitfield van 64 bits (1 << 64 is 1 op RV64)
+- mki.pl verloor alle commando's na regel 13738 van build.log (een (echo ...) > bestand-blok zonder ) | gcc); een blok eindigt nu bij de eerste regel zonder backslash
+- ttpc2 leest 4 MiB: trim.pl geeft het shared.ff met alleen de secties waarmee het assembleert (de andere leeg); stage1 == stage2 bewijst dat het niets verandert
+- bekend, al eerder zo: compile time's emit van target-instructies vindt onder een andere host (native x86_64 ttpc, doel riscv64) alleen de instructies van de host als een functie twee compile-time-blokken heeft (jit compileert de pagina opnieuw); asm-functies hebben dat probleem niet
+- nog te doen: long double op x86_64, aarch64 en arm (soft-fp voor die doelen: glibc in ff is riscv64), globals van long double met een waarde, va_arg van een double op arm

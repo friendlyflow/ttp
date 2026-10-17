@@ -104,7 +104,19 @@ OBJS_stdlib := $(OBJS_string) $(M2:%=stdlib/%) stdlib/strtol_l stdlib/grouping c
 ASMS_stdlib := $(ASMS_string) string/memcmp-vector misc/munmap csu/sysdep posix/getpid misc/gettid nptl/syscall_cancel $(EXTRA_ASM)
 ROOTS_stdlib := $(ROOTS_string) $(M2)
 
-MILESTONES := string stdlib
+# long double, through glibc's soft-fp (on riscv64 libgcc's, the same code;
+# glibc's build does not make it, mki.pl preprocesses it as libm's soft-fp
+# code is): the functions ttpc's C layer calls for it, which c2ff also
+# reaches from the long double in the C it translates. Its own milestone:
+# progs/ldouble.c needs nothing else of glibc.
+SOFTFP := addtf3 subtf3 multf3 divtf3 eqtf2 getf2 letf2 negtf2 floatditf floatunditf fixtfdi fixunstfdi \
+	extendsftf2 extenddftf2 trunctfsf2 trunctfdf2
+OBJS_ldouble := $(SOFTFP:%=soft-fp/%)
+ASMS_ldouble :=
+ROOTS_ldouble := __addtf3 __subtf3 __multf3 __divtf3 __eqtf2 __netf2 __getf2 __gttf2 __letf2 __lttf2 __negtf2 \
+	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2
+
+MILESTONES := string stdlib ldouble
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff
 

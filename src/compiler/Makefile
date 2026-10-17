@@ -40,7 +40,7 @@ TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
@@ -116,7 +116,8 @@ run: $(P)/exit42.elf $(P)/hello.elf
 # ttpc1 gets shared.ff in its own language
 # (frozen.pl): without the comments, which it knows only in code, and
 # without else if:, which it would take for a register. Neither emits
-# anything: stage1 is the same.
+# anything: stage1 is the same. ttpc2 gets it with only the sections it
+# assembles with (trim.pl), for its 4 MiB of input.
 BOOT := $(BUILD)/boot
 
 $(BOOT):
@@ -137,8 +138,13 @@ $(BOOT)/ttpc2: $(BOOT)/shared.ff $(TTPC2_SRC) $(BOOT)/ttpc1
 $(BOOT)/ttpc2.self: $(SHARED) $(TTPC2_SRC) $(BOOT)/ttpc2
 	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(SHARED) $(TTPC2_SRC) $@ > $@.lst
 
-$(BOOT)/stage1: $(TTPC_SRC) $(BOOT)/ttpc2
-	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(TTPC_SRC) $@ > $@.lst
+# ttpc2 reads at most 4 MiB: it gets shared.ff with only riscv64's section
+# (trim.pl), which is all that emits anything for it.
+$(BOOT)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BOOT)
+	perl gen/trim.pl $< riscv64 > $@
+
+$(BOOT)/stage1: $(TTPC_SRC) $(BOOT)/ttpc2 $(BOOT)/shared1.ff
+	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff ttpc.defs.ff $(TTPC_FF) $@ > $@.lst
 
 $(BOOT)/stage2: $(TTPC_SRC) $(BOOT)/stage1
 	$(QEMU) $(BOOT)/stage1 --target riscv64 $(TTPC_SRC) $@ > $@.lst
@@ -254,9 +260,10 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack
-# cexpr and cint64 compute with u64, which a target of 4-byte words does not have.
-CSKIP_arm := cexpr cint64
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu
+# cexpr, cint64, cfloats and cgnu compute with u64, which a target of 4-byte
+# words does not have (cfloats32 is cfloats without it).
+CSKIP_arm := cexpr cint64 cfloats cgnu
 
 CROSS_x86_64 := x86_64-elf-
 TASFLAGS_x86_64 := -mindex-reg
@@ -379,8 +386,11 @@ $(BUILD)/$(1)/ttpc2: $(BUILD)/$(1)/whole.ff $(BUILD)/$(1)/seed
 $(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2
 	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
 
-$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc.ff
-	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+$(BUILD)/$(1)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BUILD)/$(1)
+	perl gen/trim.pl $$< riscv64 $(1) > $$@
+
+$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc.ff $(BUILD)/$(1)/shared1.ff
+	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/stage2: $(BUILD)/$(1)/stage1
 	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst

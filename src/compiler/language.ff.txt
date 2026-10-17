@@ -69,6 +69,15 @@ ff, the language ttpc compiles
         een variabele
         *
         3
+      a negative value next to other items goes in a lambda, C's parentheses, or the - joins the item before it: if x < 0, its value - 1; a leaf -8 is a number itself
+      example
+        if
+          x
+          <
+          0
+          :
+            -
+            1
     types
       a type is a run of leaf siblings, one word per node, the first word first; a node with children ends the run
       scalars: char (unsigned 1 byte), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void, va_list (a word)
@@ -78,7 +87,9 @@ ff, the language ttpc compiles
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
-      + - * / and the comparisons work on them, - negates, cast: converts to and from the integers (on riscv64 for now; long double later)
+      + - * / and the comparisons work on them, - negates, cast: converts between them and to and from the integers, on every target
+      a floating type larger than a word (long double; double on arm) is in memory as a struct is, a value of it the address of a temporary; arm works on its double with VFP
+      long double's arithmetic calls soft-fp's functions, as gcc calls libgcc's: __addtf3 ... __getf2, __negtf2, __floatditf ... __trunctfdf2; the program has them (glibc's soft-fp)
       type (compile time only): a word of any type, as C++'s T
       example
         my string:
@@ -111,7 +122,7 @@ ff, the language ttpc compiles
             address
             node
       a union name is a type: word:, union, then its fields as a struct's, all at 0, as large as the largest one, aligned as the most aligned
-      a bitfield: a field's type run, then its width, a number: mode:, u32, 3; it is packed into units of its type as gcc does (one that does not fit the unit begins the next), read and written as that many bits
+      a bitfield: a field's type run, then its width, a number: mode:, u32, 3; it is packed into units of its type as gcc does (one that does not fit the unit begins the next), read and written as that many bits, up to the whole unit (u64, 64)
       example
         flags:
           struct
@@ -185,7 +196,7 @@ ff, the language ttpc compiles
           :
             3
             4
-      a page item whose items have children only as : or address is a global, any other is a function
+      a page item whose items have children only as :, address or a typed literal (a type word over a number, u64 / 2, C's 2UL) is a global, any other is a function
       thread local, first under a global's name and before its type, makes it thread-local; with one thread it is a global
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       example
@@ -327,6 +338,7 @@ ff, the language ttpc compiles
           i
       do while condition body: the body first, then the condition, as C's do body while (condition)
       switch value body: to the case with that value, else the default, else past the body; case value body..., default body..., anywhere in the switch, fall through to the next one; break leaves the switch
+      case lo ... hi body...: GNU C's case range, for the values from lo to hi
       example
         switch
           c
