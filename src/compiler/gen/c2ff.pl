@@ -1193,7 +1193,7 @@ sub expr {
             my $mc = own('memcpy');
             want($mc);
             return cast_node(['address', 'void'], node(':', cast_node(['address', 'u8'],
-                node(ffname($mc), map { item(expr($_)) } @args)), node('+'), item(expr($args[2]))));
+                node(ffname($mc), map { item(expr($_)) } @args)), node('+'), atom($args[2])));
         }
         # a builtin of a libc function is a call of it, as gcc makes one
         # where it does not expand the builtin
@@ -1674,6 +1674,9 @@ sub decl {
     my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
     local $in_global = $global;
     my @i = $init ? init($init) : ();
+    # (a local's = {}: zero, an empty : for it, which a local with no items
+    # would not be)
+    @i = node(':') if !$global && !@i && $init && strip($init)->{kind} eq 'InitListExpr';
     # a global takes each item as one node
     @i = node(':', @i) if $global && @i > 1 && strip($init)->{kind} ne 'InitListExpr' && !bare_string($init);
     # under address / char a leaf is text: a value that starts with a leaf goes

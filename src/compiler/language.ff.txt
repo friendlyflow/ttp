@@ -242,7 +242,7 @@ ff, the language ttpc compiles
             4
       a page item whose items have children only as :, address, cast: or a typed literal (a type word over a number, u64 / 2, C's 2UL) is a global, any other is a function
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
-      thread local, first under a global's name and before its type, makes it thread-local; with one thread it is a global
+      thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64), else a global
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       example
         errno:

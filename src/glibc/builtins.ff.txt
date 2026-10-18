@@ -1225,16 +1225,6 @@ builtins:
     return
       a
   comment
-    gcc's __builtin_thread_pointer: the thread pointer, riscv64's tp (glibc's __thread_pointer, rseq's area is at an offset from it).
-  __builtin_thread_pointer:
-    address
-    void
-    return
-      cast:
-        address
-        void
-        tp
-  comment
     gcc's __builtin_unreachable: reaching it is undefined in C; here it does nothing.
   __builtin_unreachable:
     void

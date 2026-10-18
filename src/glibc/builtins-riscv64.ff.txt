@@ -1,0 +1,10 @@
+  comment
+    builtins-riscv64.ff.txt: the builtins of gcc for riscv64 that glibc uses, after builtins.ff.txt on its page. __builtin_thread_pointer: the thread pointer, tp (glibc's __thread_pointer; rseq's area is at an offset from it).
+  __builtin_thread_pointer:
+    address
+    void
+    return
+      cast:
+        address
+        void
+        tp

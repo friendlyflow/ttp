@@ -256,6 +256,13 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   began with (FP + `cc_entryoff`); without ifuncs the routine is empty.
   The routine's place among the library definitions is fixed the first
   time, so that both passes emit the same.
+  A program whose `_start` is the library's (glibc's start.S, which calls
+  `__libc_start_main`) gets no routine: ttpc makes the IRELATIVE table a
+  static link has instead, after the library definitions: `__rela_iplt_start`
+  (the weak declaration glibc's `apply_irel` reads), an Elf64_Rela per ifunc
+  (its word, R_RISCV_IRELATIVE, its resolver), `__rela_iplt_end`; glibc's
+  startup resolves them itself, after its TLS (`gen/patches/start.pl`). A
+  resolver is reached with its ifunc's word.
 - **Asm functions** (`progs/casmfn.ff`, `progs/casmfndefs.ff`): `name:` /
   `asm` / instructions is a function in asm, its instructions and block
   labels placed as the asm of a page is. On a definition page it goes on
@@ -350,10 +357,21 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
 - **The stack after a loop** (`progs/cloopsp.ff`): each label of while, do
   while and for syncs sp (`syncsp`), since a break or continue leaves a
   block whose locals made the stack deeper.
-- **Thread-local** (`progs/ctls.ff`): `thread local` first under a global's
-  name, before its type (`errno:` / `thread local` / `int` / `0`). A ttpc
-  program has one thread, so it is laid out as a global; per-thread blocks
-  come with threads, the source unchanged.
+- **Thread-local** (`progs/ctls.ff`, `progs/ctlstp.ff`): `thread local`
+  first under a global's name, before its type (`errno:` / `thread local` /
+  `int` / `0`). Where the target says so (`cc_tls`: riscv64 so far) it is in
+  the TLS image, as gcc and ld lay it out (variant I: at its offset from tp):
+  ttpc puts the thread locals off and lays them out after the library list,
+  between `__tls_start` (aligned to 64, after 4 KiB of zeros) and
+  `__tls_end`, which the frame's PT_TLS program header names; a use is tp +
+  its offset (`tprel`, also s2ff's for la.tls.ie). glibc's startup
+  (`__libc_setup_tls`) copies the image into the thread's block and sets
+  tp; a C `_start` of the program's own points tp at the image, the zeros
+  below it the struct pthread glibc's code finds there. Elsewhere (and in
+  compile time, and in a program that lays itself out) it is a global
+  (`gen/patches/tls.pl`). Stage A brings x86_64's variant II (fs) and
+  aarch64's tpidr_el0 with their glibc startup; a second thread waits for
+  pthread_create (clone, nptl's stack setup), which no milestone reaches.
 - **Scope** is the tree: a name is looked up from where it stands, up
   through its ancestors, innermost first. The page's functions and globals
   are seen everywhere on it; a body, an `if`/`else`/`while` body and a

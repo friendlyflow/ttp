@@ -278,6 +278,15 @@ sub call {
     if (defined $name) {
         if ($side eq 'glibc') {
             return E($args[0]) if $name eq '__builtin_expect';
+            # __builtin_mempcpy (d, s, n): memcpy (d, s, n) + n, as gcc makes
+            # it and c2ff writes it (the unit's memcpy; n without its
+            # conversion to size_t)
+            if (($c->{referencedDecl}{name} // '') eq '__builtin_mempcpy' && @args == 3) {
+                my $n2 = $args[2];
+                $n2 = (kids($n2))[0] if $n2->{kind} eq 'ImplicitCastExpr' && ($n2->{castKind} // '') eq 'IntegralCast';
+                my $mc = $asmalias{memcpy} // 'memcpy';
+                return "(cast BitCast ptr(void) (+ (cast BitCast ptr(u8) (call $mc" . join('', map { ' ' . E($_) } @args) . ')) ' . E($n2) . '))';
+            }
             return '(int ' . ((strip($args[0])->{kind} // '') =~ /^(IntegerLiteral|CharacterLiteral)$/ ? 1 : 0) . ' i32)' if $name eq '__builtin_constant_p';
         }
         @args = ($args[0]) if $name eq '__builtin_va_start';

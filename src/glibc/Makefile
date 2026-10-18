@@ -259,7 +259,7 @@ ZEROS_start := __rseq_size __rseq_offset
 WEAKS_start := __fini_array_start __fini_array_end _startup_fatal_not_constant __ehdr_start
 # a milestone's own, then (riscv64) stdio's and the startup's, each once in
 # its first place
-uniq = $(if $(1),$(firstword $(1)) $(call uniq,$(filter-out $(firstword $(1)),$(1))))
+uniq = $(strip $(if $(1),$(firstword $(1)) $(call uniq,$(filter-out $(firstword $(1)),$(1)))))
 with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_start)))
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff

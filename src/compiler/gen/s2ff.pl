@@ -198,6 +198,7 @@ my %got;            # the addresses a function's pic la reads, its GOT entries
 my %numeric;        # how many times each numeric label (1:) has come so far
 my $other;          # another section than .text, while in one
 my @pending;        # its labels so far, before the bytes they name
+my %datadef;        # the labels of data that is there (zero objects)
 # GNU as's next instruction, its bytes counted; whether it ends a function
 sub take {
     my $m = $made[$n++] or fail "GNU as made fewer instructions than $src has";
@@ -244,10 +245,13 @@ while (my $l = <$s>) {
         if (defined $other) {
             next if $st =~ /^\.(globl|global|weak|type|size|hidden|align|p2align|balign)\b/;
             if ($st =~ /^([.\w]+):$/) { push @pending, $1; next }
-            if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)); next }
+            # (an alias of a label with no bytes, start.S's data_start, has
+            # nothing to name)
+            if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)) if $datadef{$2}; next }
             next if $other =~ /^\.(pre)?init_array$|^\.fini_array$/ && $st =~ /^\.dc\.a\s+[.\w]+$/;
             if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
                 my ($first, @more) = @pending;
+                $datadef{$_} = 1 for @pending;
                 push @fns, map { node("$_:", node('alias'), node($first)) } @more;
                 warn "s2ff: $where: $first is zero, c2ff --zero $first makes it\n";
                 @pending = ();

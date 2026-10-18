@@ -96,7 +96,7 @@ for my $page (@top) {
             else { $var{$name} = { node => $d, from => 1, weak => 1 } }
             next;
         }
-        if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1 }; next }
+        if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1, glibc => $glibc }; next }
         if (is_function($d)) { $fn{$name} = { kind => 'c', node => $d, from => 0 }; $glibcpage{$name} = 1 if $glibc }
         else { $var{$name} = { node => $d, from => 0, glibc => $glibc } }
     }
