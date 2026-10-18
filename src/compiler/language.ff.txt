@@ -27,6 +27,23 @@ ff, the language ttpc compiles
           done:
             ret
       a group's children are local to the group; a section is the exception: calling it puts the definitions of its groups in scope
+      a function whose name is only digits (0: 1: 2: ...) is a layer, the overflow of its parent past the 255 children a node holds: its children count as the parent's, in every scope, code and labels too
+        a layer may hold layers, each level 255 more children
+        a layer is never a name itself
+        example
+          0:
+            a:
+              ret
+            0:
+              b:
+                ret
+          1:
+            c:
+              call
+                a
+              call
+                b
+              ret
       first the function, then the call
   pages
     every page but the last holds definitions: instructions, macros, constants, sections
