@@ -51,6 +51,7 @@ ff, the language ttpc compiles
     two passes: the first finds the labels, the second emits
     a program page without origin or elf_header of its own is wrapped in the target's frame (origin, ELF header, program, file_end, bss, mem_end)
     import path, first on a program page, reads that tree and puts its pages in front of the program, each path once, from the folder of the tree
+      a folder with an index.ff is a library, read lazily: only the files of what the program reaches (index.ff is a page index: of name: / file)
   asm
     operands go in the reverse of GNU as, the destination last (stores aside)
       example

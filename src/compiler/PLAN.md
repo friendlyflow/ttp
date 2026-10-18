@@ -483,6 +483,20 @@ where the output goes, all of it is in the file.
   nothing; after other items it is an error. Any program may import:
   `ttpc progs/cimport.ff out` (`import` / `../shared.ff`) is `ttpc
   shared.ff progs/chello.ff out`.
+- **`import`** / folder, a folder with an `index.ff` (the user's choice,
+  18 Oct 2026, like C's headers), is a library read lazily: its index is
+  a page `index:` of `name:` / file, and ttpc reads only the files of what
+  the program reaches. The program's node texts (each node's) are looked
+  up among the index's names; a name found is reached, its file read once
+  (in front of the program, as an import) and its definition looked
+  through in turn (an enum's for its constants, an asm function's for its
+  entries), until nothing is new; first the names ttpc calls by itself
+  (`__riscv_hwprobe`, `_start`, the soft-fp of long double). A text that
+  is a name by chance reaches a little more, never less. `gen/ffsplit.pl`
+  makes the folder of a library tree, a file per page (glibc's milestones:
+  `make -C src/glibc` makes `NAME/`, which `NAME-prog` imports);
+  `progs/clazy.ff` imports `progs/clazylib`, whose `never.ff` is no tree
+  and is never read.
 - **A build file** is a program page. ttpc runs its top-level lambdas `:`
   / `compile time`, with the whole page, so they can call its C
   functions; it assembles and writes nothing of its own.

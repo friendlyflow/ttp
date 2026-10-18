@@ -229,7 +229,7 @@ WEAKS_floats := $(WEAKS_stdio)
 
 MILESTONES := string stdlib ldouble malloc stdio floats
 
-.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names
+.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -313,8 +313,9 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 
 # A test program in C, progs/NAME.c, built two ways: with gcc against
 # libc.a (glibc's own startup, no builtins: each call reaches glibc), and
-# through c2ff --program, with ttpc against NAME.ff, the milestone of that
-# name (each takes in the ones before it). Both run with V and without; all
+# through c2ff --program, with ttpc against the milestone of that name
+# (each takes in the ones before it), imported as the folder NAME (the
+# files of what the program reaches, read lazily). Both run with V and without; all
 # four must exit with the status on the first line of progs/NAME.expect
 # ("exit N") and print the rest of it.
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
@@ -326,15 +327,22 @@ $(FF)/%.ref: progs/%.c $(OBJ)/libc.a
 	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
 
+# A milestone as a folder that a program imports lazily (ffsplit.pl): a file
+# per page and index.ff, the file of each name; ttpc reads only the files
+# of what the program reaches.
+$(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
+	rm -rf $(FF)/$*
+	$(CAP) timeout 120 perl ../compiler/gen/ffsplit.pl $(FF)/$*.ff.txt $(FF)/$*
+
 $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	mkdir -p $(FF)
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $*.ff $(if $(filter $*,$(EARLY)),--early) $(if $(filter $*,$(EXIT)),--exit) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(EARLY)),--early) $(if $(filter $*,$(EXIT)),--exit) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
-$(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)
+$(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
 	$(CAP) timeout 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
 
 # what a check expects: progs/NAME.expect, or progs/NAME.<target>.expect
