@@ -602,14 +602,17 @@ sub asm_ins {
     return node("csrr$1", node($csr->($a[0])), node($a[1]), node('zero')) if $op =~ /^csr([wsc])$/ && @a == 2;
     # lr, sc and the AMOs, their .aq and .rl the bits before the registers
     if ($op =~ /^(lr|sc|amo(?:swap|add|xor|and|or|min|max|minu|maxu))\.([wd])((?:\.aq|\.rl|\.aqrl)*)$/) {
-        my ($name, $aq, $rl) = ("$1.$2", ($3 =~ /aq/ ? 1 : 0), ($3 =~ /rl/ ? 1 : 0));
-        return node($name, node($aq), node($rl), $base->($a[1]), node($a[0])) if $1 eq 'lr' && @a == 2;
+        # (the parts kept first: a match on one of them sets $1 ... anew)
+        my ($ins, $w, $bits) = ($1, $2, $3);
+        my ($name, $aq, $rl) = ("$ins.$w", ($bits =~ /aq/ ? 1 : 0), ($bits =~ /rl/ ? 1 : 0));
+        return node($name, node($aq), node($rl), $base->($a[1]), node($a[0])) if $ins eq 'lr' && @a == 2;
         return node($name, node($aq), node($rl), node($a[1]), $base->($a[2]), node($a[0])) if @a == 3;
     }
     # .insn i 0x0f, 0, x0, x0, imm: a fence by its fields (fm, pred, succ in imm),
     # glibc's spin hint (0x010: fence w, 0, Zihintpause's pause)
     if ($op eq '.insn' && "@a" =~ /^i 0x0f 0 x0 x0 (0x[0-9a-f]+|\d+)$/i) {
-        my $imm = oct($1 =~ /^0x/i ? $1 : "0$1") & 0xfff;
+        my $v = $1;
+        my $imm = oct($v =~ /^0x/i ? $v : "0$v") & 0xfff;
         return node('fence', node($imm >> 8), node(($imm >> 4) & 15), node($imm & 15));
     }
     stop("the asm instruction $op", $n);
@@ -1488,7 +1491,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
                 # (an unnamed field that is not a bitfield is C11's anonymous struct
                 # or union, its fields the record's own: : as before)
                 my $name = defined $f->{name} && $f->{name} ne '' ? ffname($f->{name}) : $f->{isBitfield} ? 'padding ' . ++$pad : undef;
-                node((defined $name ? "$name:" : ffname($f->{name}) . ':'), (map { node($_) } ctype(qt($f))), @w)
+                node((defined $name ? "$name:" : ':'), (map { node($_) } ctype(qt($f))), @w)
             } grep { $_->{kind} eq 'FieldDecl' } kids($d));
         }
     }

@@ -220,7 +220,9 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   (`progs/cvarargs.ff`): a call to it pushes its arguments, then their
   count (then a struct result's address) and loads no registers; the
   callee finds argument i at FP + `cc_argoff` + (1 + result) slots +
-  (n-1-i) slots, n read at run time (`argaddr`). `va_list` is a word,
+  (n-1-i) slots, n read at run time (`argaddr`). An argument of a type kept in
+  memory goes as its value, its object's address, which `vaarg` loads
+  from the slot as a word. `va_list` is a word,
   `va_start` / ap points it at the first argument after the parameters,
   `va_arg` / ap / type reads one and steps ap down a slot, `va_end` does
   nothing, `va_copy` / to / from copies.

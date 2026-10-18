@@ -132,7 +132,7 @@ ASMS_malloc := $(ASMS_stdlib) misc/madvise misc/mprotect misc/sysinfo string/mem
 ROOTS_malloc := $(ROOTS_stdlib) $(M3) __libc_early_init
 # the milestones whose programs run glibc's __libc_early_init first, as its
 # static startup does (malloc needs its arena set up)
-EARLY := malloc stdio
+EARLY := malloc stdio floats
 
 # M4, stdio: printf without floats, puts and putchar, with M3, on stdout;
 # exit (main ()) flushes it, as C's startup does (EXIT: c2ff --exit).
@@ -174,7 +174,7 @@ OBJS_stdio := $(OBJS_malloc) $(OBJS_ldouble) stdio-common/printf libio/ioputs li
 	dlfcn/dlopen libio/filedoalloc libio/wfiledoalloc locale/C-address locale/C-collate locale/C-identification locale/C-measurement locale/C-messages locale/C-monetary locale/C-name locale/C-numeric locale/C-paper locale/C-telephone locale/C-time termios/isatty_nostatus
 ASMS_stdio := $(ASMS_malloc) setjmp/setjmp setjmp/__longjmp posix/sched_getp posix/sched_primax posix/sched_primin posix/sched_gets posix/sched_sets elf/dl-trampoline
 ROOTS_stdio := $(ROOTS_malloc) $(M4)
-EXIT := stdio
+EXIT := stdio floats
 # objects glibc's asm only reserves, zeroed in .bss, that C reaches: c2ff --zero
 # makes each a global of the type C declares (elf/dl-debug-symbols.S)
 ZEROS_stdio := _r_debug_extended
@@ -184,7 +184,16 @@ ZEROS_stdio := _r_debug_extended
 # which the shared build has; gcc's optimizer left no call of it here
 WEAKS_stdio := __init_array_start __init_array_end __preinit_array_start __preinit_array_end _dl_runtime_profile
 
-MILESTONES := string stdlib ldouble malloc stdio
+# M4, floats: printf of double and long double (printf_fp, printf_fphex),
+# which the stdio reach has already, and the soft-fp the program calls for
+# its own long double
+OBJS_floats := $(OBJS_stdio)
+ASMS_floats := $(ASMS_stdio)
+ROOTS_floats := $(ROOTS_stdio) $(ROOTS_ldouble)
+ZEROS_floats := $(ZEROS_stdio)
+WEAKS_floats := $(WEAKS_stdio)
+
+MILESTONES := string stdlib ldouble malloc stdio floats
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff
 

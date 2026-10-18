@@ -163,3 +163,7 @@ RAM NODE:
 - bouwtijd: c2ff leest met JSON::XS (flake.nix), de Storable-cache van M3 is weg; ttpc2 kreeg de caches van ttpc (keuze van de gebruiker): de bootstrap van 90 s naar 33 s
 - tests: progs/clabels, calloca, caddrlit, canon, casmentry (alleen riscv64), cloopsp, ccond; cloopsp crasht met de ttpc van 1733211
 - commentaar: één comment-knoop met meerdere teksten, nooit twee na elkaar, nooit ingekort tot 255; shared.ff.txt, de macros en caddrc, casmfn en cws zijn zo samengevoegd
+## M4 floats (18 okt 2026)
+- printf van double en long double: `make -C src/glibc floats-check`: progs/floats.c (%f %F %e %E %g %G %a %A, vlaggen, breedte, precisie ook uit *, afronding naar even, 1e20, de kleinste subnormale, DBL_MAX, inf en nan met teken, en met L: 3/7, 1e-600, 1e600 in long double, uitgerekend door soft-fp) print hetzelfde als gcc + libc.a en eindigt met 169; de reach is die van stdio (printf_fp en printf_fphex zaten er al in) plus de soft-fp-roots voor het programma zelf
+- in ttpc: va_arg van een type in het geheugen (een struct, long double; double op arm) laadt het slot als een woord, het adres van het object dat de aanroep pusht; het nam het adres van het slot zelf (test progs/cvamem.ff op elk doel)
+- in c2ff: lr/sc/amo met .aqrl verloren hun rl-bit en de hint van .insn i 0x0f (glibc's pause, 0x010) werd fence 0 0 0: een match op $1 zette $1 opnieuw; een anoniem lid gaf waarschuwingen

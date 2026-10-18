@@ -282,6 +282,7 @@ ff, the language ttpc compiles
       the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0)
       a call is name with its arguments in order, the first 8 in the argument registers, the others on the stack; its value is what return gives
       a leaf ... after the parameters takes more arguments: va_list is a word, va_start ap points it at the first after the parameters, va_arg ap type takes one, va_end ap, va_copy to from
+      an extra argument of a type kept in memory (a struct, long double) goes as its value, the address of its object; va_arg of that type is the object, which a declaration of it copies
       in such a function va_arg_pack, the last argument of a call to another one, passes its own extra arguments on, and va_arg_pack_len is how many there are (GNU C's __builtin_va_arg_pack), at run time
       example
         sum:
