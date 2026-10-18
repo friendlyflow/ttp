@@ -142,6 +142,7 @@ ff, the language ttpc compiles
           blue:
       a function type: compare:, function, its return type run, its parameters name: and a type; address compare is a pointer to such a function
       a variable or a global holding one, called with arguments, calls the function it points to; address f is a function's address
+      a path that reaches one (a field, an element) calls it with the rest of the path as arguments: p / add / x / y is C's p->add (x, y), tab / 0 / add / x / y is tab[0].add (x, y)
       example
         binary:
           function
@@ -185,6 +186,7 @@ ff, the language ttpc compiles
       one item on a scalar or an address: its value, converted to the type
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
       a field or element that is a struct, union or array takes a : holding its items, as C's inner braces; what has no item is zero, in a local too
+      an empty : is a zero struct, union or array, as C's {}
       example
         pts:
           array
@@ -196,7 +198,8 @@ ff, the language ttpc compiles
           :
             3
             4
-      a page item whose items have children only as :, address or a typed literal (a type word over a number, u64 / 2, C's 2UL) is a global, any other is a function
+      a page item whose items have children only as :, address, cast: or a typed literal (a type word over a number, u64 / 2, C's 2UL) is a global, any other is a function
+      each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local; with one thread it is a global
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       example

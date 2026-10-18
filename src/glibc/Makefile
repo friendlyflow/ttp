@@ -116,7 +116,25 @@ ASMS_ldouble :=
 ROOTS_ldouble := __addtf3 __subtf3 __multf3 __divtf3 __eqtf2 __netf2 __getf2 __gttf2 __letf2 __lttf2 __negtf2 \
 	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2
 
-MILESTONES := string stdlib ldouble
+# M3, malloc: malloc, free, realloc and calloc, with M2, and qsort, which
+# was waiting for them.
+M3 := malloc free realloc calloc qsort
+OBJS_malloc := $(OBJS_stdlib) malloc/malloc stdlib/qsort \
+	io/close_nocancel_nostatus misc/getsysstats elf/enbl-secure misc/mremap io/open64_nocancel nptl/cleanup_compat \
+	io/read_nocancel misc/sbrk misc/brk stdlib/strtoul stdlib/strtoul_l posix/sched_cpucount \
+	string/memchr string/memchr-generic string/memmove string/memmove-generic string/strncmp string/strncmp-generic \
+	elf/libc_early_init time/clock_gettime ctype/ctype-info nptl/vars csu/libc-tls misc/hugepages stdlib/getrandom \
+	resource/getrlimit64 misc/single_threaded nptl/pthread_mutex_conf io/close_nocancel dirent/getdents64 nptl/nptl-stack \
+	io/pread64_nocancel posix/sysconf misc/getauxval posix/get_child_max misc/getclktck misc/getdtsz misc/getpagesize \
+	string/strrchr string/strrchr-generic string/strstr string/strnlen string/memrchr
+ASMS_malloc := $(ASMS_stdlib) misc/madvise misc/mprotect misc/sysinfo string/memchr-vector string/memmove-vector \
+	string/strncmp-vector string/strrchr-vector
+ROOTS_malloc := $(ROOTS_stdlib) $(M3) __libc_early_init
+# the milestones whose programs run glibc's __libc_early_init first, as its
+# static startup does (malloc needs its arena set up)
+EARLY := malloc
+
+MILESTONES := string stdlib ldouble malloc
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff
 
@@ -138,6 +156,7 @@ $(I)/%.dump $(I)/%.bin: $(I)/%.s
 $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w $< > $@
+	$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --store $@
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots, then
 # s2ff's of its asm parts, then the builtins written by hand and libatomic's
@@ -160,9 +179,9 @@ $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end; the fields relocations fill in (relmask.pl) are the linker's, not
 # compared, and what it names from elsewhere is a stand-in label after it.
-asm-check: $(ASMS_stdlib:%=$(I)/%.dump) $(ASMS_stdlib:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
+asm-check: $(ASMS_malloc:%=$(I)/%.dump) $(ASMS_malloc:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
-	@for a in $(ASMS_stdlib); do \
+	@for a in $(ASMS_malloc); do \
 	    n=$$(basename $$a); \
 	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
 	      riscv64-unknown-linux-gnu-objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
@@ -206,7 +225,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program $*.ff $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program $*.ff $(if $(filter $*,$(EARLY)),--early) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)

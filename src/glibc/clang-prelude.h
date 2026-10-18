@@ -10,3 +10,11 @@ extern int __builtin_va_arg_pack (void);
 /* gcc 15's C23 rotate, which clang 21 does not have (glibc's PTR_DEMANGLE);
    glibc in ff has it in builtins.ff.txt. */
 extern unsigned long __builtin_stdc_rotate_right (unsigned long, unsigned int);
+/* gcc's C23 bit builtins and __builtin_add_overflow_p, which clang 21 does
+   not have (malloc: tcache's key, its bins, an alignment), on a word as
+   glibc uses them; glibc in ff has them in builtins.ff.txt. */
+extern unsigned int __builtin_stdc_count_ones (unsigned long);
+extern unsigned int __builtin_stdc_bit_width (unsigned long);
+extern _Bool __builtin_stdc_has_single_bit (unsigned long);
+extern unsigned long __builtin_stdc_bit_ceil (unsigned long);
+extern _Bool __builtin_add_overflow_p (unsigned long, unsigned long, unsigned long);
