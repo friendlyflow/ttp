@@ -42,7 +42,10 @@
 #
 # The ASTs (1.9 GB of JSON for M4) are read with JSON::XS, which flake.nix
 # gives perl, 80 times faster than core Perl's JSON::PP, which it falls
-# back on.
+# back on; each once, by a pass of its own that c2ff keeps next to it
+# (tu.c2ff, see unit_pass), several at once (C2FF_JOBS, 3). The reach then
+# reads those: M4's floats in 13 s and 300 MB, against 62 s and 950 MB
+# with every AST in memory.
 #
 # A host tool, not part of ttpc.
 use strict;
@@ -51,6 +54,8 @@ use FindBin;
 use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 use FF qw(node write_txt read_ff);
+use Digest::SHA;
+use POSIX ();
 
 # ---- types ------------------------------------------------------------------
 # A C type as clang prints it (its canonical form, desugaredQualType when
@@ -347,17 +352,18 @@ sub own_name {
 }
 sub own { my ($name) = @_; $cur_unit && $own{$cur_unit} && $own{$cur_unit}{$name} // $name }
 sub inner_tags { my ($n) = @_; (($n->{kind} // '') =~ /^(EnumDecl|RecordDecl)$/ ? $n : ()), map { inner_tags($_) } @{ $n->{inner} || [] } }
+units_ready(@units);
 for my $u (@units) {
     # clang's ids are addresses, unique in one unit only: a typedef's
     # anonymous tag is found among its own unit's (an id of another unit's
     # enum made pthread_rwlockattr_t's union an enum)
     %recid = ();
     %enumid = ();
-    my $ast = ast_of($u->{json});
+    my $ast = unit_of($u);
     open my $h, '<', $u->{i} or die "c2ff: cannot open $u->{i}: $!\n";
     $u->{text} = do { local $/; <$h> };
     close $h;
-    anon_places($ast);
+    places($ast->{ff_places});
     my $file = '';
     for my $d (@{ $ast->{inner} }) {
         $file = $d->{loc}{file} if $d->{loc} && $d->{loc}{file};
@@ -417,9 +423,10 @@ for my $u (@units) {
             if (grep { $_->{kind} eq 'CompoundStmt' } @in) { my $k = own_name(\%fn, $name, $d, $u); $fn{$k} //= [$d, $u] }
             # (and under address a local named as a tag would be the type: struct
             # msort_param msort_param in qsort)
-            $localname{$_->{name}} = 1 for grep { defined $_->{name} } locals($d);
+            # (both found by the unit's own pass, unit_pass)
+            $localname{$_} = 1 for @{ $d->{ff_locals} };
             # its own enums and records (getrandom's struct vgetrandom_opaque_params), as globals
-            for my $t (inner_tags($d)) {
+            for my $t (@{ $d->{ff_tags} }) {
                 if ($t->{kind} eq 'EnumDecl') { index_enum($t) }
                 elsif ($t->{completeDefinition}) {
                     $recid{$t->{id}} = $t;
@@ -467,9 +474,13 @@ sub anon_fields {
 # Any other anonymous struct or union (in a sizeof, a cast) is named after
 # its place: struct at __libc_assert_fail.c:29. Clang's JSON leaves out a
 # location's file and line where they are the previous one's, so the walk
-# keeps them, in the order clang wrote them.
+# keeps them, in the order clang wrote them. The unit's own pass
+# (unit_pass) makes the list of what it finds, in order: [key, kind, name,
+# node] for such a record, [typeof, type] for a typeof; places takes them
+# in, in the order of the units, as the walk once did.
 sub anon_places {
     my ($ast) = @_;
+    my (@found, %seen);
     my ($file, $line) = ('', 0);
     my ($actual, $delta) = (0, 0);   # the .i's line, and it less the presumed one
     my $walk;
@@ -496,16 +507,13 @@ sub anon_places {
         if (($n->{kind} // '') eq 'RecordDecl' && ($n->{name} // '') eq '' && $n->{completeDefinition} && defined $l->{col}) {
             (my $base = $file) =~ s{.*/}{};
             my $key = "$base:$line:$l->{col}";
-            unless ($anon{$key}) {
-                my $name = "$n->{tagUsed} at $base:$line";
-                $anon{$key} = ["$n->{tagUsed} $name", $name];
-                $rec{"$n->{tagUsed} $name"} //= $n;
-            }
+            push @found, [$key, $n->{tagUsed}, "$n->{tagUsed} at $base:$line", $n] unless $seen{"anon $key"}++;
         }
         # what a typeof (expression) is, where clang says it (libio's vtable
         # check has typeof (((struct _IO_FILE_plus){}).vtable) *, without it)
         if ((my $ty = $n->{type}) && $n->{type}{qualType}) {
-            $desugar{ $ty->{qualType} } //= $ty->{desugaredQualType} if defined $ty->{desugaredQualType} && $ty->{qualType} =~ /^(?:typeof|__typeof__) \(/;
+            push @found, [$ty->{qualType}, $ty->{desugaredQualType}]
+                if defined $ty->{desugaredQualType} && $ty->{qualType} =~ /^(?:typeof|__typeof__) \(/ && !$seen{"typeof $ty->{qualType}"}++;
         }
         # after a node's place, clang writes its range: a line it leaves out
         # later may be one of these
@@ -513,6 +521,131 @@ sub anon_places {
         $walk->($_) for @{ $n->{inner} || [] };
     };
     $walk->($ast);
+    undef $walk;
+    \@found;
+}
+# ---- each unit's own pass, cached --------------------------------------------
+# What c2ff needs of a unit that no other unit changes is worked out once,
+# one unit at a time, and kept next to its AST: tu.c2ff, the unit's AST as
+# Storable has it, without the bodies of its functions (tu.c2ff.bodies,
+# each read when the reach takes its function), with the anonymous records'
+# places (anon_places) and each function's locals and own tags. The first
+# line of tu.c2ff is its key: c2ff's own hash and the AST's (its size and
+# time first: a JSON made again, the same, is not done again). The units
+# without one are done in parallel, C2FF_JOBS at once (3), each its own
+# process with one AST in memory, so the reach itself reads no JSON.
+use Storable qw(nfreeze thaw);
+my $self_hash;
+sub unit_file { (my $f = $_[0]{json}) =~ s/\.json$//; "$f.c2ff" }
+sub json_key {
+    my ($u, $full) = @_;
+    $self_hash //= Digest::SHA->new(256)->addfile("$FindBin::Bin/c2ff.pl")->hexdigest;
+    my @st = stat $u->{json} or die "c2ff: cannot open $u->{json}: $!\n";
+    ("c2ff unit 1 $self_hash", "$st[7] $st[9]", $full ? Digest::SHA->new(256)->addfile($u->{json})->hexdigest : ());
+}
+# The key of the unit's cache, if it is the AST's of now: else undef.
+sub unit_fresh {
+    my ($u) = @_;
+    my $file = unit_file($u);
+    open my $h, '<:raw', $file or return;
+    my $line = <$h> // return;
+    chomp $line;
+    my ($self, $stamp, $hash) = split / \| /, $line;
+    my ($s, $t) = json_key($u);
+    return unless defined $hash && $self eq $s;
+    return $h if $stamp eq $t;
+    my (undef, undef, $now) = json_key($u, 1);
+    return unless $now eq $hash;
+    # (the same AST, made again: its new stamp)
+    my $rest = do { local $/; <$h> };
+    close $h;
+    write_unit($file, "$s | $t | $hash\n", $rest);
+    open $h, '<:raw', $file or die "c2ff: cannot open $file: $!\n";
+    <$h>;
+    $h;
+}
+sub write_unit {
+    my ($file, @parts) = @_;
+    open my $o, '>:raw', "$file.$$" or die "c2ff: cannot write $file.$$: $!\n";
+    print $o @parts;
+    close $o or die "c2ff: cannot write $file.$$: $!\n";
+    rename "$file.$$", $file or die "c2ff: cannot rename $file.$$: $!\n";
+}
+sub unit_pass {
+    my ($u) = @_;
+    my $file = unit_file($u);
+    my ($s, $t, $hash) = json_key($u, 1);
+    my $ast = ast_of($u->{json});
+    $ast->{ff_places} = anon_places($ast);
+    my ($bodies, $at) = ('', 0);
+    for my $d (@{ $ast->{inner} }) {
+        # (what nothing reads after anon_places: the places inside a type,
+        # but where a message says where it is)
+        if (($d->{kind} // '') =~ /^(RecordDecl|EnumDecl|TypedefDecl)$/) { unplace($_) for @{ $d->{inner} || [] } }
+        next unless ($d->{kind} // '') eq 'FunctionDecl';
+        $d->{ff_locals} = [map { $_->{name} } grep { defined $_->{name} } locals($d)];
+        $d->{ff_tags} = [inner_tags($d)];
+        # (a declaration's parameters: its type has them)
+        $d->{inner} = [grep { $_->{kind} ne 'ParmVarDecl' } @{ $d->{inner} }]
+            if $d->{inner} && !grep { $_->{kind} eq 'CompoundStmt' } @{ $d->{inner} };
+        for my $k (@{ $d->{inner} || [] }) {
+            next unless $k->{kind} eq 'CompoundStmt';
+            my $b = nfreeze($k);
+            $bodies .= $b;
+            $k = { kind => 'CompoundStmt', ff_body => [$at, length $b] };
+            $at += length $b;
+        }
+    }
+    write_unit("$file.bodies", $bodies);
+    write_unit($file, "$s | $t | $hash\n", nfreeze($ast));
+}
+sub unplace { my ($n) = @_; delete @$n{qw(loc range)}; unplace($_) for @{ $n->{inner} || [] } }
+sub units_ready {
+    my @todo = grep { !unit_fresh($_) } @_;
+    my $jobs = $ENV{C2FF_JOBS} || 3;
+    my %pid;
+    while (@todo || %pid) {
+        while (@todo && keys %pid < $jobs) {
+            my $u = shift @todo;
+            my $pid = fork // die "c2ff: cannot fork: $!\n";
+            if (!$pid) { eval { unit_pass($u); 1 } or do { print STDERR $@; POSIX::_exit(1) }; POSIX::_exit(0) }
+            $pid{$pid} = $u;
+        }
+        my $pid = wait;
+        last if $pid < 0;
+        my $u = delete $pid{$pid} or next;
+        die "c2ff: the pass of $u->{json} failed\n" if $?;
+    }
+}
+# A unit's AST from its cache; a function's body when the reach takes it.
+sub unit_of {
+    my ($u) = @_;
+    my $h = unit_fresh($u) or die "c2ff: no pass of $u->{json}\n";
+    my $ast = thaw(do { local $/; <$h> });
+    close $h;
+    $ast;
+}
+# (a copy: the body goes when its function is done)
+sub body_of {
+    my ($d, $u) = @_;
+    $d = { %$d, inner => [@{ $d->{inner} || [] }] };
+    for my $k (@{ $d->{inner} }) {
+        my $at = $k->{ff_body} or next;
+        unless ($u->{bodies}) { open $u->{bodies}, '<:raw', unit_file($u) . '.bodies' or die "c2ff: cannot open the bodies of $u->{json}: $!\n" }
+        sysseek $u->{bodies}, $at->[0], 0 or die "c2ff: cannot seek in the bodies of $u->{json}\n";
+        sysread($u->{bodies}, my $b, $at->[1]) == $at->[1] or die "c2ff: cannot read the bodies of $u->{json}\n";
+        $k = thaw($b);
+    }
+    $d;
+}
+sub places {
+    for (@{ $_[0] }) {
+        if (@$_ == 2) { $desugar{ $_->[0] } //= $_->[1]; next }
+        my ($key, $kind, $name, $n) = @$_;
+        next if $anon{$key};
+        $anon{$key} = ["$kind $name", $name];
+        $rec{"$kind $name"} //= $n;
+    }
 }
 
 # Clang spells one anonymous type in more than one way (enum (unnamed enum at
@@ -1615,7 +1748,7 @@ while (defined(my $name = next_name())) {
         want($r);
         next;
     }
-    if (my $f = $fn{$name}) { local $cur_unit = $f->[1]; push @out, [$f->[1], function($name, $f->[0])]; next }
+    if (my $f = $fn{$name}) { local $cur_unit = $f->[1]; push @out, [$f->[1], function($name, body_of(@$f))]; next }
     if (my $v = $var{$name}) { local $cur_unit = $v->[1]; local $cur_global = $name; push @out, [$v->[1], decl($v->[0], 1, $name ne $v->[0]{name} ? ffname($name) : undef)]; next }
     # a weak name nothing defines: its address is 0 (ttpc's weak)
     if (my $w = $weak{$name}) {
