@@ -467,7 +467,20 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 refresh:
 	perl gen/mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 
+# A change of ttpc is a patch script (gen/patches/*.pl, see gen/patchlib.pl),
+# committed with the tree it changes, so that it can be replayed when a
+# merge of the tree conflicts: T (ttpc.ff) is dumped to text, the script
+# P edits the text, and the text becomes T again.
+T ?= $(TTPC_FF)
+patch: | $(BUILD)
+	@test -n "$(P)" || { echo "usage: make patch P=gen/patches/x.pl [T=ttpc.ff]"; exit 1; }
+	perl gen/fftext.pl txt $(T) > $(BUILD)/patch.ff.txt
+	PATCHLIB=$(CURDIR)/gen/patchlib.pl perl $(P) $(BUILD)/patch.ff.txt
+	perl gen/fftext.pl ff $(BUILD)/patch.ff.txt > $(BUILD)/patch.ff
+	mv $(BUILD)/patch.ff $(T)
+	@echo "patch: $(P) on $(T)"
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh clean
+.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean

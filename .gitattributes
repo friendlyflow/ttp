@@ -1,4 +1,6 @@
-# ff trees are binary; with the textconv driver from src/compiler/gen/fftext.pl
-# git diffs them as text:
+# ff trees are binary; fftext.pl (src/compiler/gen) turns them into text and
+# back without loss, so git diffs them as text (textconv) and merges them as
+# text (ffmerge.sh). `make git-setup` registers both in the repository:
 #   git config diff.ff.textconv "perl src/compiler/gen/fftext.pl txt"
-*.ff diff=ff
+#   git config merge.ff.driver "sh src/compiler/gen/ffmerge.sh %O %A %B %P"
+*.ff diff=ff merge=ff
