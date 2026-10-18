@@ -100,6 +100,7 @@
             # builds): perf samples it, gdb looks inside
             perf
             gdb
+            lazygit # git in the terminal
           ]) ++ (glibcTools pkgs) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
 
           # For src/glibc: the pinned source, the kernel's headers, and the
