@@ -50,7 +50,7 @@ ff, the language ttpc compiles
     the last page is the program: its functions are placed labels, block form, they hold the code up to the next label; nested ones are local
     two passes: the first finds the labels, the second emits
     a program page without origin or elf_header of its own is wrapped in the target's frame (origin, ELF header, program, file_end, bss, mem_end)
-    import path, first on a program page, reads that tree and puts its pages in front of the program, each path once, from the folder of the tree
+    include path, first on a program page, reads that tree and puts its pages in front of the program, each path once, from the folder of the tree
       a folder with an index.ff is a library, read lazily: only the files of what the program reaches (index.ff is a page index: of name: / file)
   asm
     operands go in the reverse of GNU as, the destination last (stores aside)
@@ -64,7 +64,7 @@ ff, the language ttpc compiles
     contexts: code (encode and emit, or expand), field (the fields of an encoding, MSB first), exec (at assemble time, on virtual registers, riscv64's ALU ops)
     an argument is, in this order, a nested call (run in exec, its value a0), a number (decimal or 0x), a parameter, a register, pc, a label, a constant (a function without parameters, run in exec)
     range checks: every operand must fit its slices
-    builtins: comment, ascii, align, reserve, origin, bss, size, import
+    builtins: comment, ascii, align, reserve, origin, bss, size, include
       comment text: anywhere, never evaluated; after a function's parameters
       ascii bytes: emits its argument's content as it is
       align n, reserve n, origin n, bss, size label

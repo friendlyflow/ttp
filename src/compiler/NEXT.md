@@ -37,7 +37,7 @@ RAM NODE:
 - conditionals en loops in exec context: `compile time` doet het nu; exec zelf blijft de seed
 - ttpc.ff tegen 1 MiB (stage0): de versieketen, ttpc in de C-laag schrijven
 - structs: per waarde zoals in C (16 okt 2026): `=` kopieert, een argument is een kopie (de callee kopieert van het adres dat hij krijgt), een resultaat gaat in ruimte die de caller bij het begin van zijn functie vrijhoudt; daaronder blijft het een adres
-- includes / meerdere files: `import` klaar (zie build files); nog: secties als aparte segments, het os in ff
+- includes / meerdere files: `include` klaar (zie build files); nog: secties als aparte segments, het os in ff
 ## targets (15 okt 2026)
 - `--target riscv64|x86_64|aarch64|arm`: shared.ff heeft een sectie per target, de keuze is een compile time lambda op de gedeelde pagina
 - de C-laag bestaat één keer: primitieven (`cc_push`, `cc_jz`, ...) per target in `c:`
@@ -50,10 +50,10 @@ RAM NODE:
 - nog te doen: echte aarch64/arm hardware (cache flush van compile time is enkel onder qemu getest)
 - riscv64 in dezelfde vorm (16 okt 2026): `hosts/riscv64/ttpc.s` (stage0), `progs/riscv64/` (exit42, hello, wide)
 ## build files (16 okt 2026)
-- `ttpc build.ff`: een build file zoals in Jai, alles staat in de file: `import` / shared.ff, `workspace`, `set target`, `set output`, `add file`, `compile` (zie PLAN.md, `progs/cws.ff`)
+- `ttpc build.ff`: een build file zoals in Jai, alles staat in de file: `include` / shared.ff, `workspace`, `set target`, `set output`, `add file`, `compile` (zie PLAN.md, `progs/cws.ff`)
 - de workspaces lopen na de build file, één na één, elk als een eigen compile; de bomen die de build file las blijven in het geheugen
-- `import` / pad vooraan op een programmapagina, ook in gewone programma's (`ttpc prog.ff out`); elk pad wordt één keer gelezen
-- paden in een boom zijn vanuit de map van die boom (import, add file, set output), dus `ttpc src/compiler/progs/cws.ff` werkt vanuit elke map; paden op de command line vanuit de huidige map; "cannot open file" noemt de file
+- `include` / pad vooraan op een programmapagina, ook in gewone programma's (`ttpc prog.ff out`); elk pad wordt één keer gelezen
+- paden in een boom zijn vanuit de map van die boom (include, add file, set output), dus `ttpc src/compiler/progs/cws.ff` werkt vanuit elke map; paden op de command line vanuit de huidige map; "cannot open file" noemt de file
 - `ttpc --print tree.ff` drukt een boom af (vroeger: één boom zonder out)
 - opgelost: een lambda die liep terwijl een andere geassembleerd werd, kwam ook in diens splices terecht (`cct2`)
 - ttpc.ff groeit: arm `whole.ff` is 859 KB van de 1 MiB die de seeds lezen; de pagina van ttpc.ff heeft 248 van de 255 kinderen (mkhost voegt er 4 toe), nieuwe code gaat in groepen zoals `cc:`

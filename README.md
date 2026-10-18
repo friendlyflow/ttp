@@ -25,7 +25,7 @@ make clean           # remove build/
 
 ttpc builds for four targets: `ttpc --target x86_64 shared.ff prog.ff out`
 (riscv64, x86_64, aarch64, arm; riscv64 without `--target`). `ttpc build.ff`
-runs a build file, which says itself what to build (`import`, `workspace`,
+runs a build file, which says itself what to build (`include`, `workspace`,
 `add file`, `compile`, as in Jai). It runs on
 riscv64 itself, under `qemu-riscv64` elsewhere; see
 [src/compiler/PLAN.md](src/compiler/PLAN.md).

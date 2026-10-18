@@ -45,7 +45,7 @@ CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmi
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
-	progs/cws.ff progs/cimport.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cimportlate.ff \
+	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
 	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff language.ff
 P := $(BUILD)/progs
 
@@ -239,10 +239,10 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 
 # Build files. progs/cws.ff is one, run as ttpc progs/cws.ff with nothing
 # else on the command line, here from the build folder (its paths are from
-# its own folder): it imports ../shared.ff and makes three workspaces,
+# its own folder): it includes ../shared.ff and makes three workspaces,
 # chello for riscv64 and for x86_64 and cexit with the name it gets without
-# set output (next to cws.ff), each the bytes the command line makes. cimport is chello importing its shared page, --print prints a tree
-# as stage0 does, and cwsnofile, cwsplace and cimportlate fail to compile
+# set output (next to cws.ff), each the bytes the command line makes. cinclude is chello including its shared page, --print prints a tree
+# as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
 cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
@@ -252,17 +252,17 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	cmp $(P)/cws-riscv64 $(P)/chello.celf
 	cmp $(P)/cws-x86_64 $(P)/x86_64/chello.celf
 	cmp $(P)/cws-cexit $(P)/cexit.celf
-	$(QEMU) $(BOOT)/stage2 progs/cimport.ff $(P)/cimport.celf > $(P)/cimport.lst
-	cmp $(P)/cimport.celf $(P)/chello.celf
+	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
+	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
 	$(QEMU) $(BIN) progs/chello.ff | cmp - $(P)/chello.print
 	! $(QEMU) $(BOOT)/stage2 progs/cwsnofile.ff 2> $(P)/cwsnofile.err
 	grep -q "a workspace needs a file" $(P)/cwsnofile.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cwsplace.ff $(P)/cwsplace.celf 2> $(P)/cwsplace.err
 	grep -q "cannot compile: set target" $(P)/cwsplace.err
-	! $(QEMU) $(BOOT)/stage2 progs/cimportlate.ff $(P)/cimportlate.celf 2> $(P)/cimportlate.err
-	grep -q "import goes first" $(P)/cimportlate.err
-	@echo "cws: a build file runs its workspaces, import reads a tree"
+	! $(QEMU) $(BOOT)/stage2 progs/cincludelate.ff $(P)/cincludelate.celf 2> $(P)/cincludelate.err
+	grep -q "include goes first" $(P)/cincludelate.err
+	@echo "cws: a build file runs its workspaces, include reads a tree"
 
 # The other targets ttpc builds for (--target). Per target: its asm
 # programs (progs/<target>/*.ff, program-only trees) must be byte-identical

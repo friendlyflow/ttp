@@ -311,8 +311,9 @@ comment
 fail:
   message
 comment
-  import file: first on a program page, reads the tree in file (each file once), file from the folder of this tree, and puts its pages in front of the program, as the trees before it on the command line; elsewhere it does nothing.
-import:
+  include file: first on a program page, reads the tree in file (each file once), file from the folder of this tree, and puts its pages in front of the program, as the trees before it on the command line; elsewhere it does nothing.
+  a folder with an index.ff is a library, of which it reads only what the program reaches.
+include:
   file
 comment
   workspace: compile time, a new workspace, a compile of its own that runs after this one; its value is the workspace.

@@ -119,7 +119,7 @@ for the host tools (`perl gen/fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl
 gen/fftext.pl ff t.ff.txt > ttpc.ff`). ttpc reads several trees: `ttpc a.ff
 b.ff ... prog.ff out` takes the pages of all but the last, then the last
 whole as the program (its root is the page); one tree alone is read as
-before, unless it begins with `import`. One tree and no output is a build
+before, unless it begins with `include`. One tree and no output is a build
 file (`ttpc build.ff`, see Build files); `ttpc --print tree.ff` prints a
 tree (stage0, ttpc1 and the seeds print one tree alone). Whatever ttpc.ff
 uses, ttpc3 must know (all of the language up to 18 Oct 2026, layers
@@ -235,7 +235,7 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   `va_arg` / ap / type reads one and steps ap down a slot, `va_end` does
   nothing, `va_copy` / to / from copies.
 - **Library C** (`progs/clib.ff`, `progs/clibdefs.ff`): a C function or
-  global on a definition page (an imported tree, as glibc.ff will be) is
+  global on a definition page (an included tree, as glibc is) is
   compiled when the program reaches it, and only then. Where `find_label`
   (the scopes being placed) finds nothing, the C layer's lookups (`cfind`)
   take the definition pages' C definition of that name (`libsym`: never a
@@ -475,27 +475,27 @@ program page it would assemble with it must be the host's too (`ctasm`,
 as Jai's build programs do: what to read, for which targets, which files,
 where the output goes, all of it is in the file.
 
-- **`import`** / path, first on a program page (comments may come
+- **`include`** / path (`import` until 18 Oct 2026, the user renamed it "to stay more C"), first on a program page (comments may come
   before it), reads that tree and puts its pages in front of the program,
   as the trees before it on the command line do. ttpc reads each path once:
-  a tree imported or added again is the one already in memory (shared.ff
-  fits only once in ttpc's 4 MiB of input). Elsewhere `import` does
-  nothing; after other items it is an error. Any program may import:
-  `ttpc progs/cimport.ff out` (`import` / `../shared.ff`) is `ttpc
+  a tree included or added again is the one already in memory (shared.ff
+  fits only once in ttpc's 4 MiB of input). Elsewhere `include` does
+  nothing; after other items it is an error. Any program may include:
+  `ttpc progs/cinclude.ff out` (`include` / `../shared.ff`) is `ttpc
   shared.ff progs/chello.ff out`.
-- **`import`** / folder, a folder with an `index.ff` (the user's choice,
+- **`include`** / folder, a folder with an `index.ff` (the user's choice,
   18 Oct 2026, like C's headers), is a library read lazily: its index is
   a page `index:` of `name:` / file, and ttpc reads only the files of what
   the program reaches. The program's node texts (each node's) are looked
   up among the index's names; a name found is reached, its file read once
-  (in front of the program, as an import) and its definition looked
+  (in front of the program, as an include) and its definition looked
   through in turn (an enum's for its constants, an asm function's for its
   entries), until nothing is new; first the names ttpc calls by itself
   (`__riscv_hwprobe`, `_start`, the soft-fp of long double). A text that
   is a name by chance reaches a little more, never less. `gen/ffsplit.pl`
   makes the folder of a library tree, a file per page (glibc's milestones:
-  `make -C src/glibc` makes `NAME/`, which `NAME-prog` imports);
-  `progs/clazy.ff` imports `progs/clazylib`, whose `never.ff` is no tree
+  `make -C src/glibc` makes `NAME/`, which `NAME-prog` includes);
+  `progs/clazy.ff` includes `progs/clazylib`, whose `never.ff` is no tree
   and is never read.
 - **A build file** is a program page. ttpc runs its top-level lambdas `:`
   / `compile time`, with the whole page, so they can call its C
@@ -511,7 +511,7 @@ where the output goes, all of it is in the file.
     line.
   - `compile` / w queues it.
 
-  A path in a tree is from that tree's folder: `import` from the file it
+  A path in a tree is from that tree's folder: `include` from the file it
   stands in, `set output` and `add file` from the file of the code that
   runs them, so `ttpc src/compiler/progs/cws.ff` works from any folder;
   paths on the command line are from the folder ttpc runs in. Text is

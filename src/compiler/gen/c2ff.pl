@@ -26,7 +26,7 @@
 # them where it does not expand them.
 #
 # With --program, what the roots reach is a program: its definitions on the
-# page itself, after import / tree (glibc in ff, which has the rest), and a
+# page itself, after include / tree (glibc in ff, which has the rest), and a
 # _start that exits with what main returns, which is what C's startup does
 # for main without arguments.
 # With --early it runs glibc's __libc_early_init (1) first, as glibc's static
@@ -232,7 +232,7 @@ sub qt { my ($n) = @_; my $t = $n->{type} or die "c2ff: no type\n"; $t->{desugar
 my %reserved = map { $_ => 1 } qw(
     if else while for return break continue comment address content syscall
     array struct union enum function sizeof alignof compile emit fail number
-    target import workspace switch case default goto char short int long void
+    target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
@@ -1831,7 +1831,7 @@ if (defined $program) {
     # riscv64 only for now: another target's thread pointer is no register
     # of C (tpidr_el0, fs), and its milestones so far (ldouble) need none
     my $tcb = $target eq 'riscv64';
-    print write_txt(node('import', node($program)), @types, (map { $_->[1] } @out),
+    print write_txt(node('include', node($program)), @types, (map { $_->[1] } @out),
         ($tcb ? node('__ff_tcb:', node('array'), node('u64'), node('1024')) : ()),
         node('_start:', node('void'), ($tcb ? (node('tp'), node('='), node('cast:', node('u64'), node('address', node('__ff_tcb'))),
             node('+'), node('4096')) : ()), ($early ? node('__libc_early_init', node('1')) : ()),

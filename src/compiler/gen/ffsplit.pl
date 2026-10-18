@@ -1,9 +1,9 @@
 #!/usr/bin/env perl
 # ffsplit.pl — a library tree (glibc in ff: a page per glibc directory) as a
-# folder that a program imports lazily (`import` / folder): a file per page,
+# folder that a program includes lazily (`include` / folder): a file per page,
 # and index.ff, which names the file of each definition. ttpc reads the
 # index first, then a file only when a name it needs is in it (see
-# language.ff.txt, import).
+# language.ff.txt, include).
 #
 #   perl ffsplit.pl <library.ff.txt> <folder>
 #
@@ -76,7 +76,7 @@ for my $name (@order) {
     for my $n (names(@{ $p->{children} })) { next if $of{$n}; $of{$n} = $f; push @index, node("$n:", node($f)) }
 }
 open my $o, '>:raw', "$dir/index.ff" or die "ffsplit: cannot write $dir/index.ff: $!\n";
-print $o write_ff(node('', node('comment', node('the names the files of this folder define and the file of each: a program that imports the folder reads a file when a name it needs is in it')),
+print $o write_ff(node('', node('comment', node('the names the files of this folder define and the file of each: a program that includes the folder reads a file when a name it needs is in it')),
     node('index:', layers(@index))));
 close $o or die "ffsplit: cannot write $dir/index.ff: $!\n";
 printf STDERR "ffsplit: %d files, %d names\n", scalar(@order), scalar(@index);

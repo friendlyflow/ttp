@@ -302,7 +302,7 @@ asm-check: $(ASMS_stdio:%=$(I)/%.dump) $(ASMS_stdio:%=$(I)/%.bin) ../compiler/ge
 	    echo "asm-check: $$a: ttpc and glibc's compiler agree ($$size bytes)"; \
 	done
 
-# progs/strlen.ff imports string.ff from its own folder, so both go there
+# progs/strlen.ff includes string.ff from its own folder, so both go there
 strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 	cp progs/strlen.ff $(FF)/strlen-prog.ff
 	$(CAP) timeout 120 $(TTPC_RUN) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
@@ -314,7 +314,7 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 # A test program in C, progs/NAME.c, built two ways: with gcc against
 # libc.a (glibc's own startup, no builtins: each call reaches glibc), and
 # through c2ff --program, with ttpc against the milestone of that name
-# (each takes in the ones before it), imported as the folder NAME (the
+# (each takes in the ones before it), included as the folder NAME (the
 # files of what the program reaches, read lazily). Both run with V and without; all
 # four must exit with the status on the first line of progs/NAME.expect
 # ("exit N") and print the rest of it.
@@ -327,7 +327,7 @@ $(FF)/%.ref: progs/%.c $(OBJ)/libc.a
 	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
 
-# A milestone as a folder that a program imports lazily (ffsplit.pl): a file
+# A milestone as a folder that a program includes lazily (ffsplit.pl): a file
 # per page and index.ff, the file of each name; ttpc reads only the files
 # of what the program reaches.
 $(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
