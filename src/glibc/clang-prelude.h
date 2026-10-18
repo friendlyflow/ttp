@@ -21,3 +21,8 @@ extern unsigned int __builtin_stdc_trailing_zeros (unsigned long);
 extern _Bool __builtin_stdc_has_single_bit (unsigned long);
 extern unsigned long __builtin_stdc_bit_ceil (unsigned long);
 extern _Bool __builtin_add_overflow_p (unsigned long, unsigned long, unsigned long);
+#ifdef __aarch64__
+/* gcc's FPCR read, which soft-fp's sfp-machine.h uses for the rounding mode;
+   glibc in ff has it in builtins-aarch64.ff.txt. */
+extern unsigned int __builtin_aarch64_get_fpcr (void);
+#endif

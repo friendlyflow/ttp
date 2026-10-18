@@ -1,7 +1,8 @@
 # isa/x86_64.pl — the x86_64 section of the shared page (mkff.pl does it):
 # the 64-bit integer instructions, the system ones, the atomics and SSE2
-# scalar floating point (no x87, MMX or packed SIMD), the registers, and
-# macros/x86_64.ff.txt.
+# scalar floating point (no x87 arithmetic, MMX or packed SIMD; of the
+# floating point state MXCSR and the x87 environment, for glibc's soft-fp),
+# the registers, and macros/x86_64.ff.txt.
 #
 # x86 is variable length, so an instruction is a macro: a function whose
 # body is calls, each emitted in turn. The small encodings (rex, modrm,
@@ -547,6 +548,16 @@ for my $t (["syscall", 0x0f, 0x05], ["sysretq", 0x48, 0x0f, 0x07],
     form($nm, [], $nm, bytes(@op));
 }
 form("sysret", [], "sysretl", bytes(0x0f, 0x07));
+# the floating point state glibc's soft-fp reads and sets (sfp-machine.h,
+# sfp-exceptions.c): SSE's MXCSR, the x87 environment
+for my $t (["ldmxcsr", [0x0f, 0xae], 2], ["stmxcsr", [0x0f, 0xae], 3],
+           ["fldenv", [0xd9], 4], ["fnstenv", [0xd9], 6]) {
+    my ($nm, $opc, $digit) = @$t;
+    for my $m (qw(m x)) {
+        form("$nm.$m", [mp($m)], pf($m) . " $nm " . mg($m), modrm_body([], 0, $opc, $digit, $m));
+    }
+}
+form("fwait", [], "fwait", bytes(0x9b));
 form("int.i", ["imm:u8"], "int \$<imm>", bytes(0xcd), imm(1));
 for my $s (qw(w l)) {
     my $z = $SZ{$s};

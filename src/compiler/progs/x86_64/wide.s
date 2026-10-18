@@ -1409,30 +1409,39 @@ w6:
     swapgs
     wbinvd
     sysretl
+    {disp32} {rex} ldmxcsr -1(%rbx,%riz,1)
+    {disp32} {rex} ldmxcsr 127(%r11,%r13,4)
+    {disp32} {rex} stmxcsr -128(%rdi,%riz,1)
+    {disp32} {rex} stmxcsr 4660(%rcx,%rcx,8)
+    {disp32} {rex} fldenv -2147483648(%r12,%riz,1)
+    {disp32} {rex} fldenv 2147483647(%r13,%rsi,1)
+    {disp32} {rex} fnstenv 0(%r15,%riz,1)
+    {disp32} {rex} fnstenv -1(%rsp,%r8,2)
+w7:
+    fwait
     int $63
     {rex} nopw %si
-    {disp32} {rex} nopw -1(%rbx,%riz,1)
-    {disp32} {rex} nopw 127(%r11,%r13,4)
+    {disp32} {rex} nopw 127(%rbp,%riz,1)
+    {disp32} {rex} nopw -128(%r8,%r14,4)
     {rex} nopl %edi
-    {disp32} {rex} nopl -128(%rdi,%riz,1)
-    {disp32} {rex} nopl 4660(%rcx,%rcx,8)
-    {disp32} {rex} sgdt -2147483648(%r12,%riz,1)
-w7:
-    {disp32} {rex} sgdt 2147483647(%r13,%rsi,1)
-    {disp32} {rex} sidt 0(%r15,%riz,1)
-    {disp32} {rex} sidt -1(%rsp,%r8,2)
-    {disp32} {rex} lgdt 127(%rbp,%riz,1)
-    {disp32} {rex} lgdt -128(%r8,%r14,4)
-    {disp32} {rex} lidt 4660(%rbx,%riz,1)
-    {disp32} {rex} lidt -2147483648(%r11,%r15,8)
-    {disp32} {rex} invlpg 2147483647(%rdi,%riz,1)
-    {disp32} {rex} invlpg 0(%rcx,%r9,1)
+    {disp32} {rex} nopl 4660(%rbx,%riz,1)
+    {disp32} {rex} nopl -2147483648(%r11,%r15,8)
+    {disp32} {rex} sgdt 2147483647(%rdi,%riz,1)
+    {disp32} {rex} sgdt 0(%rcx,%r9,1)
+    {disp32} {rex} sidt -1(%r12,%riz,1)
+    {disp32} {rex} sidt 127(%r13,%r12,2)
+    {disp32} {rex} lgdt -128(%r15,%riz,1)
+    {disp32} {rex} lgdt 4660(%rsp,%rbp,4)
+    {disp32} {rex} lidt -2147483648(%rbp,%riz,1)
+    {disp32} {rex} lidt 2147483647(%r8,%r13,8)
+    {disp32} {rex} invlpg 0(%rbx,%riz,1)
+    {disp32} {rex} invlpg -1(%r11,%rcx,1)
     {rex} lldt %r9w
-    {disp32} {rex} lldt -1(%r12,%riz,1)
-    {disp32} {rex} lldt 127(%r13,%r12,2)
+    {disp32} {rex} lldt 127(%rdi,%riz,1)
+    {disp32} {rex} lldt -128(%rcx,%rsi,2)
     {rex} ltr %r10w
-    {disp32} {rex} ltr -128(%r15,%riz,1)
-    {disp32} {rex} ltr 4660(%rsp,%rbp,4)
+    {disp32} {rex} ltr 4660(%r12,%riz,1)
+    {disp32} {rex} ltr -2147483648(%r13,%r8,4)
     {rex} mov %r11, %cr0
     {rex} mov %cr2, %r14
     {rex} mov %r12, %dr0
@@ -1450,123 +1459,123 @@ w7:
     outl %eax, $0
     outl %eax, (%dx)
     {rex} movss %xmm15, %xmm8
-    {disp32} {rex} movss -2147483648(%rbp,%riz,1), %xmm0
-    {disp32} {rex} movss 2147483647(%r8,%r13,8), %xmm12
-    {disp32} {rex} movss %xmm13, 0(%rbx,%riz,1)
-    {disp32} {rex} movss %xmm1, -1(%r11,%rcx,1)
+    {disp32} {rex} movss 2147483647(%r15,%riz,1), %xmm0
+    {disp32} {rex} movss 0(%rsp,%r14,8), %xmm12
+    {disp32} {rex} movss %xmm13, -1(%rbp,%riz,1)
+    {disp32} {rex} movss %xmm1, 127(%r8,%r15,1)
     {rex} addss %xmm7, %xmm9
-    {disp32} {rex} addss 127(%rdi,%riz,1), %xmm2
-    {disp32} {rex} addss -128(%rcx,%rsi,2), %xmm14
+    {disp32} {rex} addss -128(%rbx,%riz,1), %xmm2
+    {disp32} {rex} addss 4660(%r11,%r9,2), %xmm14
     {rex} subss %xmm3, %xmm10
-    {disp32} {rex} subss 4660(%r12,%riz,1), %xmm4
-    {disp32} {rex} subss -2147483648(%r13,%r8,4), %xmm11
+    {disp32} {rex} subss -2147483648(%rdi,%riz,1), %xmm4
+    {disp32} {rex} subss 2147483647(%rcx,%r12,4), %xmm11
     {rex} mulss %xmm5, %xmm6
-    {disp32} {rex} mulss 2147483647(%r15,%riz,1), %xmm15
-    {disp32} {rex} mulss 0(%rsp,%r14,8), %xmm8
+    {disp32} {rex} mulss 0(%r12,%riz,1), %xmm15
+    {disp32} {rex} mulss -1(%r13,%rbp,8), %xmm8
     {rex} divss %xmm0, %xmm12
-    {disp32} {rex} divss -1(%rbp,%riz,1), %xmm13
-    {disp32} {rex} divss 127(%r8,%r15,1), %xmm1
+    {disp32} {rex} divss 127(%r15,%riz,1), %xmm13
+    {disp32} {rex} divss -128(%rsp,%r13,1), %xmm1
     {rex} sqrtss %xmm7, %xmm9
-    {disp32} {rex} sqrtss -128(%rbx,%riz,1), %xmm2
-    {disp32} {rex} sqrtss 4660(%r11,%r9,2), %xmm14
+    {disp32} {rex} sqrtss 4660(%rbp,%riz,1), %xmm2
+    {disp32} {rex} sqrtss -2147483648(%r8,%rcx,2), %xmm14
     {rex} minss %xmm3, %xmm10
-    {disp32} {rex} minss -2147483648(%rdi,%riz,1), %xmm4
-    {disp32} {rex} minss 2147483647(%rcx,%r12,4), %xmm11
+    {disp32} {rex} minss 2147483647(%rbx,%riz,1), %xmm4
+    {disp32} {rex} minss 0(%r11,%rsi,4), %xmm11
     {rex} maxss %xmm5, %xmm6
-    {disp32} {rex} maxss 0(%r12,%riz,1), %xmm15
-    {disp32} {rex} maxss -1(%r13,%rbp,8), %xmm8
+    {disp32} {rex} maxss -1(%rdi,%riz,1), %xmm15
+    {disp32} {rex} maxss 127(%rcx,%r8,8), %xmm8
     {rex} cvtsi2ssl %r15d, %xmm0
-    {disp32} {rex} cvtsi2ssl 127(%r15,%riz,1), %xmm12
-    {disp32} {rex} cvtsi2ssl -128(%rsp,%r13,1), %xmm13
+    {disp32} {rex} cvtsi2ssl -128(%r12,%riz,1), %xmm12
+    {disp32} {rex} cvtsi2ssl 4660(%r13,%r14,1), %xmm13
     {rex} cvtsi2ssq %r8, %xmm1
-    {disp32} {rex} cvtsi2ssq 4660(%rbp,%riz,1), %xmm7
-    {disp32} {rex} cvtsi2ssq -2147483648(%r8,%rcx,2), %xmm9
+    {disp32} {rex} cvtsi2ssq -2147483648(%r15,%riz,1), %xmm7
+    {disp32} {rex} cvtsi2ssq 2147483647(%rsp,%r15,2), %xmm9
     {rex} cvttss2si %xmm2, %ecx
-    {disp32} {rex} cvttss2si 2147483647(%rbx,%riz,1), %edx
-    {disp32} {rex} cvttss2si 0(%r11,%rsi,4), %ebx
+    {disp32} {rex} cvttss2si 0(%rbp,%riz,1), %edx
+    {disp32} {rex} cvttss2si -1(%r8,%r9,4), %ebx
     {rex} cvttss2si %xmm14, %rsp
-    {disp32} {rex} cvttss2si -1(%rdi,%riz,1), %rbp
-    {disp32} {rex} cvttss2si 127(%rcx,%r8,8), %rsi
+    {disp32} {rex} cvttss2si 127(%rbx,%riz,1), %rbp
+    {disp32} {rex} cvttss2si -128(%r11,%r12,8), %rsi
     {rex} movsd %xmm3, %xmm10
-    {disp32} {rex} movsd -128(%r12,%riz,1), %xmm4
-    {disp32} {rex} movsd 4660(%r13,%r14,1), %xmm11
-    {disp32} {rex} movsd %xmm5, -2147483648(%r15,%riz,1)
-    {disp32} {rex} movsd %xmm6, 2147483647(%rsp,%r15,2)
+    {disp32} {rex} movsd 4660(%rdi,%riz,1), %xmm4
+    {disp32} {rex} movsd -2147483648(%rcx,%rbp,1), %xmm11
+    {disp32} {rex} movsd %xmm5, 2147483647(%r12,%riz,1)
+    {disp32} {rex} movsd %xmm6, 0(%r13,%r13,2)
     {rex} addsd %xmm15, %xmm8
-    {disp32} {rex} addsd 0(%rbp,%riz,1), %xmm0
-    {disp32} {rex} addsd -1(%r8,%r9,4), %xmm12
+    {disp32} {rex} addsd -1(%r15,%riz,1), %xmm0
+    {disp32} {rex} addsd 127(%rsp,%rcx,4), %xmm12
     {rex} subsd %xmm13, %xmm1
-    {disp32} {rex} subsd 127(%rbx,%riz,1), %xmm7
-    {disp32} {rex} subsd -128(%r11,%r12,8), %xmm9
+    {disp32} {rex} subsd -128(%rbp,%riz,1), %xmm7
+    {disp32} {rex} subsd 4660(%r8,%rsi,8), %xmm9
     {rex} mulsd %xmm2, %xmm14
-    {disp32} {rex} mulsd 4660(%rdi,%riz,1), %xmm3
-    {disp32} {rex} mulsd -2147483648(%rcx,%rbp,1), %xmm10
+    {disp32} {rex} mulsd -2147483648(%rbx,%riz,1), %xmm3
+    {disp32} {rex} mulsd 2147483647(%r11,%r8,1), %xmm10
     {rex} divsd %xmm4, %xmm11
-    {disp32} {rex} divsd 2147483647(%r12,%riz,1), %xmm5
-    {disp32} {rex} divsd 0(%r13,%r13,2), %xmm6
+    {disp32} {rex} divsd 0(%rdi,%riz,1), %xmm5
+    {disp32} {rex} divsd -1(%rcx,%r14,2), %xmm6
     {rex} sqrtsd %xmm15, %xmm8
-    {disp32} {rex} sqrtsd -1(%r15,%riz,1), %xmm0
-    {disp32} {rex} sqrtsd 127(%rsp,%rcx,4), %xmm12
+    {disp32} {rex} sqrtsd 127(%r12,%riz,1), %xmm0
+    {disp32} {rex} sqrtsd -128(%r13,%r15,4), %xmm12
     {rex} minsd %xmm13, %xmm1
-    {disp32} {rex} minsd -128(%rbp,%riz,1), %xmm7
-    {disp32} {rex} minsd 4660(%r8,%rsi,8), %xmm9
+    {disp32} {rex} minsd 4660(%r15,%riz,1), %xmm7
+    {disp32} {rex} minsd -2147483648(%rsp,%r9,8), %xmm9
     {rex} maxsd %xmm2, %xmm14
-    {disp32} {rex} maxsd -2147483648(%rbx,%riz,1), %xmm3
-    {disp32} {rex} maxsd 2147483647(%r11,%r8,1), %xmm10
+    {disp32} {rex} maxsd 2147483647(%rbp,%riz,1), %xmm3
+    {disp32} {rex} maxsd 0(%r8,%r12,1), %xmm10
     {rex} cvtsi2sdl %edi, %xmm4
-    {disp32} {rex} cvtsi2sdl 0(%rdi,%riz,1), %xmm11
-    {disp32} {rex} cvtsi2sdl -1(%rcx,%r14,2), %xmm5
+    {disp32} {rex} cvtsi2sdl -1(%rbx,%riz,1), %xmm11
+    {disp32} {rex} cvtsi2sdl 127(%r11,%rbp,2), %xmm5
     {rex} cvtsi2sdq %r9, %xmm6
-    {disp32} {rex} cvtsi2sdq 127(%r12,%riz,1), %xmm15
-    {disp32} {rex} cvtsi2sdq -128(%r13,%r15,4), %xmm8
+    {disp32} {rex} cvtsi2sdq -128(%rdi,%riz,1), %xmm15
+    {disp32} {rex} cvtsi2sdq 4660(%rcx,%r13,4), %xmm8
     {rex} cvttsd2si %xmm0, %r10d
-    {disp32} {rex} cvttsd2si 4660(%r15,%riz,1), %r11d
-    {disp32} {rex} cvttsd2si -2147483648(%rsp,%r9,8), %r14d
+    {disp32} {rex} cvttsd2si -2147483648(%r12,%riz,1), %r11d
+    {disp32} {rex} cvttsd2si 2147483647(%r13,%rcx,8), %r14d
     {rex} cvttsd2si %xmm12, %r12
-    {disp32} {rex} cvttsd2si 2147483647(%rbp,%riz,1), %r13
-    {disp32} {rex} cvttsd2si 0(%r8,%r12,1), %r15
+    {disp32} {rex} cvttsd2si 0(%r15,%riz,1), %r13
+    {disp32} {rex} cvttsd2si -1(%rsp,%rsi,1), %r15
     {rex} cvtss2sd %xmm13, %xmm1
-    {disp32} {rex} cvtss2sd -1(%rbx,%riz,1), %xmm7
-    {disp32} {rex} cvtss2sd 127(%r11,%rbp,2), %xmm9
+    {disp32} {rex} cvtss2sd 127(%rbp,%riz,1), %xmm7
+    {disp32} {rex} cvtss2sd -128(%r8,%r8,2), %xmm9
     {rex} cvtsd2ss %xmm2, %xmm14
-    {disp32} {rex} cvtsd2ss -128(%rdi,%riz,1), %xmm3
-    {disp32} {rex} cvtsd2ss 4660(%rcx,%r13,4), %xmm10
+    {disp32} {rex} cvtsd2ss 4660(%rbx,%riz,1), %xmm3
+    {disp32} {rex} cvtsd2ss -2147483648(%r11,%r14,4), %xmm10
     {rex} ucomiss %xmm4, %xmm11
-    {disp32} {rex} ucomiss -2147483648(%r12,%riz,1), %xmm5
-    {disp32} {rex} ucomiss 2147483647(%r13,%rcx,8), %xmm6
+    {disp32} {rex} ucomiss 2147483647(%rdi,%riz,1), %xmm5
+    {disp32} {rex} ucomiss 0(%rcx,%r15,8), %xmm6
     {rex} ucomisd %xmm15, %xmm8
-    {disp32} {rex} ucomisd 0(%r15,%riz,1), %xmm0
-    {disp32} {rex} ucomisd -1(%rsp,%rsi,1), %xmm12
+    {disp32} {rex} ucomisd -1(%r12,%riz,1), %xmm0
+    {disp32} {rex} ucomisd 127(%r13,%r9,1), %xmm12
     {rex} comiss %xmm13, %xmm1
-    {disp32} {rex} comiss 127(%rbp,%riz,1), %xmm7
-    {disp32} {rex} comiss -128(%r8,%r8,2), %xmm9
+    {disp32} {rex} comiss -128(%r15,%riz,1), %xmm7
+    {disp32} {rex} comiss 4660(%rsp,%r12,2), %xmm9
     {rex} comisd %xmm2, %xmm14
-    {disp32} {rex} comisd 4660(%rbx,%riz,1), %xmm3
-    {disp32} {rex} comisd -2147483648(%r11,%r14,4), %xmm10
+    {disp32} {rex} comisd -2147483648(%rbp,%riz,1), %xmm3
+    {disp32} {rex} comisd 2147483647(%r8,%rbp,4), %xmm10
     {rex} andps %xmm4, %xmm11
-    {disp32} {rex} andps 2147483647(%rdi,%riz,1), %xmm5
-    {disp32} {rex} andps 0(%rcx,%r15,8), %xmm6
+    {disp32} {rex} andps 0(%rbx,%riz,1), %xmm5
+    {disp32} {rex} andps -1(%r11,%r13,8), %xmm6
     {rex} andpd %xmm15, %xmm8
-    {disp32} {rex} andpd -1(%r12,%riz,1), %xmm0
-    {disp32} {rex} andpd 127(%r13,%r9,1), %xmm12
+    {disp32} {rex} andpd 127(%rdi,%riz,1), %xmm0
+    {disp32} {rex} andpd -128(%rcx,%rcx,1), %xmm12
     {rex} andnps %xmm13, %xmm1
-    {disp32} {rex} andnps -128(%r15,%riz,1), %xmm7
-    {disp32} {rex} andnps 4660(%rsp,%r12,2), %xmm9
+    {disp32} {rex} andnps 4660(%r12,%riz,1), %xmm7
+    {disp32} {rex} andnps -2147483648(%r13,%rsi,2), %xmm9
     {rex} andnpd %xmm2, %xmm14
-    {disp32} {rex} andnpd -2147483648(%rbp,%riz,1), %xmm3
-    {disp32} {rex} andnpd 2147483647(%r8,%rbp,4), %xmm10
+    {disp32} {rex} andnpd 2147483647(%r15,%riz,1), %xmm3
+    {disp32} {rex} andnpd 0(%rsp,%r8,4), %xmm10
     {rex} orps %xmm4, %xmm11
-    {disp32} {rex} orps 0(%rbx,%riz,1), %xmm5
-    {disp32} {rex} orps -1(%r11,%r13,8), %xmm6
+    {disp32} {rex} orps -1(%rbp,%riz,1), %xmm5
+    {disp32} {rex} orps 127(%r8,%r14,8), %xmm6
     {rex} orpd %xmm15, %xmm8
-    {disp32} {rex} orpd 127(%rdi,%riz,1), %xmm0
-    {disp32} {rex} orpd -128(%rcx,%rcx,1), %xmm12
+    {disp32} {rex} orpd -128(%rbx,%riz,1), %xmm0
+    {disp32} {rex} orpd 4660(%r11,%r15,1), %xmm12
     {rex} xorps %xmm13, %xmm1
-    {disp32} {rex} xorps 4660(%r12,%riz,1), %xmm7
-    {disp32} {rex} xorps -2147483648(%r13,%rsi,2), %xmm9
+    {disp32} {rex} xorps -2147483648(%rdi,%riz,1), %xmm7
+    {disp32} {rex} xorps 2147483647(%rcx,%r9,2), %xmm9
     {rex} xorpd %xmm2, %xmm14
-    {disp32} {rex} xorpd 2147483647(%r15,%riz,1), %xmm3
-    {disp32} {rex} xorpd 0(%rsp,%r8,4), %xmm10
+    {disp32} {rex} xorpd 0(%r12,%riz,1), %xmm3
+    {disp32} {rex} xorpd -1(%r13,%r12,4), %xmm10
     {rex} movaps %xmm4, %xmm11
     {rex} movapd %xmm5, %xmm6
     {rex} movd %r8d, %xmm15

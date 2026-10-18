@@ -4,13 +4,15 @@
 # per ff construct (see language.ff.txt). Nothing is lowered: a construct the
 # C layer has no form for stops the translation, named, with where it is.
 #
-#   perl c2ff.pl [--page name] tu.json=tu.i ... -- root ... > out.ff.txt
-#   perl c2ff.pl --program tree tu.json=tu.i -- main > prog.ff.txt
+#   perl c2ff.pl [--page name] [--target t] tu.json=tu.i ... -- root ... > out.ff.txt
+#   perl c2ff.pl --program tree [--target t] tu.json=tu.i -- main > prog.ff.txt
 #   perl c2ff.pl --types        (the type words, for a look)
 #
 # Each translation unit is its AST (from $C2FF_CLANG -x c -include
 # src/glibc/clang-prelude.h -Xclang -ast-dump=json -fsyntax-only
-# --target=riscv64-linux-gnu -std=gnu11 -w tu.i) and the .i it was made of
+# --target=riscv64-linux-gnu -std=gnu11 -w tu.i; --target t for another
+# target, aarch64 or x86_64, and c2ff's --target t too: its registers are
+# then the names ff reserves, its asm is read) and the .i it was made of
 # (for what the AST leaves out: the resolver of an ifunc). The roots are the
 # names to start from; what they call, the globals and types they use, comes
 # too, from whichever unit defines it.
@@ -48,7 +50,7 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
-use FF qw(node write_txt);
+use FF qw(node write_txt read_ff);
 
 # ---- types ------------------------------------------------------------------
 # A C type as clang prints it (its canonical form, desugaredQualType when
@@ -229,6 +231,19 @@ my %reserved = map { $_ => 1 } qw(
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
+# --target T: the target the .i were made for, riscv64 if not given. On
+# another the registers reserved are its own: the names of the registers
+# group of its section in shared.ff.
+my $target = 'riscv64';
+sub reserve_target {
+    my ($t) = @_;
+    open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "c2ff: cannot open shared.ff: $!\n";
+    my ($shared) = @{ read_ff(do { local $/; <$h> })->{children} };
+    my ($sec) = grep { $_->{content} eq "$t:" } @{ $shared->{children} } or die "c2ff: $t is not a target\n";
+    my ($regs) = grep { $_->{content} eq 'registers:' } @{ $sec->{children} } or die "c2ff: $t has no registers\n";
+    delete $reserved{$_} for grep { /^(?:x|a|s|t|f|fa|fs|ft)\d+$|^(?:zero|ra|sp|gp|tp|fp|pc)$/ } keys %reserved;
+    for (@{ $regs->{children} }) { (my $c = $_->{content}) =~ s/:$//; $reserved{$_} = 1 for split ' ', $c }
+}
 my %renamed;
 sub ffname {
     my ($n) = @_;
@@ -270,11 +285,13 @@ while (@ARGV) {
     if ($a eq '--exit') { $exit = 1; next }
     if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
+    if ($a eq '--target') { $target = shift @ARGV; next }
     if ($a eq '--') { @roots = @ARGV; last }
     my ($json, $i) = split /=/, $a, 2;
     push @units, { json => $json, i => $i };
 }
-die "usage: c2ff.pl [--page name | --program tree] tu.json=tu.i ... -- root ...\n" unless @units && @roots;
+die "usage: c2ff.pl [--page name | --program tree] [--target t] tu.json=tu.i ... -- root ...\n" unless @units && @roots;
+reserve_target($target) if $target ne 'riscv64';
 
 my %enumof;                 # each enum constant's enum, as a tag
 my $lastanon;               # the last anonymous record or enum at the top of a unit
@@ -331,6 +348,11 @@ sub own_name {
 sub own { my ($name) = @_; $cur_unit && $own{$cur_unit} && $own{$cur_unit}{$name} // $name }
 sub inner_tags { my ($n) = @_; (($n->{kind} // '') =~ /^(EnumDecl|RecordDecl)$/ ? $n : ()), map { inner_tags($_) } @{ $n->{inner} || [] } }
 for my $u (@units) {
+    # clang's ids are addresses, unique in one unit only: a typedef's
+    # anonymous tag is found among its own unit's (an id of another unit's
+    # enum made pthread_rwlockattr_t's union an enum)
+    %recid = ();
+    %enumid = ();
     my $ast = ast_of($u->{json});
     open my $h, '<', $u->{i} or die "c2ff: cannot open $u->{i}: $!\n";
     $u->{text} = do { local $/; <$h> };
@@ -545,7 +567,8 @@ sub atom { my @e = expr($_[0]); @e == 1 ? @e : node(':', @e) }
 
 # long double's arithmetic is glibc's soft-fp (the functions gcc calls from
 # libgcc for it): the one ttpc's C layer calls for an operation, a negation
-# or a conversion is reached as a call is. riscv64 for now (DI: 64 bits).
+# or a conversion is reached as a call is. Targets of 64-bit words for now
+# (DI: 64 bits): riscv64, aarch64, x86_64.
 my %sfop = ('+' => 'add', '-' => 'sub', '*' => 'mul', '/' => 'div');
 my %sfcmp = ('==' => 'eq', '!=' => 'ne', '<' => 'lt', '>' => 'gt', '<=' => 'le', '>=' => 'ge');
 # its floating type, from clang's spelling (ctype is not asked: it brings in
@@ -583,7 +606,8 @@ sub softfp {
     }
 }
 
-# A GCC asm statement (glibc's own, riscv64). clang's JSON has its operands
+# A GCC asm statement (glibc's own, riscv64; asm_stmt_other below for
+# the other targets). clang's JSON has its operands
 # but not its text: the template and the constraints come from the .i. Its
 # instructions become an asm function of their own, the statement a call of
 # it: a register input is an argument (a0 ...), a memory operand (A, m) the
@@ -592,6 +616,9 @@ sub softfp {
 # (soft-fp's sfp-machine.h: frrm, csrs fflags, ...), lr, sc and the AMOs
 # (glibc's atomics).
 my %asmfn;
+# one asm function per name: two statements that would share one stop
+my %asmsig;
+sub asm_once { my ($name, $sig, $n) = @_; stop("two asm statements named $name", $n) if ($asmsig{$name} //= $sig) ne $sig }
 # the overflow builtins builtins.ff.txt has, by name and operand types
 my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int';
 $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32';
@@ -623,7 +650,9 @@ sub asm_ins {
     }
     stop("the asm instruction $op", $n);
 }
-sub asm_stmt {
+# An asm statement's text from the .i: its template (\t a space, \n a ;),
+# the constraints of its outputs and inputs, and its operands (clang's).
+sub asm_parts {
     my ($n) = @_;
     my $b = $n->{range}{begin}{offset} // $n->{range}{begin}{expansionLoc}{offset};
     defined $b && $cur_unit or stop('an asm statement without its place in the .i', $n);
@@ -646,6 +675,15 @@ sub asm_stmt {
     my @ic = ($ins // '') =~ /"([^"]*)"/g;
     my @ops = kids($n);
     @ops == @oc + @ic or stop('an asm statement whose operands are not its text\'s', $n);
+    ($template, \@oc, \@ic, \@ops);
+}
+sub asm_stmt {
+    my ($n) = @_;
+    return asm_stmt_other($n) if $target ne 'riscv64';
+    my ($template, $ocr, $icr, $opsr) = asm_parts($n);
+    my @oc = @$ocr;
+    my @ic = @$icr;
+    my @ops = @$opsr;
     my (@arg, @text, $ret);
     for my $i (0 .. $#ops) {
         my $c = $i < @oc ? $oc[$i] : $ic[$i - @oc];
@@ -679,11 +717,136 @@ sub asm_stmt {
     push @code, node('mv', node('t0'), node('a0')) if defined $ret;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
     $name .= '_' . join '', map { (my $k = $_) =~ s/[^A-Za-z0-9]//g; $k } @oc, '_', @ic;
+    asm_once($name, "$template : @oc : @ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
     my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops[$i])) : atom($ops[$i]) } @arg;
     my $call = @args ? node($name, @args) : node($name);
     return defined $ret ? (item(expr($ops[$ret])), node('='), $call) : $call;
+}
+
+# The same on the other targets (--target), for what glibc's soft-fp has
+# there: an input in a register is an argument, in the target's argument
+# registers (aarch64 x0 ..., x86_64 rdi rsi rdx rcx r8 r9), a memory operand
+# its address as one, the register output the function's value (x0, rax).
+# aarch64's FP/SIMD operand (w, a float) is moved from its argument to s16
+# ... (sfp-machine.h's fdiv, fadd ... that raise its exceptions); x86_64's
+# x operand, only in an empty template (sfp-exceptions.c: the division is
+# the C around it), passes through a register as it is.
+my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9 r12 r13)]);
+my %retreg = (aarch64 => 'x0', x86_64 => 'rax');
+my %fpsysreg = (fpcr => 0xDA20, fpsr => 0xDA21);
+sub asm_ins_other {
+    my ($n, $op, @a) = @_;
+    if ($target eq 'aarch64') {
+        return node('mrs', node($fpsysreg{$a[1]}), node($a[0])) if $op eq 'mrs' && @a == 2 && defined $fpsysreg{$a[1]};
+        if ($op =~ /^f(?:add|sub|mul|div)$/ && @a == 3 && "@a" =~ /^([sd])\d+ [sd]\d+ [sd]\d+$/) {
+            my $w = $1;
+            stop("the asm instruction $op @a", $n) unless "@a" =~ /^$w\d+ $w\d+ $w\d+$/;
+            return node("$op.$w", node($a[2]), node($a[1]), node($a[0]));
+        }
+    } elsif ($target eq 'x86_64') {
+        return node('fwait') if $op eq 'fwait' && !@a;
+        return node($op, node($1)) if $op =~ /^(?:div|mul)q$/ && @a == 1 && $a[0] =~ /^%(\w+)$/;
+        if ($op =~ /^(?:ldmxcsr|stmxcsr|fldenv|fnstenv)$/ && @a == 1 && $a[0] =~ /^(-?\d*)\(%(\w+)\)$/) {
+            return node("$op.m", node($1 eq '' ? 0 : $1), node($2));
+        }
+    }
+    stop("the asm instruction $op", $n);
+}
+sub asm_stmt_other {
+    my ($n) = @_;
+    my $regs = $argregs{$target} or stop("an asm statement on $target", $n);
+    my ($template, $oc, $ic, $ops) = asm_parts($n);
+    my %fixed = $target eq 'x86_64' ? (a => 'rax', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
+    # each operand: what it is, and the register it wants (x86's a, d ...)
+    my (@want, $ret, @code, @after, %text);
+    for my $i (0 .. $#$ops) {
+        my $out = $i < @$oc;
+        my $c = $out ? $oc->[$i] : $ic->[$i - @$oc];
+        (my $k = $c) =~ s/[=+&]//g;
+        $k = 'r' if $k eq 'rm' && $target eq 'x86_64';
+        if ($out && $fixed{$k}) {
+            # an output in a fixed register: stored through its address after
+            stop("the asm constraint $c", $n) if $c =~ /\+/;
+            push @want, [$i, 'address'];
+            $text{$i} = $fixed{$k};
+        } elsif ($out && ($k eq 'r' || ($k eq 'x' && $target eq 'x86_64'))) {
+            # the register output: the function's value (+: it goes in first, as an argument)
+            stop('an asm statement with two register outputs', $n) if defined $ret;
+            $ret = $i;
+            $text{$i} = $retreg{$target};
+            push @want, [$i, 'value', $retreg{$target}] if $c =~ /\+/;
+        } elsif (!$out && $k =~ /^\d$/) {
+            # an input in an output's place
+            my $r = $text{$k} // stop("the asm constraint $c", $n);
+            push @want, [$i, 'value', $r];
+        } elsif (!$out && $fixed{$k}) {
+            push @want, [$i, 'value', $fixed{$k}];
+            $text{$i} = $fixed{$k};
+        } elsif (!$out && ($k eq 'r' || ($k eq 'x' && $target eq 'x86_64'))) {
+            push @want, [$i, 'value'];
+        } elsif (!$out && $k eq 'w' && $target eq 'aarch64') {
+            push @want, [$i, 'value', 'w'];
+        } elsif ($k eq 'm') {
+            push @want, [$i, 'mem'];
+        } else {
+            stop("the asm constraint $c", $n);
+        }
+    }
+    # the arguments: one that goes to a register that is an argument's is
+    # that argument, so that no move overwrites another; the others in turn
+    my %slotof = map { ($regs->[$_] => $_) } 0 .. $#$regs;
+    my (@slot, %taken);
+    for my $w (@want) { my $r = $w->[2]; next unless defined $r && defined $slotof{$r} && !$taken{ $slotof{$r} }; $w->[3] = $slotof{$r}; $taken{ $slotof{$r} } = 1 }
+    my $next = 0;
+    for my $w (@want) { next if defined $w->[3]; $next++ while $taken{$next}; $w->[3] = $next; $taken{$next++} = 1 }
+    stop('an asm statement with too many operands', $n) if grep { $_->[3] > $#$regs } @want;
+    my @arg;
+    for my $w (sort { $a->[3] <=> $b->[3] } @want) {
+        my ($i, $how, $r, $j) = @$w;
+        my $a = $regs->[$j];
+        $arg[$j] = [$i, $how eq 'value' ? 'value' : 'address'];
+        if ($how eq 'address') {
+            push @after, $target eq 'x86_64' ? node('movq.mr', node($text{$i}), node(0), node($a)) : stop("the asm output $oc->[$i]", $n);
+        } elsif ($how eq 'mem') {
+            $text{$i} = $target eq 'x86_64' ? "0(%$a)" : "[$a]";
+        } elsif (defined $r && $r eq 'w') {
+            # aarch64's FP/SIMD operand, a float or a double, from its argument
+            my $t = tword($ops->[$i]);
+            stop("the asm operand w of a $t", $n) unless $t eq 'float' || $t eq 'double';
+            my $v = 16 + $j;
+            push @code, $t eq 'float' ? node('fmov.s.w', node("w$j"), node("s$v")) : node('fmov.d.x', node($a), node("d$v"));
+            $text{$i} = ($t eq 'float' ? 's' : 'd') . $v;
+        } elsif (defined $r && $r ne $a) {
+            push @code, $target eq 'aarch64' ? node('orr', node($a), node('xzr'), node($r)) : node('movq', node($a), node($r));
+        } else {
+            $text{$i} //= $a;
+        }
+    }
+    @arg = grep { defined } @arg;
+    # the template: x86's %v (v under AVX, nothing here: glibc is not built
+    # for AVX) and gcc's dialects, {att|intel} or {att}
+    (my $t = $template) =~ s/%v//g;
+    $t =~ s/\{([^|}]*)\|[^}]*\}/$1/g;
+    $t =~ s/\{([^}]*)\}/$1/g;
+    $t =~ s{%([a-z]?)(\d+)}{
+        my ($m, $i) = ($1, $2);
+        my $r = $text{$i} // stop("the asm operand %$m$i", $n);
+        if ($m eq 'w' && $r =~ /^x(\d+)$/) { $r = "w$1" }
+        elsif ($m ne '' && !($m eq 's' && $r =~ /^s\d/) && !($m eq 'd' && $r =~ /^d\d/) && !($m eq 'x' && $r =~ /^x\d/)) { stop("the asm operand %$m$i", $n) }
+        $target eq 'x86_64' && $r !~ /\(/ ? "%$r" : $r;
+    }ge;
+    push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins_other($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
+    push @code, @after;
+    (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
+    $name .= '_' . join('', map { s/[^A-Za-z0-9]//gr } @$oc) . '_' . join('', map { s/[^A-Za-z0-9]//gr } @$ic);
+    asm_once($name, "$template : @$oc : @$ic", $n);
+    push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
+        unless $asmfn{$name}++;
+    my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
+    my $call = @args ? node($name, @args) : node($name);
+    return defined $ret ? (item(expr($ops->[$ret])), node('='), $call) : $call;
 }
 
 sub expr {
@@ -738,7 +901,8 @@ sub expr {
     if ($k eq 'DeclRefExpr') {
         my $d = $n->{referencedDecl};
         $wanttag{ $enumof{ $d->{name} } } = 1 if $d->{kind} eq 'EnumConstantDecl' && $enumof{ $d->{name} };
-        return node($staticname{ $d->{id} }) if $d->{kind} eq 'VarDecl' && $staticname{ $d->{id} };
+        # (by unit and id: clang's ids are unique in one unit only)
+        return node($staticname{"$cur_unit $d->{id}"}) if $d->{kind} eq 'VarDecl' && $staticname{"$cur_unit $d->{id}"};
         # a global register variable is its register (tp for THREAD_SELF)
         return node($regvar{ $d->{name} }) if $d->{kind} eq 'VarDecl' && !$local{ $d->{id} } && $regvar{ $d->{name} };
         # a function, or a variable that is not this function's own: a global
@@ -898,6 +1062,8 @@ sub expr {
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
         return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p)$/ || $name eq '__atomic_always_lock_free';
+        # and those of one target (builtins-<target>.ff.txt)
+        return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
         $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
         want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl' && $name !~ /^__builtin_/;
@@ -986,6 +1152,11 @@ sub csize { my ($t) = @_; return 4 if $t =~ /^enum\b/; my ($w) = ctype($t); $wsi
 sub hexfloat {
     my ($v, $type) = @_;
     my ($t) = ctype($type);
+    # a float literal above FLT_MAX by less than half its last place is
+    # FLT_MAX, as C rounds it (sfp-machine.h's 3.40282347E+38); Perl's pack
+    # makes it inf
+    $v = ($v < 0 ? -1 : 1) * 3.4028234663852886e38
+        if $t eq 'float' && abs($v) > 3.4028234663852886e38 && abs($v) < 3.4028235677973366e38;
     my ($bits, $m, $bias, $suffix) = $t eq 'float' ? (unpack('L<', pack('f<', $v)), 23, 127, 'f') :
         $t eq 'double' ? (unpack('Q<', pack('d<', $v)), 52, 1023, '') : die "c2ff: a constant of $type\n";
     my $e = $bits >> $m & ($t eq 'float' ? 0xff : 0x7ff);
@@ -1215,7 +1386,7 @@ sub stmt {
             # a static of a function lives as long as the program: a global,
             # named for its function (hugepages' mode_always)
             my $g = ffname($cur_fn) . ' ' . ffname($d->{name});
-            $staticname{ $d->{id} } = $g;
+            $staticname{"$cur_unit $d->{id}"} = $g;
             push @out, [$cur_unit, decl($d, 1, $g)];
             ();
         } else {
@@ -1527,11 +1698,14 @@ if (defined $program) {
     # glibc's startup is left out, so __libc_setup_tls does not run: tp points
     # into a zeroed block instead, where THREAD_SELF (tp less a struct pthread
     # and its tcbhead_t, 1.8 KiB) finds a zeroed struct pthread, as one thread
-    # that nothing has set has it (malloc's SINGLE_THREAD_P reads it)
+    # that nothing has set has it (malloc's SINGLE_THREAD_P reads it). On
+    # riscv64 only for now: another target's thread pointer is no register
+    # of C (tpidr_el0, fs), and its milestones so far (ldouble) need none
+    my $tcb = $target eq 'riscv64';
     print write_txt(node('import', node($program)), @types, (map { $_->[1] } @out),
-        node('__ff_tcb:', node('array'), node('u64'), node('1024')),
-        node('_start:', node('void'), node('tp'), node('='), node('cast:', node('u64'), node('address', node('__ff_tcb'))),
-            node('+'), node('4096'), ($early ? node('__libc_early_init', node('1')) : ()),
+        ($tcb ? node('__ff_tcb:', node('array'), node('u64'), node('1024')) : ()),
+        node('_start:', node('void'), ($tcb ? (node('tp'), node('='), node('cast:', node('u64'), node('address', node('__ff_tcb'))),
+            node('+'), node('4096')) : ()), ($early ? node('__libc_early_init', node('1')) : ()),
             ($exit ? node('exit', node('main')) : node('syscall', node('SYS_exit'), node('main')))));
 } else {
     my (@order, %by);

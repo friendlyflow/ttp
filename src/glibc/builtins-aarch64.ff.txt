@@ -1,0 +1,8 @@
+  comment
+    builtins-aarch64.ff.txt: the builtins of gcc for aarch64 that glibc uses, after builtins.ff.txt on its page (GTARGET=aarch64). __builtin_aarch64_get_fpcr: the FPCR (mrs, s3_3_c4_c4_0), for soft-fp's rounding mode.
+  __builtin_aarch64_get_fpcr:
+    asm
+    mrs
+      55840
+      x0
+    ret

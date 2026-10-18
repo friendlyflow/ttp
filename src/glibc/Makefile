@@ -14,25 +14,45 @@
 #
 #   make glibc-ref     configure and build  -> ~/.cache/ttp/glibc/obj
 #
+# The same for aarch64 and x86_64 with GTARGET (below), each in a folder of
+# its name: so far their long double (milestone ldouble), glibc's soft-fp
+# from their own build, as gcc's programs there take it from libgcc:
+#
+#   make GTARGET=aarch64 glibc-ref ldouble-check
+#
 # Not under build/ like the rest: this repository lives in Dropbox, which
 # renames files whose names differ only in case, and glibc makes stamp.os
 # next to stamp.oS (and .os next to .oS objects). Its build is also large
 # (some 300 MB) and nothing to sync.
 
-BUILD ?= $(HOME)/.cache/ttp/glibc
+# GTARGET: the target glibc is built and translated for, riscv64 (the
+# default) or aarch64 and x86_64, whose long double needs glibc's soft-fp
+# of their own (milestone ldouble). The other targets build next to
+# riscv64's, in a folder of their name.
+GTARGET ?= riscv64
+TRIPLE := $(GTARGET)-unknown-linux-gnu
+BUILD ?= $(HOME)/.cache/ttp/glibc$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
 JOBS ?= $(shell nproc)
 
 GLIBC_SRC ?= $(error GLIBC_SRC is not set: run this in `nix develop`)
 GLIBC_HEADERS ?= $(error GLIBC_HEADERS is not set: run this in `nix develop`)
 GLIBC_CC ?= $(error GLIBC_CC is not set: run this in `nix develop`)
+ifneq ($(GTARGET),riscv64)
+GLIBC_HEADERS := $(GLIBC_HEADERS_$(GTARGET))
+GLIBC_CC := $(GLIBC_CC_$(GTARGET))
+endif
+
+# The target's binutils have its triple in their names, except where the
+# target is the host's own (x86_64 here): there they have none.
+XPRE := $(if $(shell command -v $(TRIPLE)-objdump),$(TRIPLE)-)
 
 # The Nix ld-wrapper's hardening flags have no place in a libc's own build.
 export NIX_HARDENING_ENABLE :=
 
 # The binutils of the target, by name: the dev shell sets AR, NM, OBJCOPY,
 # ... to the host's, which configure would take.
-TOOLS := $(foreach t,AR:ar NM:nm OBJCOPY:objcopy OBJDUMP:objdump READELF:readelf RANLIB:ranlib STRIP:strip GPROF:gprof LD:ld,$(word 1,$(subst :, ,$(t)))=riscv64-unknown-linux-gnu-$(word 2,$(subst :, ,$(t))))
+TOOLS := $(foreach t,AR:ar NM:nm OBJCOPY:objcopy OBJDUMP:objdump READELF:readelf RANLIB:ranlib STRIP:strip GPROF:gprof LD:ld,$(word 1,$(subst :, ,$(t)))=$(XPRE)$(word 2,$(subst :, ,$(t))))
 
 .PHONY: glibc-ref clean
 
@@ -44,7 +64,7 @@ glibc-ref: $(OBJ)/libc.a
 $(OBJ)/config.status:
 	mkdir -p $(OBJ)
 	cd $(OBJ) && $(GLIBC_SRC)/configure \
-	    --host=riscv64-unknown-linux-gnu --prefix=/usr \
+	    --host=$(TRIPLE) --prefix=/usr \
 	    --with-headers=$(GLIBC_HEADERS) \
 	    --disable-werror --disable-nscd --disable-timezone-tools \
 	    CC="$(GLIBC_CC)" CXX= $(TOOLS) > configure.log 2>&1 \
@@ -74,12 +94,24 @@ C2FF_CLANG ?= $(error C2FF_CLANG is not set: run this in `nix develop`)
 # The checks run in parallel: make -j.
 ifeq ($(shell uname -m),x86_64)
 TTPC ?= ../../build/compiler/x86_64/stage2
-TTPC_RUN = $(TTPC)
+TTPC_RUN = $(TTPC) --target $(GTARGET)
 else
 TTPC ?= ../../build/compiler/boot/stage2
-TTPC_RUN = qemu-riscv64 $(TTPC)
+TTPC_RUN = qemu-riscv64 $(TTPC) --target $(GTARGET)
 endif
 SHARED := ../compiler/shared.ff
+
+# Per target: the CPUs a check runs on (riscv64 with V and without), and
+# the flags of a test program. On x86_64 long double is the x87's, so the
+# programs are compiled with -mlong-double-128: binary128, as ttpc's long
+# double is on every target, its arithmetic soft-fp's (__addtf3 ...).
+comma := ,
+CPUS_riscv64 := rv64 rv64,v=false
+CPUS_aarch64 := max
+CPUS_x86_64 := max
+CPUS := $(CPUS_$(GTARGET))
+PROGFLAGS_x86_64 := -mlong-double-128
+PROGFLAGS := $(PROGFLAGS_$(GTARGET))
 CAP := ulimit -v 4000000;
 
 # M1, string: strlen, memcpy, memset, strcmp and strchr, each its ifunc, its
@@ -111,7 +143,9 @@ ROOTS_stdlib := $(ROOTS_string) $(M2)
 # progs/ldouble.c needs nothing else of glibc.
 SOFTFP := addtf3 subtf3 multf3 divtf3 eqtf2 getf2 letf2 negtf2 floatditf floatunditf fixtfdi fixunstfdi \
 	extendsftf2 extenddftf2 trunctfsf2 trunctfdf2
-OBJS_ldouble := $(SOFTFP:%=soft-fp/%)
+# x86_64's soft-fp raises its exceptions through a function of libm's
+OBJS_ldouble_x86_64 := math/sfp-exceptions
+OBJS_ldouble := $(SOFTFP:%=soft-fp/%) $(OBJS_ldouble_$(GTARGET))
 ASMS_ldouble :=
 ROOTS_ldouble := __addtf3 __subtf3 __multf3 __divtf3 __eqtf2 __netf2 __getf2 __gttf2 __letf2 __lttf2 __negtf2 \
 	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2
@@ -209,12 +243,21 @@ $(I)/%.s: $(OBJ)/libc.a mki.pl
 
 $(I)/%.dump $(I)/%.bin: $(I)/%.s
 	$(CAP) timeout 60 $(GLIBC_CC) -c -mno-relax -x assembler $< -o $(I)/$*.ref.o
-	riscv64-unknown-linux-gnu-objdump -d -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
-	riscv64-unknown-linux-gnu-objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
+	$(XPRE)objdump -d -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
+	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
+
+# What clang does not read of gcc's C, rewritten for clang alone in a copy of
+# the .i, each to as many bytes (c2ff finds an asm statement's text in the
+# .i itself by the offsets in clang's AST). x86_64: gcc's %v in an asm
+# template (v under AVX, nothing here: glibc is not built for AVX) and the
+# mode __libgcc_cmp_return__ (8 bytes there, as gcc says: DI).
+CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mode (__DI__               )/g'
+CLANGFIX := $(CLANGFIX_$(GTARGET))
 
 $(I)/%.json: $(I)/%.i clang-prelude.h
+	$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i)
 	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w $< > $@
+	    -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
 # its asm parts name from elsewhere: setjmp's tail __sigjmp_save), then
@@ -223,16 +266,16 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # atomics.ff.txt). The asm parts share one page, glibc asm: the trees a
 # program reads have 255 pages in all (c2ff makes a page per directory).
 define milestone
-$$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) builtins.ff.txt atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+$$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
 	mkdir -p $$(FF)
-	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $$(foreach z,$$(ZEROS_$(1)),--zero $$(z)) $$(foreach w,$$(WEAKS_$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
-	    -- $$(ROOTS_$(1)) $$$$(for a in $$(ASMS_$(1)); do riscv64-unknown-linux-gnu-objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
+	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(ZEROS_$(1)),--zero $$(z)) $$(foreach w,$$(WEAKS_$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	    -- $$(ROOTS_$(1)) $$$$(for a in $$(ASMS_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
 	$$(if $$(ASMS_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_$(1)); do \
 	    $$(CAP) timeout 60 perl ../compiler/gen/s2ff.pl --items $$(I)/$$$$a.s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
-	cat builtins.ff.txt atomics.ff.txt >> $$(FF)/$(1).ff.txt
+	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
 	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
 endef
 $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
@@ -246,11 +289,11 @@ asm-check: $(ASMS_stdio:%=$(I)/%.dump) $(ASMS_stdio:%=$(I)/%.bin) ../compiler/ge
 	@for a in $(ASMS_stdio); do \
 	    n=$$(basename $$a); \
 	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
-	      riscv64-unknown-linux-gnu-objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
+	      $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
 	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
 	    $(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $(FF)/$$n.asm.ff $(FF)/$$n.asm > $(FF)/$$n.asm.lst || exit 1; \
 	    size=$$(perl ../compiler/gen/s2ff.pl --size $(I)/$$a.s $(I)/$$a.dump) || exit 1; \
-	    riscv64-unknown-linux-gnu-objdump -r $(I)/$$a.ref.o > $(FF)/$$n.relocs; \
+	    $(XPRE)objdump -r $(I)/$$a.ref.o > $(FF)/$$n.relocs; \
 	    head -c $$size $(I)/$$a.bin > $(FF)/$$n.want.raw; \
 	    tail -c +121 $(FF)/$$n.asm | head -c $$size > $(FF)/$$n.got.raw; \
 	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.want.raw > $(FF)/$$n.want || exit 1; \
@@ -279,33 +322,38 @@ CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
 $(FF)/%.ref: progs/%.c $(OBJ)/libc.a
 	mkdir -p $(FF)
-	$(CAP) timeout 120 $(GLIBC_CC) -O2 -fno-builtin -c $< -o $(FF)/$*.ref.o
+	$(CAP) timeout 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) -c $< -o $(FF)/$*.ref.o
 	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
 
 $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	mkdir -p $(FF)
-	$(CAP) timeout 60 $(GLIBC_CC) -E -P $< -o $(FF)/$*-prog.i
+	$(CAP) timeout 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program $*.ff $(if $(filter $*,$(EARLY)),--early) $(if $(filter $*,$(EXIT)),--exit) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	    -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $*.ff $(if $(filter $*,$(EARLY)),--early) $(if $(filter $*,$(EXIT)),--exit) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)
 	$(CAP) timeout 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
 
+# what a check expects: progs/NAME.expect, or progs/NAME.<target>.expect
+# where the target's glibc differs (soft-fp's NaNs: riscv64 makes them
+# canonical, aarch64 and x86_64 keep a NaN's payload, x86_64's sign is 1)
+expect = $(firstword $(wildcard progs/$(1).$(GTARGET).expect) progs/$(1).expect)
+
 define check
-$(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog progs/$(1).expect asm-check
-	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); \
-	tail -n +2 progs/$(1).expect > $$(FF)/$(1).want; \
+$(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter riscv64,$(GTARGET)),asm-check)
+	@want=$$$$(head -n 1 $$(call expect,$(1)) | cut -d" " -f2); \
+	tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1).want; \
 	for b in $(1).ref $(1)-prog; do \
-	    for cpu in rv64 rv64,v=false; do \
-	        s=0; $$(CAP) timeout 60 qemu-riscv64 -cpu $$$$cpu $$(FF)/$$$$b > $$(FF)/$$$$b.out || s=$$$$?; \
+	    for cpu in $$(CPUS); do \
+	        s=0; $$(CAP) timeout 60 qemu-$$(GTARGET) -cpu $$$$cpu $$(FF)/$$$$b > $$(FF)/$$$$b.out || s=$$$$?; \
 	        test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b on $$$$cpu: exit status $$$$s, not $$$$want"; exit 1; }; \
 	        cmp -s $$(FF)/$$$$b.out $$(FF)/$(1).want || { echo "$(1)-check: $$$$b on $$$$cpu: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1).want | head; exit 1; }; \
 	    done; \
 	done; \
-	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree, with V and without: exit $$$$want"
+	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree$(comma)$(if $(filter riscv64,$(GTARGET)), with V and without, on $(GTARGET)): exit $$$$want"
 .PHONY: $(1)-check
 endef
 $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
@@ -318,7 +366,7 @@ $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl
 	$(CAP) timeout 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
 
 $(FF)/%.rt.json: $(FF)/%.rt.c
-	$(CAP) timeout 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w \
+	$(CAP) timeout 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
 
 define roundtrip

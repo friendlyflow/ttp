@@ -46,6 +46,10 @@
       glibcTools = pkgs: with pkgs; [
         pkgsCross.riscv64.buildPackages.gcc
         pkgsCross.riscv64.buildPackages.binutils
+        # the same for aarch64 and x86_64 (GTARGET in src/glibc): glibc's
+        # soft-fp for long double on those targets, from their own build
+        pkgsCross.aarch64-multiplatform.buildPackages.binutils
+        pkgsCross.gnu64.buildPackages.binutils
         bison
         python3
         llvmPackages.clang-unwrapped
@@ -109,6 +113,10 @@
           GLIBC_SRC = "${glibc-src}";
           GLIBC_HEADERS = "${pkgs.pkgsCross.riscv64.linuxHeaders}/include";
           GLIBC_CC = "${pkgs.pkgsCross.riscv64.buildPackages.gcc.cc}/bin/riscv64-unknown-linux-gnu-gcc";
+          GLIBC_HEADERS_aarch64 = "${pkgs.pkgsCross.aarch64-multiplatform.linuxHeaders}/include";
+          GLIBC_CC_aarch64 = "${pkgs.pkgsCross.aarch64-multiplatform.buildPackages.gcc.cc}/bin/aarch64-unknown-linux-gnu-gcc";
+          GLIBC_HEADERS_x86_64 = "${pkgs.pkgsCross.gnu64.linuxHeaders}/include";
+          GLIBC_CC_x86_64 = "${pkgs.pkgsCross.gnu64.buildPackages.gcc.cc}/bin/x86_64-unknown-linux-gnu-gcc";
           C2FF_CLANG = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
 
           # `nix develop` always starts bash; drop into fish instead.
