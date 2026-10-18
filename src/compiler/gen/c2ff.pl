@@ -29,19 +29,25 @@
 # for main without arguments.
 # With --early it runs glibc's __libc_early_init (1) first, as glibc's static
 # startup does (ctype, malloc's arena, ...).
+# With --exit it ends with glibc's exit (main ()), as C's startup does, which
+# runs the atexit functions and flushes stdio (_IO_cleanup); else SYS_exit.
 #
-# Each unit's AST is kept next to its JSON as x.sto (Storable), read 50
-# times faster than JSON::PP parses the JSON; --store x.json makes it alone.
+# --zero name: an object glibc's asm only reserves, zeroed in .bss (elf/dl-debug-
+# symbols.S's _r_debug_extended), is a global of the type C declares, zero.
+# --weak name: a name nothing defines for a static program (the linker's
+# __init_array_start, which a ttpc program has no array for; a function gcc's
+# optimizer left no call of) is weak, address 0, as an undefined weak is.
 #
-#   perl c2ff.pl --store tu.json
+# The ASTs (1.9 GB of JSON for M4) are read with JSON::XS, which flake.nix
+# gives perl, 80 times faster than core Perl's JSON::PP, which it falls
+# back on.
 #
-# A host tool (core Perl only), not part of ttpc.
+# A host tool, not part of ttpc.
 use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use JSON::PP;
-use Storable qw(retrieve nstore);
+my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 use FF qw(node write_txt);
 
 # ---- types ------------------------------------------------------------------
@@ -67,6 +73,8 @@ my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
+my %desugar;                # a typeof (expression) as clang writes it, and the type it is
+my %enumval;                # an enum constant's value, by name
 my %typeof;                 # declared names and their types, for typeof
 my %wanttag;                # the tags whose definitions the output needs
 my (%fn, %var, %rec, %enumd, %alias, %ifunc);   # the units' definitions, by name
@@ -90,6 +98,11 @@ sub ctype {
     $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
     $t = trim($t);
     $t =~ s/\s+/ /g;
+    # an array of function pointers, ret (*[n]) (params): the init arrays'
+    # void (*[]) (int, char **, char **)
+    if ($t =~ /^(.*?)\s*\(\*\s*\[(\d*)\]\)\s*\((.*)\)$/) {
+        return ('array', 'address', fntype($1, $3), $2 eq '' ? 0 : $2);
+    }
     if ($t =~ /^(.*?)\s*\[(\d*)\]((?:\[\d+\])*)$/) {
         # T[] (a flexible array member, an extern array) has no elements of
         # its own: 0
@@ -104,6 +117,7 @@ sub ctype {
     }
     return $scalar{$t} if exists $scalar{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};
+    return ctype($desugar{$t}) if exists $desugar{$t};
     return ctype($typeof{$1}) if $t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1};
     if (my $a = $anon{ anon_key($t) // '' }) {
         my ($tag, $name) = @$a;
@@ -125,6 +139,9 @@ sub ctype {
         $wanttag{"struct $name"} = 1;
         return $tagname{"struct $name"} //= $name;
     }
+    # an anonymous enum that names no global (dl-close's static enum { ... }
+    # dl_close_state, in a function): what ttpc makes of every enum, an int
+    return 'int' if $t =~ /^enum \(unnamed at /;
     die "c2ff: no ff type for C's '$t'\n";
 }
 
@@ -139,6 +156,7 @@ sub expand {
         $t = trim($t);
         if (exists $typedef{$t}) { $t = $typedef{$t}; next }
         if ($t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1}) { $t = $typeof{$1}; next }
+        if (exists $desugar{$t}) { $t = $desugar{$t}; next }
         last;
     }
     $t;
@@ -150,6 +168,15 @@ sub split_fn {
     my ($t) = @_;
     $t = trim($t);
     return undef unless $t =~ /\)$/;
+    # clang's spelling of an anonymous type, struct (unnamed struct at f.c:9:3),
+    # and a typeof (expression) are no function types
+    return undef if $t =~ /^(?:struct|union|enum) \((?:unnamed|anonymous)\b/;
+    if ($t =~ /^(?:typeof|__typeof__) \(/) {
+        # (one whose ( closes at the end)
+        my ($d, $i) = (0, index($t, '('));
+        for (; $i < length $t; $i++) { my $c = substr($t, $i, 1); $d++ if $c eq '('; $d-- if $c eq ')'; last if !$d }
+        return undef if $i == length($t) - 1;
+    }
     my $depth = 0;
     for (my $i = length($t) - 1; $i >= 0; $i--) {
         my $c = substr($t, $i, 1);
@@ -219,29 +246,30 @@ if (@ARGV && $ARGV[0] eq '--types') {
 
 # ---- the units --------------------------------------------------------------
 
-# A unit's AST: from x.sto when it is newer than x.json, else parsed and
-# kept there.
+# A unit's AST, from its JSON.
 sub ast_of {
     my ($json) = @_;
-    (my $sto = $json) =~ s/(?:\.json)?$/.sto/;
-    return retrieve($sto) if -e $sto && -M $sto <= -M $json;
     open my $h, '<', $json or die "c2ff: cannot open $json: $!\n";
-    my $ast = JSON::PP->new->decode(do { local $/; <$h> });
+    my $ast = $json_parser->decode(do { local $/; <$h> });
     close $h;
-    rename "$sto.tmp", $sto if eval { nstore($ast, "$sto.tmp") };
     $ast;
 }
-if (@ARGV == 2 && $ARGV[0] eq '--store') { ast_of($ARGV[1]); exit 0 }
 
 my $page = 'glibc';
 my $program;
 my $early;                 # --early: _start runs glibc's __libc_early_init (1) before main
+my $exit;                  # --exit: _start ends with glibc's exit (main ()), not SYS_exit
+my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, in .bss)
+my %forceweak;             # --weak name: nothing defines it for a static program
 my (@units, @roots);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--program') { $program = shift @ARGV; next }
     if ($a eq '--early') { $early = 1; next }
+    if ($a eq '--exit') { $exit = 1; next }
+    if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
+    if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
     if ($a eq '--') { @roots = @ARGV; last }
     my ($json, $i) = split /=/, $a, 2;
     push @units, { json => $json, i => $i };
@@ -256,6 +284,15 @@ my %enumid;                 # enums by id
 # an enum's constants bring it in where they are used; one with no name is
 # named after its first constant. A function's own enums too (qsort's enum {
 # SWAP_GENERIC_SIZE = 32 }), as globals.
+# The value C gives an enum constant, worked out by clang (a ConstantExpr, under
+# the conversion to int where it needs one: vfprintf's WORK_BUFFER_SIZE =
+# 1000 / sizeof (CHAR_T)), else undef.
+sub enum_value {
+    my ($c) = @_;
+    my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($c);
+    $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
+    $e && $e->{kind} eq 'ConstantExpr' ? $e->{value} : undef;
+}
 sub index_enum {
     my ($d) = @_;
     $enumid{$d->{id}} = $d;
@@ -265,7 +302,33 @@ sub index_enum {
     $enumd{$tag} //= $d;
     $tagname{$tag} //= defined $d->{name} ? ffname($d->{name}) : "$c[0]{name} enum";
     $enumof{ $_->{name} } //= $tag for @c;
+    # the constants' values: clang's ConstantExpr where C gives one, else the
+    # one before and 1
+    my $v = -1;
+    for my $c (@c) {
+        my $e = enum_value($c);
+        $v = defined $e ? $e : $v + 1;
+        $enumval{ $c->{name} } //= $v;
+    }
 }
+# A static that another unit defines differently (csu/libc-start's and
+# elf/dl-init's call_init) is that unit's own, named for it: call_init
+# elf/dl-init; the unit's references take that name. The same text twice
+# (a header's static inline) is one function.
+my %own;
+sub def_text {
+    my ($d, $u) = @_;
+    my ($b, $e) = map { $_->{offset} // ($_->{expansionLoc} // {})->{offset} } $d->{range}{begin}, $d->{range}{end};
+    defined $b && defined $e ? substr($u->{text}, $b, $e - $b) : '';
+}
+sub own_name {
+    my ($map, $name, $d, $u) = @_;
+    my $old = $map->{$name} or return $name;
+    return $name if $old->[1] == $u || ($d->{storageClass} // '') ne 'static' || ($old->[0]{storageClass} // '') ne 'static';
+    return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]);
+    $own{$u}{$name} = "$name " . unit_name($u);
+}
+sub own { my ($name) = @_; $cur_unit && $own{$cur_unit} && $own{$cur_unit}{$name} // $name }
 sub inner_tags { my ($n) = @_; (($n->{kind} // '') =~ /^(EnumDecl|RecordDecl)$/ ? $n : ()), map { inner_tags($_) } @{ $n->{inner} || [] } }
 for my $u (@units) {
     my $ast = ast_of($u->{json});
@@ -298,7 +361,7 @@ for my $u (@units) {
             $regvar{$name} = $d->{mangledName} // $l->{label} // stop('a register variable without its register', $d);
             next;
         }
-        $weak{$name} //= $d if $d->{kind} =~ /^(VarDecl|FunctionDecl)$/ && grep { $_->{kind} =~ /^(WeakAttr|ErrorAttr)$/ } @{ $d->{inner} || [] };
+        $weak{$name} //= $d if $d->{kind} =~ /^(VarDecl|FunctionDecl)$/ && ($forceweak{$name} || grep { $_->{kind} =~ /^(WeakAttr|ErrorAttr)$/ } @{ $d->{inner} || [] });
         if ($d->{kind} eq 'TypedefDecl') {
             my $own = $d->{inner} && $d->{inner}[0]{ownedTagDecl};
             if ($own && ($own->{name} // '') eq '' && (my $e = $enumid{ $own->{id} })) {
@@ -311,9 +374,11 @@ for my $u (@units) {
                 # a typedef of an anonymous struct or union: the record is its tag
                 $rec{ $d->{type}{qualType} } //= $recid{ $own->{id} };
                 anon_fields($recid{ $own->{id} }, $name);
-                $typedef{$name} //= $d->{type}{qualType};
+                # (a typedef that other units leave void, opaque behind an address,
+                # takes the struct: _IO_lock_t outside and inside libio's lock)
+                $typedef{$name} = $d->{type}{qualType} if ($typedef{$name} // 'void') eq 'void';
             } else {
-                $typedef{$name} //= qt($d);
+                $typedef{$name} = qt($d) if ($typedef{$name} // 'void') eq 'void';
             }
         }
         $typeof{$name} //= qt($d) if $d->{kind} =~ /^(FunctionDecl|VarDecl)$/ && $d->{type};
@@ -321,7 +386,7 @@ for my $u (@units) {
         if ($d->{kind} eq 'FunctionDecl') {
             if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
             if (my ($r) = grep { $_->{kind} eq 'IFuncAttr' } @in) { $ifunc{$name} = [$d, $u, resolver($u, $r)]; next }
-            $fn{$name} //= [$d, $u] if grep { $_->{kind} eq 'CompoundStmt' } @in;
+            if (grep { $_->{kind} eq 'CompoundStmt' } @in) { my $k = own_name(\%fn, $name, $d, $u); $fn{$k} //= [$d, $u] }
             # (and under address a local named as a tag would be the type: struct
             # msort_param msort_param in qsort)
             $localname{$_->{name}} = 1 for grep { defined $_->{name} } locals($d);
@@ -335,7 +400,7 @@ for my $u (@units) {
             }
         } elsif ($d->{kind} eq 'VarDecl') {
             if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
-            $var{$name} //= [$d, $u] if ($d->{storageClass} // '') ne 'extern';
+            if (($d->{storageClass} // '') ne 'extern' || $zero{$name}) { my $k = own_name(\%var, $name, $d, $u); $var{$k} //= [$d, $u] }
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
             $rec{"$d->{tagUsed} $name"} //= $d;
             anon_fields($d, $name);
@@ -378,14 +443,21 @@ sub anon_fields {
 sub anon_places {
     my ($ast) = @_;
     my ($file, $line) = ('', 0);
+    my ($actual, $delta) = (0, 0);   # the .i's line, and it less the presumed one
     my $walk;
     # one location as clang writes it: a macro's spelling, then its expansion
     my $at = sub {
         my ($l) = @_;
         for my $p ($l->{spellingLoc} // (), $l->{expansionLoc} // $l) {
-            # the type's spelling has the place the # line markers give
+            # the type's spelling has the place the # line markers give. clang
+            # writes presumedLine where it differs from the .i's line and from
+            # the last it wrote: without one the place follows the .i's line
+            # where the two have been the same (no markers: a -P program), else
+            # stays (dl-reloc's struct in a macro)
             $file = $p->{presumedFile} // $p->{file} if defined($p->{presumedFile} // $p->{file});
-            $line = $p->{presumedLine} // $p->{line} if defined($p->{presumedLine} // $p->{line});
+            if (defined $p->{presumedLine}) { $line = $p->{presumedLine}; $delta = ($p->{line} // $actual) - $line }
+            elsif (defined $p->{line} && !$delta) { $line = $p->{line} }
+            $actual = $p->{line} if defined $p->{line};
         }
     };
     $walk = sub {
@@ -401,6 +473,11 @@ sub anon_places {
                 $anon{$key} = ["$n->{tagUsed} $name", $name];
                 $rec{"$n->{tagUsed} $name"} //= $n;
             }
+        }
+        # what a typeof (expression) is, where clang says it (libio's vtable
+        # check has typeof (((struct _IO_FILE_plus){}).vtable) *, without it)
+        if ((my $ty = $n->{type}) && $n->{type}{qualType}) {
+            $desugar{ $ty->{qualType} } //= $ty->{desugaredQualType} if defined $ty->{desugaredQualType} && $ty->{qualType} =~ /^(?:typeof|__typeof__) \(/;
         }
         # after a node's place, clang writes its range: a line it leaves out
         # later may be one of these
@@ -435,6 +512,9 @@ sub want { my ($n) = @_; push @todo, $n unless $done{$n}++ }
 sub where { my ($n) = @_; my $l = $n->{range}{begin} // $n->{loc} // {}; $l = $l->{expansionLoc} // $l; ($l->{file} // '') . ':' . ($l->{line} // '?') }
 our $cur_fn = '';           # the function being translated, for messages
 our %staticname;            # a function's statics, by id: their names as globals
+our $cur_global;            # the global whose items are being translated
+our $in_global;             # a global's items are being translated
+our %literals;              # its compound literals so far, by global
 sub stop { my ($what, $n) = @_; die "c2ff: not yet: $what (at " . where($n) . ($cur_fn ne '' ? ", in $cur_fn" : '') . ")\n" }
 
 my %prec = ('=' => 1, '+=' => 1, '-=' => 1, '*=' => 1, '/=' => 1, '%=' => 1, '&=' => 1, '|=' => 1,
@@ -506,6 +586,9 @@ sub softfp {
 # (soft-fp's sfp-machine.h: frrm, csrs fflags, ...), lr, sc and the AMOs
 # (glibc's atomics).
 my %asmfn;
+# the overflow builtins builtins.ff.txt has, by name and operand types
+my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int';
+$ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 sub asm_ins {
     my ($n, $op, @a) = @_;
@@ -522,6 +605,12 @@ sub asm_ins {
         my ($name, $aq, $rl) = ("$1.$2", ($3 =~ /aq/ ? 1 : 0), ($3 =~ /rl/ ? 1 : 0));
         return node($name, node($aq), node($rl), $base->($a[1]), node($a[0])) if $1 eq 'lr' && @a == 2;
         return node($name, node($aq), node($rl), node($a[1]), $base->($a[2]), node($a[0])) if @a == 3;
+    }
+    # .insn i 0x0f, 0, x0, x0, imm: a fence by its fields (fm, pred, succ in imm),
+    # glibc's spin hint (0x010: fence w, 0, Zihintpause's pause)
+    if ($op eq '.insn' && "@a" =~ /^i 0x0f 0 x0 x0 (0x[0-9a-f]+|\d+)$/i) {
+        my $imm = oct($1 =~ /^0x/i ? $1 : "0$1") & 0xfff;
+        return node('fence', node($imm >> 8), node(($imm >> 4) & 15), node($imm & 15));
     }
     stop("the asm instruction $op", $n);
 }
@@ -561,6 +650,11 @@ sub asm_stmt {
         } elsif ($k =~ /^[rJK]+$/) {
             push @arg, [$i, 'value'];
             push @text, 'a' . $#arg;
+        } elsif ($k =~ /^\d$/ && $i >= @oc && defined $ret && $k == $ret) {
+            # an input in the register output's place (dl-lookup's "0"):
+            # its value there first, as for +r
+            push @arg, [$i, 'value', 1];
+            push @text, 't0';
         } elsif ($k =~ /^[Am]$/) {
             push @arg, [$i, 'address'];
             push @text, ($k eq 'A' ? '(a' . $#arg . ')' : '0(a' . $#arg . ')');
@@ -575,7 +669,7 @@ sub asm_stmt {
     push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
     push @code, node('mv', node('t0'), node('a0')) if defined $ret;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
-    $name .= '_' . join '', map { (my $k = $_) =~ s/[^A-Za-z]//g; $k } @oc, '_', @ic;
+    $name .= '_' . join '', map { (my $k = $_) =~ s/[^A-Za-z0-9]//g; $k } @oc, '_', @ic;
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
     my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops[$i])) : atom($ops[$i]) } @arg;
@@ -587,12 +681,20 @@ sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
     softfp($n);
+    # GNU's &&L, the address of a label of the function
+    return node('address', node(ffname($label{ $n->{labelDeclId} } // stop('the address of no label', $n)))) if $k eq 'AddrLabelExpr';
+    # in a global's items, an array field that decays to its first element's
+    # address (dl-support's .l_scope = _dl_main_map.l_scope_mem): the address of
+    # the path, the same address, as ttpc takes an item
+    if ($in_global && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'ArrayToPointerDecay' && strip((kids($n))[0])->{kind} =~ /^(MemberExpr|ArraySubscriptExpr)$/) {
+        return node('address', expr((kids($n))[0]));
+    }
     # a function as a value is its address (a function name alone is a call in ff)
     return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
     # the conversions C makes between integers and floating types, and
     # between those, are written out, as a cast is
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/) {
-        return node('cast:', map({ node($_) } ctype(qt($n))), item(expr((kids($n))[0])));
+        return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean') {
         my ($e) = kids($n);
@@ -617,9 +719,9 @@ sub expr {
     }
     return node(hexfloat($n->{value}, qt($n))) if $k eq 'FloatingLiteral';
     return wide_text($n) if $k eq 'StringLiteral' && $n->{value} =~ /^(L|u|U)"/;
-    return node('address', node('char'), texts($n)) if $k eq 'StringLiteral';
+    return string_value($n) if $k eq 'StringLiteral';
     # __func__ and its kin: the function's name, as the string clang has for it
-    if ($k eq 'PredefinedExpr') { my ($l) = kids($n); $l && $l->{kind} eq 'StringLiteral' or stop('a PredefinedExpr', $n); return node('address', node('char'), texts($l)) }
+    if ($k eq 'PredefinedExpr') { my ($l) = kids($n); $l && $l->{kind} eq 'StringLiteral' or stop('a PredefinedExpr', $n); return string_value($l) }
     if ($k eq 'DeclRefExpr') {
         my $d = $n->{referencedDecl};
         $wanttag{ $enumof{ $d->{name} } } = 1 if $d->{kind} eq 'EnumConstantDecl' && $enumof{ $d->{name} };
@@ -627,7 +729,8 @@ sub expr {
         # a global register variable is its register (tp for THREAD_SELF)
         return node($regvar{ $d->{name} }) if $d->{kind} eq 'VarDecl' && !$local{ $d->{id} } && $regvar{ $d->{name} };
         # a function, or a variable that is not this function's own: a global
-        want($d->{name}) if $d->{kind} eq 'FunctionDecl' || ($d->{kind} eq 'VarDecl' && !$local{ $d->{id} });
+        # (this unit's own static, if another unit has one of its name)
+        if ($d->{kind} eq 'FunctionDecl' || ($d->{kind} eq 'VarDecl' && !$local{ $d->{id} })) { my $g = own($d->{name}); want($g); return node(ffname($g)) }
         return node(ffname($d->{name}));
     }
     if ($k eq 'OffsetOfExpr') {
@@ -660,6 +763,19 @@ sub expr {
         my $op = $n->{opcode};
         my ($e) = kids($n);
         return node('content', expr($e)) if $op eq '*';
+        # in a global's items, the address of an element of a global array is
+        # the array and that many elements on, as C has it (&a[i] is a + i),
+        # the form ttpc works out while compiling (__io_vtables[IO_FILE_JUMPS])
+        my $s = strip($e);
+        $s = strip((kids($s))[0]) while $s->{kind} eq 'ParenExpr';     # (stdfiles' &(__io_vtables[...]))
+        if ($op eq '&' && $in_global && $s->{kind} eq 'ArraySubscriptExpr') {
+            my ($b, $i) = kids($s);
+            # (the index a number, as ttpc wants it there: an enum constant its value)
+            my $x = strip($i);
+            my @i = $x->{kind} eq 'DeclRefExpr' && $x->{referencedDecl}{kind} eq 'EnumConstantDecl' && defined $enumval{ $x->{referencedDecl}{name} }
+                ? node($enumval{ $x->{referencedDecl}{name} }) : item(expr($i));
+            return node(':', expr($b), node('+'), @i) if strip($b)->{kind} eq 'DeclRefExpr';
+        }
         return node('address', expr($e)) if $op eq '&';
         return (node($op), atom($e)) if $op eq '-' || $op eq '!' || $op eq '~';
         return $n->{isPostfix} ? (atom($e), node($op)) : (node($op), atom($e)) if $op eq '++' || $op eq '--';
@@ -668,14 +784,15 @@ sub expr {
         stop("the operator $op", $n);
     }
     if ($k eq 'CStyleCastExpr') {
-        return node('cast:', map({ node($_) } ctype(qt($n))), item(expr((kids($n))[0])));
+        return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
     if ($k eq 'ArraySubscriptExpr' || $k eq 'MemberExpr') {
         # a path from a variable: its elements and fields in a row, xs i x
         my @path;
         my $base = $n;
         while (1) {
-            if ($base->{kind} eq 'MemberExpr') { unshift @path, node(ffname($base->{name})); $base = strip((kids($base))[0]); next }
+            # (an anonymous member, C11's, is no step: ttpc finds its fields in it)
+            if ($base->{kind} eq 'MemberExpr') { unshift @path, node(ffname($base->{name})) if ($base->{name} // '') ne ''; $base = strip((kids($base))[0]); next }
             if ($base->{kind} eq 'ArraySubscriptExpr' && strip((kids($base))[0])->{kind} =~ /^(DeclRefExpr|MemberExpr|ArraySubscriptExpr)$/) {
                 my ($b, $i) = kids($base);
                 unshift @path, item(expr($i));
@@ -718,6 +835,15 @@ sub expr {
             push @{ $p[0]{children} }, map { item(expr($_)) } @args;
             return @p;
         }
+        if ($c->{kind} =~ /^(CStyleCastExpr|ConditionalOperator|CallExpr)$/) {
+            # through a function pointer that is a value, not a variable (dl-fini's
+            # ((fini_t) array[i]) ()): the value, a ., then the arguments
+            my @p = expr($c);
+            @p = node(':', @p) if @p > 1;    # (a conditional)
+            @p == 1 or stop('a call through ' . $c->{kind} . ' of several nodes', $n);
+            push @{ $p[0]{children} }, node('.'), map { item(expr($_)) } @args;
+            return @p;
+        }
         $c->{kind} eq 'DeclRefExpr' or stop('a call through ' . $c->{kind}, $n);
         my $name = $c->{referencedDecl}{name};
         return expr($args[0]) if $name eq '__builtin_expect';
@@ -729,11 +855,24 @@ sub expr {
         # a builtin of a libc function is a call of it, as gcc makes one
         # where it does not expand the builtin
         $name = $1 if $name =~ /^__builtin_((?:mem|str|stp)\w+|free|malloc)$/;
-        # gcc's type-generic overflow builtins, on unsigned words only (as
-        # malloc has them), in builtins.ff.txt
+        # gcc's alloca: ttpc's, C on the shared page, which the function gives
+        # back when it returns
+        return node('alloca', map { item(expr($_)) } @args) if $name eq '__builtin_alloca';
+        # gcc's type-generic overflow builtins: one function in builtins.ff.txt
+        # for each set of operand types glibc uses, named for them
+        # (__builtin_add_overflow u32 u32 u32)
         if ($name =~ /^__builtin_(add|mul)_overflow$/) {
             my @t = map { tword_int($_) } @args;
-            "@t" eq 'u64 u64 address u64' or stop("$name on @t", $n);
+            my $sig = "@t" =~ /^(\S+) (\S+) address (\S+)$/ ? "$1 $2 $3" : '';
+            $ovf{"$name $sig"} or stop("$name on @t", $n);
+            return node("$name $sig", map { item(expr($_)) } @args);
+        }
+        # gcc's type-generic float classification, in builtins.ff.txt, one
+        # function for each floating type (printf_fp has double and long double)
+        if ($name =~ /^__builtin_(isnan|isinf_sign|signbit)$/) {
+            my $t = tword_int($args[0]);
+            $t =~ /^(double|long double)$/ or stop("$name on $t", $n);
+            return node("$name $t", item(expr($args[0])));
         }
         # C's va_ words, as clang has them
         return node('va_start', item(expr($args[0]))) if $name eq '__builtin_va_start' || $name eq '__builtin_c23_va_start';
@@ -743,8 +882,10 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|unreachable|trap|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p)$/ || $name eq '__atomic_always_lock_free';
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
+        $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
+        $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
         want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl' && $name !~ /^__builtin_/;
         return node(ffname($name), map { item(expr($_)) } @args);
     }
@@ -765,14 +906,16 @@ sub expr {
         stop("the atomic $a", $n);
     }
     if ($k eq 'VAArgExpr') { my ($ap) = kids($n); return node('va_arg', item(expr($ap)), map { node($_) } ctype(qt($n))) }
+    # C's c ? a : b, a leaf ? and a leaf : among the siblings, between = and ||
+    # in precedence, right to left (ttpc gives both branches the type C
+    # does); GNU C's a ?: b is ? and : in a row, a worked out once
     if ($k eq 'BinaryConditionalOperator') {
-        # GNU C's a ?: b: an if with only its condition, a worked out once
         my ($common, undef, undef, $b) = kids($n);
-        return (node('if', item(expr($common))), node('else', item(expr($b))));
+        return (operand($common, 2, 0), node('?'), node(':'), operand($b, 1.5, 1));
     }
     if ($k eq 'ConditionalOperator') {
         my ($c, $a, $b) = kids($n);
-        return (node('if', item(expr($c)), item(expr($a))), node('else', item(expr($b))));
+        return (operand($c, 2, 0), node('?'), operand($a, 2, 0), node(':'), operand($b, 1.5, 1));
     }
     if ($k eq 'StmtExpr') {
         my ($cs) = kids($n);
@@ -780,8 +923,17 @@ sub expr {
         return @sys ? @sys : node(':', body($cs));
     }
     if ($k eq 'CompoundLiteralExpr') {
+        # in a global's items it is a static object of its own (dl-support's
+        # &(struct link_map *) { &_dl_main_map }): a global, named for that one
+        if (defined $cur_global) {
+            my $g = ffname($cur_global) . ' literal ' . ++$literals{$cur_global};
+            push @out, [$cur_unit, decl({ kind => 'VarDecl', type => $n->{type}, inner => [kids($n)] }, 1, $g)];
+            return node($g);
+        }
         my @t = ctype(qt($n));
-        @t == 1 && !$scalar_word{$t[0]} or stop('a compound literal of ' . qt($n), $n);
+        @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne 'address' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
+        # (one of a scalar type is a typed literal, u32 / 0; ttpc gives
+        # address / u32 / 0 a temporary, C's &(unsigned int){0})
         return node($t[0], init((kids($n))[0]));
     }
     if ($k eq 'UnaryExprOrTypeTraitExpr') {
@@ -836,6 +988,8 @@ sub bytes {
 sub pieces {
     my ($s, $array) = @_;
     my @p = unpack '(a255)*', $s;
+    # (a node's text holds no NUL: gconv's alias list, texts with NULs between)
+    return () if $s =~ /\0/;
     for (@p) { return () unless utf8::decode(my $u = $_) && !($array && /^-?(?:0x[0-9a-f]+|\d+)$/i) }
     @p;
 }
@@ -857,6 +1011,29 @@ sub texts {
     return node('') if $s eq '';
     my @p = pieces($s) or stop('a text that is not UTF-8 text', $n);
     map { node($_) } @p;
+}
+# A string literal as a value: address / char / its text. But a text that ff
+# reads as something else (an operator: __dcigettext's "/", a word ff
+# reserves), holds a NUL (which a node's text cannot) or is longer than a
+# node's 255 bytes (a __PRETTY_FUNCTION__: a value is one text) is a global
+# char array of its own, text 1, 2, ..., and the value the address of its
+# first char.
+my $ntext = 0;
+# cast: type value; under address / char (or u8) a leaf is a text, so a leaf
+# value goes in a : (printf-parse's (const char *) format)
+sub cast_node {
+    my ($t, @v) = @_;
+    @v = node(':', @v) if "@$t" =~ /^address (char|u8)$/ && @v == 1 && !@{ $v[0]{children} };
+    node('cast:', map({ node($_) } @$t), @v);
+}
+sub string_value {
+    my ($n) = @_;
+    my $s = bytes($n);
+    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255;
+    my $name = 'text ' . ++$ntext;
+    my @c = (unpack('C*', $s), 0);
+    push @out, [$cur_unit, node("$name:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
+    node('address', node($name, node('0')));
 }
 # A wide literal's elements (L"", u"", U""): each escape one element, each
 # character its code point
@@ -887,7 +1064,9 @@ sub array_text {
     my $s = bytes($n);
     $s =~ s/\0+$//;
     return () if $s eq '';
-    my @p = pieces($s, 1);
+    # (a local takes no text leaves, ttpc fills only a global's array with text:
+    # its codes, as dl-map-segments' char bssname[80] = " glibc: .bss")
+    my @p = $in_global ? pieces($s, 1) : ();
     @p ? map({ node($_) } @p) : map({ node($_) } unpack 'C*', $s);
 }
 # A string literal that sets a char array: under no decay to an address.
@@ -916,12 +1095,16 @@ sub operand {
         my $q = $prec{ $s->{opcode} } // 0;
         return node(':', @e) if $q < $p || ($right && $q == $p && $p != 1);
     }
-    return node(':', @e) if $s->{kind} eq 'ConditionalOperator';
+    # a conditional (1.5) in a : where what holds it binds tighter; not as the
+    # else branch of another (right to left) nor as the value of an =
+    return node(':', @e) if $s->{kind} =~ /^(Binary)?ConditionalOperator$/ && (1.5 < $p || (!$right && 1.5 == $p));
     @e;
 }
 
 # The LabelStmts under a node.
 sub labels { my ($n) = @_; (($n->{kind} // '') eq 'LabelStmt' ? $n : ()), map { labels($_) } kids($n) }
+# Whether a node of that kind is under n.
+sub holds { my ($n, $k) = @_; (($n->{kind} // '') eq $k) || grep { holds($_, $k) } kids($n) }
 # The ParmVarDecls and VarDecls under a node (a function's own).
 sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n : ()), map { locals($_) } kids($n) }
 
@@ -993,6 +1176,11 @@ sub stmt {
             my (undef, $m) = kids($d);
             my $text = $m ? join('', map { $_->{content} } texts($m)) : '';
             node('comment', node("_Static_assert, checked by clang: $text"));
+        } elsif ($d->{kind} eq 'TypedefDecl') {
+            # a typedef in a function (dl-load's d_tag_utype): what it stands
+            # for, as a unit's own typedefs are; it makes no code
+            $typedef{ $d->{name} } //= qt($d);
+            ();
         } elsif ($d->{kind} eq 'LabelDecl') {
             # GNU's __label__ (a local label of a macro's): a label of the
             # function, as every label in ff is
@@ -1005,14 +1193,19 @@ sub stmt {
             $weak{ $d->{name} } //= $d if grep { $_->{kind} =~ /^(WeakAttr|ErrorAttr)$/ } @{ $d->{inner} || [] };
             want($d->{name});
             ();
-        } elsif (($d->{storageClass} // '') eq 'static') {
+        } elsif (($d->{storageClass} // '') eq 'static' && !holds($d, 'AddrLabelExpr')) {
             # a static of a function lives as long as the program: a global,
             # named for its function (hugepages' mode_always)
             my $g = ffname($cur_fn) . ' ' . ffname($d->{name});
             $staticname{ $d->{id} } = $g;
             push @out, [$cur_unit, decl($d, 1, $g)];
             ();
-        } else { decl($d) }
+        } else {
+            # the one lowering: a static holding the addresses of the function's
+            # labels (vfprintf's jump tables, const) is set where it stands, as a
+            # local: a global cannot name them, they are addresses only inside it
+            decl($d);
+        }
     } kids($n) if $k eq 'DeclStmt';
     return node('return', $n->{inner} ? item(expr((kids($n))[0])) : ()) if $k eq 'ReturnStmt';
     return asm_stmt($n) if $k eq 'GCCAsmStmt';
@@ -1022,7 +1215,11 @@ sub stmt {
     if ($k eq 'ForStmt') {
         # clang's parts: init, a condition variable, cond, inc, body ({} when absent)
         my ($i, undef, $c, $s, $b) = kids($n);
-        return node('for', clause($i, 1), clause($c), clause($s, 1), sub_body($b));
+        # an init declaring several (dl-load's *ph = phdr, *ph_end = ...): their
+        # scope is the loop, as C has it, so a block holds them and the loop
+        my @i = clause($i, 1);
+        return node(':', @i, node('for', node(':'), clause($c), clause($s, 1), sub_body($b))) if @i > 1;
+        return node('for', @i, clause($c), clause($s, 1), sub_body($b));
     }
     if ($k eq 'SwitchStmt') {
         my ($v, $b) = kids($n);
@@ -1031,6 +1228,11 @@ sub stmt {
     return labelled($n) if $k eq 'CaseStmt' || $k eq 'DefaultStmt';
     return node(ffname($n->{name}) . ':', stmt((kids($n))[0])) if $k eq 'LabelStmt';
     return node('goto', node(ffname($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
+    # GNU's goto *p: to the address p holds (a label's, &&L)
+    return node('goto', node('content', expr((kids($n))[0]))) if $k eq 'IndirectGotoStmt';
+    # a statement under an attribute (__attribute__ ((fallthrough)), a hint to
+    # the compiler): the statement
+    return map { stmt($_) } grep { $_->{kind} !~ /Attr$/ } kids($n) if $k eq 'AttributedStmt';
     return node('break') if $k eq 'BreakStmt';
     return node('continue') if $k eq 'ContinueStmt';
     return () if $k eq 'NullStmt';
@@ -1056,13 +1258,20 @@ sub clause {
 # The body of a switch: each case holds the statements up to the next one,
 # as clang has them after it; case 2: case 3: is two cases, the first empty.
 sub cases {
-    my @out;
+    my (@pre, @out);
     for my $s (@_) {
         if ($s->{kind} eq 'CaseStmt' || $s->{kind} eq 'DefaultStmt') { push @out, labelled($s); next }
-        stop('a statement before the first case', $s) unless @out;
+        # before the first case only declarations without a value, which the
+        # whole body sees (exit's function pointers): what they do is nothing
+        if (!@out) {
+            stop('a statement before the first case', $s)
+                unless $s->{kind} eq 'DeclStmt' && !grep { $_->{init} || kids($_) } kids($s);
+            push @pre, stmt($s);
+            next;
+        }
         push @{ $out[-1]{children} }, stmt($s);
     }
-    @out;
+    (@pre, @out);
 }
 # A case or default and what clang puts under it: its first statement, or
 # the next case.
@@ -1091,20 +1300,45 @@ sub ifs {
 sub decl {
     my ($v, $global, $name) = @_;
     $v->{kind} eq 'VarDecl' or stop('a declaration of ' . $v->{kind}, $v);
+    # a variable-length array (iofwide's wchar_t to_buf[max]): array, the
+    # element's type and the count, which clang has only as text in the type
+    if (!$global && qt($v) =~ /^(.*?) ?\[([^\[\]]*[A-Za-z_][^\[\]]*)\]$/) {
+        my ($elem, $count) = ($1, $2);
+        my @c = vla_count($count, $v);
+        return node(ffname($v->{name}) . ':', node('array'), map({ node($_) } ctype($elem)), @c > 1 ? node(':', @c) : @c);
+    }
     my @t = ctype(qt($v));
     my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+    local $in_global = $global;
     my @i = $init ? init($init) : ();
     # a global takes each item as one node
     @i = node(':', @i) if $global && @i > 1 && strip($init)->{kind} ne 'InitListExpr' && !bare_string($init);
-    # under address / char a leaf is text: a value that is a leaf goes in a :
-    @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i == 1 && !@{ $i[0]{children} } && !bare_string($init);
+    # under address / char a leaf is text: a value that starts with a leaf goes
+    # in a : (vfprintf's char *workend = work_buffer + WORK_BUFFER_SIZE)
+    @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i && !@{ $i[0]{children} } && !bare_string($init);
     # (a thread-local one, __thread, stays a global: with one thread that is
     # the same, and glibc's asm reaches it as s2ff has la.tls.ie, tp 0)
     node(($name // ffname($v->{name})) . ':', map({ node($_) } @t), grouped(255 - @t, @i));
 }
+# A variable-length array's count from its text: names (its locals), numbers,
+# + - * / and parentheses, as ff infix.
+sub vla_count {
+    my ($text, $v) = @_;
+    my @stack = ([]);
+    for my $tok ($text =~ /\s*([A-Za-z_]\w*|\d+|[-+*\/()])/g) {
+        if ($tok eq '(') { push @stack, []; next }
+        if ($tok eq ')') { my $in = pop @stack; push @{ $stack[-1] }, node(':', @$in); next }
+        push @{ $stack[-1] }, node($tok =~ /^[A-Za-z_]/ ? ffname($tok) : $tok);
+    }
+    @stack == 1 && @{ $stack[0] } or stop("the count of a variable-length array: $text", $v);
+    @{ $stack[0] };
+}
 sub init {
     my ($n) = @_;
     my $s = strip($n);
+    # a char array set from one text in braces, { "..." } (gconv's builtin_aliases):
+    # as the text alone, which C makes it
+    if ($s->{kind} eq 'InitListExpr' && (my @k = kids($s)) == 1) { if (my $str = bare_string($k[0])) { return array_text($str) } }
     return init_items($s) if $s->{kind} eq 'InitListExpr';
     if (my $str = bare_string($n)) { return array_text($str) }
     item(expr($n));
@@ -1123,13 +1357,33 @@ sub init_items {
         @k = @i;
     }
     pop @k while @k && $k[-1]{kind} eq 'ImplicitValueInitExpr';
-    map { init_item($_) } @k;
+    # a union set through a member not its first (plural-exp's .val.args):
+    # ttpc sets members by place, a union's all at 0, so zeros come first for
+    # the members before it, then its item, as C leaves the rest zero
+    my @before = union_before($l);
+    (@before, map { init_item($_) } @k);
+}
+sub union_before {
+    my ($l) = @_;
+    my $f = $l->{field} or return ();
+    my $t = expand(qt($l));
+    $t =~ /^union\b/ or return ();
+    my $r = $rec{$t} // do { my $a = $anon{ anon_key($t) // '' }; $a && $rec{ $a->[0] } } or return ();
+    my @fs = grep { $_->{kind} eq 'FieldDecl' } @{ $r->{inner} || [] };
+    my ($k) = grep { ($fs[$_]{name} // '') eq ($f->{name} // '') } 0 .. $#fs;      # (an unnamed one: errname's)
+    defined $k or stop('a union set through a member it has not: ' . ($f->{name} // '?'), $l);
+    map { my @t = ctype(qt($fs[$_])); @t == 1 && $scalar_word{$t[0]} || $t[0] eq 'address' ? node(0) : node(':') } 0 .. $k - 1;
 }
 sub init_item {
     my ($n) = @_;
     my $s = strip($n);
     return node(':', grouped(255, init_items($s))) if $s->{kind} eq 'InitListExpr';
-    if (my $str = bare_string($n)) { return array_text($str) }
+    if (my $str = bare_string($n)) {
+        # a field's text in a : of its own: text leaves in a row are one text
+        # (C's "ab" "cd"), and errname's fields are texts side by side; its
+        # codes where a text such as "0" would read as a number; "" an empty :
+        return node(':', grouped(255, array_text($str)));
+    }
     if ($s->{kind} eq 'ImplicitValueInitExpr') { my @t = ctype(qt($s)); return @t == 1 && $scalar_word{$t[0]} || $t[0] eq 'address' ? node(0) : node(':') }
     # an item of a list is one node
     my @e = item(expr($n));
@@ -1173,9 +1427,13 @@ while (defined(my $name = next_name())) {
         next;
     }
     if (my $f = $fn{$name}) { local $cur_unit = $f->[1]; push @out, [$f->[1], function($name, $f->[0])]; next }
-    if (my $v = $var{$name}) { local $cur_unit = $v->[1]; push @out, [$v->[1], decl($v->[0], 1)]; next }
+    if (my $v = $var{$name}) { local $cur_unit = $v->[1]; local $cur_global = $name; push @out, [$v->[1], decl($v->[0], 1, $name ne $v->[0]{name} ? ffname($name) : undef)]; next }
     # a weak name nothing defines: its address is 0 (ttpc's weak)
     if (my $w = $weak{$name}) {
+        # (said, so that the reach can add what defines it where an object
+        # it links references it strongly, as the linker does: vtables'
+        # pragma weak _IO_file_doallocate, which stdio.o needs)
+        warn "c2ff: weak, address 0: $name\n";
         if ($w->{kind} eq 'FunctionDecl') {
             my ($ret) = split_fn(expand(qt($w)));
             push @out, [undef, node(ffname($name) . ':', node('weak'), node('function'), map { node($_) } ctype($ret))];
@@ -1197,7 +1455,8 @@ while ($fdone < @fntypes) {
     my ($name, $ret, $ps) = @{ $fntypes[$fdone++] };
     my $i = 0;
     push @types, node("$name:", node('function'), map({ node($_) } ctype($ret)),
-        map({ $i++; node("p$i:", map { node($_) } ctype($_)) } params($ps)));
+        # (a variadic one's ... a leaf after its parameters, as a function's)
+        map({ $_ eq '...' ? node('...') : do { $i++; node("p$i:", map { node($_) } ctype($_)) } } params($ps)));
 }
 while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
     for my $tag (@t) {
@@ -1210,8 +1469,8 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
         if ($kind eq 'enum') {
             # a constant keeps its value where C gives it one (clang has worked it out)
             unshift @types, node($tagname{$tag} . ':', node('enum'), grouped(254, map {
-                my ($v) = grep { $_->{kind} eq 'ConstantExpr' } kids($_);
-                node(ffname($_->{name}) . ':', defined $v && defined $v->{value} ? node($v->{value}) : ())
+                my $v = enum_value($_);
+                node(ffname($_->{name}) . ':', defined $v ? node($v) : ())
             } grep { $_->{kind} eq 'EnumConstantDecl' } kids($d)));
         } else {
             # a bitfield: its type run, then its width (one with no name, padding,
@@ -1236,9 +1495,9 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 }
 }
 
-# glibc in ff is a group per source unit (string/strlen, ...), its types in
-# one of their own, the weak names in another: a node holds 255 children, so
-# a longer group goes on as name 2, name 3, ...
+# glibc in ff is a page per glibc directory (string, stdio-common, ...), its
+# types in one of their own, the weak names in another: a node holds 255
+# children, so a longer page goes on as name 2, name 3, ...
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
 sub groups {
     my ($name, @n) = @_;
@@ -1255,10 +1514,13 @@ if (defined $program) {
         node('__ff_tcb:', node('array'), node('u64'), node('1024')),
         node('_start:', node('void'), node('tp'), node('='), node('cast:', node('u64'), node('address', node('__ff_tcb'))),
             node('+'), node('4096'), ($early ? node('__libc_early_init', node('1')) : ()),
-            node('syscall', node('SYS_exit'), node('main'))));
+            ($exit ? node('exit', node('main')) : node('syscall', node('SYS_exit'), node('main')))));
 } else {
     my (@order, %by);
-    for (@out) { my $g = unit_name($_->[0]); push @order, $g unless $by{$g}; push @{ $by{$g} }, $_->[1] }
+    # (by directory, not by unit: the trees a program reads have 255 pages in
+    # all, and M4 has more units than that; each function's comment names its
+    # unit)
+    for (@out) { my $g = unit_name($_->[0]) =~ s{/.*}{}r; push @order, $g unless $by{$g}; push @{ $by{$g} }, $_->[1] }
     print write_txt(groups("$page types", @types), map { groups("$page $_", @{ $by{$_} }) } @order);
 }
 warn "c2ff: renamed: " . join(', ', map { "$_ -> $renamed{$_}" } sort keys %renamed) . "\n" if %renamed;

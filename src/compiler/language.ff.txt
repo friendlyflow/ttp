@@ -61,9 +61,23 @@ ff, the language ttpc compiles
     items
       siblings without an operator between them are separate items: statements, arguments, elements
       an operator node joins its neighbours into one expression, with C precedence
-      precedence, low to high: = += -= *= /= %= &= |= ^= <<= >>=, ||, &&, |, ^, &, == !=, < > <= >=, << >>, + -, * / %; leading - ! ~; ++ -- after a name, or before one
+      precedence, low to high: = += -= *= /= %= &= |= ^= <<= >>=, ? :, ||, &&, |, ^, &, == !=, < > <= >=, << >>, + -, * / %; leading - ! ~; ++ -- after a name, or before one
       x ++ is C's x++: x grows by one (an element, for an address), the value is the old x; ++ x is C's ++x, the value the new x; -- likewise
       && and || short-circuit; and, or are instructions (bitwise, with operands), never operators
+      c ? a : b is C's conditional, a leaf ? and a leaf : among the siblings, right to left: c ? a : d ? e : f is c ? a : (d ? e : f), x = c ? a : b assigns it; only the branch taken is worked out
+      its type is the branches' common type, both converted to it: C's usual arithmetic conversions (c ? u32 1 : - 1 is unsigned), a pointer beside 0 or a pointer the pointer, a struct the struct
+      c ?: b, a ? and a : together, is GNU C's: the value of c when it is not 0 (c worked out once), else b
+      the : of a ? is part of the item, it starts none; a : with children is a lambda there too, as a branch: c ? : a b : d
+      example
+        smaller:
+          long
+          x
+          <
+          y
+          ?
+          x
+          :
+          y
       an operator first in an item starts an expression, also first in a lambda: - ! ~
       example
         een variabele
@@ -84,6 +98,7 @@ ff, the language ttpc compiles
       i64 and u64 are refused on arm
       address T: a word, the address of a T; address alone, the address of nothing (C's void *)
       array T n: n elements of T; n a number or a constant; arrays of arrays nest, array array int 3 4
+      in a function n may be any value, worked out at run time (C's variable-length array): its n elements are on the stack until the function returns; alloca n (C on the shared page) likewise gives n bytes there
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
@@ -122,6 +137,14 @@ ff, the language ttpc compiles
             address
             node
       a union name is a type: word:, union, then its fields as a struct's, all at 0, as large as the largest one, aligned as the most aligned
+      a field : with a struct or union type and no name is an anonymous member (C11's): its fields are seen as the outer one's own, at its offset plus theirs
+      example
+        both:
+          union
+          :
+            pair
+          w:
+            long
       a bitfield: a field's type run, then its width, a number: mode:, u32, 3; it is packed into units of its type as gcc does (one that does not fit the unit begins the next), read and written as that many bits, up to the whole unit (u64, 64)
       example
         flags:
@@ -284,6 +307,7 @@ ff, the language ttpc compiles
             point
               1
               2
+      address over a typed literal (the literal under the type word: address / long / 30, C's &(long){30}) or over a compound literal (address / point / 1 / 2) is the address of that temporary
       a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy, an argument is the callee's own copy, a result is copied into space the caller keeps for it
       example
         b:
@@ -368,9 +392,19 @@ ff, the language ttpc compiles
         done:
           return
             r
+      address name of a label is its address, an address (GNU C's &&name); goto / content / p jumps to the label p holds (goto *p), in the same function
+      example
+        p:
+          address
+          void
+          address
+            done
+        goto
+          content
+            p
       return, with a value or without
       return is a value too: as an item (of a declaration, an argument, an expression) it leaves the function there
-      if and else are a value too, C's c ? a : b: the last item of the branch taken; the comma of C is a lambda, : a b
+      if and else are a value too, C's c ? a : b: the last item of the branch taken, converted to both branches' common type as ? : does; the comma of C is a lambda, : a b
       an if with only its condition is GNU C's a ?: b: the value of a when it is not 0 (worked out once), else what else gives
       example
         m:
@@ -441,6 +475,7 @@ ff, the language ttpc compiles
       name: / asm / instructions is an asm function: its instructions (and block labels) are placed as the asm of a page, on a definition page only when C reaches it
       C calls it by name and takes its address, as a long; it keeps the calling convention itself (glibc's .S functions, by gen/s2ff.pl)
       what its instructions name (a library function, C or asm, a C alias) is reached and placed before it, so asm names it by its label
+      a block label whose first child is asm is one more entry of the function (glibc's _setjmp runs on into __sigsetjmp): C calls it and takes its address, and the function holding it is placed with it
       example
         seven:
           asm

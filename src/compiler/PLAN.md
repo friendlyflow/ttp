@@ -306,12 +306,40 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   + 121), `fcvt` converts V between two types (`convert`, so `cast:`),
   `unary` negates, and `hexf` reads a literal, an exact hex float. riscv64
   has the primitives (macros/riscv64.ff.txt, F and D); aarch64, x86_64
-  (SSE2) and arm (VFP) and long double (glibc's soft-fp) come next.
+  (SSE2) and arm (VFP) and long double (glibc's soft-fp) come next. A
+  floating type larger than a word is in memory as a struct is (`fwide`:
+  long double, and double on arm).
 - **Compound literals** (`progs/ccomplit.ff`): a struct or union name with
   items, used as a value, is a temporary of that type, C's `(point){1, 2}`
   as `point` / `1` / `2`: its space is reserved at the start of the
   function (`tscan` counts it), zeroed and filled as a declaration is
   (`complit`); its value is its address, as a struct's is.
+- **Conditionals** (`progs/ccond.ff`): `c` / `?` / `a` / `:` / `b` among
+  siblings is C's `c ? a : b`, right to left, between `=` and `||`
+  (`OP_cond`); `c` / `?` / `:` / `b` is GNU C's `c ?: b`.
+- **Labels as values** (`progs/clabels.ff`): `address` / L is the address
+  of label L (`label_addr`, given the definition node), `goto` / `content`
+  / p jumps to it through `cc_jv` (every target), as glibc's vfprintf
+  jump tables need.
+- **alloca and variable-length arrays** (`progs/calloca.ff`, the user's
+  choice: a real alloca): `alloca` is C on the shared page, from a stack
+  of 8 MiB it maps (`alloca top`); a function that calls it or holds an
+  `array` / T / n with n a value (`ccalloca` in cc) saves `alloca top` in
+  its frame and gives the space back when it returns.
+- **Addresses of literals** (`progs/caddrlit.ff`): `address` over a typed
+  literal (the literal under the type word) or over a compound literal is
+  the address of a temporary holding it; an array element or field of a
+  floating type kept in memory takes a value (`linit`).
+- **Anonymous members** (`progs/canon.ff`): a field `:` with a struct or
+  union type; `fields`, asked for a name that is not its own, looks into
+  it and adds its offset.
+- **Asm entries** (`progs/casmentry.ff`, `progs/casmentrydefs.ff`): a block
+  label of an asm function whose first child is `asm` is a name of its
+  own; `libsym` finds it among the asm functions and places the one
+  holding it (setjmp.S's `__sigsetjmp`, inside `_setjmp`).
+- **The stack after a loop** (`progs/cloopsp.ff`): each label of while, do
+  while and for syncs sp (`syncsp`), since a break or continue leaves a
+  block whose locals made the stack deeper.
 - **Thread-local** (`progs/ctls.ff`): `thread local` first under a global's
   name, before its type (`errno:` / `thread local` / `int` / `0`). A ttpc
   program has one thread, so it is laid out as a global; per-thread blocks

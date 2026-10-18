@@ -92,7 +92,9 @@
           packages = (toolchain pkgs) ++ (twins pkgs) ++ (with pkgs; [
             gnumake
             qemu # qemu-system-riscv64 for `make os-test`, qemu-<arch> for the programs
-            perl # src/compiler/gen/mkff.pl generates test.ff
+            # src/compiler/gen/mkff.pl generates test.ff; c2ff.pl reads the ASTs
+            # of glibc with JSON::XS (80 times faster than core JSON::PP)
+            (perl.withPackages (p: [ p.JSONXS ]))
             fish
             # profiling and debugging ttpc where it runs natively (the host
             # builds): perf samples it, gdb looks inside

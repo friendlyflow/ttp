@@ -1,7 +1,6 @@
 macros:
   comment
     The groups macros, elf, c and linux of the arm section (isa/arm.pl reads this file): the address helpers and pseudo-instructions, A32 unless named t. (Thumb). Operands go in the reverse order of GNU as, the destination last.
-  comment
     arel and trel: the offset of target from PC as a branch reads it, the instruction + 8 in A32, + 4 in Thumb. lo16 and hi16: the halves of a 32-bit value, for movw and movt.
   arel:
     target
@@ -201,7 +200,6 @@ elf:
 c:
   comment
     The C layer of ttpc, for arm in A32: the primitives it emits, in its own terms. V is the value (r0), L the left operand (r12), X a scale or count (r8), FP the frame (r11), SP the stack (sp), LR the return address (lr).
-  comment
     arm is ILP32: a stack slot and a word (long, address) are 4 bytes. A call takes its arguments in r0..r7 (r0..r3 as in the AAPCS, then r4..r7), a system call its number in r7 (svc 0) and its arguments in r0..r6.
   cc_v:
     addi
@@ -748,7 +746,6 @@ c:
       r8
   comment
     C's floating point: a float is its bits in V (L for the left operand), worked on in s14 (L) and s15 (V). A double is 8 bytes, more than a word: in memory, V (and L) its address, worked on in d6 and d7.
-  comment
     A comparison is vcmp, vmrs and a conditional mov, false when either is a NaN but for !=: mi for <, ls for <=. A result in memory goes to X + the frame pointer (X: the offset of a temporary), V its address.
   cc_fadd_s:
     vmov.sr
@@ -1350,6 +1347,11 @@ c:
   cc_calll:
     blx
       r12
+  comment
+    cc_jv: jump to the address in V (GNU C's goto *p, to a label of this function).
+  cc_jv:
+    bx
+      r0
   cc_load_i8:
     ldrsb
       0
@@ -1414,7 +1416,6 @@ c:
       r0
   comment
     For compile time only, when ttpc runs on arm (assembled with rv64:, its registers the 8-byte slots at r10): the bridge to ttpc. cc_ctreg: the C layer gives ttpc's a1 in r1.
-  comment
     cc_ctargs: a1 = r1 and a2 = SP, as 64-bit values. cc_call_l: a0 = V, ra = the address after the bx (pc reads as the addi + 8, + 8 more), bx to L, then V = a0.
   cc_ctreg:
     addi
@@ -1480,7 +1481,6 @@ c:
 linux:
   comment
     The Linux system calls by name, for syscall: the arm EABI numbers (mmap is mmap2, its offset in pages).
-  comment
     host_name, host_name_len: the name of this section, NUL-terminated, and its length without the NUL: what ttpc built for arm takes as its host, the section compile time is assembled with.
   host_name:
     ascii
@@ -1563,9 +1563,7 @@ linux:
 rv64:
   comment
     rv64: ttpc's own instructions, RV64 in ff order (the destination last), in arm instructions (A32): what ttpc, written in RV64, is assembled with to run on arm. mkhost.pl renames each op of ttpc to rv.op and each register to rv.reg.
-  comment
     Each RV64 register is a slot of 8 bytes, lo word then hi word, at r10 + 8 * its number: a 64-bit value is two registers of arm. A value is loaded into r0:r1 (and r2:r3), worked on in pairs (adds and adc, ...), stored back.
-  comment
     ra is a slot too: rv.call puts the return address in it, rv.ret loads pc from it. sp is a slot, its stack is rvstack; arm's sp is the stack of the C layer. r0-r8, r12 and lr are the scratch registers; C does not write r9 r10 r11.
   rv.x0 rv.zero:
     00000

@@ -6,6 +6,8 @@
 # order (the encoding's, the destination last); nothing is lowered.
 #
 #   perl s2ff.pl [--page name] file.s file.dump > out.ff.txt
+#   perl s2ff.pl --items file.s file.dump    its functions alone, for a page of
+#                                            several files'
 #   perl s2ff.pl --size file.s file.dump     the bytes of those instructions
 #
 # file.dump is what GNU as made of file.s, without relaxation, as objdump
@@ -37,13 +39,15 @@ use FF qw(node write_txt);
 my $page = 'glibc asm';
 my @files;
 my $size;
+my $items;
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--size') { $size = 1; next }
+    if ($a eq '--items') { $items = 1; next }
     push @files, $a;
 }
-die "usage: s2ff.pl [--page name | --size] file.s file.dump\n" unless @files == 2;
+die "usage: s2ff.pl [--page name | --items | --size] file.s file.dump\n" unless @files == 2;
 my ($src, $dump) = @files;
 my $where = $src;
 sub fail { die "s2ff: $where: @_\n" }
@@ -113,8 +117,8 @@ sub rel { node('rel', node($_[0])) }
 my %rtype = map { $_ => 1 } qw(add sub and or xor sll srl sra slt sltu addw subw sllw srlw sraw
     mul mulh mulhu mulhsu div divu rem remu mulw divw divuw remw remuw);
 my %itype = map { $_ => 1 } qw(addi andi ori xori slti sltiu slli srli srai addiw slliw srliw sraiw);
-my %load = map { $_ => 1 } qw(lb lh lw ld lbu lhu lwu);
-my %store = map { $_ => 1 } qw(sb sh sw sd);
+my %load = map { $_ => 1 } qw(lb lh lw ld lbu lhu lwu flw fld);
+my %store = map { $_ => 1 } qw(sb sh sw sd fsw fsd);
 my %btype = map { $_ => 1 } qw(beq bne blt bge bltu bgeu);
 # the macros of macros/riscv64.ff.txt, which take GNU's operands reversed
 my %macro = map { $_ => 1 } qw(mv li neg seqz j jr ret beqz bnez bltz bgez blez bgtz bgt ble bgtu bleu csrr);
@@ -162,9 +166,9 @@ sub short {
     return ins($op, @o[1, 0]) if $op =~ /^c\.(li|addi|addiw|slli|srli|srai|andi)$/;
     return ins($op, rel($label), $o[0]) if $op =~ /^c\.(beqz|bnez)$/;
     return ins($op, rel($label)) if $op eq 'c.j';
-    if ($op =~ /^c\.(ld|lw)$/) { my ($off, $base) = mem($o[1]); return ins($op, $off, $base, $o[0]) }
-    if ($op =~ /^c\.(sd|sw)$/) { my ($off, $base) = mem($o[1]); return ins($op, $off, $base, $o[0]) }
-    if ($op =~ /^c\.(ldsp|lwsp|sdsp|swsp)$/) { my ($off) = mem($o[1]); return ins($op, $off, $o[0]) }
+    if ($op =~ /^c\.(ld|lw|fld)$/) { my ($off, $base) = mem($o[1]); return ins($op, $off, $base, $o[0]) }
+    if ($op =~ /^c\.(sd|sw|fsd)$/) { my ($off, $base) = mem($o[1]); return ins($op, $off, $base, $o[0]) }
+    if ($op =~ /^c\.(ldsp|lwsp|sdsp|swsp|fldsp|fsdsp)$/) { my ($off) = mem($o[1]); return ins($op, $off, $o[0]) }
     if ($op eq 'c.lui') { my $v = num($o[1]) << 12; $v -= 2**32 if $v >= 2**31; return ins($op, $v, $o[0]) }
     return ins($op, num($o[2]), $o[0]) if $op eq 'c.addi4spn';
     return ins($op, num($o[1])) if $op eq 'c.addi16sp';
@@ -188,6 +192,7 @@ my $n = 0;
 my $pos = 0;        # the bytes GNU as made so far
 my $ends = 1;       # the last instruction does not run on (a return, a jump)
 my %tls;            # a function's thread-locals, as la.tls.ie reads them
+my %got;            # the addresses a function's pic la reads, its GOT entries
 my %numeric;        # how many times each numeric label (1:) has come so far
 # GNU as's next instruction, its bytes counted; whether it ends a function
 sub take {
@@ -198,15 +203,18 @@ sub take {
 }
 # the end of a function: the words its la.tls.ie read
 sub finish {
-    return unless $fn && %tls;
-    push @{ $fn->{children} }, node('align', node(8)), map { node(".Ltls $_:", node('dword', node($_))) } sort keys %tls;
-    %tls = ();
+    return unless $fn && (%tls || %got);
+    push @{ $fn->{children} }, node('align', node(8)), (map { node(".Ltls $_:", node('dword', node($_))) } sort keys %tls),
+        map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got;
+    %tls = %got = ();
 }
 open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
 while (my $l = <$s>) {
     chomp $l;
     if ($l =~ /^# (\d+) "([^"]+)"/) { ($line, $file) = ($1 - 1, $2 =~ s{^(\.\./)+}{}r); next }
     $line++;
+    # a # starts a comment (.S's own, kept by cpp: dl-trampoline's), outside a text
+    $l =~ s/\s*#.*$// unless $l =~ /"/;
     $where = "$src ($file:$line)";
     for my $st (split /;/, $l) {
         $st =~ s/^\s+|\s+$//g;
@@ -222,8 +230,10 @@ while (my $l = <$s>) {
                 push @{$fn->{children}}, $block;
             } elsif ($fn && !$ends) {
                 # the function before runs on into this one: it holds it, as
-                # a label, so that they are placed together
-                $block = node("$name:", node('comment', node("glibc-2.44 $file:$line")));
+                # a label, so that they are placed together; asm first (which
+                # in asm is nothing) makes it an entry C may call: ttpc places
+                # the function that holds it
+                $block = node("$name:", node('asm'), node('comment', node("glibc-2.44 $file:$line")));
                 push @{$fn->{children}}, $block;
             } else {
                 finish();
@@ -280,12 +290,25 @@ while (my $l = <$s>) {
             push @$into, ins('auipc', node('pcrel_hi', node($w)), $o[0]), ins('ld', node('pcrel_lo', node($w)), $o[0], $o[0]);
             next;
         }
+        # la under .option pic: GNU as loads the address from the GOT (auipc,
+        # ld); here from a word the function carries, as for la.tls.ie
+        if ($op eq 'la' && $made[$n] && $made[$n + 1] && $made[$n]{op} eq 'auipc' && $made[$n + 1]{op} eq 'ld') {
+            take(); take();
+            my $w = ".Lgot $o[1]";
+            $got{ $o[1] } = 1;
+            push @$into, ins('auipc', node('pcrel_hi', node($w)), $o[0]), ins('ld', node('pcrel_lo', node($w)), $o[0], $o[0]);
+            next;
+        }
+        # la, auipc and addi: the macro's
+        if ($op eq 'la') { take(); take(); push @$into, ins('la', $o[1], $o[0]); next }
         my $m = take();
         # a call or a tail is two instructions, the macro's
         if ($op =~ /^(call|tail)$/) { take(); push @$into, node($op, node($o[-1])); next }
         my $i;
         if ($m->{bytes} == 2) {
             my ($target) = grep { /^\.L/ } @o;
+            # (or a function's own name: setjmp's j __sigsetjmp)
+            $target //= $o[-1] if $m->{op} =~ /^c\.(j|beqz|bnez)$/;
             $i = short($m, $target);
         } else {
             $i = full($op, @o);
@@ -299,4 +322,25 @@ finish();
 pop @made while @made > $n && $made[-1]{op} =~ /^c\.(addi|nop)$|^addi$/ && $made[-1]{args} =~ /^zero,(zero,)?0$/;
 fail "GNU as made " . scalar(@made) . " instructions, $src has $n" unless $n == @made;
 if ($size) { my $b = 0; $b += $_->{bytes} for @made; print "$b\n"; exit }
-print write_txt(node("$page:", @fns));
+# A function that jumps to a block label of the function after it (setjmp.S's
+# _setjmp: j __sigsetjmp, which runs on from setjmp): the two are one asm
+# function, the second's name a block label in it, as a block label is
+# known only inside its function.
+{
+    my $blocks = sub { my ($f) = @_; map { $_->{content} =~ s/:$//r } grep { @{ $_->{children} } && $_->{content} =~ /:$/ && $_->{children}[0]{content} =~ /^(asm|comment)$/ } @{ $f->{children} } };
+    my $targets = sub { my ($f) = @_; my @t; my $w; $w = sub { for (@{ $_[0]{children} }) { push @t, $_->{children}[0]{content} if $_->{content} eq 'rel'; $w->($_) } }; $w->($f); @t };
+    for (my $i = 0; $i + 1 < @fns; $i++) {
+        my ($f, $g) = @fns[$i, $i + 1];
+        next unless @{ $f->{children} } && $f->{children}[0]{content} eq 'asm' && @{ $g->{children} } && $g->{children}[0]{content} eq 'asm';
+        my %in_g = map { $_ => 1 } $blocks->($g);
+        next unless grep { $in_g{$_} } $targets->($f);
+        my (undef, @rest) = @{ $g->{children} };
+        # g's own instructions as a block of its name, then its blocks
+        my (@own, @later);
+        for (@rest) { if (@later || (@{ $_->{children} } && $_->{content} =~ /:$/ && $_ != $rest[0])) { push @later, $_ } else { push @own, $_ } }
+        push @{ $f->{children} }, node($g->{content}, @own), @later;
+        splice @fns, $i + 1, 1;
+        $i--;
+    }
+}
+print $items ? write_txt(@fns) : write_txt(node("$page:", @fns));

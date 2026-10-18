@@ -32,6 +32,56 @@ builtins:
           %
           64
   comment
+    gcc's __builtin_stdc_rotate_left on a word: x turned left by n bits; glibc's PTR_MANGLE uses it.
+  __builtin_stdc_rotate_left:
+    u64
+    x:
+      u64
+    n:
+      u32
+    return
+      :
+        x
+        <<
+        :
+          n
+          %
+          64
+      |
+      :
+        x
+        >>
+        :
+          :
+            64
+            -
+            :
+              n
+              %
+              64
+          %
+          64
+  comment
+    gcc's __builtin_stdc_leading_zeros and __builtin_stdc_trailing_zeros (C23) on a word, which printf_fp uses on its limbs: clzl and ctzl, which give the width for 0, as C23 does.
+  __builtin_stdc_leading_zeros:
+    u32
+    x:
+      u64
+    return
+      cast:
+        u32
+        __builtin_clzl
+          x
+  __builtin_stdc_trailing_zeros:
+    u32
+    x:
+      u64
+    return
+      cast:
+        u32
+        __builtin_ctzl
+          x
+  comment
     gcc's __builtin_clz, clzl and clzll: how many zero bits are above the highest one of x (an unsigned int, long, long long); C leaves x = 0 undefined, here it gives the width.
   __builtin_clz:
     int
@@ -488,8 +538,10 @@ builtins:
     return
       r
   comment
-    gcc's __builtin_add_overflow and __builtin_mul_overflow on unsigned words, as malloc uses them: *r = the result, and whether it overflowed; __builtin_add_overflow_p: only whether a + b would.
-  __builtin_add_overflow:
+    gcc's type-generic __builtin_add_overflow (a, b, r) and __builtin_mul_overflow: *r = the exact result as r's type holds it (modulo its size), and whether that is not the exact result.
+    One function for each set of types glibc uses, named for them (c2ff names the call so); __builtin_add_overflow_p: only whether a + b would wrap, on words.
+    __builtin_add_overflow on words (malloc): the sum wrapped, and whether it did.
+  __builtin_add_overflow u64 u64 u64:
     int
     a:
       u64
@@ -509,7 +561,211 @@ builtins:
         r
       <
       a
-  __builtin_mul_overflow:
+  comment
+    __builtin_add_overflow on unsigned ints (dl-open): the sum in a word, and whether an unsigned int holds it.
+  __builtin_add_overflow u32 u32 u32:
+    int
+    a:
+      u32
+    b:
+      u32
+    r:
+      address
+      u32
+    s:
+      u64
+      cast:
+        u64
+        a
+      +
+      cast:
+        u64
+        b
+    content
+      r
+    =
+    cast:
+      u32
+      s
+    return
+      s
+      >
+      4294967295
+  comment
+    __builtin_add_overflow on unsigned ints into a word (dl-open): the sum, which a word always holds.
+  __builtin_add_overflow u32 u32 u64:
+    int
+    a:
+      u32
+    b:
+      u32
+    r:
+      address
+      u64
+    content
+      r
+    =
+    cast:
+      u64
+      a
+    +
+    cast:
+      u64
+      b
+    return
+      0
+  comment
+    __builtin_add_overflow on an unsigned int and a word (dl-support): the sum wrapped, and whether it did.
+  __builtin_add_overflow u32 u64 u64:
+    int
+    a:
+      u32
+    b:
+      u64
+    r:
+      address
+      u64
+    s:
+      u64
+      cast:
+        u64
+        a
+      +
+      b
+    content
+      r
+    =
+    s
+    return
+      s
+      <
+      b
+  comment
+    __builtin_add_overflow on a word and an int into an unsigned int (dl-open): the sum, and whether it is below 0 or more than an unsigned int holds.
+  __builtin_add_overflow u64 int u32:
+    int
+    a:
+      u64
+    b:
+      int
+    r:
+      address
+      u32
+    s:
+      u64
+      a
+      +
+      cast:
+        u64
+        cast:
+          long
+          b
+    content
+      r
+    =
+    cast:
+      u32
+      s
+    if
+      :
+        b
+        <
+        0
+      return
+        :
+          a
+          <
+          cast:
+            u64
+            :
+              0
+              -
+              cast:
+                long
+                b
+        ||
+        :
+          s
+          >
+          4294967295
+    return
+      :
+        s
+        <
+        a
+      ||
+      :
+        s
+        >
+        4294967295
+  comment
+    __builtin_add_overflow on two words into an int (printf's count of what it wrote): the sum, and whether it wrapped or is more than an int holds.
+  __builtin_add_overflow u64 u64 int:
+    int
+    a:
+      u64
+    b:
+      u64
+    r:
+      address
+      int
+    s:
+      u64
+      a
+      +
+      b
+    content
+      r
+    =
+    cast:
+      int
+      s
+    return
+      :
+        s
+        <
+        a
+      ||
+      :
+        s
+        >
+        2147483647
+  comment
+    __builtin_add_overflow on ints (wcsmbs' counters): the sum in a long, and whether an int holds it.
+  __builtin_add_overflow int int int:
+    int
+    a:
+      int
+    b:
+      int
+    r:
+      address
+      int
+    s:
+      long
+      cast:
+        long
+        a
+      +
+      cast:
+        long
+        b
+    content
+      r
+    =
+    cast:
+      int
+      s
+    return
+      s
+      !=
+      cast:
+        long
+        content
+          r
+  comment
+    __builtin_mul_overflow on words (malloc): the product wrapped, and whether it did.
+  __builtin_mul_overflow u64 u64 u64:
     int
     a:
       u64
@@ -536,6 +792,99 @@ builtins:
         a
       !=
       b
+  comment
+    __builtin_mul_overflow on an unsigned int and a word (dl-open): the product wrapped, and whether it did.
+  __builtin_mul_overflow u32 u64 u64:
+    int
+    a:
+      u32
+    b:
+      u64
+    r:
+      address
+      u64
+    s:
+      u64
+      cast:
+        u64
+        a
+      *
+      b
+    content
+      r
+    =
+    s
+    return
+      :
+        a
+        !=
+        0
+      &&
+      :
+        :
+          s
+          /
+          cast:
+            u64
+            a
+        !=
+        b
+  comment
+    __builtin_mul_overflow on a word and an int into an unsigned int (dl-open): the product, and whether it is below 0, wrapped, or is more than an unsigned int holds.
+  __builtin_mul_overflow u64 int u32:
+    int
+    a:
+      u64
+    b:
+      int
+    r:
+      address
+      u32
+    s:
+      u64
+      a
+      *
+      cast:
+        u64
+        cast:
+          long
+          b
+    content
+      r
+    =
+    cast:
+      u32
+      s
+    if
+      :
+        b
+        <
+        0
+      return
+        a
+        !=
+        0
+    return
+      :
+        :
+          a
+          !=
+          0
+        &&
+        :
+          :
+            s
+            /
+            a
+          !=
+          cast:
+            u64
+            b
+      ||
+      :
+        s
+        >
+        4294967295
   __builtin_add_overflow_p:
     int
     a:
@@ -549,6 +898,331 @@ builtins:
       +
       b
       <
+      a
+  comment
+    gcc's type-generic __builtin_isnan, __builtin_isinf_sign and __builtin_signbit, one function for each type (c2ff names them so), from the bits: IEEE binary64, and binary128 for long double (its high word second).
+    NaN is the highest exponent with a fraction, an infinity that exponent without one (isinf_sign: 1 or -1, by the sign), signbit the top bit.
+  __builtin_isnan double:
+    int
+    x:
+      double
+    h:
+      u64
+      content
+        cast:
+          address
+          u64
+          address
+            x
+    e:
+      u64
+      :
+        h
+        >>
+        52
+      &
+      2047
+    f:
+      int
+      :
+        :
+          h
+          &
+          4503599627370495
+        !=
+        0
+    return
+      :
+        e
+        ==
+        2047
+      &&
+      f
+  __builtin_isinf_sign double:
+    int
+    x:
+      double
+    h:
+      u64
+      content
+        cast:
+          address
+          u64
+          address
+            x
+    e:
+      u64
+      :
+        h
+        >>
+        52
+      &
+      2047
+    f:
+      int
+      :
+        :
+          h
+          &
+          4503599627370495
+        !=
+        0
+    if
+      :
+        :
+          e
+          ==
+          2047
+        &&
+        :
+          !
+          f
+      if
+        :
+          h
+          >>
+          63
+        return
+          0
+          -
+          1
+      return
+        1
+    return
+      0
+  __builtin_signbit double:
+    int
+    x:
+      double
+    h:
+      u64
+      content
+        cast:
+          address
+          u64
+          address
+            x
+    e:
+      u64
+      :
+        h
+        >>
+        52
+      &
+      2047
+    f:
+      int
+      :
+        :
+          h
+          &
+          4503599627370495
+        !=
+        0
+    return
+      cast:
+        int
+        :
+          h
+          >>
+          63
+  __builtin_isnan long double:
+    int
+    x:
+      long double
+    h:
+      u64
+      cast:
+        address
+        u64
+        address
+          x
+        .
+        1
+    e:
+      u64
+      :
+        h
+        >>
+        48
+      &
+      32767
+    f:
+      int
+      :
+        :
+          h
+          &
+          281474976710655
+        !=
+        0
+      ||
+      :
+        cast:
+          address
+          u64
+          address
+            x
+          .
+          0
+        !=
+        0
+    return
+      :
+        e
+        ==
+        32767
+      &&
+      f
+  __builtin_isinf_sign long double:
+    int
+    x:
+      long double
+    h:
+      u64
+      cast:
+        address
+        u64
+        address
+          x
+        .
+        1
+    e:
+      u64
+      :
+        h
+        >>
+        48
+      &
+      32767
+    f:
+      int
+      :
+        :
+          h
+          &
+          281474976710655
+        !=
+        0
+      ||
+      :
+        cast:
+          address
+          u64
+          address
+            x
+          .
+          0
+        !=
+        0
+    if
+      :
+        :
+          e
+          ==
+          32767
+        &&
+        :
+          !
+          f
+      if
+        :
+          h
+          >>
+          63
+        return
+          0
+          -
+          1
+      return
+        1
+    return
+      0
+  __builtin_signbit long double:
+    int
+    x:
+      long double
+    h:
+      u64
+      cast:
+        address
+        u64
+        address
+          x
+        .
+        1
+    e:
+      u64
+      :
+        h
+        >>
+        48
+      &
+      32767
+    f:
+      int
+      :
+        :
+          h
+          &
+          281474976710655
+        !=
+        0
+      ||
+      :
+        cast:
+          address
+          u64
+          address
+            x
+          .
+          0
+        !=
+        0
+    return
+      cast:
+        int
+        :
+          h
+          >>
+          63
+  comment
+    gcc's __builtin_return_address level: where the function that calls it returns to (level 0, all glibc asks: dlopen's RETURN_ADDRESS), from ttpc's frame on riscv64, which holds the caller's s0 at s0 and its return address at s0 + 8.
+    This builtin's own frame is one more: the word at its s0 is the s0 of the function that calls it.
+  __builtin_return_address:
+    address
+    void
+    level:
+      u32
+    f:
+      address
+      u64
+      cast:
+        address
+        u64
+        content
+          cast:
+            address
+            u64
+            s0
+    return
+      cast:
+        address
+        void
+        content
+          :
+            f
+            +
+            1
+  comment
+    gcc's __builtin_extract_return_addr: the address itself, which riscv64 keeps as it is.
+  __builtin_extract_return_addr:
+    address
+    void
+    a:
+      address
+      void
+    return
       a
   comment
     gcc's __builtin_unreachable: reaching it is undefined in C; here it does nothing.

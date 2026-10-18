@@ -1,9 +1,7 @@
 macros:
   comment
     macros/aarch64.ff.txt: the groups of the aarch64 section after its instructions (isa/aarch64.pl reads it, mkff.pl puts it in shared.ff): macros:, elf: (the ELF header and frame:), c: (the primitives of the C layer), linux: (the system calls).
-  comment
     The address helpers, the condition codes and the pseudo-instructions of aarch64. Operands go as in the instructions: the destination last (GNU's mov x0, x1 is mov x1 x0, lsl x0, x1, #3 is lsl 3 x1 x0).
-  comment
     pagerel: the distance from the 4 KiB page of pc to that of target, what adrp takes; lo12: the low 12 bits of target, for the addi after it.
   pagerel:
     target
@@ -1187,7 +1185,6 @@ c:
       x0
   comment
     C's floating point: float and double values are their bits in V (L for the left operand), worked on in s16/d16 (L) and s17/d17 (V).
-  comment
     A comparison is fcmp and cset (csinc with the opposite condition), false when either is a NaN but for !=: mi for <, ls for <=.
   cc_fadd_s:
     fmov.s.w
@@ -1625,6 +1622,11 @@ c:
   cc_calll:
     blr
       x9
+  comment
+    cc_jv: jump to the address in V (GNU C's goto *p, to a label of this function).
+  cc_jv:
+    br
+      x0
   cc_load_i8:
     ldrsb
       0
@@ -1706,7 +1708,6 @@ c:
 linux:
   comment
     The Linux system calls by name, for syscall: aarch64 has the generic numbers, as riscv64.
-  comment
     host_name, host_name_len: the name of this section, NUL-terminated, and its length without the NUL: what ttpc built for aarch64 takes as its host, the section compile time is assembled with.
   host_name:
     ascii
@@ -1789,9 +1790,7 @@ linux:
 rv64:
   comment
     rv64: ttpc's own instructions, RV64 in ff order (the destination last), in aarch64 instructions: what ttpc, written in RV64, is assembled with to run on aarch64. mkhost.pl renames each op of ttpc to rv.op and each register to rv.reg.
-  comment
     The RV64 registers are aarch64 registers: a0-a5 a7 x0-x5 x7 (a0 is V of the C layer), t0-t4 x9-x13, t5 x6 (ttpc has no a6; x29 is the FP of C), t6 x8, s0-s11 x17-x28 (which C does not write), ra x30, sp sp. zero is x15, kept 0, so that 31 is always sp.
-  comment
     x14 and x16 are the scratch registers. Immediates go through x16 (rv.imm: movz and sxth, a 12-bit value sign-extended), loads and stores take a register offset, add and sub the extended form, which may name sp.
   rv.x0 rv.zero:
     01111

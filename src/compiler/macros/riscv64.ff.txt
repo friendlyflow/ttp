@@ -796,7 +796,6 @@ c:
       a0
   comment
     cc_ext_<type>: V = V as that type (sign- or zero-extended from its size), what C's value of an expression of a type narrower than a word is. cc_uw: V and L zero-extended from 32 bits, for an operator whose operands convert to unsigned int.
-  comment
     C's floating point: float and double values are their bits in V (L for the left operand), worked on in ft0 and ft1.
   cc_fadd_s:
     fmv.w.x
@@ -1246,6 +1245,13 @@ c:
       0
       t0
       ra
+  comment
+    cc_jv: jump to the address in V (GNU C's goto *p, to a label of this function).
+  cc_jv:
+    jalr
+      0
+      a0
+      zero
   cc_load_i8:
     lb
       0
@@ -1344,7 +1350,6 @@ c:
 linux:
   comment
     The Linux system calls by name, for syscall: riscv64 has the generic numbers.
-  comment
     host_name, host_name_len: the name of this section, NUL-terminated, and its length without the NUL: what ttpc built for riscv64 takes as its host, the section compile time is assembled with.
   host_name:
     ascii

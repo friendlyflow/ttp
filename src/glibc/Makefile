@@ -132,9 +132,59 @@ ASMS_malloc := $(ASMS_stdlib) misc/madvise misc/mprotect misc/sysinfo string/mem
 ROOTS_malloc := $(ROOTS_stdlib) $(M3) __libc_early_init
 # the milestones whose programs run glibc's __libc_early_init first, as its
 # static startup does (malloc needs its arena set up)
-EARLY := malloc
+EARLY := malloc stdio
 
-MILESTONES := string stdlib ldouble malloc
+# M4, stdio: printf without floats, puts and putchar, with M3, on stdout;
+# exit (main ()) flushes it, as C's startup does (EXIT: c2ff --exit).
+M4 := printf puts putchar exit
+OBJS_stdio := $(OBJS_malloc) $(OBJS_ldouble) stdio-common/printf libio/ioputs libio/putchar stdlib/exit \
+	libio/iofwide libio/vtables libio/genops libio/putc libio/stdio stdio-common/vfprintf-internal \
+	stdio-common/printf_buffer_to_file libio/stdfiles stdio-common/funlockfile nptl/libc-cleanup iconv/gconv_db \
+	stdio-common/errname stdio-common/grouping_iterator libio/fileops libio/strops libio/wgenops \
+	locale/lc-numeric stdio-common/printf-parsemb stdio-common/reg-printf stdio-common/printf_buffer_done \
+	stdio-common/printf_buffer_pad_1 stdio-common/printf_buffer_putc_1 stdio-common/printf_buffer_write \
+	stdio-common/printf_fphex stdio-common/printf_fp stdio-common/printf_function_invoke \
+	stdio-common/reg-modifier stdio-common/reg-type debug/readonly-area string/_strerror \
+	stdio-common/translated_number_width wcsmbs/wcrtomb wcsmbs/wcsrtombs intl/dcgettext elf/dl-readonly-area \
+	stdio-common/errlist locale/SYS_libc stdio-common/printf_buffer_flush debug/readonly-area-fallback \
+	stdio-common/snprintf debug/chk_fail intl/dcigettext elf/dl-find_object libio/iogetdelim libio/iofclose \
+	libio/iofopen stdio-common/printf_buffer_puts_1 libio/vsnprintf wcsmbs/wcslen wcsmbs/wcsnlen \
+	stdio-common/asprintf locale/localename elf/dl-addr-obj debug/fortify_fail stdlib/fpioconst io/fstat64 \
+	iconv/gconv iconv/gconv_charset iconv/gconv_conf iconv/gconv_cache iconv/gconv_open iconv/gconv_dl io/getcwd \
+	stdlib/getenv nss/hash-string libio/wfileops nptl/alloca_cutoff malloc/scratch_buffer_grow_preserve \
+	malloc/scratch_buffer_set_array_size locale/setlocale io/lseek64 stdlib/cmp stdlib/divrem stdlib/dbl2mpn \
+	stdlib/ldbl2mpn stdlib/lshift stdlib/mul stdlib/mul_1 stdlib/rshift intl/finddomain intl/loadmsgcat \
+	stdio-common/printf_buffer_as_file nptl/pthread_rwlock_rdlock nptl/pthread_rwlock_unlock io/read \
+	string/stpcpy string/strcpy string/strcspn string/strdup misc/tsearch wcsmbs/wmemchr wcsmbs/wmemcpy \
+	wcsmbs/wmemmove wcsmbs/wmempcpy stdio-common/wprintf_buffer_putc_1 io/write io/write_nocancel stdlib/addmul_1 \
+	stdlib/add_n stdlib/mul_n intl/localealias intl/explodename intl/l10nflist dirent/closedir posix/environ \
+	stdlib/cxa_atexit dirent/fdopendir libio/iofgets_u io/fstatat64 iconv/gconv_builtin intl/plural-exp \
+	elf/dl-libc io/lstat64 stdlib/submul_1 stdlib/sub_n io/open64 io/openat64 dirent/opendir nptl/pthread_once \
+	nptl/pthread_rwlock_init dirent/readdir64 dirent/rewinddir io/stat64 string/strcasecmp_l \
+	string/strcpy-generic string/strtok_r libio/vasprintf stdio-common/wprintf_buffer_flush io/fcntl_nocancel \
+	intl/plural libio/iogetline elf/dl-catch elf/dl-close elf/dl-exception elf/dl-lookup elf/dl-open \
+	csu/init-first string/strspn stdio-common/wprintf_buffer_to_file nptl/pthread_mutex_lock \
+	nptl/pthread_mutex_unlock elf/dl-call_fini elf/dl-debug elf/dl-printf elf/dl-load elf/dl-scope \
+	elf/dl-sort-maps elf/dl-thread_gscope_wait elf/dl-debug_state elf/dl-misc misc/init-misc nptl/tpp \
+	elf/dl-object elf/dl-tls elf/dl-call-libc-early-init elf/dl-origin elf/dl-version elf/dl-init elf/dl-cache \
+	elf/dl-deps elf/dl-reloc elf/dl-lookup-direct elf/dl-execstack elf/dl-scratch-buffer elf/dl-setup_hash \
+	elf/dl-map-segment-align misc/fd_to_filename string/strsep stdio-common/errlist-data elf/rtld_static_init \
+	dlfcn/dladdr dlfcn/dladdr1 dlfcn/dlclose dlfcn/dlerror dlfcn/dlinfo dlfcn/dlmopen dlfcn/dlsym dlfcn/dlvsym \
+	elf/dl-addr elf/dl-sym dlfcn/libc_dlerror_result elf/dl-runtime setjmp/sigjmp signal/sigprocmask nptl/pthread_sigmask \
+	dlfcn/dlopen libio/filedoalloc libio/wfiledoalloc locale/C-address locale/C-collate locale/C-identification locale/C-measurement locale/C-messages locale/C-monetary locale/C-name locale/C-numeric locale/C-paper locale/C-telephone locale/C-time termios/isatty_nostatus
+ASMS_stdio := $(ASMS_malloc) setjmp/setjmp setjmp/__longjmp posix/sched_getp posix/sched_primax posix/sched_primin posix/sched_gets posix/sched_sets elf/dl-trampoline
+ROOTS_stdio := $(ROOTS_malloc) $(M4)
+EXIT := stdio
+# objects glibc's asm only reserves, zeroed in .bss, that C reaches: c2ff --zero
+# makes each a global of the type C declares (elf/dl-debug-symbols.S)
+ZEROS_stdio := _r_debug_extended
+# names nothing defines for a static program, weak (address 0) by c2ff --weak:
+# the linker's bounds of .init_array and .preinit_array, which a ttpc program
+# has none of (so they are empty), and dl-trampoline's _dl_runtime_profile,
+# which the shared build has; gcc's optimizer left no call of it here
+WEAKS_stdio := __init_array_start __init_array_end __preinit_array_start __preinit_array_end _dl_runtime_profile
+
+MILESTONES := string stdlib ldouble malloc stdio
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff
 
@@ -156,19 +206,22 @@ $(I)/%.dump $(I)/%.bin: $(I)/%.s
 $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w $< > $@
-	$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --store $@
 
-# A milestone's ff: c2ff's from its objects' ASTs, from its roots, then
+# A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
+# its asm parts name from elsewhere: setjmp's tail __sigjmp_save), then
 # s2ff's of its asm parts, then the builtins written by hand and libatomic's
 # functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
-# atomics.ff.txt).
+# atomics.ff.txt). The asm parts share one page, glibc asm: the trees a
+# program reads have 255 pages in all (c2ff makes a page per directory).
 define milestone
 $$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) builtins.ff.txt atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
 	mkdir -p $$(FF)
-	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $$(foreach o,$$(OBJS_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
-	    -- $$(ROOTS_$(1)) > $$(FF)/$(1).ff.txt
+	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl $$(foreach z,$$(ZEROS_$(1)),--zero $$(z)) $$(foreach w,$$(WEAKS_$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	    -- $$(ROOTS_$(1)) $$$$(for a in $$(ASMS_$(1)); do riscv64-unknown-linux-gnu-objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
+	$$(if $$(ASMS_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_$(1)); do \
-	    $$(CAP) timeout 60 perl ../compiler/gen/s2ff.pl $$(I)/$$$$a.s $$(I)/$$$$a.dump >> $$(FF)/$(1).ff.txt || exit 1; \
+	    $$(CAP) timeout 60 perl ../compiler/gen/s2ff.pl --items $$(I)/$$$$a.s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
+	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
 	cat builtins.ff.txt atomics.ff.txt >> $$(FF)/$(1).ff.txt
 	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
@@ -179,9 +232,9 @@ $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end; the fields relocations fill in (relmask.pl) are the linker's, not
 # compared, and what it names from elsewhere is a stand-in label after it.
-asm-check: $(ASMS_malloc:%=$(I)/%.dump) $(ASMS_malloc:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
+asm-check: $(ASMS_stdio:%=$(I)/%.dump) $(ASMS_stdio:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
-	@for a in $(ASMS_malloc); do \
+	@for a in $(ASMS_stdio); do \
 	    n=$$(basename $$a); \
 	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
 	      riscv64-unknown-linux-gnu-objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
@@ -210,7 +263,8 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 # libc.a (glibc's own startup, no builtins: each call reaches glibc), and
 # through c2ff --program, with ttpc against NAME.ff, the milestone of that
 # name (each takes in the ones before it). Both run with V and without; all
-# four must exit with the status in progs/NAME.expect.
+# four must exit with the status on the first line of progs/NAME.expect
+# ("exit N") and print the rest of it.
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
@@ -225,7 +279,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program $*.ff $(if $(filter $*,$(EARLY)),--early) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --program $*.ff $(if $(filter $*,$(EARLY)),--early) $(if $(filter $*,$(EXIT)),--exit) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)
@@ -234,10 +288,12 @@ $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%.ff $(TTPC)
 define check
 $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog progs/$(1).expect asm-check
 	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); \
+	tail -n +2 progs/$(1).expect > $$(FF)/$(1).want; \
 	for b in $(1).ref $(1)-prog; do \
 	    for cpu in rv64 rv64,v=false; do \
-	        s=0; $$(CAP) timeout 60 qemu-riscv64 -cpu $$$$cpu $$(FF)/$$$$b || s=$$$$?; \
+	        s=0; $$(CAP) timeout 60 qemu-riscv64 -cpu $$$$cpu $$(FF)/$$$$b > $$(FF)/$$$$b.out || s=$$$$?; \
 	        test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b on $$$$cpu: exit status $$$$s, not $$$$want"; exit 1; }; \
+	        cmp -s $$(FF)/$$$$b.out $$(FF)/$(1).want || { echo "$(1)-check: $$$$b on $$$$cpu: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1).want | head; exit 1; }; \
 	    done; \
 	done; \
 	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree, with V and without: exit $$$$want"

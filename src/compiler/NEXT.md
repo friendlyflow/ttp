@@ -145,3 +145,21 @@ RAM NODE:
 - daarvoor in ttpc: een functie-adres langs een pad aanroepen (`p` / add / x / y; test progs/cpath.ff); cast: en een lege : maken van een library-item een global (tcache, main_arena waren functies); elke global eindigt op 8 bytes (een global van één byte zette de code erna op een oneven adres: SIGILL)
 - bouwtijd: c2ff bewaart elke AST naast zijn JSON als Storable (x.sto; JSON::PP leest 2,7 MB/s, Storable 50 keer sneller): een milestone in c2ff 6,5 s in plaats van minuten; `--store` maakt alleen de cache, de Makefile doet dat na clang, zes tegelijk met -j6
 - nog te doen: arrays van functie-adressen in c2ff's ctype (`int (*[2]) (int, int)`); daarna M4 stdio (printf zonder floats, puts)
+## M4 stdio (18 okt 2026)
+- M4 klaar: printf zonder floats, puts en putchar: `make -C src/glibc stdio-check`: progs/stdio.c (d i u o x X c s % en n, de vlaggen - + spatie # 0, breedte en precisie ook uit de argumenten (*), de lengtes hh h l ll z t j, NULL voor %s) print hetzelfde als gcc + libc.a en eindigt met 131; exit spoelt stdout
+- de reach volgt alles (keuze van de gebruiker), ook de dynamische loader en gettext, zonder stand-ins: 316 C-objecten en 27 asm-delen, alle asm byte voor byte gelijk in asm-check; `_start` eindigt met `exit / main` (`c2ff --exit`, EXIT in de Makefile); `--zero` maakt van _r_debug_extended (in glibc's asm alleen gereserveerd) een nul-global, `--weak` laat __init_array_* en _dl_runtime_profile op adres 0
+- daarvoor in ttpc:
+  - labels als waarden: address / L, goto / content / p (vfprintf's sprongtabellen; cc_jv op elk doel)
+  - echte alloca en VLA's (keuze van de gebruiker): alloca is C op de shared page (8 MiB met mmap), de functie geeft het terug bij return
+  - het adres van een getypte literal (address / long / 30, de literal onder het type) en van een compound literal
+  - ?: als infix, c ? a : b (door een agent; test ccond)
+  - anonieme leden (C11): een veld : zonder naam, zijn velden gezien als die van de buitenste
+  - een blok met asm als eerste kind is een ingang van een asm-functie (setjmp.S's __sigsetjmp in _setjmp); libsym vindt het en plaatst de functie
+  - cc_types 32 MiB, met een controle (de types liepen over in glabels)
+  - elke label van while, do while en for synct sp: een break uit een blok met locals liet sp lager staan, en een syncsp midden in een expressie erna schoof over een gepushte waarde (vfprintf)
+  - fwide vergelijkt met een woord, niet met een slot: aarch64's slot is 16 bytes, zijn long double stond in één register van 8 en verloor bij elke kopie zijn bovenste helft (gevonden door caddrlit)
+- daarvoor in c2ff: ?: als infix, &&label en goto *p, VLA's en __builtin_alloca, de overflow-builtins per type (mkovf.pl), statics met dezelfde naam en een andere tekst krijgen per unit een naam, pagina's per glibc-map (de root houdt er 255), teksten langer dan 255 of met een NUL als global "text N", enum-waarden achter een ImplicitCastExpr (WORK_BUFFER_SIZE was 0), designated init van een union
+- daarvoor in s2ff: fld en fsd, pic `la` via een GOT-woord, `#`-commentaar, een functie die in een blok van de volgende springt neemt dat blok op
+- bouwtijd: c2ff leest met JSON::XS (flake.nix), de Storable-cache van M3 is weg; ttpc2 kreeg de caches van ttpc (keuze van de gebruiker): de bootstrap van 90 s naar 33 s
+- tests: progs/clabels, calloca, caddrlit, canon, casmentry (alleen riscv64), cloopsp, ccond; cloopsp crasht met de ttpc van 1733211
+- commentaar: één comment-knoop met meerdere teksten, nooit twee na elkaar, nooit ingekort tot 255; shared.ff.txt, de macros en caddrc, casmfn en cws zijn zo samengevoegd
