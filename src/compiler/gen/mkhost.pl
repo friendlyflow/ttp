@@ -31,7 +31,7 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use File::Basename qw(basename);
-use FF qw(node read_ff write_ff);
+use FF qw(node kids holder read_ff write_ff);
 
 die "usage: mkhost.pl <host> <outdir> <tree.ff> ...\n" unless @ARGV >= 3;
 my ($host, $outdir, @files) = @ARGV;
@@ -103,12 +103,13 @@ sub code {
 }
 code($page, 0);
 
-my ($start) = grep { $_->{content} eq "_start:" } @{ $page->{children} };
+# (_start and mem_end may stand in a layer of the page, 0: 1: ...)
+my ($start) = grep { $_->{content} eq "_start:" } kids($page);
 die "mkhost: no _start\n" unless $start;
 unshift @{ $start->{children} }, node("rv.start", node("rvregs"), node("rvstack_end"));
-my ($end) = grep { $page->{children}[$_]{content} eq "mem_end:" } 0 .. $#{ $page->{children} };
-die "mkhost: no mem_end\n" unless defined $end;
-splice @{ $page->{children} }, $end, 0,
+my ($holder, $end) = holder($page, "mem_end:");
+die "mkhost: no mem_end\n" unless $holder;
+splice @{ $holder->{children} }, $end, 0,
     node("align", node("16")),
     node("rvregs:", node("reserve", node("256"))),
     node("rvstack:", node("reserve", node("0x100000"))),

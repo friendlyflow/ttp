@@ -36,6 +36,9 @@
 #                        $new; each $old must be there exactly once.
 #   once(\$s, $old, $new, $what)
 #                        $old replaced by $new in $s, exactly once.
+#   tree()               the nodes of $t (its root's children), as FF.pm
+#                        has them ({content, children}), for a change of
+#                        the tree's shape; untree(@nodes) makes them $t.
 #   save()               writes $t back to the text file.
 use strict; use warnings;
 our ($t, $tf);
@@ -98,6 +101,10 @@ sub edit {
     while (@pairs) { my ($o, $n) = splice @pairs, 0, 2; once(\$e, $o, $n, $name) }
     substr($$t, $from, $to - $from) = $e;
 }
+
+my $gen = __FILE__ =~ s{/[^/]*$}{}r;
+sub tree { unshift @INC, $gen; require FF; FF::read_txt($t, $tf) }
+sub untree { unshift @INC, $gen; require FF; $t = FF::write_txt(@_) }
 
 sub save { open my $h, '>', $tf or die "$tf: $!"; print $h $t; close $h or die "$tf: $!" }
 1;

@@ -23,12 +23,39 @@ use warnings;
 use Digest::SHA qw(sha256);
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(node call uncomment frozen read_ff write_ff read_txt write_txt);
+our @EXPORT_OK = qw(node call uncomment frozen is_layer kids holder read_ff write_ff read_txt write_txt);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
 # A call: name with leaf arguments.
 sub call { my ($name, @args) = @_; node($name, map { node($_) } @args) }
+
+# A layer: a function whose name is only digits (0: 1: ...), the overflow of
+# its parent past the 255 children a node holds. Its children count as the
+# parent's, in every scope, and a layer may hold layers (language.ff.txt).
+sub is_layer { $_[0]{content} =~ /^[0-9]+:$/ }
+
+# The children of n as a scope sees them: through its layers and theirs.
+sub kids {
+    my ($n, $depth) = @_;
+    $depth //= 0;
+    die "ff: layers nested too deep in $n->{content}\n" if $depth > 64;
+    map { is_layer($_) ? kids($_, $depth + 1) : $_ } @{ $n->{children} };
+}
+
+# Where the child of n (through its layers) with this content stands: the
+# node that holds it and its index there; nothing if there is none.
+sub holder {
+    my ($n, $content, $depth) = @_;
+    $depth //= 0;
+    die "ff: layers nested too deep in $n->{content}\n" if $depth > 64;
+    my $k = $n->{children};
+    for my $i (0 .. $#$k) {
+        return ($n, $i) if $k->[$i]{content} eq $content;
+        if (is_layer($k->[$i])) { my @h = holder($k->[$i], $content, $depth + 1); return @h if @h }
+    }
+    ();
+}
 
 # The tree under n without its comments (comment with its text), all the way
 # down. A leaf comment is data (ascii / comment) and stays.

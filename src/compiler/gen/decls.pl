@@ -11,14 +11,14 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use FF qw(read_ff);
+use FF qw(kids read_ff read_txt);
 
 die "usage: decls.pl <shared.ff.txt> <ttpc.ff>\n" unless @ARGV == 2;
 my ($txt, $ttpc) = @ARGV;
 
-open my $h, "<", $txt or die "decls: cannot open $txt: $!\n";
-my %decl;
-while (<$h>) { chomp; $decl{$1} = 1 if /^(\S.*):$/ }
+# the declarations: the shared page's functions, through its layers
+open my $h, "<:raw", $txt or die "decls: cannot open $txt: $!\n";
+my %decl = map { ($_->{content} =~ /^(.+):$/ ? ($1 => 1) : ()) } map { kids({ content => '', children => [$_] }) } read_txt(do { local $/; <$h> }, $txt);
 close $h;
 
 open $h, "<:raw", $ttpc or die "decls: cannot open $ttpc: $!\n";
@@ -27,7 +27,7 @@ close $h;
 
 my $bad = 0;
 for my $table (qw(cc_kw cc_ops cc_tynames)) {
-    my ($node) = grep { $_->{content} eq "$table:" } @{ $root->{children} }
+    my ($node) = grep { $_->{content} eq "$table:" } kids($root)
         or die "decls: no $table in $ttpc\n";
     my $bytes = join "", map { $_->{children}[0]{content} } @{ $node->{children} };
     my @words = grep { length } split /\0/, $bytes;
