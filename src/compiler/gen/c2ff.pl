@@ -17,7 +17,7 @@
 #
 # Two idioms of glibc are recognized as what they are: its system call (a
 # statement expression of register variables and scall) is ff's syscall, and
-# __builtin_expect (a hint to the compiler) is its first argument; __extension__
+# __builtin_expect (a hint to the compiler) is its first argument (a long); __extension__
 # (which only quiets -pedantic) is what it marks; __builtin_constant_p is 1
 # for a literal, else 0, as gcc may answer where it cannot tell.
 # __builtin_memcpy and the like are calls of memcpy and the like, as gcc makes
@@ -352,7 +352,13 @@ for my $u (@units) {
             my $kind = $lastanon->{kind} eq 'EnumDecl' ? 'enum' : $lastanon->{tagUsed};
             my $tn = "$d->{name} $kind";
             $anon{$key} //= ["$kind $tn", $tn];
-            if ($kind eq 'enum') { $enumd{"enum $tn"} //= $lastanon } else { $rec{"$kind $tn"} //= $lastanon; anon_fields($lastanon, $tn) }
+            # (an enum's constants are then its: one name for one enum, not also
+            # the one index_enum gave it after its first constant)
+            if ($kind eq 'enum') {
+                $enumd{"enum $tn"} //= $lastanon;
+                $tagname{ $anon{$key}[0] } //= $anon{$key}[1];
+                $enumof{ $_->{name} } = $anon{$key}[0] for grep { $_->{kind} eq 'EnumConstantDecl' } @{ $lastanon->{inner} || [] };
+            } else { $rec{"$kind $tn"} //= $lastanon; anon_fields($lastanon, $tn) }
         }
         my $name = $d->{name} // next;
         # weak, or a function gcc's error attribute keeps from being called
@@ -699,10 +705,14 @@ sub expr {
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/) {
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
-    if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean') {
+    # C's conversion to _Bool (in ff a u8) gives 0 or 1: the value compared
+    # with 0 (the low byte of the value would be has_zero_eq's mask, 0 for a
+    # zero byte above the first). long double has no literal of its own: 0, a
+    # double, converts
+    if ($k =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($n->{castKind} // '') =~ /^(Integral|Pointer|Floating)ToBoolean$/) {
         my ($e) = kids($n);
-        # long double has no literal of its own: 0, a double, converts
-        return node(':', item(expr($e)), node('!='), node(hexfloat(0, isld($e) ? 'double' : qt($e))));
+        my $zero = $1 eq 'Floating' ? hexfloat(0, isld($e) ? 'double' : qt($e)) : 0;
+        return node(':', operand($e, $prec{'!='}, 0), node('!='), node($zero));
     }
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
     return node(':', expr((kids($n))[0])) if $k eq 'ParenExpr';
@@ -835,7 +845,8 @@ sub expr {
             # p->fn (x), its arguments after the path's fields and indexes
             my @p = expr($c);
             @p == 1 && @{ $p[0]{children} } or stop('a call through a path that is not one node', $n);
-            push @{ $p[0]{children} }, map { item(expr($_)) } @args;
+            # (without arguments, a . after the path: the field alone is its value)
+            push @{ $p[0]{children} }, @args ? map { item(expr($_)) } @args : node('.');
             return @p;
         }
         if ($c->{kind} =~ /^(CStyleCastExpr|ConditionalOperator|CallExpr)$/) {
@@ -849,7 +860,8 @@ sub expr {
         }
         $c->{kind} eq 'DeclRefExpr' or stop('a call through ' . $c->{kind}, $n);
         my $name = $c->{referencedDecl}{name};
-        return expr($args[0]) if $name eq '__builtin_expect';
+        # (its value a long, as its first argument is made one)
+        return cast_node([ctype(qt($n))], item(expr($args[0]))) if $name eq '__builtin_expect';
         if ($name eq '__builtin_constant_p') {
             # gcc's answer where it cannot tell is 0, and code that asks must
             # mean the same either way: 1 for a literal, else 0
@@ -888,8 +900,11 @@ sub expr {
         return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p)$/ || $name eq '__atomic_always_lock_free';
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
         $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
-        $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
         want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl' && $name !~ /^__builtin_/;
+        # a call through a variable without arguments: a . after it (the
+        # variable alone is its value; pthread_once's init_routine (), the
+        # atexit functions of exit)
+        if ($c->{referencedDecl}{kind} ne 'FunctionDecl' && !@args) { my ($v) = expr($c); push @{ $v->{children} }, node('.'); return $v }
         return node(ffname($name), map { item(expr($_)) } @args);
     }
     if ($k eq 'AtomicExpr') {
@@ -898,15 +913,11 @@ sub expr {
         # builtins.ff.txt)
         my ($p, $o, @v) = kids($n);
         my $a = $n->{name};
-        return node("__atomic_exchange_" . csize(qt($n)), item(expr($p)), item(expr($v[0])), item(expr($o))) if $a eq '__atomic_exchange_n';
-        return node("__atomic_load_" . csize(qt($n)), item(expr($p)), item(expr($o))) if $a eq '__atomic_load_n';
-        return node("__atomic_store_" . csize(qt($v[0])), item(expr($p)), item(expr($v[0])), item(expr($o))) if $a eq '__atomic_store_n';
-        # clang's order: ptr, success, expected, failure, desired, weak
-        return node("__atomic_compare_exchange_" . csize(qt($v[2])), item(expr($p)), item(expr($v[0])), item(expr($v[2])), item(expr($o)), item(expr($v[1])))
-            if $a eq '__atomic_compare_exchange_n';
-        return node("${1}_" . csize(qt($n)), item(expr($p)), item(expr($v[0])), item(expr($o)))
-            if $a =~ /^(__atomic_(?:fetch_(?:add|sub|and|or|xor|nand)|(?:add|sub|and|or|xor|nand)_fetch))$/;
-        stop("the atomic $a", $n);
+        # (libatomic's functions take and give u8 ... u64: the value is C's
+        # type again, an enum's or an int's, as the builtin has it)
+        my @t = ctype(qt($n));
+        return cast_node([@t], atomic_call($n, $a, $p, $o, @v)) unless "@t" eq 'void' || "@t" =~ /^(u8|u16|u32|u64)$/;
+        return atomic_call($n, $a, $p, $o, @v);
     }
     if ($k eq 'VAArgExpr') { my ($ap) = kids($n); return node('va_arg', item(expr($ap)), map { node($_) } ctype(qt($n))) }
     # C's c ? a : b, a leaf ? and a leaf : among the siblings, between = and ||
@@ -947,6 +958,22 @@ sub expr {
         stop("the trait $w", $n);
     }
     stop($k, $n);
+}
+
+# The call of libatomic's function for an atomic builtin
+sub atomic_call {
+    {
+        my ($n, $a, $p, $o, @v) = @_;
+        return node("__atomic_exchange_" . csize(qt($n)), item(expr($p)), item(expr($v[0])), item(expr($o))) if $a eq '__atomic_exchange_n';
+        return node("__atomic_load_" . csize(qt($n)), item(expr($p)), item(expr($o))) if $a eq '__atomic_load_n';
+        return node("__atomic_store_" . csize(qt($v[0])), item(expr($p)), item(expr($v[0])), item(expr($o))) if $a eq '__atomic_store_n';
+        # clang's order: ptr, success, expected, failure, desired, weak
+        return node("__atomic_compare_exchange_" . csize(qt($v[2])), item(expr($p)), item(expr($v[0])), item(expr($v[2])), item(expr($o)), item(expr($v[1])))
+            if $a eq '__atomic_compare_exchange_n';
+        return node("${1}_" . csize(qt($n)), item(expr($p)), item(expr($v[0])), item(expr($o)))
+            if $a =~ /^(__atomic_(?:fetch_(?:add|sub|and|or|xor|nand)|(?:add|sub|and|or|xor|nand)_fetch))$/;
+        stop("the atomic $a", $n);
+    }
 }
 
 # The bytes of a scalar or an address: what the atomics need
@@ -1146,25 +1173,13 @@ sub syscall_idiom {
 
 # ---- statements ---------------------------------------------------------------
 
-# A function's statements: a local declared before any statement without a
-# value would be one more parameter; a comment ends the parameters.
+# A block's statements. (A local declared first in a function without a
+# value would be one more parameter, but the comment that says where the
+# function comes from ends them.)
 sub body {
-    my ($cs, $fnhead) = @_;
-    my @out;
-    my $lead = $fnhead;
-    for my $s (kids($cs)) {
-        my @st = stmt($s);
-        if ($lead && $s->{kind} eq 'DeclStmt' && grep { $_->{content} =~ /:$/ && !has_value($_) } @st) {
-            push @out, node('comment', node('locals'));
-            $lead = 0;
-        }
-        $lead = 0 unless $s->{kind} eq 'DeclStmt';
-        push @out, @st;
-    }
-    @out;
+    my ($cs) = @_;
+    map { stmt($_) } kids($cs);
 }
-# A declaration with a value: something after its type words.
-sub has_value { my ($d) = @_; my @c = @{ $d->{children} }; scalar grep { @{ $_->{children} } || !$scalar_word{ $_->{content} } } @c }
 
 sub stmt {
     my ($n) = @_;
@@ -1221,7 +1236,7 @@ sub stmt {
         # an init declaring several (dl-load's *ph = phdr, *ph_end = ...): their
         # scope is the loop, as C has it, so a block holds them and the loop
         my @i = clause($i, 1);
-        return node(':', @i, node('for', node(':'), clause($c), clause($s, 1), sub_body($b))) if @i > 1;
+        return node(':', @i, node('for', node(':'), clause($c), clause($s, 1), sub_body($b))) if $i && $i->{kind} && $i->{kind} eq 'DeclStmt' && @i > 1;
         return node('for', @i, clause($c), clause($s, 1), sub_body($b));
     }
     if ($k eq 'SwitchStmt') {
@@ -1409,7 +1424,7 @@ sub function {
         map({ $i++; node(ffname($_->{name} // "p$i") . ':', map { node($_) } ctype(qt($_))) } @p),
         ($d->{variadic} ? node('...') : ()),
         node('comment', node("glibc-2.44 $d->{file}")),
-        body($cs, 1));
+        body($cs));
 }
 
 sub next_name {

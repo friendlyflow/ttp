@@ -165,6 +165,7 @@ ff, the language ttpc compiles
           blue:
       a function type: compare:, function, its return type run, its parameters name: and a type; address compare is a pointer to such a function
       a variable or a global holding one, called with arguments, calls the function it points to; address f is a function's address
+      without arguments it is called with a . after it, f / . (C's f ()): the variable alone is its value; a path to one likewise, p / fn / .
       a path that reaches one (a field, an element) calls it with the rest of the path as arguments: p / add / x / y is C's p->add (x, y), tab / 0 / add / x / y is tab[0].add (x, y)
       example
         binary:

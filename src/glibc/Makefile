@@ -195,7 +195,7 @@ WEAKS_floats := $(WEAKS_stdio)
 
 MILESTONES := string stdlib ldouble malloc stdio floats
 
-.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff
+.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -310,4 +310,23 @@ $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog progs/$(1).expect asm-check
 endef
 $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 
-.PHONY: strlen-check asm-check
+# The round trip, the other proof of "exact": the C functions of a milestone,
+# written back as C from its ff (ff2c.pl, which reads ff as ttpc does), have
+# the AST of glibc's own, each against its .i's (roundtrip.pl). The
+# addresses of asm functions, which have no C type in ff, are let through.
+$(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl
+	$(CAP) timeout 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
+
+$(FF)/%.rt.json: $(FF)/%.rt.c
+	$(CAP) timeout 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -w \
+	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
+
+define roundtrip
+$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl
+	$$(CAP) timeout 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json
+.PHONY: $(1)-roundtrip
+endef
+$(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
+glibc-roundtrip: floats-roundtrip
+
+.PHONY: strlen-check asm-check glibc-roundtrip

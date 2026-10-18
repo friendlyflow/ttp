@@ -167,3 +167,17 @@ RAM NODE:
 - printf van double en long double: `make -C src/glibc floats-check`: progs/floats.c (%f %F %e %E %g %G %a %A, vlaggen, breedte, precisie ook uit *, afronding naar even, 1e20, de kleinste subnormale, DBL_MAX, inf en nan met teken, en met L: 3/7, 1e-600, 1e600 in long double, uitgerekend door soft-fp) print hetzelfde als gcc + libc.a en eindigt met 169; de reach is die van stdio (printf_fp en printf_fphex zaten er al in) plus de soft-fp-roots voor het programma zelf
 - in ttpc: va_arg van een type in het geheugen (een struct, long double; double op arm) laadt het slot als een woord, het adres van het object dat de aanroep pusht; het nam het adres van het slot zelf (test progs/cvamem.ff op elk doel)
 - in c2ff: lr/sc/amo met .aqrl verloren hun rl-bit en de hint van .insn i 0x0f (glibc's pause, 0x010) werd fence 0 0 0: een match op $1 zette $1 opnieuw; een anoniem lid gaf waarschuwingen
+## de round trip (18 okt 2026)
+- het tweede bewijs van "exact" uit het plan: `make -C src/glibc glibc-roundtrip` (of NAME-roundtrip per milestone): gen/ff2c.pl schrijft de ff van een milestone terug als één C-bestand, gelezen zoals ttpc ff leest (language.ff.txt: infix met voorrang, paden met . en -> uit de types, `:` als haakjes, blok of komma, `f / .`); src/glibc/roundtrip.pl legt clang's AST daarvan per functie naast clang's AST van de functie in glibc's .i, beide op dezelfde manier genormaliseerd
+- weg aan beide kanten: haakjes, casts die niets veranderen (ook tussen long en long long), a[i] als *(a + i), accolades rond één statement, de vorm van case en label; aan glibc's kant de idiomen die c2ff een eigen ff-vorm geeft (INTERNAL_SYSCALL, asm-statements, atomics, __builtin_expect, offsetof, statics als globals)
+- uitkomst: alle 1015 functies van floats (de grootste milestone), en die van string, stdlib, ldouble, malloc en stdio, zijn glibc's C; 2 minuten voor alle zes
+- wat de round trip vond, in c2ff:
+  - een conversie naar _Bool (in ff een u8) hield de lage byte in plaats van 0 of 1: has_zero_eq gaf 0 voor een nul in een hogere byte; nu `: x != 0`
+  - een aanroep zonder argumenten via een variabele of een veld (pthread_once's init_routine (), exit's atexit-functies) was de variabele alleen, zonder aanroep: nu `f / .`
+  - atomics gaven libatomic's uN in plaats van C's type (een enum, een int): nu met cast:
+  - __builtin_expect is een long: cast: long rond zijn argument
+  - `for (i = 0; ...)` werd in een blok gezet, alleen nodig voor meerdere declaraties
+  - een anonieme enum kreeg twee namen (naar zijn eerste constante en naar de global)
+  - de komment `locals` na de provenance-komment (twee comment-knopen na elkaar) is weg: die eerste beëindigt de parameters al
+- test progs/cnullary.ff (`f / .`, `p / fn / .`) op elk doel
+- nog niet vergeleken: de waarden van globals (hun items)
