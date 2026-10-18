@@ -40,7 +40,7 @@ TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
@@ -260,7 +260,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary
 # cexpr, cint64, cfloats and cgnu compute with u64, which a target of 4-byte
 # words does not have (cfloats32 is cfloats without it).
 CSKIP_arm := cexpr cint64 cfloats cgnu
@@ -427,6 +427,8 @@ bootstrap-$(1): $(BUILD)/$(1)/ttpc2.self $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),
 	$(if $(CAN_RISCV),@echo "bootstrap-$(1): == the riscv64 chain's ttpc for $(1)")
 
 # The C programs, built by stage2 for its own host and run there.
+# casm, casm2 and casmfail also for riscv64: compile time runs on the host,
+# its asm is riscv64's.
 chello-$(1): $(BUILD)/$(1)/stage2
 	@set -e; d=$(BUILD)/$(1)/c; mkdir -p $$$$d; \
 	for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)); do \
@@ -440,6 +442,13 @@ chello-$(1): $(BUILD)/$(1)/stage2
 	    echo "chello-$(1): $$$$p"; \
 	done; \
 	grep -qx compiling $$$$d/cnow.lst; ! grep -aq compiling $$$$d/cnow
+	$(if $(CAN_RISCV),@set -e; d=$(BUILD)/$(1)/c; for p in casm casm2 casmfail; do \
+	    $(RUN_$(1)) $(BUILD)/$(1)/stage2 --target riscv64 $(SHARED) progs/$$$$p.ff $$$$d/$$$$p.riscv64 > $$$$d/$$$$p.riscv64.lst; \
+	    s=0; $(QEMU) $$$$d/$$$$p.riscv64 || s=$$$$?; \
+	    want=$$$$(head -n 1 progs/$$$$p.expect | cut -d" " -f2); \
+	    test $$$$s -eq $$$$want || { echo "chello-$(1): $$$$p for riscv64: exit status $$$$s instead of $$$$want"; exit 1; }; \
+	    echo "chello-$(1): $$$$p built on $(1) for riscv64"; \
+	done)
 	@echo "chello-$(1): the C programs, built on $(1) by its own ttpc, run"
 
 .PHONY: seed-$(1) bootstrap-$(1) chello-$(1)

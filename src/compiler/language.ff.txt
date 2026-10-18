@@ -493,6 +493,7 @@ ff, the language ttpc compiles
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program
+    for it the page is compiled for the host too, so compile time can call its functions; there a lambda puts nothing and does not run: what it emits is the target's
     a named one without parameters is a define: its value is what a use of it gives
       example
         LINES:
