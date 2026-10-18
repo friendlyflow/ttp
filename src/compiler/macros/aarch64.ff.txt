@@ -643,6 +643,26 @@ elf:
     dword
       0x1000
   comment
+    elf_header_tls, program_headers and tls_header lay out riscv64's frame with its TLS image (macros/riscv64.ff.txt). Here they are for a riscv64 program's compile time, which runs on this host: elf_header_tls is elf_header, the other two lay out nothing.
+    On aarch64 a thread local is still a global (cc_tls 0), and its frame has no PT_TLS.
+  elf_header_tls:
+    entry
+    file_end
+    mem_end
+    phdrs
+    elf_header
+      entry
+      file_end
+      mem_end
+  program_headers:
+    file_end
+    mem_end
+    align
+      1
+  tls_header:
+    align
+      1
+  comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
   frame:
     origin
@@ -698,6 +718,13 @@ c:
   cc_entryoff:
     addi
       16
+      zero
+      a0
+  comment
+    cc_tls: 1 where a thread local is in the TLS image, at its offset from the thread pointer (not yet on aarch64: a thread local is laid out as a global); 0 where it is laid out as a global.
+  cc_tls:
+    addi
+      0
       zero
       a0
   comment

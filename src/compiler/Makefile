@@ -186,12 +186,13 @@ $(P)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)
 # The vector instructions (RVV 1.0), which ttpc.s predates: stage2
 # assembles progs/riscv64/rvv.ff, a program-only tree that mkrvv.pl writes
 # with its GNU twin rvv.s, every instruction unmasked and under v0.t. They
-# must be byte-identical after the ELF header.
+# must be byte-identical after the ELF header (as far as the twin goes: the
+# frame's program headers follow the program).
 $(P)/rvv.velf: progs/riscv64/rvv.ff $(SHARED) $(BOOT)/stage2 | $(P)
 	$(QEMU) $(BOOT)/stage2 $(SHARED) $< $@ > $(P)/rvv.lst
 
 rvv: $(P)/rvv.velf $(P)/rvv.twin.bin
-	tail -c +121 $(P)/rvv.velf | cmp - $(P)/rvv.twin.bin
+	tail -c +121 $(P)/rvv.velf | head -c $$(wc -c < $(P)/rvv.twin.bin) | cmp - $(P)/rvv.twin.bin
 	@echo "rvv: ttpc and GNU as agree on the vector instructions"
 
 ctest: $(CPROGS:%=$(P)/%.celf)

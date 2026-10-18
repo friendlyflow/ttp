@@ -246,6 +246,30 @@ elf:
       -65536
       addr
       a0
+  comment
+    __tls_start and __tls_end are the linker's bounds of the TLS image, the thread locals of a C program, which the C layer lays out between them (and so places them as labels); a program with none has them at elf_base, the image empty.
+    tls_size is the image's size; tprel a thread local's offset in it, which is its offset from tp (riscv64's TLS, variant I: tp points at the image of the thread's block).
+  __tls_start:
+    addi
+      0x10000
+      zero
+      a0
+  __tls_end:
+    addi
+      0x10000
+      zero
+      a0
+  tls_size:
+    sub
+      __tls_start
+      __tls_end
+      a0
+  tprel:
+    sym
+    sub
+      __tls_start
+      sym
+      a0
   elf_header:
     entry
     file_end
@@ -299,17 +323,106 @@ elf:
     dword
       0x1000
   comment
+    elf_header_tls: elf_header whose program headers are at phdrs (program_headers lays them out there), two: the load and the TLS image (PT_TLS, which glibc's static startup reads).
+    The 120 bytes of the header are elf_header's, so the program follows at the same place; its one program header there is no longer read.
+  elf_header_tls:
+    entry
+    file_end
+    mem_end
+    phdrs
+    dword
+      0x00010102464c457f
+    dword
+      0
+    half
+      2
+    half
+      243
+    word
+      1
+    dword
+      entry
+    dword
+      from_base
+        phdrs
+    dword
+      0
+    word
+      0
+    half
+      64
+    half
+      56
+    half
+      2
+    half
+      64
+    half
+      0
+    half
+      0
+    program_headers
+      file_end
+      mem_end
+  program_headers:
+    file_end
+    mem_end
+    word
+      1
+    word
+      7
+    dword
+      0
+    dword
+      elf_base
+    dword
+      elf_base
+    dword
+      from_base
+        file_end
+    dword
+      from_base
+        mem_end
+    dword
+      0x1000
+  tls_header:
+    word
+      7
+    word
+      4
+    dword
+      from_base
+        __tls_start
+    dword
+      __tls_start
+    dword
+      __tls_start
+    dword
+      tls_size
+    dword
+      tls_size
+    dword
+      64
+  comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
+    __global_pointer$ is the linker's name for gp, which start.S's load_gp sets: nothing ttpc makes is relative to it, so it is where the data ends.
   frame:
     origin
       elf_base
-    elf_header
+    elf_header_tls
       _start
       file_end
       mem_end
+      phdrs
     program
     align
       8
+    phdrs:
+    program_headers
+      file_end
+      mem_end
+    tls_header
+    __global_pointer$:
     file_end:
     bss
     mem_end:
@@ -353,6 +466,13 @@ c:
   cc_entryoff:
     addi
       16
+      zero
+      a0
+  comment
+    cc_tls: 1 where a thread local is in the TLS image, at its offset from the thread pointer (riscv64's: tp, set by glibc's startup (__libc_setup_tls) or by a C _start of the program's own); 0 where it is laid out as a global.
+  cc_tls:
+    addi
+      1
       zero
       a0
   comment

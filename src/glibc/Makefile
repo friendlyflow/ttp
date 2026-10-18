@@ -164,12 +164,9 @@ OBJS_malloc := $(OBJS_stdlib) malloc/malloc stdlib/qsort \
 ASMS_malloc := $(ASMS_stdlib) misc/madvise misc/mprotect misc/sysinfo string/memchr-vector string/memmove-vector \
 	string/strncmp-vector string/strrchr-vector
 ROOTS_malloc := $(ROOTS_stdlib) $(M3) __libc_early_init
-# the milestones whose programs run glibc's __libc_early_init first, as its
-# static startup does (malloc needs its arena set up)
-EARLY := malloc stdio floats
 
 # M4, stdio: printf without floats, puts and putchar, with M3, on stdout;
-# exit (main ()) flushes it, as C's startup does (EXIT: c2ff --exit).
+# exit (main ()) flushes it, as C's startup does.
 M4 := printf puts putchar exit
 OBJS_stdio := $(OBJS_malloc) $(OBJS_ldouble) stdio-common/printf libio/ioputs libio/putchar stdlib/exit \
 	libio/iofwide libio/vtables libio/genops libio/putc libio/stdio stdio-common/vfprintf-internal \
@@ -208,7 +205,6 @@ OBJS_stdio := $(OBJS_malloc) $(OBJS_ldouble) stdio-common/printf libio/ioputs li
 	dlfcn/dlopen libio/filedoalloc libio/wfiledoalloc locale/C-address locale/C-collate locale/C-identification locale/C-measurement locale/C-messages locale/C-monetary locale/C-name locale/C-numeric locale/C-paper locale/C-telephone locale/C-time termios/isatty_nostatus
 ASMS_stdio := $(ASMS_malloc) setjmp/setjmp setjmp/__longjmp posix/sched_getp posix/sched_primax posix/sched_primin posix/sched_gets posix/sched_sets elf/dl-trampoline
 ROOTS_stdio := $(ROOTS_malloc) $(M4)
-EXIT := stdio floats
 # objects glibc's asm only reserves, zeroed in .bss, that C reaches: c2ff --zero
 # makes each a global of the type C declares (elf/dl-debug-symbols.S)
 ZEROS_stdio := _r_debug_extended
@@ -227,7 +223,44 @@ ROOTS_floats := $(ROOTS_stdio) $(ROOTS_ldouble)
 ZEROS_floats := $(ZEROS_stdio)
 WEAKS_floats := $(WEAKS_stdio)
 
-MILESTONES := string stdlib ldouble malloc stdio floats
+# args: a program of argc, argv and an environment variable, through
+# glibc's startup (below), with what stdio has
+OBJS_args := $(OBJS_stdio)
+ASMS_args := $(ASMS_stdio)
+ROOTS_args := $(ROOTS_stdio) getenv
+ZEROS_args := $(ZEROS_stdio)
+WEAKS_args := $(WEAKS_stdio)
+RUN_args := one two three
+RUNENV_args := FF_ARGS=hello
+
+MILESTONES := string stdlib ldouble malloc stdio floats args
+
+# glibc's own startup, on riscv64, for the program of every milestone:
+# start.S's _start (crt1.o's, with csu/static-reloc and csu/init) calls
+# __libc_start_main, which sets up the auxv, tunables, TLS, stdio and
+# atexit, runs main (argc, argv, envp) and exits with exit (), which runs
+# the atexit functions and flushes stdio. So each milestone has stdio's
+# objects too, and these, from its root _start. Of the linker's own names,
+# ttpc's frame has __global_pointer$ and ttpc's IRELATIVE table
+# __rela_iplt_start and __rela_iplt_end; weak (address 0) are the bounds of
+# .fini_array, which a ttpc program has none of, __ehdr_start, which glibc
+# reads only when the kernel gives no AT_PHDR (Linux always does), and
+# _startup_fatal_not_constant, a name glibc leaves undefined on purpose
+# (gcc's optimizer keeps no call of it). dl-rseq-symbols.S's two objects
+# are zero (c2ff --zero), their other names aliases (s2ff). Another target
+# has no startup in ff yet: its programs have a _start of their own (c2ff
+# --start).
+GLIBC_START := $(filter riscv64,$(GTARGET))
+OBJS_start := csu/static-reloc csu/init csu/check_fds elf/dl-early_allocate nptl/nptl_deallocate_tsd nptl/nptl_nthreads \
+	elf/dl-tls_init_tp stdlib/setenv elf/dl-execstack-tunable nptl/pthread_keys
+ASMS_start := csu/start elf/dl-rseq-symbols
+ROOTS_start := _start
+ZEROS_start := __rseq_size __rseq_offset
+WEAKS_start := __fini_array_start __fini_array_end _startup_fatal_not_constant __ehdr_start
+# a milestone's own, then (riscv64) stdio's and the startup's, each once in
+# its first place
+uniq = $(if $(1),$(firstword $(1)) $(call uniq,$(filter-out $(firstword $(1)),$(1))))
+with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_start)))
 
 .PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
@@ -266,12 +299,14 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # atomics.ff.txt). The asm parts share one page, glibc asm: the trees a
 # program reads have 255 pages in all (c2ff makes a page per directory).
 define milestone
-$$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+OBJS_all_$(1) := $$(call with_start,OBJS,$(1))
+ASMS_all_$(1) := $$(call with_start,ASMS,$(1))
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
 	mkdir -p $$(FF)
-	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(ZEROS_$(1)),--zero $$(z)) $$(foreach w,$$(WEAKS_$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
-	    -- $$(ROOTS_$(1)) $$$$(for a in $$(ASMS_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
-	$$(if $$(ASMS_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
-	for a in $$(ASMS_$(1)); do \
+	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
+	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
+	for a in $$(ASMS_all_$(1)); do \
 	    $$(CAP) timeout 60 perl ../compiler/gen/s2ff.pl --items $$(I)/$$$$a.s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
@@ -280,13 +315,15 @@ $$(FF)/$(1).ff: $$(OBJS_$(1):%=$$(I)/%.json) $$(ASMS_$(1):%=$$(I)/%.dump) builti
 endef
 $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 
-# Each asm part, assembled by ttpc alone (with a _start after it), is the
+# Each asm part, assembled by ttpc alone (with a _start after it; start.S's
+# own is its page's), is the
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end; the fields relocations fill in (relmask.pl) are the linker's, not
 # compared, and what it names from elsewhere is a stand-in label after it.
-asm-check: $(ASMS_stdio:%=$(I)/%.dump) $(ASMS_stdio:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
+ASMCHECK := $(ASMS_stdio) $(if $(GLIBC_START),csu/start)
+asm-check: $(ASMCHECK:%=$(I)/%.dump) $(ASMCHECK:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
 	mkdir -p $(FF)
-	@for a in $(ASMS_stdio); do \
+	@for a in $(ASMCHECK); do \
 	    n=$$(basename $$a); \
 	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
 	      $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
@@ -339,7 +376,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(EARLY)),--early) $(if $(filter $*,$(EXIT)),--exit) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(GLIBC_START),,--start) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
@@ -356,7 +393,7 @@ $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter 
 	tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1).want; \
 	for b in $(1).ref $(1)-prog; do \
 	    for cpu in $$(CPUS); do \
-	        s=0; $$(CAP) timeout 60 qemu-$$(GTARGET) -cpu $$$$cpu $$(FF)/$$$$b > $$(FF)/$$$$b.out || s=$$$$?; \
+	        s=0; $$(CAP) $$(if $$(RUNENV_$(1)),env $$(RUNENV_$(1))) timeout 60 qemu-$$(GTARGET) -cpu $$$$cpu $$(FF)/$$$$b $$(RUN_$(1)) > $$(FF)/$$$$b.out || s=$$$$?; \
 	        test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b on $$$$cpu: exit status $$$$s, not $$$$want"; exit 1; }; \
 	        cmp -s $$(FF)/$$$$b.out $$(FF)/$(1).want || { echo "$(1)-check: $$$$b on $$$$cpu: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1).want | head; exit 1; }; \
 	    done; \
@@ -379,7 +416,7 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 
 define roundtrip
 $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl
-	$$(CAP) timeout 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_$(1):%=$$(I)/%.json)
+	$$(CAP) timeout 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))

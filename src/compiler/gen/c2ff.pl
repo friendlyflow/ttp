@@ -23,16 +23,14 @@
 # (which only quiets -pedantic) is what it marks; __builtin_constant_p is 1
 # for a literal, else 0, as gcc may answer where it cannot tell.
 # __builtin_memcpy and the like are calls of memcpy and the like, as gcc makes
-# them where it does not expand them.
+# them where it does not expand them; __builtin_mempcpy is memcpy + n, which
+# gcc always makes of it.
 #
 # With --program, what the roots reach is a program: its definitions on the
-# page itself, after include / tree (glibc in ff, which has the rest), and a
-# _start that exits with what main returns, which is what C's startup does
-# for main without arguments.
-# With --early it runs glibc's __libc_early_init (1) first, as glibc's static
-# startup does (ctype, malloc's arena, ...).
-# With --exit it ends with glibc's exit (main ()), as C's startup does, which
-# runs the atexit functions and flushes stdio (_IO_cleanup); else SYS_exit.
+# page itself, after include / tree (glibc in ff, which has the rest, its
+# startup too: start.S's _start, which calls __libc_start_main with main).
+# With --start, for a target whose glibc in ff has no startup of its own
+# yet, the program has a _start that exits with what main returns.
 #
 # --zero name: an object glibc's asm only reserves, zeroed in .bss (elf/dl-debug-
 # symbols.S's _r_debug_extended), is a global of the type C declares, zero.
@@ -50,6 +48,7 @@
 # A host tool, not part of ttpc.
 use strict;
 use warnings;
+use feature 'current_sub';
 use FindBin;
 use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
@@ -277,8 +276,7 @@ sub ast_of {
 
 my $page = 'glibc';
 my $program;
-my $early;                 # --early: _start runs glibc's __libc_early_init (1) before main
-my $exit;                  # --exit: _start ends with glibc's exit (main ()), not SYS_exit
+my $start;                 # --start: a _start of the program's own, SYS_exit (main ())
 my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, in .bss)
 my %forceweak;             # --weak name: nothing defines it for a static program
 my (@units, @roots);
@@ -286,8 +284,7 @@ while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--program') { $program = shift @ARGV; next }
-    if ($a eq '--early') { $early = 1; next }
-    if ($a eq '--exit') { $exit = 1; next }
+    if ($a eq '--start') { $start = 1; next }
     if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
     if ($a eq '--target') { $target = shift @ARGV; next }
@@ -387,6 +384,14 @@ for my $u (@units) {
                 $tagname{ $anon{$key}[0] } //= $anon{$key}[1];
                 $enumof{ $_->{name} } = $anon{$key}[0] for grep { $_->{kind} eq 'EnumConstantDecl' } @{ $lastanon->{inner} || [] };
             } else { $rec{"$kind $tn"} //= $lastanon; anon_fields($lastanon, $tn) }
+        }
+        # asm ("memset = __memset_generic") at the top of a unit (riscv's
+        # dl-symbol-redir-ifunc.h, in what runs before the ifuncs are
+        # resolved): the unit's calls of memset are calls of __memset_generic
+        if ($d->{kind} eq 'FileScopeAsmDecl') {
+            my ($str) = grep { $_->{kind} eq 'StringLiteral' } @{ $d->{inner} || [] };
+            $own{$u}{$1} = $2 if $str && ($str->{value} // '') =~ /^"\s*([.\w]+)\s*=\s*([.\w]+)\s*"$/;
+            next;
         }
         my $name = $d->{name} // next;
         # weak, or a function gcc's error attribute keeps from being called
@@ -578,6 +583,20 @@ sub unit_pass {
     my $ast = ast_of($u->{json});
     $ast->{ff_places} = anon_places($ast);
     my ($bodies, $at) = ('', 0);
+    # a declaration inside a function, of a name defined outside it (an
+    # extern in a block: dl-support's __ehdr_start, startup.h's
+    # _startup_fatal_not_constant), is one of the unit's as well
+    # (a declaration only: a gnu89 extern inline definition at the top is
+    # the unit's already)
+    my $externs = sub {
+        my ($n) = @_;
+        return () unless ref $n eq 'HASH';
+        (($n->{kind} // '') =~ /^(VarDecl|FunctionDecl)$/ && ($n->{storageClass} // '') eq 'extern'
+            && !(grep { $_->{kind} eq 'CompoundStmt' } @{ $n->{inner} || [] }) ? $n : ()),
+            map { __SUB__->($_) } @{ $n->{inner} || [] };
+    };
+    push @{ $ast->{inner} }, map { $externs->($_) } map { @{ $_->{inner} } }
+        grep { ($_->{kind} // '') eq 'FunctionDecl' && $_->{inner} && grep { $_->{kind} eq 'CompoundStmt' } @{ $_->{inner} } } @{ $ast->{inner} };
     for my $d (@{ $ast->{inner} }) {
         # (what nothing reads after anon_places: the places inside a type,
         # but where a message says where it is)
@@ -1164,6 +1183,18 @@ sub expr {
             # mean the same either way: 1 for a literal, else 0
             return node(strip($args[0])->{kind} =~ /^(IntegerLiteral|CharacterLiteral)$/ ? 1 : 0);
         }
+        # __builtin_mempcpy (d, s, n) is memcpy (d, s, n) + n, as gcc always
+        # makes it (no glibc object calls mempcpy for it): a call of the
+        # unit's memcpy (dl-tls's, before the ifuncs are resolved, is
+        # __memcpy_generic). n is taken twice, so it must have no effects.
+        if ($name eq '__builtin_mempcpy') {
+            @args == 3 or stop('__builtin_mempcpy without 3 arguments', $n);
+            pure($args[2]) or stop('__builtin_mempcpy of a count with effects', $n);
+            my $mc = own('memcpy');
+            want($mc);
+            return cast_node(['address', 'void'], node(':', cast_node(['address', 'u8'],
+                node(ffname($mc), map { item(expr($_)) } @args)), node('+'), item(expr($args[2]))));
+        }
         # a builtin of a libc function is a call of it, as gcc makes one
         # where it does not expand the builtin
         $name = $1 if $name =~ /^__builtin_((?:mem|str|stp)\w+|free|malloc)$/;
@@ -1194,7 +1225,7 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|thread_pointer)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
@@ -1355,6 +1386,16 @@ sub texts {
 my $ntext = 0;
 # cast: type value; under address / char (or u8) a leaf is a text, so a leaf
 # value goes in a : (printf-parse's (const char *) format)
+# an expression without effects: names, members, constants, and what C
+# makes of them without calls, assignments or ++
+sub pure {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    return 0 if $k =~ /^(CallExpr|CompoundAssignOperator|StmtExpr)$/;
+    return 0 if $k eq 'BinaryOperator' && ($n->{opcode} // '') eq '=';
+    return 0 if $k eq 'UnaryOperator' && ($n->{opcode} // '') =~ /^(\+\+|--)$/;
+    !grep { !pure($_) } kids($n);
+}
 sub cast_node {
     my ($t, @v) = @_;
     @v = node(':', @v) if "@$t" =~ /^address (char|u8)$/ && @v == 1 && !@{ $v[0]{children} };
@@ -1638,9 +1679,10 @@ sub decl {
     # under address / char a leaf is text: a value that starts with a leaf goes
     # in a : (vfprintf's char *workend = work_buffer + WORK_BUFFER_SIZE)
     @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i && !@{ $i[0]{children} } && !bare_string($init);
-    # (a thread-local one, __thread, stays a global: with one thread that is
-    # the same, and glibc's asm reaches it as s2ff has la.tls.ie, tp 0)
-    node(($name // ffname($v->{name})) . ':', map({ node($_) } @t), grouped(255 - @t, @i));
+    # a thread-local one, __thread, is ff's thread local (ttpc lays it out in
+    # the TLS image, where the target has one)
+    my @tls = $global && $v->{tls} ? node('thread local') : ();
+    node(($name // ffname($v->{name})) . ':', @tls, map({ node($_) } @t), grouped(255 - @t - @tls, @i));
 }
 # A variable-length array's count from its text: names (its locals), numbers,
 # + - * / and parentheses, as ff infix.
@@ -1824,18 +1866,8 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
 sub groups { my ($name, @n) = @_; node("$name:", layers(@n)) }
 if (defined $program) {
-    # glibc's startup is left out, so __libc_setup_tls does not run: tp points
-    # into a zeroed block instead, where THREAD_SELF (tp less a struct pthread
-    # and its tcbhead_t, 1.8 KiB) finds a zeroed struct pthread, as one thread
-    # that nothing has set has it (malloc's SINGLE_THREAD_P reads it). On
-    # riscv64 only for now: another target's thread pointer is no register
-    # of C (tpidr_el0, fs), and its milestones so far (ldouble) need none
-    my $tcb = $target eq 'riscv64';
     print write_txt(node('include', node($program)), @types, (map { $_->[1] } @out),
-        ($tcb ? node('__ff_tcb:', node('array'), node('u64'), node('1024')) : ()),
-        node('_start:', node('void'), ($tcb ? (node('tp'), node('='), node('cast:', node('u64'), node('address', node('__ff_tcb'))),
-            node('+'), node('4096')) : ()), ($early ? node('__libc_early_init', node('1')) : ()),
-            ($exit ? node('exit', node('main')) : node('syscall', node('SYS_exit'), node('main')))));
+        ($start ? node('_start:', node('void'), node('syscall', node('SYS_exit'), node('main'))) : ()));
 } else {
     my (@order, %by);
     # (by directory, not by unit: the trees a program reads have 255 pages in

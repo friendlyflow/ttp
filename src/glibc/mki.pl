@@ -27,9 +27,14 @@ use strict;
 use warnings;
 use File::Path qw(make_path);
 use File::Basename qw(dirname);
+use Cwd ();
 
 die "usage: mki.pl <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
 my ($obj, $src, @want) = @ARGV;
+# (the folder of the build, as given: its i/ is next to obj/, also where obj
+# is a link to another build's, whose build.log names its own folder)
+(my $build = $obj) =~ s{/+[^/]+/*$}{};
+my $real = Cwd::abs_path($obj);
 
 open my $log, '<', "$obj/build.log" or die "mki: cannot open $obj/build.log: $!\n";
 my %cmd;
@@ -44,10 +49,10 @@ while (my $l = <$log>) {
     }
     # an object whose asm is gcc's -S of a C file (errlist-data.S includes
     # errlist-data-aux.S, from errlist-data-gen.c): that C is its source
-    if ($l =~ / -S(?:\s|$)/ && $l =~ / -o \Q$obj\E\/(\S+)-aux\.S /) { $gen{"$1.o"} //= $l; next }
+    if ($l =~ / -S(?:\s|$)/ && $l =~ / -o (?:\Q$obj\E|\Q$real\E)\/(\S+)-aux\.S /) { $gen{"$1.o"} //= $l; next }
     next unless $l =~ / -c / && $l =~ / -o (\S+\.o) /;
     my $o = $1;
-    next unless $o =~ s/^\Q$obj\E\///;
+    next unless $o =~ s/^\Q$obj\E\/// || $o =~ s/^\Q$real\E\///;
     $cmd{$o} //= $l;
 }
 close $log;
@@ -83,7 +88,7 @@ for my $o (@want) {
     $c or do { warn "mki: no command for $o in build.log\n"; $bad = 1; next };
     chomp $c;
     my $ext = !$gen{$o} && $c =~ m{\.S\s| -x assembler-with-cpp } ? "s" : "i";
-    (my $i = "$obj/../i/$o") =~ s/\.o$/.$ext/;
+    (my $i = "$build/i/$o") =~ s/\.o$/.$ext/;
     make_path(dirname($i));
     $c =~ s/ -c / -E / or $c =~ s/ -S(\s|$)/ -E$1/;
     $c =~ s/ -o \S+\.(?:o|S) / -o $i /;

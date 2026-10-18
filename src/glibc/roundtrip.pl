@@ -111,7 +111,7 @@ sub retcls {
 
 # ---- the normal form ------------------------------------------------------------
 
-our ($side, %labels, %regvar, %local, $in_global, %enumval);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
+our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
 sub strip { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub unparen { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub name_of {
@@ -121,6 +121,9 @@ sub name_of {
     return $regvar{$n} if $d->{kind} eq 'VarDecl' && $regvar{$n} && !$local{ $d->{id} };
     $n =~ s/^__builtin_((?:mem|str|stp)\w+|free|malloc)$/$1/;
     $n = '__builtin_va_start' if $n eq '__builtin_c23_va_start';
+    # (a unit's asm ("memset = __memset_generic"): its calls of memset are
+    # of __memset_generic, as c2ff writes them)
+    $n = $asmalias{$n} if $d->{kind} eq 'FunctionDecl' && exists $asmalias{$n};
     $n;
 }
 my %castdrop = map { $_ => 1 } qw(LValueToRValue NoOp ArrayToPointerDecay FunctionToPointerDecay BuiltinFnToFnPtr);
@@ -554,6 +557,7 @@ for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
     local %enumval = enumvals($ast);
     local $side = 'glibc';
     local %regvar;
+    local %asmalias = map { ((kids($_))[0]{value} // '') =~ /^"\s*([.\w]+)\s*=\s*([.\w]+)\s*"$/ ? ($1 => $2) : () } grep { $_->{kind} eq 'FileScopeAsmDecl' } kids($ast);
     local %tdef = typedefs($ast);
     local %typeof = typeofs($ast);
     local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);

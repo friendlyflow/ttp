@@ -21,7 +21,9 @@
 #   directives      .globl .weak .type .size .cfi_* .option .attribute .align .text
 #                   give no bytes of their own here and are dropped (ttpc places a
 #                   function on a 2-byte boundary, as RVC allows); any other
-#                   stops the translation; X = Y is an alias
+#                   stops the translation; X = Y is an alias; in a section
+#                   other than .text, .zero N is c2ff --zero's global (its
+#                   other labels aliases of it), and an init array is left out
 #   instructions    GNU's operands reversed (loads off base rd, stores off
 #                   rs2 base, a branch target as rel label), the macros of
 #                   macros/riscv64.ff.txt as they are; vector ones vm first
@@ -194,6 +196,8 @@ my $ends = 1;       # the last instruction does not run on (a return, a jump)
 my %tls;            # a function's thread-locals, as la.tls.ie reads them
 my %got;            # the addresses a function's pic la reads, its GOT entries
 my %numeric;        # how many times each numeric label (1:) has come so far
+my $other;          # another section than .text, while in one
+my @pending;        # its labels so far, before the bytes they name
 # GNU as's next instruction, its bytes counted; whether it ends a function
 sub take {
     my $m = $made[$n++] or fail "GNU as made fewer instructions than $src has";
@@ -201,10 +205,11 @@ sub take {
     $ends = $m->{op} =~ /^c\.(jr|j)$/ || ($m->{op} =~ /^(jal|jalr)$/ && $m->{args} =~ /^zero\b/) ? 1 : 0;
     $m;
 }
-# the end of a function: the words its la.tls.ie read
+# the end of a function: the words its la.tls.ie read (each thread local's
+# offset from tp) and its pic la's (addresses)
 sub finish {
     return unless $fn && (%tls || %got);
-    push @{ $fn->{children} }, node('align', node(8)), (map { node(".Ltls $_:", node('dword', node($_))) } sort keys %tls),
+    push @{ $fn->{children} }, node('align', node(8)), (map { node(".Ltls $_:", node('dword', node('tprel', node($_)))) } sort keys %tls),
         map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got;
     %tls = %got = ();
 }
@@ -219,6 +224,37 @@ while (my $l = <$s>) {
     for my $st (split /;/, $l) {
         $st =~ s/^\s+|\s+$//g;
         next if $st eq '';
+        # another section than .text: data. A zeroed object (.zero N, as
+        # dl-rseq-symbols.S's __rseq_size) is a global of the type C declares,
+        # zero, which c2ff --zero makes (its own name, the first label); its
+        # other labels are aliases of it here; a label with no bytes after it (start.S's
+        # __data_start) has no place. An init array (start.S's .preinit_array,
+        # load_gp, which _start has run) is left out: a program ttpc makes
+        # has none (their bounds are weak, 0). Any other bytes stop the
+        # translation.
+        if ($st =~ /^\.(data|bss|section\s+([^,\s]+)(,.*)?)$/) {
+            my $sec = $2 // ".$1";
+            if ($sec eq '.text') { $other = undef; next }
+            $other = $sec;
+            @pending = ();
+            warn "s2ff: $where: $sec left out\n" if $sec =~ /^\.(pre)?init_array$|^\.fini_array$/;
+            next;
+        }
+        if ($st eq '.text') { $other = undef; next }
+        if (defined $other) {
+            next if $st =~ /^\.(globl|global|weak|type|size|hidden|align|p2align|balign)\b/;
+            if ($st =~ /^([.\w]+):$/) { push @pending, $1; next }
+            if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)); next }
+            next if $other =~ /^\.(pre)?init_array$|^\.fini_array$/ && $st =~ /^\.dc\.a\s+[.\w]+$/;
+            if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
+                my ($first, @more) = @pending;
+                push @fns, map { node("$_:", node('alias'), node($first)) } @more;
+                warn "s2ff: $where: $first is zero, c2ff --zero $first makes it\n";
+                @pending = ();
+                next;
+            }
+            fail "bytes in $other: $st";
+        }
         while ($st =~ s/^([.\w]+):\s*//) {
             my $name = $1;
             # GNU's numeric labels (1:, 1f the next, 1b the one before): each a
@@ -259,13 +295,15 @@ while (my $l = <$s>) {
                 }
                 next;
             }
-            next if $op =~ /^\.(globl|global|weak|type|size|align|p2align|text|attribute|cfi_\w+)$/;
+            next if $op =~ /^\.(globl|global|weak|hidden|type|size|align|p2align|text|attribute|cfi_\w+)$/;
             next if $op eq '.option' && $rest =~ /^(push|pop|arch\b.*|norelax|relax|pic|nopic|rvc|norvc)$/;
             fail "a directive with no ff form: $st";
         }
         fail "an instruction outside a function: $st" unless $fn;
         $op = { scall => 'ecall', sbreak => 'ebreak' }->{$op} // $op;    # GNU's old names
-        my @o = map { /^(\d+)([fb])$/ ? ".L$1 " . (($numeric{$1} // 0) + ($2 eq 'f' ? 1 : 0)) : $_ } split_ops($rest);
+        # (a call through the PLT, name@plt, is a call of name: a static
+        # program has no PLT)
+        my @o = map { /^(\d+)([fb])$/ ? ".L$1 " . (($numeric{$1} // 0) + ($2 eq 'f' ? 1 : 0)) : s/\@plt$//r } split_ops($rest);
         my $into = ($block // $fn)->{children};
         # li is what GNU as made of it for its value (addi, or lui and addiw)
         if ($op eq 'li') {
@@ -280,9 +318,9 @@ while (my $l = <$s>) {
             }
             next;
         }
-        # la.tls.ie: the thread-local's offset from tp, which with tp 0 (one
-        # thread, a thread-local laid out as a global) is its address, from a
-        # word the function carries
+        # la.tls.ie: the thread-local's offset from tp, from a word the
+        # function carries (tprel: its offset in the TLS image, as ld puts
+        # it in the GOT)
         if ($op eq 'la.tls.ie') {
             take(); take();
             my $w = ".Ltls $o[1]";
@@ -299,8 +337,8 @@ while (my $l = <$s>) {
             push @$into, ins('auipc', node('pcrel_hi', node($w)), $o[0]), ins('ld', node('pcrel_lo', node($w)), $o[0], $o[0]);
             next;
         }
-        # la, auipc and addi: the macro's
-        if ($op eq 'la') { take(); take(); push @$into, ins('la', $o[1], $o[0]); next }
+        # la (and lla, which is la without pic), auipc and addi: the macro's
+        if ($op eq 'la' || $op eq 'lla') { take(); take(); push @$into, ins('la', $o[1], $o[0]); next }
         my $m = take();
         # a call or a tail is two instructions, the macro's
         if ($op =~ /^(call|tail)$/) { take(); push @$into, node($op, node($o[-1])); next }

@@ -1,0 +1,7 @@
+exit 44
+argc 4
+argv 1 one
+argv 2 two
+argv 3 three
+FF_ARGS hello
+FF_NOT_SET not set
