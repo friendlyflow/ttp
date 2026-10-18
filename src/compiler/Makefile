@@ -39,11 +39,12 @@ TTPC_FF := ttpc.ff
 TTPC_SRC := shared.ff ttpc.defs.ff ttpc.ff
 TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
+TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
 CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
-TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
+TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE),$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cimport.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cimportlate.ff \
 	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff language.ff
 P := $(BUILD)/progs
@@ -111,7 +112,9 @@ run: $(P)/exit42.elf $(P)/hello.elf
 # into ttpc1, which must assemble itself into itself, assemble every asm
 # program and print ttpc1.ff exactly as stage0 does. ttpc1 assembles ttpc2
 # (TTPC2_SRC, ttpc.ff frozen when the seeds' 1 MiB got tight), which must
-# assemble itself into itself; ttpc2 assembles ttpc (TTPC_SRC) into stage1,
+# assemble itself into itself; ttpc2 assembles ttpc3 (TTPC3_SRC, ttpc.ff
+# frozen when it learnt layers, 0: 1: ..., before using them), which must
+# assemble itself into itself; ttpc3 assembles ttpc (TTPC_SRC) into stage1,
 # stage1 assembles it into stage2: they must be the same, the fixed point.
 # ttpc1 gets shared.ff in its own language
 # (frozen.pl): without the comments, which it knows only in code, and
@@ -143,17 +146,25 @@ $(BOOT)/ttpc2.self: $(SHARED) $(TTPC2_SRC) $(BOOT)/ttpc2
 $(BOOT)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BOOT)
 	perl gen/trim.pl $< riscv64 > $@
 
-$(BOOT)/stage1: $(TTPC_SRC) $(BOOT)/ttpc2 $(BOOT)/shared1.ff
-	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff ttpc.defs.ff $(TTPC_FF) $@ > $@.lst
+$(BOOT)/ttpc3: $(TTPC3_SRC) $(BOOT)/ttpc2 $(BOOT)/shared1.ff
+	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff $(TTPC3_SRC) $@ > $@.lst
+
+$(BOOT)/ttpc3.self: $(SHARED) $(TTPC3_SRC) $(BOOT)/ttpc3
+	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(SHARED) $(TTPC3_SRC) $@ > $@.lst
+
+$(BOOT)/stage1: $(TTPC_SRC) $(BOOT)/ttpc3
+	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(TTPC_SRC) $@ > $@.lst
 
 $(BOOT)/stage2: $(TTPC_SRC) $(BOOT)/stage1
 	$(QEMU) $(BOOT)/stage1 --target riscv64 $(TTPC_SRC) $@ > $@.lst
 
-bootstrap: $(BOOT)/ttpc1.self $(BOOT)/ttpc2.self $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
+bootstrap: $(BOOT)/ttpc1.self $(BOOT)/ttpc2.self $(BOOT)/ttpc3.self $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
 	cmp $(BOOT)/ttpc1 $(BOOT)/ttpc1.self
 	@echo "bootstrap: ttpc1 assembles itself"
 	cmp $(BOOT)/ttpc2 $(BOOT)/ttpc2.self
 	@echo "bootstrap: ttpc2 assembles itself"
+	cmp $(BOOT)/ttpc3 $(BOOT)/ttpc3.self
+	@echo "bootstrap: ttpc3 assembles itself"
 	cmp $(BOOT)/stage1 $(BOOT)/stage2
 	@echo "bootstrap: stage1 == stage2"
 	@for p in $(PROGS); do \
@@ -334,7 +345,8 @@ targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%)
 # in the host's instructions, and mkwhole.pl makes of that a whole tree in
 # the language of the seed, of ttpc2 (the whole tree of ttpc.ff would no
 # longer fit the seed's 1 MiB). The seed assembles it into ttpc2, which
-# assembles itself into itself and ttpc into stage1; stage1 assembles ttpc
+# assembles itself into itself and ttpc3 (mkhost.pl's too), which assembles
+# itself into itself and ttpc into stage1; stage1 assembles ttpc
 # into stage2: the same, and the same as what the riscv64
 # chain makes with --target <host> (cross), two chains that share nothing
 # but the source. Then stage2 builds the C programs for its own host, which
@@ -389,8 +401,19 @@ $(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2
 $(BUILD)/$(1)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BUILD)/$(1)
 	perl gen/trim.pl $$< riscv64 $(1) > $$@
 
-$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc.ff $(BUILD)/$(1)/shared1.ff
-	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+$(BUILD)/$(1)/ttpc3.ff: $(TTPC3_SRC) $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
+	perl gen/mkhost.pl $(1) $(BUILD)/$(1) $(TTPC3_SRC)
+
+$(BUILD)/$(1)/ttpc3.defs.ff: $(BUILD)/$(1)/ttpc3.ff
+
+$(BUILD)/$(1)/ttpc3: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc3.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/shared1.ff
+	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
+
+$(BUILD)/$(1)/ttpc3.self: $(BUILD)/$(1)/ttpc3
+	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
+
+$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc.ff
+	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/stage2: $(BUILD)/$(1)/stage1
 	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
@@ -418,9 +441,11 @@ seed-$(1): $(BUILD)/$(1)/seed $(BIN) | $(BUILD)/$(1)
 	pr print-ttpc1 ttpc1.ff; pr print-hello progs/riscv64/hello.ff; pr toolarge $(SHARED); pr usage; \
 	pr toomany a b c; pr missing $$$$d/none.ff; pr truncated $$$$d/truncated.ff; pr trailing $$$$d/trailing.ff
 
-bootstrap-$(1): $(BUILD)/$(1)/ttpc2.self $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),$(BUILD)/$(1)/cross)
+bootstrap-$(1): $(BUILD)/$(1)/ttpc2.self $(BUILD)/$(1)/ttpc3.self $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),$(BUILD)/$(1)/cross)
 	cmp $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc2.self
 	@echo "bootstrap-$(1): from its seed, ttpc2 assembles itself"
+	cmp $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc3.self
+	@echo "bootstrap-$(1): from its seed, ttpc3 assembles itself"
 	cmp $(BUILD)/$(1)/stage1 $(BUILD)/$(1)/stage2
 	@echo "bootstrap-$(1): from its seed, stage1 == stage2"
 	$(if $(CAN_RISCV),cmp $(BUILD)/$(1)/stage1 $(BUILD)/$(1)/cross,@echo "bootstrap-$(1): no $(QEMU) here, not compared with the riscv64 chain")

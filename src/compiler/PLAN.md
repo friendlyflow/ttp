@@ -50,7 +50,8 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 |---|---|
 | `hosts/riscv64/ttpc.s` | **stage0**, the frozen seed: ttpc in RISC-V assembly, built by GNU as. It no longer changes; it is the small, auditable start of the chain. |
 | `ttpc1.ff` | **ttpc1**, frozen too: ttpc in ff as it was when it learned targets, a whole tree (the RV64GC pages `0:` `1:` `2:` of then, its constants `3:`, itself `4:`) in the language of stage0 and below stage0's 1 MiB. |
-| `ttpc2.ff`, `ttpc2.defs.ff` | **ttpc2**, frozen: `ttpc.ff` and `ttpc.defs.ff` as they were when the seeds' 1 MiB got tight (16 Oct 2026, with C's integers and control flow), program-only. ttpc1 builds it on riscv64, each seed on its host (its whole tree is 949 KB on arm); it builds `ttpc.ff`, which may now use anything ttpc2 knows (`comment`, the C layer) and grow to its 4 MiB of input. |
+| `ttpc2.ff`, `ttpc2.defs.ff` | **ttpc2**, frozen: `ttpc.ff` and `ttpc.defs.ff` as they were when the seeds' 1 MiB got tight (16 Oct 2026, with C's integers and control flow), program-only. ttpc1 builds it on riscv64, each seed on its host (its whole tree is 949 KB on arm); it builds ttpc3. |
+| `ttpc3.ff`, `ttpc3.defs.ff` | **ttpc3**, frozen: `ttpc.ff` and `ttpc.defs.ff` as they were when ttpc learnt layers (18 Oct 2026: a function named only by digits, `0:` `1:` ..., is the overflow of its parent), before ttpc.ff used them, which ttpc2 does not know. ttpc2 builds it on riscv64 and on each host; it builds `ttpc.ff`, which may use anything ttpc3 knows (layers too) and grow to its 32 MiB of input (BUF_SIZE) and 16 MiB of output (OUT_SIZE). |
 | `ttpc.ff`, `ttpc.defs.ff` | **ttpc in ff**, the source from now on, edited in sicompass: a program of only its own (`ttpc.ff`), its constants and messages' lengths on a page of their own (`ttpc.defs.ff`), assembled on the shared page: `ttpc --target riscv64 shared.ff ttpc.defs.ff ttpc.ff out`. |
 | `shared.ff` | the shared page (`perl gen/mkff.pl > shared.ff`, kept by `make refresh`): what a program-only tree is assembled with, `ttpc [--target t] shared.ff prog.ff out`. |
 | `gen/mkff.pl`, `shared.ff.txt` | make `shared.ff`: what every target has and the choice of one (`shared.ff.txt`), then a section per target. |
@@ -72,7 +73,9 @@ stage0 = GNU as(hosts/riscv64/ttpc.s)
 ttpc1  = stage0(ttpc1.ff)       == ttpc1(ttpc1.ff)
 ttpc2  = ttpc1(frozen shared.ff, ttpc2.defs.ff ttpc2.ff)
                                 == ttpc2(shared.ff ttpc2.defs.ff ttpc2.ff)
-stage1 = ttpc2(shared.ff ttpc.defs.ff ttpc.ff)
+ttpc3  = ttpc2(trimmed shared.ff, ttpc3.defs.ff ttpc3.ff)
+                                == ttpc3(shared.ff ttpc3.defs.ff ttpc3.ff)
+stage1 = ttpc3(shared.ff ttpc.defs.ff ttpc.ff)
 stage2 = stage1(shared.ff ttpc.defs.ff ttpc.ff)
                                 == stage1, byte for byte: the fixed point
 ```
@@ -81,13 +84,15 @@ On x86_64, aarch64 and arm the chain starts from that host's seed and
 never runs riscv64 (`make bootstraps`; natively on the host itself, under
 `qemu-<host>` elsewhere). ttpc1 is not in it: its C layer still emits
 RV64 by name, so its compile time can only run on riscv64. The seed builds
-ttpc2, which builds today's ttpc.ff:
+ttpc2, which builds ttpc3, which builds today's ttpc.ff:
 
 ```
 seed   = GNU as(hosts/<host>/ttpc.s)
 ttpc2  = seed(mkwhole(<host>, mkhost(<host>, ttpc2.defs.ff ttpc2.ff)))
                                 == ttpc2(--target <host> shared.ff ttpc2.defs.ff' ttpc2.ff')
-stage1 = ttpc2(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
+ttpc3  = ttpc2(--target <host> trimmed shared.ff, ttpc3.defs.ff' ttpc3.ff')
+                                == ttpc3(--target <host> shared.ff ttpc3.defs.ff' ttpc3.ff')
+stage1 = ttpc3(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
 stage2 = stage1(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
                                 == stage1 == what the riscv64 chain makes
                                    with --target <host>: two chains that
@@ -95,7 +100,7 @@ stage2 = stage1(--target <host> shared.ff ttpc.defs.ff' ttpc.ff')
 ```
 
 ```sh
-make bootstrap        # ttpc1 and ttpc2 assemble themselves, stage1 == stage2
+make bootstrap        # ttpc1, ttpc2, ttpc3 assemble themselves, stage1 == stage2
 make bootstraps       # the same from the seed of x86_64, aarch64, arm; the
                       # C programs built there by stage2 run there
 make seeds            # each seed agrees with ttpc.s
@@ -108,7 +113,7 @@ make compiler-check   # every asm program == its GNU twin, they run; the C
 ```
 
 A change to ttpc is a change to `ttpc.ff` (or `ttpc.defs.ff`) that keeps
-`make bootstrap` green: ttpc2 builds the new stage1, which must then
+`make bootstrap` green: ttpc3 builds the new stage1, which must then
 rebuild itself identically. ttpc reads `.ff` directly; the text form is only
 for the host tools (`perl gen/fftext.pl txt ttpc.ff > t.ff.txt`, edit, `perl
 gen/fftext.pl ff t.ff.txt > ttpc.ff`). ttpc reads several trees: `ttpc a.ff
@@ -117,9 +122,12 @@ whole as the program (its root is the page); one tree alone is read as
 before, unless it begins with `import`. One tree and no output is a build
 file (`ttpc build.ff`, see Build files); `ttpc --print tree.ff` prints a
 tree (stage0, ttpc1 and the seeds print one tree alone). Whatever ttpc.ff
-uses, ttpc2 must know (all of the language up to 16 Oct 2026); ttpc2
-reads at most 4 MiB in all, shared.ff (2.8 MB) with it. When that gets
-tight, the chain gets a next link: freeze ttpc.ff as ttpc3.ff.
+uses, ttpc3 must know (all of the language up to 18 Oct 2026, layers
+included); ttpc3 reads at most 32 MiB in all (BUF_SIZE), shared.ff (3 MB)
+with it, and writes at most 16 MiB (OUT_SIZE). When ttpc needs what ttpc3
+does not know, or outgrows that, the chain gets a next link: freeze
+ttpc.ff as ttpc4.ff. ttpc2 still reads at most 4 MiB: it gets shared.ff
+trimmed to riscv64's section (and the host's) for building ttpc3.
 
 ### The language ttpc assembles
 
