@@ -180,4 +180,5 @@ RAM NODE:
   - een anonieme enum kreeg twee namen (naar zijn eerste constante en naar de global)
   - de komment `locals` na de provenance-komment (twee comment-knopen na elkaar) is weg: die eerste beëindigt de parameters al
 - test progs/cnullary.ff (`f / .`, `p / fn / .`) op elk doel
-- nog niet vergeleken: de waarden van globals (hun items)
+- ook de globals: ff2c definieert elke global van de glibc-pagina's met zijn items (C's initializers; c2ff's text N, wide text N en X literal N komen terug als de tekst of compound literal waar ze genoemd worden), roundtrip.pl zoekt hem in de units van de milestone (een eigen static in zijn unit, een static van een functie in die functie, anders de eerste unit in c2ff's volgorde) en vergelijkt type en waarde; &a[i] is a + i, &array is de array, een enum-constante zijn waarde, een tekst voor een array zijn codes; alle 285 globals van floats kloppen
+- ff2c schrijft het laatste veld array T 0 als flexible array member (T x[]), dat de items erna neemt

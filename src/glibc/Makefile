@@ -323,7 +323,7 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 
 define roundtrip
 $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl
-	$$(CAP) timeout 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json
+	$$(CAP) timeout 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_$(1):%=$$(I)/%.json)
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))

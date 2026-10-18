@@ -3,8 +3,10 @@
 # function of a milestone, clang's AST of what ff2c.pl writes back from the ff
 # must be clang's AST of the function in glibc's .i, both normalized alike.
 #
-#   perl roundtrip.pl names.txt back.json
+#   perl roundtrip.pl names.txt back.json unit.json ...
 #
+# The globals too: each glibc global of the ff, its type and its items,
+# against its definition in glibc's units (unit.json ...: the milestone's).
 # names.txt is ff2c's (each body's C name, its name in glibc and its .i;
 # every global's and function's name), back.json clang's AST of ff2c's C.
 # Each .i's AST is the .json beside it. It prints each function that differs,
@@ -29,15 +31,16 @@ use strict;
 use warnings;
 my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 
-my ($namesfile, $backjson) = @ARGV;
-die "usage: roundtrip.pl names.txt back.json\n" unless defined $backjson;
+my ($namesfile, $backjson, @unitjson) = @ARGV;
+die "usage: roundtrip.pl names.txt back.json [unit.json ...]\n" unless defined $backjson;
 
-my (@bodies, %orig, %asmfn);
+my (@bodies, %orig, %asmfn, @globals);
 open my $h, '<', $namesfile or die "roundtrip: $namesfile: $!\n";
 while (<$h>) {
     chomp;
     my ($k, $cid, $o, $unit) = split /\t/;
     if ($k eq 'asm') { $asmfn{$o} = 1; next }
+    if ($k eq 'global' || $k eq 'gfailed') { push @globals, [$cid, $o, $unit, $k]; next }
     $orig{$cid} = $o;
     push @bodies, [$cid, $o, $unit, $k] if $k eq 'body' || $k eq 'failed';
 }
@@ -108,7 +111,7 @@ sub retcls {
 
 # ---- the normal form ------------------------------------------------------------
 
-our ($side, %labels, %regvar, %local);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
+our ($side, %labels, %regvar, %local, $in_global, %enumval);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
 sub strip { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub unparen { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub name_of {
@@ -142,6 +145,8 @@ sub E {
         # a null pointer, however its casts go
         if (($ck eq 'BitCast' || $ck eq 'NullToPointer') && is_null($n)) { return '(null ' . tcls($n) . ')' }
         return E($c) if $castdrop{$ck};
+        # (in a global's items &array, which C converts to its element's address, is the array)
+        if ($in_global && $ck eq 'BitCast' && $k eq 'ImplicitCastExpr') { my $u = unparen($c); return E($c) if ($u->{kind} // '') eq 'UnaryOperator' && $u->{opcode} eq '&' && tcls(unparen((kids($u))[0])) =~ /^arr\(/ }
         # (and an asm function's value is a long: C's conversion of it is not there)
         return E($c) if $k eq 'ImplicitCastExpr' && is_asmfncall($c);
         # (c2ff gives an atomic's value C's type again, over libatomic's uN)
@@ -161,12 +166,20 @@ sub E {
     return '(flt ' . flt($n->{value}) . ')' if $k eq 'FloatingLiteral';
     return '(str ' . str($n->{value}) . ')' if $k eq 'StringLiteral';
     return E((kids($n))[0]) if $k eq 'PredefinedExpr';
-    if ($k eq 'DeclRefExpr') { return '(ref ' . name_of($n->{referencedDecl}) . ')' }
+    if ($k eq 'DeclRefExpr') {
+        # (an enum constant in a global's items is its value, as c2ff writes it there)
+        return "(int $enumval{ $n->{referencedDecl}{name} } i32)" if $in_global && ($n->{referencedDecl}{kind} // '') eq 'EnumConstantDecl' && defined $enumval{ $n->{referencedDecl}{name} };
+        return '(ref ' . name_of($n->{referencedDecl}) . ')';
+    }
     if ($k eq 'UnaryOperator') {
         my ($c) = kids($n);
         my $op = $n->{opcode};
         # (+x is x, its promotion left to the operator that takes it)
         return E($op eq '+' ? unimplicit($c) : $c) if $op eq '+' || $op eq '__extension__';
+        # &*x is x (&a[i] is a + i)
+        if ($op eq '&') { my $e = E($c); return $1 if $e =~ /^\(u\* (.*)\)$/s && balanced($1) }
+        # in a global's items an array's address is where it begins, as its decay
+        return E($c) if $op eq '&' && $in_global && tcls(unparen($c)) =~ /^arr\(/;
         # a function's address is the function (its decay is dropped too)
         return E($c) if $op eq '&' && (strip($c)->{kind} // '') eq 'DeclRefExpr' && (strip($c)->{referencedDecl}{kind} // '') eq 'FunctionDecl';
         return "(u$op" . ($n->{isPostfix} ? 'post' : '') . ' ' . E($c) . ')';
@@ -288,10 +301,20 @@ sub init {
     my ($n) = @_;
     my @k = kids($n);
     @k = @{ $n->{array_filler} }[1 .. $#{ $n->{array_filler} }] if !@k && $n->{array_filler};
-    my @i = map { my $e = E($_); $e =~ /^\(int 0 [^)]*\)$|^\(cast \w+ \S+ \(int 0 [^)]*\)\)$|^\(init\)$/ ? '(zero)' : $e } @k;
+    # (an array of chars or wide chars set from one text in braces: the text)
+    return text_codes($n, E($k[0])) if @k == 1 && tcls($n) =~ /^arr\(/ && (unparen($k[0])->{kind} // '') eq 'StringLiteral';
+    my $elem = tcls($n) =~ /^arr\((char|u8|i8),/ ? 'char' : '';
+    my @i = map {
+        my $u = unparen($_);
+        # (a text setting an array, not decayed to an address: its codes)
+        my $e = ($u->{kind} // '') eq 'StringLiteral' ? text_codes($u, E($u)) : E($_);
+        # (in a char array a number is a char, however converted)
+        if ($elem) { $e =~ s/^\(cast IntegralCast (?:char|u8|i8) \(int (-?\d+) i32\)\)$/(int $1 char)/; $e =~ s/^\(int (-?\d+) (?:u8|i8)\)$/(int $1 char)/ }
+        is_zero_form($e) ? '(zero)' : $e;
+    } @k;
     pop @i while @i && $i[-1] eq '(zero)';
     my $f = $n->{field} ? ' .' . ($n->{field}{name} // '') : '';
-    return '(zero)' if !@i && !$f;
+    return '(zero)' if !@i;
     "(init$f" . join('', map { " $_" } @i) . ')';
 }
 
@@ -327,6 +350,58 @@ sub syscall_idiom {
     '(syscall ' . join(' ', E(strip($reg{a7})), @a) . ')';
 }
 
+# A declaration's value: a char array set from a text as the text's codes, the
+# zeros at its end the rest
+sub var_init {
+    my ($d) = @_;
+    my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($d);
+    return undef unless $init;
+    my $u = unparen($init);
+    return text_codes($d, E($u)) if ($u->{kind} // '') eq 'StringLiteral' && tcls($d) =~ /^arr\(/;
+    E($init);
+}
+# A text that sets an array: its codes as the array's items, the zeros at its
+# end the rest
+sub text_codes {
+    my ($n, $str) = @_;
+    my ($w, $codes) = $str =~ /^\(str (w?)([-\d,]*)\)$/ or return $str;
+    my ($elem) = tcls($n) =~ /^arr\((\w+),/;
+    $elem = 'char' if !$w || $elem =~ /^(u8|i8)$/;
+    my @c = split /,/, $codes;
+    pop @c while @c && $c[-1] == 0;
+    @c ? '(init' . join('', map { $_ == 0 ? ' (zero)' : " (int $_ $elem)" } @c) . ')' : '(zero)';
+}
+sub is_zero_form { $_[0] =~ /^\((?:int 0 \S+|null \S+|init|zero|cast \w+ \S+ \(int 0 \S+\))\)$/ }
+# A global: its type and its value, nothing an empty one
+sub gnorm {
+    my ($d) = @_;
+    local $in_global = 1;
+    my $i = var_init($d);
+    $i = '(zero)' if !defined $i || is_zero_form($i);
+    # (an anonymous enum is an int in ff)
+    '(global ' . (tcls($d) =~ s/^enum$/i32/r) . " $i)";
+}
+sub balanced { my ($s) = @_; my $d = 0; for my $c (split //, $s) { $d++ if $c eq '('; $d--, ($d < 0 and return 0) if $c eq ')' } !$d }
+# The values of an AST's enum constants (clang's, else one more than the one before)
+sub enumvals {
+    my ($ast) = @_;
+    my %v;
+    my @q = ($ast);
+    while (my $n = shift @q) {
+        if (($n->{kind} // '') eq 'EnumDecl') {
+            my $x = -1;
+            for my $c (grep { $_->{kind} eq 'EnumConstantDecl' } kids($n)) {
+                my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($c);
+                $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
+                $x = $e && $e->{kind} eq 'ConstantExpr' ? $e->{value} : $x + 1;
+                $v{ $c->{name} } //= $x;
+            }
+            next;
+        }
+        push @q, @{ $n->{inner} || [] };
+    }
+    %v;
+}
 sub holds { my ($n, $k) = @_; (($n->{kind} // '') eq $k) || grep { holds($_, $k) } kids($n) }
 # Statements, as a list.
 sub S {
@@ -345,12 +420,8 @@ sub S {
                 next unless $d->{kind} eq 'VarDecl';
                 next if ($d->{storageClass} // '') eq 'extern';
                 next if ($d->{storageClass} // '') eq 'static' && !holds($d, 'AddrLabelExpr');
-                my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($d);
-                # a char array set from a text: the text's codes, the zeros at its end the rest
-                my $i = $init ? E($init) : undef;
-                if ($i && $i =~ /^\(str ([\d,]*)\)$/ && (my $codes = $1) && tcls($d) =~ /^arr/) { my @c = split /,/, $codes; pop @c while @c && $c[-1] == 0; $i = '(init' . join('', map { " (int $_ " . 'char)' } @c) . ')' }
-                if ($i && $i =~ /^\(init/ && tcls($d) =~ /^arr\((char|u8|i8),/) { $i =~ s/\(cast IntegralCast (?:char|u8|i8) (\(int \d+) i32\)\)/$1 char)/g; $i =~ s/\(int (\d+) (?:u8|i8)\)/(int $1 char)/g }
-                push @out, '(var ' . ($d->{name} =~ s/'$//r) . ' ' . tcls($d) . (defined $i ? " $i" : '') . ')';
+                my $i = var_init($d);
+                push @out, '(var ' . ($d->{name} =~ s/'$//r) . ' ' . (tcls($d) =~ s/^enum$/i32/r) . (defined $i ? " $i" : '') . ')';
             }
             next;
         }
@@ -451,25 +522,36 @@ sub typeofs {
 
 # ---- the comparison -----------------------------------------------------------
 
-my %back;
+my (%back, %backg);
 {
     my $ast = load($backjson);
     local $side = 'ff';
     local %tdef = typedefs($ast);
     local %typeof = typeofs($ast);
     local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
+    local %enumval = enumvals($ast);
     for my $d (kids($ast)) {
+        if ($d->{kind} eq 'VarDecl' && ($d->{storageClass} // '') ne 'extern') { $backg{ $d->{name} } = gnorm($d); next }
         next unless $d->{kind} eq 'FunctionDecl' && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
         $back{ $d->{name} } = fnorm($d);
     }
 }
 my %byunit;
-push @{ $byunit{ $_->[2] } }, $_ for grep { $_->[3] eq 'body' } @bodies;
+push @{ $byunit{ $_->[2] =~ s/\.i$/.json/r } }, $_ for grep { $_->[3] eq 'body' } @bodies;
+my %fnunit = map { ($_->[1] => $_->[2] =~ s/\.i$/.json/r) } @bodies;
 my ($same, @diff) = (0);
 my @failed = grep { $_->[3] eq 'failed' } @bodies;
-for my $unit (sort keys %byunit) {
-    (my $j = $unit) =~ s/\.i$/.json/;
+# the globals wanted: by name, a unit's own in that unit, a function's static in it
+my (%gwant, %gfound);
+for my $g (grep { $_->[3] eq 'global' } @globals) {
+    my ($cid, $o, $hint) = @$g;
+    push @{ $gwant{$o} }, $g;
+}
+my %seen;
+my %gextern;
+for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
     my $ast = load($j);
+    local %enumval = enumvals($ast);
     local $side = 'glibc';
     local %regvar;
     local %tdef = typedefs($ast);
@@ -482,9 +564,31 @@ for my $unit (sort keys %byunit) {
         }
         $def{ $d->{name} } = $d if $d->{kind} eq 'FunctionDecl' && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
     }
-    for my $b (@{ $byunit{$unit} }) {
+    # its globals: a definition (an extern declaration is none), the first unit's
+    for my $d (kids($ast)) {
+        next unless $d->{kind} eq 'VarDecl' && defined $d->{name} && $gwant{ $d->{name} };
+        # (one glibc's asm only reserves, zero, c2ff --zero: its declaration)
+        if (($d->{storageClass} // '') eq 'extern') { $gextern{ $d->{name} } //= '(global ' . tcls($d) . ' (zero))'; next }
+        for my $g (@{ $gwant{ $d->{name} } }) {
+            next if $g->[2] =~ /^in / || $gfound{ $g->[0] };
+            next if $g->[2] =~ /^unit (.+)$/ && $j !~ /\/\Q$1\E\.json$/;
+            $gfound{ $g->[0] } = gnorm($d);
+        }
+    }
+    # and its functions' statics
+    for my $d (kids($ast)) {
+        next unless $d->{kind} eq 'FunctionDecl' && defined $d->{name} && ($fnunit{ $d->{name} } // '') eq $j && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
+        my @q = kids($d);
+        while (my $n = shift @q) {
+            if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && $gwant{ $n->{name} // '' }) {
+                for my $g (@{ $gwant{ $n->{name} } }) { $gfound{ $g->[0] } //= gnorm($n) if $g->[2] eq "in $d->{name}" }
+            }
+            push @q, kids($n);
+        }
+    }
+    for my $b (@{ $byunit{$j} // [] }) {
         my ($cid, $o) = @$b;
-        my $d = $def{$o} or do { push @diff, [$cid, "no function $o in $unit"]; next };
+        my $d = $def{$o} or do { push @diff, [$cid, "no function $o in $j"]; next };
         my $want = fnorm($d);
         my $got = $back{$cid} // do { push @diff, [$cid, 'not in the C written back']; next };
         if ($want eq $got) { $same++; next }
@@ -499,7 +603,17 @@ sub where {
     my $from = $i > 80 ? $i - 80 : 0;
     "\n    glibc: ..." . substr($a, $from, 200) . "\n    ff:    ..." . substr($b, $from, 200);
 }
-print "roundtrip: $_->[0]: $_->[1]\n" for @diff;
+my ($gsame, @gdiff) = (0);
+for my $g (@globals) {
+    my ($cid, $o, $hint, $k) = @$g;
+    if ($k eq 'gfailed') { push @gdiff, [$cid, 'ff2c could not write it back']; next }
+    my $want = $gfound{$cid} // $gextern{$o} // do { push @gdiff, [$cid, "no definition of $o in glibc's units ($hint)"]; next };
+    my $got = $backg{$cid} // do { push @gdiff, [$cid, 'not in the C written back']; next };
+    print "glibc: $want\nff:    $got\n" if ($ENV{ROUNDTRIP_SHOW} // '') eq $cid;
+    if ($want eq $got) { $gsame++; next }
+    push @gdiff, [$cid, where($want, $got)];
+}
+print "roundtrip: $_->[0]: $_->[1]\n" for @diff, @gdiff;
 print "roundtrip: $_->[1]: ff2c could not write it back\n" for @failed;
-printf "roundtrip: %d of %d functions as glibc's C\n", $same, scalar(@bodies);
-exit(@diff || @failed ? 1 : 0);
+printf "roundtrip: %d of %d functions and %d of %d globals as glibc's C\n", $same, scalar(@bodies), $gsame, scalar(@globals);
+exit(@diff || @failed || @gdiff ? 1 : 0);

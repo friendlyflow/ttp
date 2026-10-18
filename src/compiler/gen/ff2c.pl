@@ -6,10 +6,11 @@
 #
 #   perl ff2c.pl tree.ff.txt out.c names.txt
 #
-# out.c has every type, a declaration of every global and function, and the
-# body of every C function of the glibc pages; names.txt says, for each such
-# function, its C name here, its name in the C it came from and that C's .i
-# (the comment c2ff puts first in each function).
+# out.c has every type, a declaration of every global and function, the body
+# of every C function of the glibc pages and the definition of each of their
+# globals with its items; names.txt says, for each such function, its C name
+# here, its name in the C it came from and that C's .i (the comment c2ff puts
+# first in each function), and for each global where glibc has it.
 #
 # What c2ff writes in a fixed form for what C has no other ff form of is
 # written back as that C: a text it made a global (text N, wide text N) is the
@@ -95,7 +96,7 @@ for my $page (@top) {
         }
         if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1 }; next }
         if (is_function($d)) { $fn{$name} = { kind => 'c', node => $d, from => 0 }; $glibcpage{$name} = 1 if $glibc }
-        else { $var{$name} = { node => $d, from => 0 } }
+        else { $var{$name} = { node => $d, from => 0, glibc => $glibc } }
     }
 }
 
@@ -363,6 +364,8 @@ sub cstring {
 sub text_of { my (@n) = @_; my $s = join '', map { c($_) } @n; utf8::encode($s) if utf8::is_utf8($s); $s }
 
 # The items of a global's array, as numbers: a text global's bytes.
+# A global's items, after its type
+sub items_of { my ($n) = @_; my $v = $var{$n}; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); @l[$i .. $#l] }
 sub global_items { my ($n) = @_; my $v = $var{$n} or return; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); map { $_->{content} =~ /^items$/ ? kids($_) : $_ } @l[$i .. $#l] }
 
 sub operand {
@@ -384,6 +387,8 @@ sub operand {
         return ('tp', [ptr => undef]) if $w eq 'tp';
         if (my $t = local_type($w)) { return (cid_local($w), $t) }
         return ("$w()", undef) if clang_builtin($w);
+        # (a compound literal c2ff made a global of its own: the literal again)
+        if ($w =~ / literal \d+$/ && $var{$w}) { my $t = gtype($w); return ('((' . ctype($t) . ')' . init_list($t, [items_of($w)]) . ')', $t) }
         if (my $t = gtype($w)) { return (cid($w), $t) }
         return (cid($w), [enum => $econst{$w}]) if $econst{$w};
         # a function named alone is called
@@ -543,6 +548,11 @@ sub init_list {
     @fl = grep { !defined $_->{bits} || $_->{name} !~ /^padding \d+$/ } @fl;
     my @parts;
     for my $k (0 .. $#items) {
+        # (a flexible array member, the last field, array T 0, takes the items after it)
+        if ($t->[0] eq 'rec' && $k == $#fl && $fl[$k]{type}[0] eq 'arr' && c($fl[$k]{type}[2]) eq '0' && $k < $#items) {
+            push @parts, '{' . join(', ', map { init_item($fl[$k]{type}[1], $_) } @items[$k .. $#items]) . '}';
+            last;
+        }
         my $et = $t->[0] eq 'arr' ? $t->[1] : $fl[$k] ? $fl[$k]{type} : undef;
         push @parts, init_item($et, $items[$k]);
     }
@@ -741,14 +751,17 @@ sub rec_deps {
 # fields in braces of their own, as C writes one
 sub rec_body {
     my ($r) = @_;
+    my @fl = @{ $fieldcache{$r} //= [fields($r)] };
     '{ ' . join(' ', map {
         my $f = $_;
+        # (the last field, array T 0, is a flexible array member: T x[])
+        local our $extern_arrays = $f == $fl[-1];
         if ($f->{name} eq '' && $f->{type}[0] eq 'rec') { "$rec{ $f->{type}[1] }{kind} " . rec_body($f->{type}[1]) . ';' }
         else {
             my $nm = $f->{name} =~ /^padding \d+$/ && defined $f->{bits} ? '' : cid_local($f->{name});
             cdecl($f->{type}, $nm) . (defined $f->{bits} ? " : $f->{bits}" : '') . ';';
         }
-    } @{ $fieldcache{$r} //= [fields($r)] }) . ' }';
+    } @fl) . ' }';
 }
 sub emit_rec {
     my ($r) = @_;
@@ -779,8 +792,23 @@ for my $f (grep { $fn{$_} && $fn{$_}{kind} eq 'alias' } @order) {
     my $t = $fn{$f}{target};
     push @c, $var{$t} ? "extern __typeof__(" . cid($t) . ") " . cid($f) . ';' : proto($f) . ';';
 }
+# the glibc pages' globals, with their items (but those c2ff makes of a
+# text or a compound literal, which come back where they are named)
+my @gnames;
+for my $v (grep { $var{$_} && $var{$_}{glibc} && !$var{$_}{weak} && $_ !~ /^(?:wide )?text \d+$| literal \d+$/ } @order) {
+    my $t = gtype($v);
+    my @items = items_of($v);
+    my $init = !@items ? '' : ($t->[0] eq 'arr' || $t->[0] eq 'rec') ? ' = ' . init_list($t, \@items) : ' = ' . expr_item([map { c($_) eq 'items' ? kids($_) : $_ } @items]);
+    local $cur_fn = $v;
+    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$init;"; 1 };
+    warn $@ unless $ok;
+    # (where glibc has it: a unit's own static in that unit, a function's static in that function)
+    my $hint = $v =~ /^\S+ (\S+\/\S+)$/ ? "unit $1" : $v =~ /^(\S+) \S+$/ && $fn{$1} ? 'in ' . orig($1) : '-';
+    push @gnames, join("\t", $ok ? 'global' : 'gfailed', cid($v), orig($v), $hint);
+}
 # the bodies
 my (@names, @cbody);
+push @names, @gnames;
 for my $f (grep { $glibcpage{$_} } @order) {
     local $cur_fn = $f;
     my $s = sig($f);
@@ -815,7 +843,7 @@ sub orig {
 }
 
 # (the names c2ff left out, found in the bodies, before them)
-push @c, map { 'long ' . cid($_) . '();' } grep { $fn{$_}{missing} } @order;
+push @c, map { 'long ' . cid($_) . '();' } grep { $fn{$_} && $fn{$_}{missing} } @order;
 push @c, @cbody;
 open my $h, '>', $out or die "ff2c: $out: $!\n";
 print $h join("\n", @c), "\n";
