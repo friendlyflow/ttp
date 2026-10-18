@@ -23,7 +23,7 @@ use warnings;
 use Digest::SHA qw(sha256);
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(node call uncomment frozen is_layer kids holder read_ff write_ff read_txt write_txt);
+our @EXPORT_OK = qw(node call uncomment frozen is_layer kids holder layers read_ff write_ff read_txt write_txt);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
@@ -41,6 +41,22 @@ sub kids {
     $depth //= 0;
     die "ff: layers nested too deep in $n->{content}\n" if $depth > 64;
     map { is_layer($_) ? kids($_, $depth + 1) : $_ } @{ $n->{children} };
+}
+
+# Nodes as the children of one node, which holds 255: in layers (0: 1: ...)
+# where they are more than that, each 255 nodes or 255 layers of them, as
+# deep as they need.
+sub layers {
+    my @n = @_;
+    return @n if @n <= 255;
+    my $per = 255;
+    $per *= 255 while @n > $per * 255;
+    my @l;
+    for (my $i = 0; $i < @n; $i += $per) {
+        my $e = $i + $per - 1 < $#n ? $i + $per - 1 : $#n;
+        push @l, node(scalar(@l) . ':', layers(@n[$i .. $e]));
+    }
+    @l;
 }
 
 # Where the child of n (through its layers) with this content stands: the

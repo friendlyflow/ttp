@@ -26,6 +26,7 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use FF qw(read_txt);
+use FF ();
 
 my ($in, $out, $namesout) = @ARGV;
 die "usage: ff2c.pl tree.ff.txt out.c names.txt\n" unless defined $namesout;
@@ -68,7 +69,8 @@ my %glibcpage;   # functions of the glibc pages (their bodies are written)
 for my $page (@top) {
     next if c($page) eq 'comment';
     my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:';
-    for my $d (kids($page)) {
+    # (a page's definitions through its layers, 0: 1: ...)
+    for my $d (FF::kids($page)) {
         next if c($d) eq 'comment';
         (my $name = c($d)) =~ s/:$// or fail('not a definition', $d);
         my @k = kids($d);

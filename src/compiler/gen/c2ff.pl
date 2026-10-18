@@ -53,7 +53,7 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
-use FF qw(node write_txt read_ff);
+use FF qw(node layers write_txt read_ff);
 use Digest::SHA;
 use POSIX ();
 
@@ -1819,14 +1819,10 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 
 # glibc in ff is a page per glibc directory (string, stdio-common, ...), its
 # types in one of their own, the weak names in another: a node holds 255
-# children, so a longer page goes on as name 2, name 3, ...
+# children, so a longer page holds them in layers (0: 1: ..., the user's
+# overflow of a node, see FF.pm layers).
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
-sub groups {
-    my ($name, @n) = @_;
-    my @g;
-    for (my $i = 0; $i < @n; $i += 255) { push @g, node(($i ? "$name " . ($i / 255 + 1) : $name) . ':', @n[$i .. ($i + 254 < $#n ? $i + 254 : $#n)]) }
-    @g;
-}
+sub groups { my ($name, @n) = @_; node("$name:", layers(@n)) }
 if (defined $program) {
     # glibc's startup is left out, so __libc_setup_tls does not run: tp points
     # into a zeroed block instead, where THREAD_SELF (tp less a struct pthread
