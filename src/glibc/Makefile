@@ -559,17 +559,20 @@ all-asm:
 # c2ff's of every C object, from every name the objects define (nm) and
 # what the asm objects name from elsewhere, then s2ff's of every asm
 # object, then the builtins and libatomic's functions, as a milestone's.
-# The roots are in $(FF)/glibc.roots, one per line.
-ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start)
+# The roots are in $(FF)/glibc.roots, one per line. What c2ff cannot
+# translate yet is left out (--keep-going): its reasons are in
+# $(FF)/glibc.c2ff.err, "c2ff: left out: name: why".
+ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start)
 $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; } | sort -u > $@
+	for o in $(ALL_C); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 
 $(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
-	$(SLOT) -t 3600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
-	    $(foreach o,$(ALL_C),$(I)/$(o).json=$(I)/$(o).i) -- $$(cat $(FF)/glibc.roots) > $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
+	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
+	    @$(FF)/glibc.units -- @$(FF)/glibc.roots > $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
 	echo 'glibc asm:' >> $(FF)/glibc.ff.txt
 	for a in $(ALL_ASM); do \

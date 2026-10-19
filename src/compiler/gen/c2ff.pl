@@ -8,6 +8,7 @@
 #   perl c2ff.pl --program tree [--target t] tu.json=tu.i -- main > prog.ff.txt
 #   perl c2ff.pl --types        (the type words, for a look)
 #   perl c2ff.pl --pass [--target t] tu.json=tu.i ...   (each unit's own pass, cached)
+#   an argument @file stands for the lines of file
 #
 # Each translation unit is its AST (from $C2FF_CLANG -x c -include
 # src/glibc/clang-prelude.h -Xclang -ast-dump=json -fsyntax-only
@@ -122,6 +123,9 @@ sub ctype {
         my ($base, $n, $rest) = ($1, $2, $3);
         return ('array', ctype($base . $rest), $n eq '' ? 0 : $n);
     }
+    # (a declarator in parentheses of its own, as the source has them:
+    # regex's reg_errcode_t ((*)(void *, bin_tree_t *)))
+    $t = "$1 $2" while $t =~ /^(.*?\S)\s*\((\(\*\)\s*\(.*\))\)$/;
     return ('address', fntype($1, $2)) if $t =~ /^(.*?)\s*\(\*\)\s*\((.*)\)$/;
     if ($t =~ /^(.*)\*$/) {
         my $base = expand($1);
@@ -288,6 +292,10 @@ my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, 
 my %forceweak;             # --weak name: nothing defines it for a static program
 my (@units, @roots);
 my $passonly;              # --pass: only each unit's own pass (unit_pass), made where it is not
+our $keep_going;           # --keep-going: what cannot be translated yet is left out (leave_out)
+# (@file: the arguments in a file, one a line: all of glibc's units and
+# roots are past what one command line holds)
+@ARGV = map { /^@(.+)$/ ? do { open my $h, '<', $1 or die "c2ff: cannot open $1: $!\n"; map { chomp; length ? $_ : () } <$h> } : $_ } @ARGV;
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -297,6 +305,7 @@ while (@ARGV) {
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
     if ($a eq '--target') { $target = shift @ARGV; next }
     if ($a eq '--pass') { $passonly = 1; next }
+    if ($a eq '--keep-going') { $keep_going = 1; next }
     if ($a eq '--') { @roots = @ARGV; last }
     my ($json, $i) = split /=/, $a, 2;
     push @units, { json => $json, i => $i };
@@ -2048,18 +2057,44 @@ sub function {
     my @p = grep { $_->{kind} eq 'ParmVarDecl' } kids($d);
     my ($cs) = grep { $_->{kind} eq 'CompoundStmt' } kids($d);
     my $i = 0;
-    node(ffname($name) . ':', map({ node($_) } ctype($ret)),
+    my @head = (map({ node($_) } ctype($ret)),
         map({ $i++; node(ffname($_->{name} // "p$i") . ':', map { node($_) } ctype(qt($_))) } @p),
         ($d->{variadic} ? node('...') : ()),
         # (the .i, not the copy of it clang read: CLANGFIX)
-        node('comment', node("glibc-2.44 " . ($d->{file} =~ s/\.clang\.i$/.i/r))),
-        body($cs));
+        node('comment', node("glibc-2.44 " . ($d->{file} =~ s/\.clang\.i$/.i/r))));
+    node(ffname($name) . ':', @head, stmt_layers(scalar @head, map { [stmt($_)] } kids($cs)));
+}
+# A function's statements, each a run of nodes: past what a node holds
+# (255, with the head before them), in layers 0: 1: ... of whole
+# statements, as ttpc reads them (a layer's children are its parent's).
+sub stmt_layers {
+    my ($head, @st) = @_;
+    my $n = 0;
+    $n += @$_ for @st;
+    return map { @$_ } @st if $head + $n <= 255;
+    my (@layers, @cur);
+    for my $s (@st) {
+        if (@cur + @$s > 255) { push @layers, node(scalar(@layers) . ':', @cur); @cur = () }
+        push @cur, @$s;
+    }
+    push @layers, node(scalar(@layers) . ':', @cur) if @cur;
+    die "c2ff: a function too long for layers of one level\n" if $head + @layers > 255;
+    @layers;
 }
 
 sub next_name {
     return shift @todo if @todo;
     while (@roots) { my $r = shift @roots; return $r unless $done{$r}++ }
     undef;
+}
+# (--keep-going: a definition c2ff cannot translate yet is left out, said
+# on stderr with why, and the rest goes on: all of glibc while a few of
+# its objects wait)
+sub leave_out {
+    my ($name) = @_;
+    die $@ unless $keep_going;
+    (my $why = $@) =~ s/\n+$//;
+    warn "c2ff: left out: $name: $why\n";
 }
 while (defined(my $name = next_name())) {
     if (my $a = $alias{$name}) { push @out, [$a->[1], node(ffname($name) . ':', node('alias'), node(ffname($a->[0])))]; want($a->[0]); next }
@@ -2073,8 +2108,17 @@ while (defined(my $name = next_name())) {
         want($r);
         next;
     }
-    if (my $f = $fn{$name}) { local $cur_unit = $f->[1]; push @out, [$f->[1], function($name, body_of(@$f))]; next }
-    if (my $v = $var{$name}) { local $cur_unit = $v->[1]; local $cur_global = $name; push @out, [$v->[1], decl($v->[0], 1, $name ne $v->[0]{name} ? ffname($name) : undef)]; next }
+    if (my $f = $fn{$name}) {
+        local $cur_unit = $f->[1];
+        eval { push @out, [$f->[1], function($name, body_of(@$f))]; 1 } or leave_out($name);
+        next;
+    }
+    if (my $v = $var{$name}) {
+        local $cur_unit = $v->[1];
+        local $cur_global = $name;
+        eval { push @out, [$v->[1], decl($v->[0], 1, $name ne $v->[0]{name} ? ffname($name) : undef)]; 1 } or leave_out($name);
+        next;
+    }
     # a weak name nothing defines: its address is 0 (ttpc's weak)
     if (my $w = $weak{$name}) {
         # (said, so that the reach can add what defines it where an object
