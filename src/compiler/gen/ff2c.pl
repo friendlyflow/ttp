@@ -5,6 +5,10 @@
 # held against clang's AST of the C they were made of (src/glibc/roundtrip.pl).
 #
 #   perl ff2c.pl tree.ff.txt out.c names.txt
+#   perl ff2c.pl --pages 'glibc string,glibc stdlib' tree.ff.txt out.c names.txt
+#
+# With --pages, only those glibc pages' bodies and globals are written (the
+# rest declared): all of glibc is held against its C a part at a time.
 #
 # out.c has every type, a declaration of every global and function, the body
 # of every C function of the glibc pages and the definition of each of their
@@ -28,8 +32,10 @@ use lib $FindBin::Bin;
 use FF qw(read_txt);
 use FF ();
 
+my %only;      # --pages a,b: only these glibc pages' bodies and globals
+if (@ARGV && $ARGV[0] eq '--pages') { shift @ARGV; $only{$_} = 1 for split /,/, shift @ARGV }
 my ($in, $out, $namesout) = @ARGV;
-die "usage: ff2c.pl tree.ff.txt out.c names.txt\n" unless defined $namesout;
+die "usage: ff2c.pl [--pages page,...] tree.ff.txt out.c names.txt\n" unless defined $namesout;
 my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt(<$h>, $in) };
 
 sub kids { @{ $_[0]{children} } }
@@ -62,13 +68,14 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
-    va_list => '__builtin_va_list');
+    va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
+    'complex long double' => '_Complex long double');
 my (%rec, %enum, %fntype, %fn, %var, %econst, @order);
 my %glibcpage;   # functions of the glibc pages (their bodies are written)
 
 for my $page (@top) {
     next if c($page) eq 'comment';
-    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:';
+    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:' && (!%only || $only{ c($page) =~ s/:$//r });
     # (a page's definitions through its layers, 0: 1: ...)
     for my $d (FF::kids($page)) {
         next if c($d) eq 'comment';
@@ -385,6 +392,7 @@ sub operand {
     }
     if (!@k) {
         return ($w, [scalar => 'int']) if $w =~ /^-?(?:0x[0-9a-fA-F]+|\d+)$/;
+        return ($w, [scalar => 'long double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+L$/i;
         return ($w, [scalar => $w =~ /f$/ ? 'float' : 'double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+f?$/i;
         return ('__builtin_va_arg_pack()', undef) if $w eq 'va_arg_pack';
         return ('__builtin_va_arg_pack_len()', undef) if $w eq 'va_arg_pack_len';
@@ -452,6 +460,11 @@ sub operand {
         if (@k == 1 && leaf($f) && !local_type(c($f)) && !gtype(c($f)) && !$econst{ c($f) }) { $fn{ c($f) } = { kind => 'asm', missing => 1 }; push @order, c($f); return ('(&' . cid(c($f)) . ')', [ptr => undef]) }
         my ($s, $t) = expr([@k]);
         return ("(&$s)", [ptr => $t]);
+    }
+    # a complex value's parts: C's __real__ and __imag__
+    if ($w eq 'real' || $w eq 'imag') {
+        my ($s, $t) = expr([@k]);
+        return ("(__${w}__ ($s))", $t && $t->[0] eq 'scalar' && $t->[1] =~ /^complex (.+)$/ ? [scalar => $1] : undef);
     }
     if ($w eq 'content') {
         my ($s, $t) = expr([@k]);
