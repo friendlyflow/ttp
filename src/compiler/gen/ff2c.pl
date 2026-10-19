@@ -5,6 +5,10 @@
 # held against clang's AST of the C they were made of (src/glibc/roundtrip.pl).
 #
 #   perl ff2c.pl tree.ff.txt out.c names.txt
+#   perl ff2c.pl --pages 'glibc string,glibc stdlib' tree.ff.txt out.c names.txt
+#
+# With --pages, only those glibc pages' bodies and globals are written (the
+# rest declared): all of glibc is held against its C a part at a time.
 #
 # out.c has every type, a declaration of every global and function, the body
 # of every C function of the glibc pages and the definition of each of their
@@ -28,8 +32,10 @@ use lib $FindBin::Bin;
 use FF qw(read_txt);
 use FF ();
 
+my %only;      # --pages a,b: only these glibc pages' bodies and globals
+if (@ARGV && $ARGV[0] eq '--pages') { shift @ARGV; $only{$_} = 1 for split /,/, shift @ARGV }
 my ($in, $out, $namesout) = @ARGV;
-die "usage: ff2c.pl tree.ff.txt out.c names.txt\n" unless defined $namesout;
+die "usage: ff2c.pl [--pages page,...] tree.ff.txt out.c names.txt\n" unless defined $namesout;
 my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt(<$h>, $in) };
 
 sub kids { @{ $_[0]{children} } }
@@ -68,7 +74,7 @@ my %glibcpage;   # functions of the glibc pages (their bodies are written)
 
 for my $page (@top) {
     next if c($page) eq 'comment';
-    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:';
+    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:' && (!%only || $only{ c($page) =~ s/:$//r });
     # (a page's definitions through its layers, 0: 1: ...)
     for my $d (FF::kids($page)) {
         next if c($d) eq 'comment';
