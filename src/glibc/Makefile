@@ -130,7 +130,10 @@ SHARED := ../compiler/shared.ff
 # double is on every target, its arithmetic soft-fp's (__addtf3 ...).
 comma := ,
 CPUS_riscv64 := rv64 rv64,v=false
-CPUS_aarch64 := max
+# aarch64: SVE and MOPS (max), the same without SVE, none of them
+# (cortex-a57), and SVE at 512 and 256 bits (a64fx, neoverse-v1), whose
+# ifuncs pick glibc's other string asm (memcpy_a64fx, memcpy_sve ...)
+CPUS_aarch64 := max max,sve=off cortex-a57 a64fx neoverse-v1
 CPUS_x86_64 := max
 CPUS_arm := max
 CPUS := $(CPUS_$(GTARGET))
@@ -298,11 +301,11 @@ with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_s
 # (each C object's AST is c2ff's pass of it, all-units', not its JSON)
 UNITDEP_aarch64 := c2ff
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
-LINKED_aarch64 := string stdlib malloc stdio floats args
+LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
-# (ctype_l's __toupper_l, abs; check_fds, which riscv64's startup has too)
-OBJS_crt := $(OBJS_start) ctype/ctype_l stdlib/abs
+# (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
+OBJS_crt := $(OBJS_start) ctype/ctype_l stdlib/abs libio/putc
 ASMS_crt := csu/start csu/crti
 ifneq ($(LINKED),)
 -include $(LINKED:%=$(FF)/%.objs.mk)
@@ -495,7 +498,7 @@ $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter 
 	        cmp -s $$(FF)/$$$$b.out $$(FF)/$(1).want || { echo "$(1)-check: $$$$b on $$$$cpu: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1).want | head; exit 1; }; \
 	    done; \
 	done; \
-	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree$(comma)$(if $(filter riscv64,$(GTARGET)), with V and without, on $(GTARGET)): exit $$$$want"
+	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree$(comma)$(if $(filter riscv64,$(GTARGET)), with V and without,) on $(GTARGET) ($$(CPUS)): exit $$$$want"
 .PHONY: $(1)-check
 endef
 $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))

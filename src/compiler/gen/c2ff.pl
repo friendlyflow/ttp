@@ -73,6 +73,9 @@ my %scalar = (
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
     '_Bool' => 'u8', 'void' => 'void',
     '__builtin_va_list' => 'va_list',
+    # (aarch64's __builtin_va_list is AAPCS64's struct; ttpc's va_list is its
+    # own word, as on every target)
+    'struct __va_list' => 'va_list',
 );
 
 # The words a type run can be made of, besides the names of types.
