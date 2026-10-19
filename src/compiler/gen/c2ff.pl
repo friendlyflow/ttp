@@ -7,6 +7,7 @@
 #   perl c2ff.pl [--page name] [--target t] tu.json=tu.i ... -- root ... > out.ff.txt
 #   perl c2ff.pl --program tree [--target t] tu.json=tu.i -- main > prog.ff.txt
 #   perl c2ff.pl --types        (the type words, for a look)
+#   perl c2ff.pl --pass [--target t] tu.json=tu.i ...   (each unit's own pass, cached)
 #
 # Each translation unit is its AST (from $C2FF_CLANG -x c -include
 # src/glibc/clang-prelude.h -Xclang -ast-dump=json -fsyntax-only
@@ -280,6 +281,7 @@ my $start;                 # --start: a _start of the program's own, SYS_exit (m
 my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, in .bss)
 my %forceweak;             # --weak name: nothing defines it for a static program
 my (@units, @roots);
+my $passonly;              # --pass: only each unit's own pass (unit_pass), made where it is not
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -288,11 +290,12 @@ while (@ARGV) {
     if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
     if ($a eq '--target') { $target = shift @ARGV; next }
+    if ($a eq '--pass') { $passonly = 1; next }
     if ($a eq '--') { @roots = @ARGV; last }
     my ($json, $i) = split /=/, $a, 2;
     push @units, { json => $json, i => $i };
 }
-die "usage: c2ff.pl [--page name | --program tree] [--target t] tu.json=tu.i ... -- root ...\n" unless @units && @roots;
+die "usage: c2ff.pl [--page name | --program tree] [--target t] tu.json=tu.i ... -- root ...\n" unless @units && (@roots || $passonly);
 reserve_target($target) if $target ne 'riscv64';
 
 my %enumof;                 # each enum constant's enum, as a tag
@@ -350,6 +353,7 @@ sub own_name {
 sub own { my ($name) = @_; $cur_unit && $own{$cur_unit} && $own{$cur_unit}{$name} // $name }
 sub inner_tags { my ($n) = @_; (($n->{kind} // '') =~ /^(EnumDecl|RecordDecl)$/ ? $n : ()), map { inner_tags($_) } @{ $n->{inner} || [] } }
 units_ready(@units);
+exit 0 if $passonly;
 for my $u (@units) {
     # clang's ids are addresses, unique in one unit only: a typedef's
     # anonymous tag is found among its own unit's (an id of another unit's
@@ -535,18 +539,41 @@ sub anon_places {
 # Storable has it, without the bodies of its functions (tu.c2ff.bodies,
 # each read when the reach takes its function), with the anonymous records'
 # places (anon_places) and each function's locals and own tags. The first
-# line of tu.c2ff is its key: c2ff's own hash and the AST's (its size and
-# time first: a JSON made again, the same, is not done again). The units
+# line of tu.c2ff is its key: the hash of the pass's own code (the subs it
+# runs, from c2ff.pl's text: a change elsewhere in c2ff keeps every
+# unit's pass) and the AST's (its size and time first: a JSON made again,
+# the same, is not done again), then the .i's (the same way). The units
 # without one are done in parallel, C2FF_JOBS at once (3), each its own
 # process with one AST in memory, so the reach itself reads no JSON.
+# Without its JSON (all of glibc's ASTs take some 16 GB: each is deleted
+# once its pass is made, `c2ff.pl --pass tu.json=tu.i ...` makes only
+# that) a unit's pass is taken while its .i is the same.
 use Storable qw(nfreeze thaw);
 my $self_hash;
 sub unit_file { (my $f = $_[0]{json}) =~ s/\.json$//; "$f.c2ff" }
+# (the pass's code: these subs, as c2ff.pl has them)
+my @pass_subs = qw(unit_pass anon_places anon_key locals kids inner_tags unplace);
+sub pass_hash {
+    open my $h, '<', "$FindBin::Bin/c2ff.pl" or die "c2ff: cannot read c2ff.pl: $!\n";
+    my $text = do { local $/; <$h> };
+    my $d = Digest::SHA->new(256);
+    # (a sub of one line, or up to its closing brace)
+    for my $s (@pass_subs) { $text =~ /^(sub \Q$s\E\b[^\n]*\}\n|sub \Q$s\E\b.*?^\}\n)/ms or die "c2ff: no sub $s\n"; $d->add($1) }
+    $d->hexdigest;
+}
+# (the .i's size and time, then its hash: an .i made again, the same,
+# keeps its pass)
+sub istamp {
+    my ($u, $full) = @_;
+    my @st = stat $u->{i} or die "c2ff: cannot open $u->{i}: $!\n";
+    $full ? ("$st[7] $st[9]", Digest::SHA->new(256)->addfile($u->{i})->hexdigest) : "$st[7] $st[9]";
+}
+sub ikey { join ' | ', istamp($_[0], 1) }
 sub json_key {
     my ($u, $full) = @_;
-    $self_hash //= Digest::SHA->new(256)->addfile("$FindBin::Bin/c2ff.pl")->hexdigest;
+    $self_hash //= pass_hash();
     my @st = stat $u->{json} or die "c2ff: cannot open $u->{json}: $!\n";
-    ("c2ff unit 1 $self_hash", "$st[7] $st[9]", $full ? Digest::SHA->new(256)->addfile($u->{json})->hexdigest : ());
+    ("c2ff unit 2 $self_hash", "$st[7] $st[9]", $full ? Digest::SHA->new(256)->addfile($u->{json})->hexdigest : ());
 }
 # The key of the unit's cache, if it is the AST's of now: else undef.
 sub unit_fresh {
@@ -555,16 +582,31 @@ sub unit_fresh {
     open my $h, '<:raw', $file or return;
     my $line = <$h> // return;
     chomp $line;
-    my ($self, $stamp, $hash) = split / \| /, $line;
+    my ($self, $stamp, $hash, $ist, $ihash) = split / \| /, $line;
+    return unless defined $ihash;
+    # (no JSON: the pass of the same .i)
+    unless (-e $u->{json}) {
+        $self_hash //= pass_hash();
+        return unless $self eq "c2ff unit 2 $self_hash";
+        return $h if $ist eq istamp($u);
+        my ($t, $now) = istamp($u, 1);
+        return unless $now eq $ihash;
+        my $rest = do { local $/; <$h> };
+        close $h;
+        write_unit($file, "$self | $stamp | $hash | $t | $ihash\n", $rest);
+        open $h, '<:raw', $file or die "c2ff: cannot open $file: $!\n";
+        <$h>;
+        return $h;
+    }
     my ($s, $t) = json_key($u);
-    return unless defined $hash && $self eq $s;
+    return unless $self eq $s;
     return $h if $stamp eq $t;
     my (undef, undef, $now) = json_key($u, 1);
     return unless $now eq $hash;
     # (the same AST, made again: its new stamp)
     my $rest = do { local $/; <$h> };
     close $h;
-    write_unit($file, "$s | $t | $hash\n", $rest);
+    write_unit($file, "$s | $t | $hash | " . ikey($u) . "\n", $rest);
     open $h, '<:raw', $file or die "c2ff: cannot open $file: $!\n";
     <$h>;
     $h;
@@ -616,11 +658,17 @@ sub unit_pass {
         }
     }
     write_unit("$file.bodies", $bodies);
-    write_unit($file, "$s | $t | $hash\n", nfreeze($ast));
+    write_unit($file, "$s | $t | $hash | " . ikey($u) . "\n", nfreeze($ast));
 }
 sub unplace { my ($n) = @_; delete @$n{qw(loc range)}; unplace($_) for @{ $n->{inner} || [] } }
 sub units_ready {
     my @todo = grep { !unit_fresh($_) } @_;
+    # (a unit whose AST is gone and whose pass is not of its .i, or not of
+    # this c2ff's pass: exit 3, its AST is to be made again)
+    if (my @gone = grep { !-e $_->{json} } @todo) {
+        print STDERR "c2ff: no AST and no pass of $_->{json}: make it again\n" for @gone;
+        exit 3;
+    }
     my $jobs = $ENV{C2FF_JOBS} || 3;
     my %pid;
     while (@todo || %pid) {
