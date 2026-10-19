@@ -351,14 +351,19 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
 # atomics.ff.txt). The asm parts share one page, glibc asm: the trees a
 # program reads have 255 pages in all (c2ff makes a page per directory).
+# The tree's license (license.ff.txt) is at its root, and each page first
+# has the license of each file it is made of, its header (c2ff, s2ff
+# --header; ../compiler/gen/Header.pm).
 define milestone
 OBJS_all_$(1) := $$(call with_start,OBJS,$(1))
 ASMS_all_$(1) := $$(call with_start,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
+	cp license.ff.txt $$(FF)/$(1).ff.txt
 	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
-	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
+	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
+	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    $$(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $$(I)/$$$$a.s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
@@ -435,7 +440,7 @@ $(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
 
 $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	mkdir -p $(FF)
-	$(RUN) -t 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
+	$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
@@ -479,12 +484,32 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 define roundtrip
 $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl
 	$$(RUN) -t 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
+	$$(RUN) -t 300 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
 glibc-roundtrip: floats-roundtrip
 
 .PHONY: strlen-check asm-check glibc-roundtrip
+
+# The licenses (../compiler/gen/licenses.pl): glibc's trees here (their
+# pages' licenses: builtins, atomics), and of a milestone its tree, its
+# folder (each file and the index) and its program, each with its license
+# at its root and every page made from source with the license of each
+# file it is made of. glibc-licenses checks every milestone made.
+LICENSES_PL := perl ../compiler/gen/licenses.pl
+licenses:
+	$(LICENSES_PL) --fragment builtins.ff.txt atomics.ff.txt
+	$(LICENSES_PL) license.ff.txt progs/strlen.ff
+define licenses
+$(1)-licenses: $$(FF)/$(1).ff $$(FF)/$(1)/index.ff $$(FF)/$(1)-prog.ff
+	$$(LICENSES_PL) --pages $$(FF)/$(1).ff $$(FF)/$(1)/*.ff
+	$$(LICENSES_PL) $$(FF)/$(1)-prog.ff
+.PHONY: $(1)-licenses
+endef
+$(foreach m,$(MILESTONES),$(eval $(call licenses,$(m))))
+glibc-licenses: licenses $(MILESTONES:%=%-licenses)
+.PHONY: licenses glibc-licenses
 
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
@@ -496,9 +521,9 @@ glibc-roundtrip: floats-roundtrip
 # on every target, and as every check with gcc + libc.a; generic-roundtrip
 # writes its ff back as C and compares the ASTs, as for a milestone.
 OWNSTART := generic
-$(FF)/generic.ff: builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt
+$(FF)/generic.ff: builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt
 	mkdir -p $(FF)
-	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt > $(FF)/generic.ff.txt
+	cat license.ff.txt builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt > $(FF)/generic.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/generic.ff.txt > $@
 $(eval $(call check,generic))
 GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit
@@ -508,6 +533,7 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/generic.rt.c > $(FF)/generic.rt.json
 	$(RUN) -t 300 perl roundtrip.pl $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
+	$(RUN) -t 120 perl ../compiler/gen/headers.pl $(FF)/generic.rt.c $(FF)/generic.rt.names
 .PHONY: generic-roundtrip
 
 # ---- every check at once --------------------------------------------------------

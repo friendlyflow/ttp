@@ -1,3 +1,8 @@
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
   comment
     builtins-aarch64.ff.txt: the builtins of gcc for aarch64 that glibc uses, after builtins.ff.txt on its page (GTARGET=aarch64). __builtin_aarch64_get_fpcr: the FPCR (mrs, s3_3_c4_c4_0), for soft-fp's rounding mode.
   __builtin_aarch64_get_fpcr:

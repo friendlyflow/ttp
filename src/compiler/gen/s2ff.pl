@@ -9,6 +9,8 @@
 #   perl s2ff.pl --items file.s file.dump    its functions alone, for a page of
 #                                            several files'
 #   perl s2ff.pl --size file.s file.dump     the bytes of those instructions
+#   perl s2ff.pl --header file.s ...        the license of each one's file, for
+#                                            the top of their page
 #
 # file.dump is what GNU as made of file.s, without relaxation, as objdump
 # -d -M no-aliases prints it: where it chose a compressed instruction, the ff
@@ -37,18 +39,22 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use FF qw(node write_txt);
+use Header qw(license_nodes);
 
 my $page = 'glibc asm';
 my @files;
 my $size;
 my $items;
+my $header;               # --header file.s ...: the license of each one's file (Header.pm)
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--size') { $size = 1; next }
     if ($a eq '--items') { $items = 1; next }
+    if ($a eq '--header') { $header = 1; next }
     push @files, $a;
 }
+if ($header) { print write_txt(license_nodes(@files)); exit }
 die "usage: s2ff.pl [--page name | --items | --size] file.s file.dump\n" unless @files == 2;
 my ($src, $dump) = @files;
 my $where = $src;
@@ -395,4 +401,4 @@ if ($size) { my $b = 0; $b += $_->{bytes} for @made; print "$b\n"; exit }
         $i--;
     }
 }
-print $items ? write_txt(@fns) : write_txt(node("$page:", @fns));
+print $items ? write_txt(@fns) : write_txt(node("$page:", license_nodes($src), @fns));
