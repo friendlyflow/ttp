@@ -204,6 +204,7 @@ ff, the language ttpc compiles
             3
             4
       sizeof and alignof: of a type run or a variable, an unsigned long
+      sizeof of a variable-length array is its size in bytes, worked out where it is declared
     arithmetic, as in C
       char and short, signed or not, become int first
       then both operands get one type: of 8 bytes if either is (unsigned if an 8-byte one is), else unsigned int if either is one, else int

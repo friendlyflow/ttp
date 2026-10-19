@@ -465,9 +465,20 @@ sub operand {
         return ("((" . ctype($t) . ")($v))", $t);
     }
     if ($w eq 'sizeof' || $w eq 'alignof') {
+        # of a variable (a variable-length array's)
+        if (@k == 1 && leaf($k[0]) && (local_type(c($k[0])) || gtype(c($k[0])))) {
+            return (($w eq 'sizeof' ? 'sizeof' : '_Alignof') . '(' . (operand($k[0]))[0] . ')', [scalar => 'u64']);
+        }
         my $i = 0;
         my $t = ptype(\@k, \$i);
         return (($w eq 'sizeof' ? 'sizeof' : '_Alignof') . '(' . ctype($t) . ')', [scalar => 'u64']);
+    }
+    # an array compound literal: array / its element's type / its count / items
+    if ($w eq 'array') {
+        my @l = ({ content => 'array', children => [] }, @k);
+        my $i = 0;
+        my $t = ptype(\@l, \$i);
+        return ('((' . ctype($t) . ')' . init_list($t, [@l[$i .. $#l]]) . ')', $t);
     }
     if ($w eq 'syscall') { return ('__ff_syscall(' . join(', ', map { expr_item($_) } items(@k)) . ')', [scalar => 'long']) }
     if ($w eq 'va_arg') {

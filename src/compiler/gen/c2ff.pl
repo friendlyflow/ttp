@@ -1285,6 +1285,13 @@ sub expr {
         my $w = $n->{name};
         my $t = $n->{argType} ? ($n->{argType}{desugaredQualType} // $n->{argType}{qualType}) : qt((kids($n))[0]);
         $w = 'alignof' if $w eq '__alignof' || $w eq '_Alignof';   # GNU's and C11's spellings, one on riscv64
+        # of a variable-length array (gmon's sizeof (buf)): of the variable,
+        # whose size ttpc keeps from its declaration
+        if (!$n->{argType} && $w eq 'sizeof' && $t =~ /\[[^\[\]]*[A-Za-z_][^\[\]]*\]$/) {
+            my $v = strip((kids($n))[0]);
+            $v = strip((kids($v))[0]) while $v->{kind} eq 'ParenExpr';
+            return node('sizeof', expr($v)) if $v->{kind} eq 'DeclRefExpr';
+        }
         return node($w, map { node($_) } ctype($t)) if $w eq 'sizeof' || $w eq 'alignof';
         stop("the trait $w", $n);
     }
