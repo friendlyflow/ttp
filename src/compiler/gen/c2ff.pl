@@ -110,6 +110,9 @@ sub ctype {
     if ($t =~ /^(.*?)\s*\(\*\s*\[(\d*)\]\)\s*\((.*)\)$/) {
         return ('array', 'address', fntype($1, $3), $2 eq '' ? 0 : $2);
     }
+    # a pointer to an array, T (*)[n]: what an array of arrays parameter
+    # is (libm's const double c[][2])
+    return ('address', ctype("$1$2")) if $t =~ /^(.*?)\s*\(\*\)\s*((?:\[\d+\])+)$/;
     if ($t =~ /^(.*?)\s*\[(\d*)\]((?:\[\d+\])*)$/) {
         # T[] (a flexible array member, an extern array) has no elements of
         # its own: 0
@@ -818,10 +821,20 @@ sub softfp {
 my %asmfn;
 # one asm function per name: two statements that would share one stop
 my %asmsig;
-sub asm_once { my ($name, $sig, $n) = @_; stop("two asm statements named $name", $n) if ($asmsig{$name} //= $sig) ne $sig }
+# An asm statement's function, by its name: two statements whose names
+# meet but whose text differs ("" : "+m" and "" : "=m", libm's math_opt_barrier
+# and its kin) get names of their own, the second the name with a few hex
+# digits of its text's hash.
+sub asm_once {
+    my ($name, $sig, $n) = @_;
+    return $name if ($asmsig{$name} //= $sig) eq $sig;
+    my $h = substr(Digest::SHA::sha1_hex($sig), 0, 6);
+    ($asmsig{"${name}_$h"} //= $sig) eq $sig or stop("two asm statements named ${name}_$h", $n);
+    "${name}_$h";
+}
 # the overflow builtins builtins.ff.txt has, by name and operand types
-my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int';
-$ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32';
+my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'u64 u32 u64', 'u64 int u64';
+$ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 sub asm_ins {
     my ($n, $op, @a) = @_;
@@ -833,6 +846,25 @@ sub asm_ins {
     return node('csrrw', node(1), node($a[0]), node('zero')) if $op eq 'fsflags' && @a == 1;
     return node('csrrs', node($csr->($a[1])), node('zero'), node($a[0])) if $op eq 'csrr' && @a == 2;
     return node("csrr$1", node($csr->($a[0])), node($a[1]), node('zero')) if $op =~ /^csr([wsc])$/ && @a == 2;
+    # the whole fcsr: frsr rd, fssr rs (fenv's)
+    return node('csrrs', node(3), node('zero'), node($a[0])) if $op eq 'frsr' && @a == 1;
+    return node('csrrw', node(3), node($a[0]), node('zero')) if $op eq 'fssr' && @a == 1;
+    # csrrw/csrrs/csrrc rd, csr, rs; of an immediate csrrwi ... as GNU as
+    # takes it (feholdexcept's csrrc of the flags it clears)
+    if ($op =~ /^csrr[wsc]$/ && @a == 3) {
+        return node("${op}i", node($csr->($a[1])), node($a[2]), node($a[0])) if $a[2] =~ /^\d+$/;
+        return node($op, node($csr->($a[1])), node($a[2]), node($a[0]));
+    }
+    # the float instructions of libm's asm: fclass, fmin and fmax, and the
+    # conversions, a rounding mode after their source (dyn, 7, where none is
+    # given, as GNU as takes it)
+    my %rm = (rne => 0, rtz => 1, rdn => 2, rup => 3, rmm => 4, dyn => 7);
+    return node($op, node($a[1]), node($a[0])) if $op =~ /^fclass\.[sd]$/ && @a == 2;
+    return node($op, node($a[2]), node($a[1]), node($a[0])) if $op =~ /^f(?:min|max)\.[sd]$/ && @a == 3;
+    if ($op =~ /^fcvt\.(?:[wl]u?\.[sd]|[sd]\.[wl]u?)$/ && (@a == 2 || @a == 3)) {
+        my $m = @a == 3 ? $rm{ $a[2] } // stop("the rounding mode $a[2]", $n) : 7;
+        return node($op, node($a[1]), node($m), node($a[0]));
+    }
     # lr, sc and the AMOs, their .aq and .rl the bits before the registers
     if ($op =~ /^(lr|sc|amo(?:swap|add|xor|and|or|min|max|minu|maxu))\.([wd])((?:\.aq|\.rl|\.aqrl)*)$/) {
         # (the parts kept first: a match on one of them sets $1 ... anew)
@@ -884,11 +916,33 @@ sub asm_stmt {
     my @oc = @$ocr;
     my @ic = @$icr;
     my @ops = @$opsr;
-    my (@arg, @text, $ret);
+    my (@arg, @text, $ret, $fret, @fmv);
+    # a float operand's width, s or d
+    my $fw = sub { my ($o) = @_; my $t = tword($o); $t eq 'float' ? 's' : $t eq 'double' ? 'd' : stop("an asm operand \"f\" of type " . qt($o), $n) };
     for my $i (0 .. $#ops) {
         my $c = $i < @oc ? $oc[$i] : $ic[$i - @oc];
         (my $k = $c) =~ s/[=+&]//g;
-        if ($k =~ /^[rJK]+$/ && $i < @oc) {
+        if ($k eq 'f' && $i < @oc && $c !~ /\+/) {
+            # a float register output (libm's fcvt.d.l, fmin.d): ft0, its bits
+            # the asm function's value, which C puts in the operand's own bits
+            stop('an asm statement with two register outputs', $n) if defined $ret;
+            $ret = $i;
+            $fret = $fw->($ops[$i]);
+            push @text, 'ft0';
+        } elsif ($k eq 'f' && $i >= @oc) {
+            # a float register input: its bits come as an argument, and go
+            # into a float register of their own (ft1 ...) first
+            push @arg, [$i, 'value'];
+            my $r = 'ft' . (@fmv + 1);
+            push @fmv, node('fmv.' . ($fw->($ops[$i]) eq 's' ? 'w' : 'd') . '.x', node('a' . $#arg), node($r));
+            push @text, $r;
+        } elsif ($k eq 'i' && $i >= @oc) {
+            # an immediate: its value, worked out (an integer constant
+            # expression: feholdexcept's flags or'ed together)
+            my $v = int_const($ops[$i]);
+            defined $v or stop('an asm operand "i" that is no constant', $n);
+            push @text, $v;
+        } elsif ($k =~ /^[rJK]+$/ && $i < @oc) {
             # the register output
             stop('an asm statement with two register outputs', $n) if defined $ret;
             $ret = $i;
@@ -913,15 +967,19 @@ sub asm_stmt {
     my @code;
     # a +r output: its value from its argument
     for my $j (0 .. $#arg) { push @code, node('mv', node("a$j"), node('t0')) if $arg[$j][2] }
+    push @code, @fmv;
     push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
+    push @code, node('fmv.x.' . ($fret eq 's' ? 'w' : 'd'), node('ft0'), node('t0')) if $fret;
     push @code, node('mv', node('t0'), node('a0')) if defined $ret;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
     $name .= '_' . join '', map { (my $k = $_) =~ s/[^A-Za-z0-9]//g; $k } @oc, '_', @ic;
-    asm_once($name, "$template : @oc : @ic", $n);
+    $name = asm_once($name, "$template : @oc : @ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
     my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops[$i])) : atom($ops[$i]) } @arg;
     my $call = @args ? node($name, @args) : node($name);
+    # (a float output: the value's bits are the operand's, *(u64 *) &x = ...)
+    return (node('content', cast_node(['address', $fret eq 's' ? 'u32' : 'u64'], node('address', atom($ops[$ret])))), node('='), $call) if $fret;
     return defined $ret ? (item(expr($ops[$ret])), node('='), $call) : $call;
 }
 
@@ -1041,7 +1099,7 @@ sub asm_stmt_other {
     push @code, @after;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
     $name .= '_' . join('', map { s/[^A-Za-z0-9]//gr } @$oc) . '_' . join('', map { s/[^A-Za-z0-9]//gr } @$ic);
-    asm_once($name, "$template : @$oc : @$ic", $n);
+    $name = asm_once($name, "$template : @$oc : @$ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
     my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
@@ -1086,6 +1144,14 @@ sub expr {
         return @t == 1 && $t[0] ne 'int' ? node($t[0], node($n->{value})) : node($n->{value});
     }
     return node($n->{value}) if $k eq 'CharacterLiteral';
+    # GNU C's __builtin_types_compatible_p (strfromd's float or double): a
+    # constant, 1 where the two types are one (their qualifiers aside), as
+    # gcc answers it
+    if ($k eq 'TypeTraitExpr') {
+        my @t = kids($n);
+        @t == 2 && ($n->{type}{qualType} // '') eq 'int' or stop('TypeTraitExpr', $n);
+        return node(types_compatible(@t) ? 1 : 0);
+    }
     if ($k eq 'FloatingLiteral' && isld($n)) {
         # a long double literal that a double holds exactly: that double, cast
         my $v = 0 + $n->{value};
@@ -1260,10 +1326,12 @@ sub expr {
         }
         # gcc's type-generic float classification, in builtins.ff.txt, one
         # function for each floating type (printf_fp has double and long double)
-        if ($name =~ /^__builtin_(isnan|isinf_sign|signbit)$/) {
-            my $t = tword_int($args[0]);
-            $t =~ /^(double|long double)$/ or stop("$name on $t", $n);
-            return node("$name $t", item(expr($args[0])));
+        # (and C's classification and quiet comparisons, a function for each
+        # of the three types; fpclassify's type is its last argument's)
+        if ($name =~ /^__builtin_(isnan|isinf_sign|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
+            my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
+            $t =~ /^(float|double|long double)$/ or stop("$name on $t", $n);
+            return node("$name $t", map { item(expr($_)) } @args);
         }
         # C's va_ words, as clang has them
         return node('va_start', item(expr($args[0]))) if $name eq '__builtin_va_start' || $name eq '__builtin_c23_va_start';
@@ -1273,7 +1341,7 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
@@ -1339,6 +1407,36 @@ sub expr {
 }
 
 # The call of libatomic's function for an atomic builtin
+# The value of an integer constant expression (literals, parentheses, casts,
+# + - * & | ^ << >> ~ and unary -), or undef.
+sub int_const {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    return $n->{value} if $k =~ /^(IntegerLiteral|ConstantExpr)$/ && defined $n->{value} && $n->{value} =~ /^-?\d+$/;
+    return int_const((kids($n))[0]) if $k =~ /^(ParenExpr|ImplicitCastExpr|CStyleCastExpr|ConstantExpr)$/;
+    if ($k eq 'UnaryOperator') {
+        my $v = int_const((kids($n))[0]) // return;
+        $v += 0;
+        return $n->{opcode} eq '-' ? -$v : $n->{opcode} eq '~' ? ~$v : $n->{opcode} eq '+' ? $v : undef;
+    }
+    if ($k eq 'BinaryOperator') {
+        # (as numbers: | on two strings, as JSON has them, is a string's)
+        my ($a, $b) = map { int_const($_) } kids($n);
+        return unless defined $a && defined $b;
+        ($a, $b) = ($a + 0, $b + 0);
+        use integer;
+        my $o = $n->{opcode};
+        return $o eq '|' ? $a | $b : $o eq '&' ? $a & $b : $o eq '^' ? $a ^ $b : $o eq '+' ? $a + $b : $o eq '-' ? $a - $b
+            : $o eq '*' ? $a * $b : $o eq '<<' ? $a << $b : $o eq '>>' ? $a >> $b : undef;
+    }
+    undef;
+}
+# Two types of a type trait, one type: their canonical spellings, without
+# qualifiers, the same
+sub types_compatible {
+    my @t = map { my $q = $_->{type}{desugaredQualType} // $_->{type}{qualType} // ''; $q =~ s/\b(const|volatile|restrict)\b//g; $q =~ s/\s+/ /g; trim($q) } @_;
+    $t[0] ne '' && $t[0] eq $t[1];
+}
 sub atomic_call {
     {
         my ($n, $a, $p, $o, @v) = @_;

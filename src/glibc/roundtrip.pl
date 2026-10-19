@@ -165,6 +165,11 @@ sub E {
         return "(cast $ck " . tcls($n) . ' ' . E($c) . ')';
     }
     return '(int ' . ($n->{value} // 0) . ' ' . tcls($n) . ')' if $k eq 'IntegerLiteral';
+    # (__builtin_types_compatible_p: the constant c2ff makes of it)
+    if ($k eq 'TypeTraitExpr') {
+        my @t = map { my $q = $_->{type}{desugaredQualType} // $_->{type}{qualType} // ''; $q =~ s/\b(const|volatile|restrict)\b//g; $q =~ s/\s+/ /g; $q =~ s/^ | $//g; $q } kids($n);
+        return '(int ' . (@t == 2 && $t[0] ne '' && $t[0] eq $t[1] ? 1 : 0) . ' ' . tcls($n) . ')';
+    }
     return '(int ' . $n->{value} . ' i32)' if $k eq 'CharacterLiteral';
     return '(flt ' . flt($n->{value}) . ')' if $k eq 'FloatingLiteral';
     return '(str ' . str($n->{value}) . ')' if $k eq 'StringLiteral';

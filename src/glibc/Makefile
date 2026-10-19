@@ -251,7 +251,17 @@ WEAKS_args := $(WEAKS_stdio)
 RUN_args := one two three
 RUNENV_args := FF_ARGS=hello
 
-MILESTONES := string stdlib ldouble malloc stdio floats args
+# gnuc: gcc's builtins and the GNU C forms beyond the other milestones
+# (progs/gnuc.c: float classification and quiet comparisons, fabs,
+# copysign, inf, nan, fma, sqrt, the overflow builtins, a pointer to an
+# array, and riscv64's asm statements with "f" and "i" operands), with
+# long double's soft-fp
+OBJS_gnuc := $(OBJS_ldouble)
+CFLAGS_gnuc := -fno-math-errno
+ASMS_gnuc :=
+ROOTS_gnuc := $(ROOTS_ldouble)
+
+MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 
 # glibc's own startup, on riscv64, for the program of every milestone:
 # start.S's _start (crt1.o's, with csu/static-reloc and csu/init) calls
@@ -387,7 +397,7 @@ CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
 $(FF)/%.ref: progs/%.c $(OBJ)/libc.a
 	mkdir -p $(FF)
-	$(CAP) timeout 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) -c $< -o $(FF)/$*.ref.o
+	$(CAP) timeout 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) $(CFLAGS_$*) -c $< -o $(FF)/$*.ref.o
 	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
 
