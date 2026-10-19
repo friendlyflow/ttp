@@ -122,7 +122,8 @@ else
 TTPC ?= ../../build/compiler/boot/stage2
 TTPC_RUN = qemu-riscv64 $(TTPC) --target $(GTARGET)
 endif
-SHARED := ../compiler/shared.ff
+# (and on x86_64 the forms GNU as picks, for glibc's asm: x86_64gnu.ff)
+SHARED := ../compiler/shared.ff $(if $(filter x86_64,$(GTARGET)),../compiler/x86_64gnu.ff)
 
 # Per target: the CPUs a check runs on (riscv64 with V and without), and
 # the flags of a test program. On x86_64 long double is the x87's, so the
