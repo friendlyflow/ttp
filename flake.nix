@@ -108,8 +108,9 @@
             gnumake
             qemu # qemu-system-riscv64 for `make os-test`, qemu-<arch> for the programs
             # src/compiler/gen/mkff.pl generates test.ff; c2ff.pl reads the ASTs
-            # of glibc with JSON::XS (80 times faster than core JSON::PP)
-            (perl.withPackages (p: [ p.JSONXS ]))
+            # of glibc with JSON::XS (80 times faster than core JSON::PP); the host
+            # tools are profiled with Devel::NYTProf (perl -d:NYTProf, nytprofhtml)
+            (perl.withPackages (p: [ p.JSONXS p.DevelNYTProf ]))
             fish
             # profiling and debugging ttpc where it runs natively (the host
             # builds): perf samples it, gdb looks inside
