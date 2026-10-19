@@ -1,0 +1,33 @@
+exit 0
+ok i64 *
+ok i64 * negative
+ok u64 *
+ok i64 /
+ok i64 / negative
+ok i64 / by negative
+ok i64 % negative
+ok i64 % by negative
+ok i64 / i64
+ok u64 / above 2^63
+ok u64 % above 2^63
+ok u64 / u64
+ok u64 % u64
+ok << 0
+ok u64 >> 0
+ok i64 >> 0
+ok << 1
+ok u64 >> 1
+ok i64 >> 1
+ok << 31
+ok u64 >> 31
+ok i64 >> 31
+ok << 32
+ok u64 >> 32
+ok i64 >> 32
+ok << 33
+ok u64 >> 33
+ok i64 >> 33
+ok << 63
+ok u64 >> 63
+ok i64 >> 63
+ok *= /= %= <<= >>=

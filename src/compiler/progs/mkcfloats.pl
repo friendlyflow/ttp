@@ -9,7 +9,7 @@
 #
 # What it checks: + - * / on float and double, the six comparisons (with
 # a NaN too), negation (of 0 as well: -0), infinities and NaN as results,
-# and cast: between float, double, long and u64, at the edges of rounding
+# and cast: between float, double, i64 and u64, at the edges of rounding
 # (2^63 and up for u64, the sticky bit). A NaN's bits and a conversion out
 # of range differ between targets (C leaves them open), so they are not
 # compared.
@@ -63,11 +63,11 @@ my @vars;      # [name, type, value nodes]
 my %var;
 sub var {
     my ($t, $v) = @_;
-    my $key = "$t " . ($t =~ /^(long|u64|u32)$/ ? $v : isnan($v) ? 'nan' : sprintf '%a', $v);
+    my $key = "$t " . ($t =~ /^(long|i64|u64|u32)$/ ? $v : isnan($v) ? 'nan' : sprintf '%a', $v);
     return $var{$key} if $var{$key};
-    my $name = ($t eq 'float' ? 'fv' : $t eq 'double' ? 'dv' : $t eq 'long' ? 'lv' : 'uv') . scalar @vars;
+    my $name = ($t eq 'float' ? 'fv' : $t eq 'double' ? 'dv' : $t =~ /^(long|i64)$/ ? 'lv' : 'uv') . scalar @vars;
     my @init;
-    if ($t eq 'long') { my $m = abs $v; $m = sprintf '%.0f', $m if $m =~ /e/i; @init = $v < 0 ? leaf('-', $m) : leaf($m) }
+    if ($t eq 'long' || $t eq 'i64') { my $m = abs $v; $m = sprintf '%.0f', $m if $m =~ /e/i; @init = $v < 0 ? leaf('-', $m) : leaf($m) }
     elsif ($t eq 'u64' || $t eq 'u32') { @init = node($t, leaf($v)) }
     elsif (isnan($v)) { @init = leaf('inf' . ($t eq 'float' ? 'f' : ''), '-', 'inf' . ($t eq 'float' ? 'f' : '')) }
     elsif ($v == inf()) { @init = leaf('inf' . ($t eq 'float' ? 'f' : '')) }
@@ -139,22 +139,22 @@ if ($w4) {
 } else {
 for my $v (1.5, -2.75, 1e18, -1e18, 0x1.fffffffffffffp+62) {
     my $w = int $v;
-    check(node('cast:', leaf('long', var('double', $v))), leaf('!=', var('long', $w)));
+    check(node('cast:', leaf('i64', var('double', $v))), leaf('!=', var('i64', $w)));
 }
 for my $v (1.5, 1e18, 0x1p+63, 0x1.8p+63, 0x1.fffffffffffffp+63) {
     my $w = sprintf '%.0f', int $v;
     check(node('cast:', leaf('u64', var('double', $v))), leaf('!='), node('u64', leaf($w)));
 }
 for my $v (f32(1.5), f32(-2.75), f32(1e18), f32(0x1p+63), f32(0x1.fffffep+63)) {
-    my ($t, $w) = $v < 0 ? ('long', int $v) : ('u64', sprintf '%.0f', int $v);
-    check(node('cast:', leaf($t, var('float', $v))), leaf('!='), $t eq 'u64' ? node('u64', leaf($w)) : leaf(var('long', $w)));
+    my ($t, $w) = $v < 0 ? ('i64', int $v) : ('u64', sprintf '%.0f', int $v);
+    check(node('cast:', leaf($t, var('float', $v))), leaf('!='), $t eq 'u64' ? node('u64', leaf($w)) : leaf(var('i64', $w)));
 }
 # long and u64 to double and float: rounding to nearest, ties to even
 my @lv = (3, -7, 9007199254740993, 9007199254740995, -4611686018427388929, 4611686018427388416, 16777217, -16777219);
 for my $v (@lv) {
     my $s = $v < 0 ? -1 : 1;
-    want_value('double', $s * u64_to(abs($v), 53), node('cast:', leaf('double', var('long', $v))));
-    want_value('float', $s * u64_to(abs($v), 24), node('cast:', leaf('float', var('long', $v))));
+    want_value('double', $s * u64_to(abs($v), 53), node('cast:', leaf('double', var('i64', $v))));
+    want_value('float', $s * u64_to(abs($v), 24), node('cast:', leaf('float', var('i64', $v))));
 }
 # u64 at 2^63 and up, where the top bit is set: the sticky bit decides
 for my $u ('9223372036854775808', '9223372586610589697', '9223372586610589696', '18446744073709551615',
@@ -207,7 +207,7 @@ for my $c (@checks) {
 }
 push @fns, [@body] if @body;
 my @out = (
-    node('comment', leaf("C's floating point checked against Perl's IEEE double, written by mkcfloats.pl: arithmetic, comparisons (a NaN too), negation, infinities, cast: between float, double, long and " . ($w4 ? "u32 (for a target of 4-byte words)" : "u64") . " at the edges of rounding.")),
+    node('comment', leaf("C's floating point checked against Perl's IEEE double, written by mkcfloats.pl: arithmetic, comparisons (a NaN too), negation, infinities, cast: between float, double, " . ($w4 ? "long and u32 (for a target of 4-byte words)" : "i64 and u64") . " at the edges of rounding.")),
     node('first:', leaf('long', '0')),
     node('bad:', leaf('void'), node('n:', leaf('long')),
         node('if', node(':', leaf('first', '==', '0')), leaf('first', '=', 'n'))),
