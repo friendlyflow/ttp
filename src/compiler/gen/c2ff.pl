@@ -297,6 +297,10 @@ while (@ARGV) {
 }
 die "usage: c2ff.pl [--page name | --program tree] [--target t] tu.json=tu.i ... -- root ...\n" unless @units && (@roots || $passonly);
 reserve_target($target) if $target ne 'riscv64';
+# arm is ILP32: an unsigned long is its 4-byte word, a u32 there
+$scalar{'unsigned long'} = 'u32' if $target eq 'arm';
+# and its va_list is the AAPCS's struct __va_list (a pointer), ttpc's va_list
+@scalar{'__va_list', 'struct __va_list'} = ('va_list', 'va_list') if $target eq 'arm';
 
 my %enumof;                 # each enum constant's enum, as a tag
 my $lastanon;               # the last anonymous record or enum at the top of a unit
@@ -1084,6 +1088,14 @@ sub expr {
     return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
     # the conversions C makes between integers and floating types, and
     # between those, are written out, as a cast is
+    # on arm, where a long long is a pair of registers and a word is not, the
+    # conversion of a narrower integer to it too (ttpc keeps a word's value in
+    # one register, without the high word a pair needs)
+    if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
+        my @to = ctype(qt($n));
+        my @from = ctype(qt((kids($n))[0]));
+        return cast_node(\@to, item(expr((kids($n))[0]))) if "@to" =~ /^[iu]64$/ && "@from" !~ /^[iu]64$/;
+    }
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/) {
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
