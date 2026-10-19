@@ -300,6 +300,10 @@ with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_s
 # from libgcc). c2ff translates what the roots reach of them.
 # (each C object's AST is c2ff's pass of it, all-units', not its JSON)
 UNITDEP_aarch64 := c2ff
+# (and a path from a value of several nodes under a cast:, for ttpc's
+# "unknown name" of a : path in a large function, until it is fixed)
+C2FFFLAGS_aarch64 := --path-cast
+C2FFFLAGS := $(C2FFFLAGS_$(GTARGET))
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
 LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
 LINKED := $(LINKED_$(GTARGET))
@@ -310,9 +314,12 @@ ASMS_crt := csu/start csu/crti
 ifneq ($(LINKED),)
 -include $(LINKED:%=$(FF)/%.objs.mk)
 endif
-objs_of = $(if $(filter $(2),$(LINKED)),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble))),$(call with_start,$(1),$(2)))
+# (elf/dl-debug-symbols.S only reserves _r_debug_extended, c2ff --zero's,
+# with _r_debug an alias of it: left out, as on riscv64)
+ASMS_skip := elf/dl-debug-symbols
+objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
 
-.PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.L.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
+.PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -328,23 +335,25 @@ $(I)/%.s: $(OBJ)/libc.a mki.pl
 # aarch64 (s2ff-aarch64.pl): the instructions are read from the object
 # alone, as GNU as made them (its macros, aliases, .inst words), and its
 # labels from the symbol table: the .s with its numeric labels named
-# (.L.s, s2ff-aarch64.pl --locals) is assembled with -L, which keeps local
+# (.Ls, s2ff-aarch64.pl --locals) is assembled with -L, which keeps local
 # labels, and dumped with its relocations and symbols. Its .text is the
 # same bytes as glibc's own object's (asm-check compares them too).
 S2FF_riscv64 := ../compiler/gen/s2ff.pl
 S2FF_aarch64 := ../compiler/gen/s2ff-aarch64.pl
 S2FF := $(S2FF_$(GTARGET))
-# the .s s2ff reads: riscv64 the .s itself, aarch64 the .L.s
-SL_aarch64 := .L
-SL := $(SL_$(GTARGET))
+# the file s2ff reads: riscv64 the .s itself, aarch64 the .Ls (not .L.s:
+# that would be an .s of an object x.L, which mki.pl would be asked for)
+SSRC_riscv64 := .s
+SSRC_aarch64 := .Ls
+SSRC := $(or $(SSRC_$(GTARGET)),.s)
 ASREF_riscv64 := -mno-relax
 ASREF_aarch64 := -Wa,-L
 DUMPFLAGS_aarch64 := -r -t
 
-$(I)/%.L.s: $(I)/%.s $(S2FF_aarch64)
+$(I)/%.Ls: $(I)/%.s $(S2FF_aarch64)
 	perl $(S2FF_aarch64) --locals $< > $@
 
-$(I)/%.dump $(I)/%.bin: $(I)/%$(SL).s
+$(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
 	$(CAP) timeout 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
 	$(XPRE)objdump -d $(DUMPFLAGS_$(GTARGET)) -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
@@ -373,12 +382,12 @@ OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
 $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl $$(S2FF)
 	mkdir -p $$(FF)
-	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
 	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
 	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_all_$(1)); do \
-	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SL).s $$(I)/csu/crtn.dump"; \
-	    $$(CAP) timeout 60 perl $$(S2FF) --items $$(I)/$$$$a$$(SL).s $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
+	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
+	    $$(CAP) timeout 60 perl $$(S2FF) --items $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
 	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
@@ -407,7 +416,7 @@ asm-check:
 # stand-in label (ASMTRAP) and where ttpc's code starts in its output
 # (ASMHDR, after the ELF and program headers). relmask.pl knows riscv64's
 # and aarch64's relocations; s2ff.pl reads riscv64's GNU as,
-# s2ff-aarch64.pl aarch64's (S2FF, from the .L.s: SL). On aarch64 the
+# s2ff-aarch64.pl aarch64's (S2FF, from the .Ls: SSRC). On aarch64 the
 # bytes start after the padding before the first label (s2ff-aarch64.pl
 # --skip: strncmp's nops), and the .s must make glibc's own object (the
 # same .text).
@@ -419,12 +428,12 @@ ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) ye
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
 $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
 	@a=$(I)/$*; \
-	{ perl $(S2FF) $$a$(SL).s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
+	{ perl $(S2FF) $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
 	$(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
-	size=$$(perl $(S2FF) --size $$a$(SL).s $$a.dump) || exit 1; \
-	skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $$a$(SL).s $$a.dump) || exit 1,0); \
+	size=$$(perl $(S2FF) --size $$a$(SSRC) $$a.dump) || exit 1; \
+	skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $$a$(SSRC) $$a.dump) || exit 1,0); \
 	$(if $(filter aarch64,$(GTARGET)),$(XPRE)objcopy -O binary -j .text $(OBJ)/$*.o $$a.glibc.bin && \
 	    cmp -s $$a.glibc.bin $$a.bin || { echo "asm-check: $*: the .s does not make glibc's object"; exit 1; };) \
 	$(XPRE)objdump -r $$a.ref.o > $$a.relocs; \
@@ -476,7 +485,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
@@ -588,7 +597,7 @@ all-units: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 # it takes from other objects are left out (c2ff says so). A count of the
 # objects done and the reasons of the others, most first.
 $(I)/%.one: $(I)/%.c2ff ../compiler/gen/c2ff.pl
-	@s=0; $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(I)/$*.json=$(I)/$*.i \
+	@s=0; $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) $(I)/$*.json=$(I)/$*.i \
 	    -- $$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }') > $(I)/$*.one.ff.txt 2> $(I)/$*.one.err || s=$$?; \
 	echo $$s > $@
 

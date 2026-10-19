@@ -30,6 +30,8 @@
 # With --program, what the roots reach is a program: its definitions on the
 # page itself, after include / tree (glibc in ff, which has the rest, its
 # startup too: start.S's _start, which calls __libc_start_main with main).
+# --path-cast (aarch64, until ttpc's fix): a path from a value of several
+# nodes, ((struct pthread *) tp - 1)->tid, is under a cast: to its own type.
 # With --start, for a target whose glibc in ff has no startup of its own
 # yet, the program has a _start that exits with what main returns.
 #
@@ -281,6 +283,7 @@ sub ast_of {
 my $page = 'glibc';
 my $program;
 my $start;                 # --start: a _start of the program's own, SYS_exit (main ())
+my $path_cast;              # --path-cast: a path from a value of several nodes under a cast: (see expr)
 my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, in .bss)
 my %forceweak;             # --weak name: nothing defines it for a static program
 my (@units, @roots);
@@ -290,6 +293,7 @@ while (@ARGV) {
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--program') { $program = shift @ARGV; next }
     if ($a eq '--start') { $start = 1; next }
+    if ($a eq '--path-cast') { $path_cast = 1; next }
     if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
     if ($a eq '--target') { $target = shift @ARGV; next }
@@ -1233,10 +1237,11 @@ sub expr {
         # a path from an expression: after a . among the base node's children
         if (@path && $base != $n) {
             my @b = expr($base);
-            # (a value of several nodes, x - 1, is a : of them under a cast:
-            # to its own type, the form of a path from a cast: aarch64's
-            # THREAD_SELF, ((struct pthread *) tp - 1)->tid)
-            @b = cast_node([ctype(qt($base))], node(':', @b)) if @b > 1;
+            # (a value of several nodes, x - 1, is a : of them: aarch64's
+            # THREAD_SELF, ((struct pthread *) tp - 1)->tid; with --path-cast
+            # under a cast: to its own type, the form of a path from a cast,
+            # for ttpc's "unknown name" of a : path in a large function)
+            @b = $path_cast ? cast_node([ctype(qt($base))], node(':', @b)) : node(':', @b) if @b > 1;
             push @{ $b[0]{children} }, node('.'), @path;
             return @b;
         }

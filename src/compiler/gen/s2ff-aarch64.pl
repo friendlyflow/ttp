@@ -10,16 +10,16 @@
 #   perl s2ff-aarch64.pl --items file.s file.dump    its functions alone
 #   perl s2ff-aarch64.pl --size file.s file.dump     the bytes of those instructions
 #   perl s2ff-aarch64.pl --skip file.s file.dump     the bytes of padding before them
-#   perl s2ff-aarch64.pl crti.L.s crti.dump --then crtn.L.s crtn.dump
+#   perl s2ff-aarch64.pl crti.Ls crti.dump --then crtn.Ls crtn.dump
 #                        crti's functions, its _init and _fini ended by
 #                        crtn's .init and .fini, as the linker joins them
-#   perl s2ff-aarch64.pl --locals file.s > file.L.s  numeric labels named
+#   perl s2ff-aarch64.pl --locals file.s > file.Ls  numeric labels named
 #
 # GNU as's macros (.macro, .if, .rept), its aliases (mov, cmp, lsl, ...,
 # which name other instructions) and .inst words are as GNU as made them:
 # the instructions are read from what it made of the file, file.dump, by
 # objdump -d -r -t -M no-aliases of the object assembled with -L (local
-# labels kept in the symbol table) from file.L.s, the .s whose numeric
+# labels kept in the symbol table) from file.Ls, the .s whose numeric
 # labels (1:, 1f, 1b) --locals has named .L1__1, .L1__2, ... (the ff's
 # .L1 1, .L1 2, as s2ff.pl has them). Each instruction word is decoded by
 # the instructions of ttpc's aarch64 section itself: the one whose fixed
@@ -363,7 +363,7 @@ for my $m (@made) {
     emit($m);
 }
 finish();
-# crtn's .init and .fini (--then crtn.L.s crtn.dump): the end of crti's
+# crtn's .init and .fini (--then crtn.Ls crtn.dump): the end of crti's
 # _init and _fini, the functions of those sections there, as the linker
 # puts crtn's after crti's
 if (@then) {
