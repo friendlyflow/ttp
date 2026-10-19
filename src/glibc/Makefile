@@ -638,7 +638,7 @@ $(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET)
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
 	echo 'glibc asm:' >> $(FF)/glibc.ff.txt
 	for a in $(ALL_ASM); do \
-	    $(CAP) timeout 60 perl ../compiler/gen/s2ff.pl --items $(I)/$$a.s $(I)/$$a.dump > $(FF)/glibc.asm.txt || exit 1; \
+	    $(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $(I)/$$a.s $(I)/$$a.dump > $(FF)/glibc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.ff.txt; \
 	done
 	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt >> $(FF)/glibc.ff.txt
