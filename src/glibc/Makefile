@@ -352,7 +352,7 @@ ASMHDR_riscv64 := 120
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
 $(I)/%.asmok: $(I)/%.dump $(I)/%.bin ../compiler/gen/s2ff.pl $(TTPC)
-	@a=$(I)/$*; \
+	@rm -f $@; a=$(I)/$*; \
 	{ perl ../compiler/gen/s2ff.pl $$a.s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
@@ -490,9 +490,13 @@ all-units: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 # it cannot yet ($(I)/x.one.err, its last line c2ff's message); the names
 # it takes from other objects are left out (c2ff says so). A count of the
 # objects done and the reasons of the others, most first.
+# An object that defines nothing (riscv64's dirent/readdir.o: readdir64's
+# object defines readdir too) has nothing to translate.
 $(I)/%.one: $(I)/%.c2ff ../compiler/gen/c2ff.pl
-	@s=0; $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(I)/$*.json=$(I)/$*.i \
-	    -- $$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }') > $(I)/$*.one.ff.txt 2> $(I)/$*.one.err || s=$$?; \
+	@roots=$$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }'); s=0; \
+	if test -z "$$roots"; then echo "all-survey: $*: defines nothing" > $(I)/$*.one.err; : > $(I)/$*.one.ff.txt; \
+	else $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(I)/$*.json=$(I)/$*.i \
+	    -- $$roots > $(I)/$*.one.ff.txt 2> $(I)/$*.one.err || s=$$?; fi; \
 	echo $$s > $@
 
 all-survey: $(ALL_C:%=$(I)/%.one)
@@ -509,3 +513,26 @@ all-asm:
 	echo "all-asm: $$ok of $$n asm objects byte for byte (make's output in $(I)/all-asm.log)"
 .PHONY: all-asm
 
+# All of glibc in ff (glibc.ff, and the folder glibc/ a program includes):
+# c2ff's of every C object, from every name the objects define (nm) and
+# what the asm objects name from elsewhere, then s2ff's of every asm
+# object, then the builtins and libatomic's functions, as a milestone's.
+# The roots are in $(FF)/glibc.roots, one per line.
+ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start)
+WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start)
+$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
+	mkdir -p $(FF)
+	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
+	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; } | sort -u > $@
+
+$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+	$(SLOT) -t 3600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
+	    $(foreach o,$(ALL_C),$(I)/$(o).json=$(I)/$(o).i) -- $$(cat $(FF)/glibc.roots) > $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
+	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
+	echo 'glibc asm:' >> $(FF)/glibc.ff.txt
+	for a in $(ALL_ASM); do \
+	    $(CAP) timeout 60 perl ../compiler/gen/s2ff.pl --items $(I)/$$a.s $(I)/$$a.dump > $(FF)/glibc.asm.txt || exit 1; \
+	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.ff.txt; \
+	done
+	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt >> $(FF)/glibc.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@

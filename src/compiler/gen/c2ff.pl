@@ -1273,7 +1273,7 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|thread_pointer)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;

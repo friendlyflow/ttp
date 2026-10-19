@@ -900,6 +900,31 @@ builtins:
       <
       a
   comment
+    __builtin_mul_overflow_p as glibc uses it (gnulib's hash.c, with a ptrdiff_t 1 as its third): whether the product of two sizes is past what a long holds.
+  __builtin_mul_overflow_p:
+    int
+    a:
+      u64
+    b:
+      u64
+    c:
+      long
+    if
+      :
+        b
+        ==
+        0
+      return
+        0
+    return
+      a
+      >
+      :
+        u64
+          9223372036854775807
+        /
+        b
+  comment
     gcc's type-generic __builtin_isnan, __builtin_isinf_sign and __builtin_signbit, one function for each type (c2ff names them so), from the bits: IEEE binary64, and binary128 for long double (its high word second).
     NaN is the highest exponent with a fraction, an infinity that exponent without one (isinf_sign: 1 or -1, by the sign), signbit the top bit.
   __builtin_isnan double:
@@ -1214,6 +1239,23 @@ builtins:
             f
             +
             1
+  comment
+    gcc's __builtin_frame_address level: the frame of the function that calls it (level 0, all glibc asks: ____longjmp_chk's check that a longjmp goes up the stack), its s0 in ttpc's frame on riscv64.
+    This builtin's own frame is one more: the word at its s0 is the s0 of the function that calls it.
+  __builtin_frame_address:
+    address
+    void
+    level:
+      u32
+    return
+      cast:
+        address
+        void
+        content
+          cast:
+            address
+            u64
+            s0
   comment
     gcc's __builtin_extract_return_addr: the address itself, which riscv64 keeps as it is.
   __builtin_extract_return_addr:
