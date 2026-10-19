@@ -113,6 +113,8 @@ patch:
 # PCJOBS steps (6) wait for at most the machine's three slots.
 #   GBUILD   riscv64's glibc BUILD (the others' are GBUILD/<target>), else
 #            src/glibc's own default
+#   PC_STEPS some of the steps only (with what they need first), e.g.
+#            make ports-check PC_STEPS="compiler-check floats-roundtrip"
 CHECKLOG ?= $(HOME)/.cache/ttp/check/$(notdir $(CURDIR))
 PCJOBS ?= 6
 GBUILD ?=
@@ -125,14 +127,14 @@ PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-che
 # with its time and how much of it its commands waited for a slot
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
 	w=$$(awk '{ w += $$1 } END { print w + 0 }' $(CHECKLOG)/$(1).slots 2> /dev/null || echo 0); \
-	echo "$$r $(1) $$(( $$(date +%s) - s )) s ($$w s waiting for slots)$$(test $$r = PASS || echo " log $(CHECKLOG)/$(1).log")" | tee $(CHECKLOG)/$(1).result
+	echo "$$r $(1) $$(( $$(date +%s) - s )) s ($$w s in slot queues)$$(test $$r = PASS || echo " log $(CHECKLOG)/$(1).log")" | tee $(CHECKLOG)/$(1).result
 
 ports-check:
 	@rm -rf $(CHECKLOG) && mkdir -p $(CHECKLOG)
 	@s=$$(date +%s); $(MAKE) --no-print-directory -j$(PCJOBS) $(PC_STEPS:%=pc-%); \
 	echo "ports-check: $$(( $$(date +%s) - s )) s, logs in $(CHECKLOG)"; \
-	for t in $(PC_STEPS); do cat $(CHECKLOG)/$$t.result 2> /dev/null || echo "SKIP $$t"; done; \
-	! grep -qv '^PASS' $(CHECKLOG)/*.result && test $$(ls $(CHECKLOG)/*.result | wc -l) -eq $(words $(PC_STEPS))
+	ok=1; for t in $(PC_STEPS); do cat $(CHECKLOG)/$$t.result 2> /dev/null || echo "SKIP $$t"; grep -qs '^PASS' $(CHECKLOG)/$$t.result || ok=; done; \
+	test -n "$$ok"
 
 pc-bootstrap:
 	$(call pc_step,bootstrap,$(PC_SLOT) $(MAKE) -j1 bootstrap)
