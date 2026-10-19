@@ -74,6 +74,9 @@ my %scalar = (
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
     '_Bool' => 'u8', 'void' => 'void',
     '__builtin_va_list' => 'va_list',
+    # C's complex types: the shared page's (real / z and imag / z its parts)
+    '_Complex float' => 'complex float', '_Complex double' => 'complex double', '_Complex long double' => 'complex long double',
+    'float _Complex' => 'complex float', 'double _Complex' => 'complex double', 'long double _Complex' => 'complex long double',
 );
 
 # The words a type run can be made of, besides the names of types.
@@ -111,6 +114,9 @@ sub ctype {
     if ($t =~ /^(.*?)\s*\(\*\s*\[(\d*)\]\)\s*\((.*)\)$/) {
         return ('array', 'address', fntype($1, $3), $2 eq '' ? 0 : $2);
     }
+    # a pointer to an array, T (*)[n]: what an array of arrays parameter
+    # is (libm's const double c[][2])
+    return ('address', ctype("$1$2")) if $t =~ /^(.*?)\s*\(\*\)\s*((?:\[\d+\])+)$/;
     if ($t =~ /^(.*?)\s*\[(\d*)\]((?:\[\d+\])*)$/) {
         # T[] (a flexible array member, an extern array) has no elements of
         # its own: 0
@@ -235,7 +241,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len zero ra sp gp tp fp pc
+    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -244,7 +250,7 @@ my $target = 'riscv64';
 sub reserve_target {
     my ($t) = @_;
     open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "c2ff: cannot open shared.ff: $!\n";
-    my ($shared) = @{ read_ff(do { local $/; <$h> })->{children} };
+    my ($shared) = grep { $_->{content} eq "shared:" } @{ read_ff(do { local $/; <$h> })->{children} };
     my ($sec) = grep { $_->{content} eq "$t:" } @{ $shared->{children} } or die "c2ff: $t is not a target\n";
     my ($regs) = grep { $_->{content} eq 'registers:' } @{ $sec->{children} } or die "c2ff: $t has no registers\n";
     delete $reserved{$_} for grep { /^(?:x|a|s|t|f|fa|fs|ft)\d+$|^(?:zero|ra|sp|gp|tp|fp|pc)$/ } keys %reserved;
@@ -803,7 +809,7 @@ sub softfp {
                 : '__fix' . (unsigned_t($n) ? 'uns' : '') . 'tfdi');
         }
     } elsif ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean' && isld((kids($n))[0])) {
-        want($_) for '__netf2', '__extenddftf2';
+        want('__netf2');
     }
 }
 
@@ -819,10 +825,20 @@ sub softfp {
 my %asmfn;
 # one asm function per name: two statements that would share one stop
 my %asmsig;
-sub asm_once { my ($name, $sig, $n) = @_; stop("two asm statements named $name", $n) if ($asmsig{$name} //= $sig) ne $sig }
+# An asm statement's function, by its name: two statements whose names
+# meet but whose text differs ("" : "+m" and "" : "=m", libm's math_opt_barrier
+# and its kin) get names of their own, the second the name with a few hex
+# digits of its text's hash.
+sub asm_once {
+    my ($name, $sig, $n) = @_;
+    return $name if ($asmsig{$name} //= $sig) eq $sig;
+    my $h = substr(Digest::SHA::sha1_hex($sig), 0, 6);
+    ($asmsig{"${name}_$h"} //= $sig) eq $sig or stop("two asm statements named ${name}_$h", $n);
+    "${name}_$h";
+}
 # the overflow builtins builtins.ff.txt has, by name and operand types
-my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long';
-$ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32';
+my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
+$ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int';
 $ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 sub asm_ins {
@@ -835,6 +851,25 @@ sub asm_ins {
     return node('csrrw', node(1), node($a[0]), node('zero')) if $op eq 'fsflags' && @a == 1;
     return node('csrrs', node($csr->($a[1])), node('zero'), node($a[0])) if $op eq 'csrr' && @a == 2;
     return node("csrr$1", node($csr->($a[0])), node($a[1]), node('zero')) if $op =~ /^csr([wsc])$/ && @a == 2;
+    # the whole fcsr: frsr rd, fssr rs (fenv's)
+    return node('csrrs', node(3), node('zero'), node($a[0])) if $op eq 'frsr' && @a == 1;
+    return node('csrrw', node(3), node($a[0]), node('zero')) if $op eq 'fssr' && @a == 1;
+    # csrrw/csrrs/csrrc rd, csr, rs; of an immediate csrrwi ... as GNU as
+    # takes it (feholdexcept's csrrc of the flags it clears)
+    if ($op =~ /^csrr[wsc]$/ && @a == 3) {
+        return node("${op}i", node($csr->($a[1])), node($a[2]), node($a[0])) if $a[2] =~ /^\d+$/;
+        return node($op, node($csr->($a[1])), node($a[2]), node($a[0]));
+    }
+    # the float instructions of libm's asm: fclass, fmin and fmax, and the
+    # conversions, a rounding mode after their source (dyn, 7, where none is
+    # given, as GNU as takes it)
+    my %rm = (rne => 0, rtz => 1, rdn => 2, rup => 3, rmm => 4, dyn => 7);
+    return node($op, node($a[1]), node($a[0])) if $op =~ /^fclass\.[sd]$/ && @a == 2;
+    return node($op, node($a[2]), node($a[1]), node($a[0])) if $op =~ /^f(?:min|max)\.[sd]$/ && @a == 3;
+    if ($op =~ /^fcvt\.(?:[wl]u?\.[sd]|[sd]\.[wl]u?)$/ && (@a == 2 || @a == 3)) {
+        my $m = @a == 3 ? $rm{ $a[2] } // stop("the rounding mode $a[2]", $n) : 7;
+        return node($op, node($a[1]), node($m), node($a[0]));
+    }
     # lr, sc and the AMOs, their .aq and .rl the bits before the registers
     if ($op =~ /^(lr|sc|amo(?:swap|add|xor|and|or|min|max|minu|maxu))\.([wd])((?:\.aq|\.rl|\.aqrl)*)$/) {
         # (the parts kept first: a match on one of them sets $1 ... anew)
@@ -886,11 +921,33 @@ sub asm_stmt {
     my @oc = @$ocr;
     my @ic = @$icr;
     my @ops = @$opsr;
-    my (@arg, @text, $ret);
+    my (@arg, @text, $ret, $fret, @fmv);
+    # a float operand's width, s or d
+    my $fw = sub { my ($o) = @_; my $t = tword($o); $t eq 'float' ? 's' : $t eq 'double' ? 'd' : stop("an asm operand \"f\" of type " . qt($o), $n) };
     for my $i (0 .. $#ops) {
         my $c = $i < @oc ? $oc[$i] : $ic[$i - @oc];
         (my $k = $c) =~ s/[=+&]//g;
-        if ($k =~ /^[rJK]+$/ && $i < @oc) {
+        if ($k eq 'f' && $i < @oc && $c !~ /\+/) {
+            # a float register output (libm's fcvt.d.l, fmin.d): ft0, its bits
+            # the asm function's value, which C puts in the operand's own bits
+            stop('an asm statement with two register outputs', $n) if defined $ret;
+            $ret = $i;
+            $fret = $fw->($ops[$i]);
+            push @text, 'ft0';
+        } elsif ($k eq 'f' && $i >= @oc) {
+            # a float register input: its bits come as an argument, and go
+            # into a float register of their own (ft1 ...) first
+            push @arg, [$i, 'value'];
+            my $r = 'ft' . (@fmv + 1);
+            push @fmv, node('fmv.' . ($fw->($ops[$i]) eq 's' ? 'w' : 'd') . '.x', node('a' . $#arg), node($r));
+            push @text, $r;
+        } elsif ($k eq 'i' && $i >= @oc) {
+            # an immediate: its value, worked out (an integer constant
+            # expression: feholdexcept's flags or'ed together)
+            my $v = int_const($ops[$i]);
+            defined $v or stop('an asm operand "i" that is no constant', $n);
+            push @text, $v;
+        } elsif ($k =~ /^[rJK]+$/ && $i < @oc) {
             # the register output
             stop('an asm statement with two register outputs', $n) if defined $ret;
             $ret = $i;
@@ -915,15 +972,19 @@ sub asm_stmt {
     my @code;
     # a +r output: its value from its argument
     for my $j (0 .. $#arg) { push @code, node('mv', node("a$j"), node('t0')) if $arg[$j][2] }
+    push @code, @fmv;
     push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
+    push @code, node('fmv.x.' . ($fret eq 's' ? 'w' : 'd'), node('ft0'), node('t0')) if $fret;
     push @code, node('mv', node('t0'), node('a0')) if defined $ret;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
     $name .= '_' . join '', map { (my $k = $_) =~ s/[^A-Za-z0-9]//g; $k } @oc, '_', @ic;
-    asm_once($name, "$template : @oc : @ic", $n);
+    $name = asm_once($name, "$template : @oc : @ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
     my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops[$i])) : atom($ops[$i]) } @arg;
     my $call = @args ? node($name, @args) : node($name);
+    # (a float output: the value's bits are the operand's, *(u64 *) &x = ...)
+    return (node('content', cast_node(['address', $fret eq 's' ? 'u32' : 'u64'], node('address', atom($ops[$ret])))), node('='), $call) if $fret;
     return defined $ret ? (item(expr($ops[$ret])), node('='), $call) : $call;
 }
 
@@ -1061,7 +1122,7 @@ sub asm_stmt_other {
     push @code, @after;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
     $name .= '_' . join('', map { s/[^A-Za-z0-9]//gr } @$oc) . '_' . join('', map { s/[^A-Za-z0-9]//gr } @$ic);
-    asm_once($name, "$template : @$oc : @$ic", $n);
+    $name = asm_once($name, "$template : @$oc : @$ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
     my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
@@ -1094,7 +1155,7 @@ sub expr {
     # double, converts
     if ($k =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($n->{castKind} // '') =~ /^(Integral|Pointer|Floating)ToBoolean$/) {
         my ($e) = kids($n);
-        my $zero = $1 eq 'Floating' ? hexfloat(0, isld($e) ? 'double' : qt($e)) : 0;
+        my $zero = $1 ne 'Floating' ? 0 : isld($e) ? ldhexfloat('0') : hexfloat(0, qt($e));
         return node(':', operand($e, $prec{'!='}, 0), node('!='), node($zero));
     }
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
@@ -1106,13 +1167,17 @@ sub expr {
         return @t == 1 && $t[0] ne 'int' ? node($t[0], node($n->{value})) : node($n->{value});
     }
     return node($n->{value}) if $k eq 'CharacterLiteral';
-    if ($k eq 'FloatingLiteral' && isld($n)) {
-        # a long double literal that a double holds exactly: that double, cast
-        my $v = 0 + $n->{value};
-        sprintf('%.17g', $v) eq $n->{value} || $v == 0 && $n->{value} =~ /^0(\.0*)?$/ or stop("the long double literal $n->{value}", $n);
-        want('__extenddftf2');
-        return node('cast:', node('long double'), node(hexfloat($v, 'double')));
+    # GNU C's __builtin_types_compatible_p (strfromd's float or double): a
+    # constant, 1 where the two types are one (their qualifiers aside), as
+    # gcc answers it
+    if ($k eq 'TypeTraitExpr') {
+        my @t = kids($n);
+        @t == 2 && ($n->{type}{qualType} // '') eq 'int' or stop('TypeTraitExpr', $n);
+        return node(types_compatible(@t) ? 1 : 0);
     }
+    # a long double literal: its exact hex float, with C's L (binary128,
+    # rounded from clang's decimal as C rounds it)
+    return node(ldhexfloat($n->{value})) if $k eq 'FloatingLiteral' && isld($n);
     return node(hexfloat($n->{value}, qt($n))) if $k eq 'FloatingLiteral';
     return wide_text($n) if $k eq 'StringLiteral' && $n->{value} =~ /^(L|u|U)"/;
     return string_value($n) if $k eq 'StringLiteral';
@@ -1178,6 +1243,9 @@ sub expr {
         return $n->{isPostfix} ? (atom($e), node($op)) : (node($op), atom($e)) if $op eq '++' || $op eq '--';
         return expr($e) if $op eq '+';
         return expr($e) if $op eq '__extension__';     # only quiets gcc's -pedantic
+        # a complex value's parts: real / z, imag / z
+        return node('real', item(expr($e))) if $op eq '__real';
+        return node('imag', item(expr($e))) if $op eq '__imag';
         stop("the operator $op", $n);
     }
     if ($k eq 'CStyleCastExpr') {
@@ -1282,10 +1350,12 @@ sub expr {
         }
         # gcc's type-generic float classification, in builtins.ff.txt, one
         # function for each floating type (printf_fp has double and long double)
-        if ($name =~ /^__builtin_(isnan|isinf_sign|signbit)$/) {
-            my $t = tword_int($args[0]);
-            $t =~ /^(double|long double)$/ or stop("$name on $t", $n);
-            return node("$name $t", item(expr($args[0])));
+        # (and C's classification and quiet comparisons, a function for each
+        # of the three types; fpclassify's type is its last argument's)
+        if ($name =~ /^__builtin_(isnan|isinf_sign|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
+            my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
+            $t =~ /^(float|double|long double)$/ or stop("$name on $t", $n);
+            return node("$name $t", map { item(expr($_)) } @args);
         }
         # C's va_ words, as clang has them
         return node('va_start', item(expr($args[0]))) if $name eq '__builtin_va_start' || $name eq '__builtin_c23_va_start';
@@ -1295,7 +1365,7 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|thread_pointer|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
@@ -1372,6 +1442,36 @@ sub expr {
 }
 
 # The call of libatomic's function for an atomic builtin
+# The value of an integer constant expression (literals, parentheses, casts,
+# + - * & | ^ << >> ~ and unary -), or undef.
+sub int_const {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    return $n->{value} if $k =~ /^(IntegerLiteral|ConstantExpr)$/ && defined $n->{value} && $n->{value} =~ /^-?\d+$/;
+    return int_const((kids($n))[0]) if $k =~ /^(ParenExpr|ImplicitCastExpr|CStyleCastExpr|ConstantExpr)$/;
+    if ($k eq 'UnaryOperator') {
+        my $v = int_const((kids($n))[0]) // return;
+        $v += 0;
+        return $n->{opcode} eq '-' ? -$v : $n->{opcode} eq '~' ? ~$v : $n->{opcode} eq '+' ? $v : undef;
+    }
+    if ($k eq 'BinaryOperator') {
+        # (as numbers: | on two strings, as JSON has them, is a string's)
+        my ($a, $b) = map { int_const($_) } kids($n);
+        return unless defined $a && defined $b;
+        ($a, $b) = ($a + 0, $b + 0);
+        use integer;
+        my $o = $n->{opcode};
+        return $o eq '|' ? $a | $b : $o eq '&' ? $a & $b : $o eq '^' ? $a ^ $b : $o eq '+' ? $a + $b : $o eq '-' ? $a - $b
+            : $o eq '*' ? $a * $b : $o eq '<<' ? $a << $b : $o eq '>>' ? $a >> $b : undef;
+    }
+    undef;
+}
+# Two types of a type trait, one type: their canonical spellings, without
+# qualifiers, the same
+sub types_compatible {
+    my @t = map { my $q = $_->{type}{desugaredQualType} // $_->{type}{qualType} // ''; $q =~ s/\b(const|volatile|restrict)\b//g; $q =~ s/\s+/ /g; trim($q) } @_;
+    $t[0] ne '' && $t[0] eq $t[1];
+}
 sub atomic_call {
     {
         my ($n, $a, $p, $o, @v) = @_;
@@ -1413,6 +1513,73 @@ sub hexfloat {
     my ($lead, $exp) = $e == 0 ? (0, 1 - $bias) : (1, $e - $bias);
     return "0x0p+0$suffix" if $e == 0 && $f == 0;
     sprintf "0x%d%sp%+d%s", $lead, ($hex eq '' ? '' : ".$hex"), $exp, $suffix;
+}
+# A long double literal from clang's decimal: binary128's exact hex float,
+# 0x1.<28 hex digits at most>p<e>L (a subnormal 0x0.<digits>p-16382L, zero
+# 0x0p+0L), the nearest value, ties to even, as C rounds a literal.
+use Math::BigInt;
+sub ldhexfloat {
+    my ($s) = @_;
+    # (where long double is double, arm's EABI: the double nearest, written
+    # as the same hex float, which binary128 holds exactly)
+    if ($target eq 'arm') {
+        my $d = ldround($s, 53, -1074, 1023);
+        return defined $d ? $d : die "c2ff: a long double literal past a double: $s\n";
+    }
+    ldround($s, 113, -16494, 16383) // die "c2ff: a long double literal past the largest: $s\n";
+}
+# The decimal $s to the nearest number of $p bits (ties to even), its
+# exponent no lower than $emin (the subnormals) and its top bit's no higher
+# than $emax, as binary128's exact hex float with L; undef past $emax.
+sub ldround {
+    my ($s, $p, $emin, $emax) = @_;
+    $s =~ /^([0-9]*)(?:\.([0-9]*))?(?:[eE]([-+]?[0-9]+))?$/ or die "c2ff: a long double literal that is no decimal: $s\n";
+    my ($i, $f, $e) = ($1, $2 // '', $3 // 0);
+    my $m = Math::BigInt->new(($i . $f) =~ s/^0+(?=.)//r);
+    my $e10 = $e - length $f;
+    return '0x0p+0L' if $m->is_zero;
+    my ($n, $d) = $e10 >= 0 ? ($m * Math::BigInt->new(10)->bpow($e10), Math::BigInt->new(1)) : ($m, Math::BigInt->new(10)->bpow(-$e10));
+    my $bits = sub { length($_[0]->as_bin) - 2 };
+    # e2: value / 2^e2 in [2^(p-1), 2^p)
+    my $e2 = $bits->($n) - $bits->($d) - $p;
+    my $q;
+    my $div = sub {
+        my ($e2) = @_;
+        my ($nn, $dd) = ($n->copy, $d->copy);
+        if ($e2 >= 0) { $dd->blsft($e2) } else { $nn->blsft(-$e2) }
+        my ($qq, $r) = $nn->copy->bdiv($dd);
+        # round to nearest, ties to even
+        my $c = ($r * 2)->bcmp($dd);
+        $qq->binc if $c > 0 || ($c == 0 && $qq->is_odd);
+        $qq;
+    };
+    my $top = Math::BigInt->new(2)->bpow($p - 1);
+    my $over = Math::BigInt->new(2)->bpow($p);
+    $e2++ while ($div->($e2))->bcmp($over) >= 0;
+    $e2-- while ($div->($e2))->bcmp($top) < 0 && $e2 > $emin;
+    $e2 = $emin if $e2 < $emin;
+    $q = $div->($e2);
+    if ($q->bcmp($over) >= 0) { $e2++; $q = $div->($e2) }
+    return '0x0p+0L' if $q->is_zero;
+    # q * 2^e2, as binary128 writes it: its top bit the leading 1, or, below
+    # binary128's normal range, a subnormal 0x0.<digits>p-16382
+    my $lead = length($q->as_bin) - 3;
+    my $exp = $e2 + $lead;
+    return undef if $exp > $emax;
+    my $g = $q->copy;
+    if ($exp >= -16382) {
+        $g->bsub(Math::BigInt->new(2)->bpow($lead));
+        $g->blsft(112 - $lead);
+        my $hex = substr($g->as_hex, 2);
+        $hex = ('0' x (28 - length $hex)) . $hex;
+        $hex =~ s/0+$//;
+        return sprintf "0x1%sp%+dL", ($hex eq '0' || $hex eq '' ? '' : ".$hex"), $exp;
+    }
+    $g->blsft($e2 + 16494);
+    my $hex = substr($g->as_hex, 2);
+    $hex = ('0' x (28 - length $hex)) . $hex;
+    $hex =~ s/0+$//;
+    sprintf "0x0.%sp-16382L", $hex;
 }
 sub fail_float { die "c2ff: a constant with no hex form: $_[0]\n" }
 

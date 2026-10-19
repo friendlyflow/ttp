@@ -13,7 +13,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../../gen";
-use FF qw(node write_ff);
+use FF qw(node ttp_license write_ff);
 
 my $dir = $FindBin::Bin;
 my @rows;       # [ff name, [ff operands], gnu line]
@@ -68,7 +68,7 @@ row('csrr', [0xc22, 't0'], 'csrr t0, vlenb');
 my $ff = node('_start:', node('comment', node('Every vector instruction of the riscv64 section, unmasked and under v0.t, with its GNU twin rvv.s (written by mkrvv.pl).')),
     map { my ($n, $ops) = @$_; node($n, map { node($_) } @$ops) } @rows);
 open my $h, '>:raw', "$dir/rvv.ff" or die "mkrvv: rvv.ff: $!\n";
-print $h write_ff(node('', $ff));
+print $h write_ff(node('', ttp_license(), $ff));
 close $h;
 open $h, '>', "$dir/rvv.s" or die "mkrvv: rvv.s: $!\n";
 print $h "# The GNU twin of rvv.ff (written by mkrvv.pl).\n\t.option norvc\n\t.text\n\t.globl _start\n_start:\n";

@@ -1,3 +1,8 @@
+license
+  GPL-3.0-only
+  Copyright (C) 2026 Nico Verrijdt
+  This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+  It comes with no warranty. See the file LICENSE for the full text.
 comment
   The shared page: what every target has (the data words, bits, rel), the targets as sections, and the choice of one of them by --target. Operands go in the reverse order of GNU as, the destination last, as in the instructions.
   Every name ttpc takes by itself, the builtins of asm and the words of C, declared like any function so that each is defined before it is called. ttpc takes these calls itself: the declarations are never run.
@@ -403,6 +408,38 @@ comment
   long double value: C, a 16-byte floating point number (IEEE quad, as on riscv64).
 long double:
   value
+comment
+  complex float: C's complex type of float parts, 8 bytes: its real part, then its imaginary part, each a float; real / z and imag / z are its parts.
+complex float:
+  struct
+  real part:
+    float
+  imag part:
+    float
+comment
+  complex double: C's complex type of double parts, 16 bytes: its real part, then its imaginary part, each a double; real / z and imag / z are its parts.
+complex double:
+  struct
+  real part:
+    double
+  imag part:
+    double
+comment
+  complex long double: C's complex type of long double parts, 32 bytes: its real part, then its imaginary part, each a long double; real / z and imag / z are its parts.
+complex long double:
+  struct
+  real part:
+    long double
+  imag part:
+    long double
+comment
+  real z: C, the real part of z, a complex value (C's __real__ z); also on the left of =.
+real:
+  z
+comment
+  imag z: C, the imaginary part of z, a complex value (C's __imag__ z); also on the left of =.
+imag:
+  z
 comment
   void: C, no value, the type of a function that returns none.
 void:

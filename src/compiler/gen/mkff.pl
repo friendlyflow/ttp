@@ -32,7 +32,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use FF qw(node write_ff read_txt);
+use FF qw(node is_license write_ff read_txt);
 
 my @TARGETS = qw(riscv64 x86_64 aarch64 arm);
 
@@ -52,9 +52,11 @@ sub section {
     $section;
 }
 
-my $shared = node("shared:",
-    read_txt(slurp("$FindBin::Bin/../shared.ff.txt"), "shared.ff.txt"),
-    map { section($_) } @TARGETS);
+# shared.ff.txt's license (the first of its nodes) is the license of the
+# tree, at its root.
+my @page = read_txt(slurp("$FindBin::Bin/../shared.ff.txt"), "shared.ff.txt");
+my @license = grep { is_license($_) } @page;
+my $shared = node("shared:", (grep { !is_license($_) } @page), map { section($_) } @TARGETS);
 
 binmode STDOUT;
-print write_ff(node("", $shared, map { node("$_:", read_txt(slurp($_), $_)) } @ARGV));
+print write_ff(node("", @license, $shared, map { node("$_:", read_txt(slurp($_), $_)) } @ARGV));
