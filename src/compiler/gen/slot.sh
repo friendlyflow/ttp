@@ -11,7 +11,9 @@
 # -v caps the command's memory (ulimit -v, in KB: 4000000 for most, 8000000
 # for qemu-arm), -t its time (timeout). A command that is already in a slot
 # (TTP_SLOT set, as slot.sh sets it for what it runs) takes no second one.
-# TTP_SLOTS (the folder) and TTP_NSLOTS (3) change the slots.
+# TTP_SLOTS (the folder) and TTP_NSLOTS (3) change the slots. With
+# TTP_SLOTLOG set, each command that takes a slot adds a line to that file:
+# the seconds it waited for one, and the command.
 
 set -u
 mem= secs=
@@ -36,12 +38,14 @@ dir=${TTP_SLOTS:-$HOME/.cache/ttp}
 n=${TTP_NSLOTS:-3}
 mkdir -p "$dir"
 waited=
+start=$(date +%s)
 while :; do
     i=1
     while test $i -le $n; do
         exec 9>> "$dir/slot.$i"
         if flock -n 9; then
             test -n "$waited" && echo "slot.sh: got slot $i" >&2
+            test -n "${TTP_SLOTLOG:-}" && echo "$(( $(date +%s) - start )) $*" | cut -c1-200 >> "$TTP_SLOTLOG"
             TTP_SLOT=$i; export TTP_SLOT
             run "$@"
         fi
