@@ -364,7 +364,14 @@ ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE
 endef
 $(foreach t,$(TARGETS),$(eval $(call target,$(t))))
 
-targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%)
+# the forms GNU as picks for glibc's asm (isa/x86_64gnu.pl): every one in
+# progs/x86_64/gnu.ff (mkgnu.pl), byte for byte its GNU twin gnu.s
+x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
+	tail -c +$$(($(THDR_x86_64) + 1)) $(P)/x86_64/gnu.elf | cmp - $(P)/x86_64/gnu.twin.bin
+	@echo "x86gnu: ttpc and GNU as agree on every form of isa/x86_64gnu.pl (gnu.s)"
+.PHONY: x86gnu
+
+targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%) x86gnu
 	! $(QEMU) $(BOOT)/stage2 --target mips $(SHARED) progs/cexit.ff $(P)/mips.celf 2> $(P)/mips.err
 	grep -q "compile time: mips is not a target" $(P)/mips.err
 	@echo "targets: $(TARGETS) and riscv64"
