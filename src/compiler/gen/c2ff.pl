@@ -1141,7 +1141,8 @@ sub expr {
         # a path from an expression: after a . among the base node's children
         if (@path && $base != $n) {
             my @b = expr($base);
-            @b == 1 or stop('a path from ' . $base->{kind} . ' of several nodes', $n);
+            # (of several nodes, (child++)->argp, a : holds them)
+            @b = node(':', @b) if @b > 1;
             push @{ $b[0]{children} }, node('.'), @path;
             return @b;
         }
@@ -1601,7 +1602,8 @@ sub stmt {
         return node('switch', item(expr($v)), cases($b->{kind} eq 'CompoundStmt' ? kids($b) : $b));
     }
     return labelled($n) if $k eq 'CaseStmt' || $k eq 'DefaultStmt';
-    return node(ffname($n->{name}) . ':', stmt((kids($n))[0])) if $k eq 'LabelStmt';
+    # (a label's attribute, ret0: __attribute__ ((unused)), says nothing of its code)
+    return node(ffname($n->{name}) . ':', stmt((grep { $_->{kind} !~ /Attr$/ } kids($n))[0])) if $k eq 'LabelStmt';
     return node('goto', node(ffname($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     # GNU's goto *p: to the address p holds (a label's, &&L)
     return node('goto', node('content', expr((kids($n))[0]))) if $k eq 'IndirectGotoStmt';
