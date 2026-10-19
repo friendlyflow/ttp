@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 # decls.pl — every name ttpc takes itself (the words of cc_kw, the operators
-# of cc_ops, the types of cc_tynames in ttpc.ff) must be declared on the
+# of cc_ops, the types of cc_tynames in ttpc.ff, and license, str_license,
+# which ttpc takes as a comment) must be declared on the
 # shared page (shared.ff.txt), as a function with its parameters, even when
 # it does nothing (comment: ...:), so that an editor can offer a call of it.
 #
@@ -26,7 +27,7 @@ my $root = read_ff(do { local $/; <$h> });
 close $h;
 
 my $bad = 0;
-for my $table (qw(cc_kw cc_ops cc_tynames)) {
+for my $table (qw(cc_kw cc_ops cc_tynames str_license)) {
     my ($node) = grep { $_->{content} eq "$table:" } kids($root)
         or die "decls: no $table in $ttpc\n";
     my $bytes = join "", map { $_->{children}[0]{content} } @{ $node->{children} };

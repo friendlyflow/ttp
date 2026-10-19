@@ -1,7 +1,14 @@
 /* For clang reading glibc .i made by gcc: the _FloatN types gcc has built in. */
 typedef float _Float32;
 typedef double _Float64;
+#ifdef __x86_64__
+/* x86_64: gcc's _Float128 is a type of its own beside long double (glibc's
+   _Generic lists both); __float128 is clang's, as long double is binary128
+   here too (-mlong-double-128); a macro, so that _Complex _Float128 reads */
+#define _Float128 __float128
+#else
 typedef long double _Float128;
+#endif
 typedef double _Float32x;
 typedef long double _Float64x;
 /* gcc builtins clang does not have, used by inline helpers in glibc's headers. */
