@@ -63,7 +63,7 @@ use POSIX ();
 # restrict) have no ff form and no effect on the code, and are dropped.
 
 my %scalar = (
-    'char' => 'char',                   # unsigned on riscv64
+    'char' => 'char',                   # signed or not as the target's ABI says (ttpc's cc_char)
     'signed char' => 'i8', 'unsigned char' => 'u8',
     'short' => 'short', 'signed short' => 'short', 'unsigned short' => 'u16',
     'int' => 'int', 'signed int' => 'int', 'signed' => 'int',
