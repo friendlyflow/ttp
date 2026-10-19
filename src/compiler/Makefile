@@ -101,6 +101,18 @@ roundtrip: | $(BUILD)
 decls:
 	@perl gen/decls.pl shared.ff.txt $(TTPC_FF)
 
+# Every tree has its license at its root (license / SPDX expression / the
+# notice, a line per child), its SPDX ids known to gen/spdx.txt; the frozen
+# files, which stay as they are, have theirs in LICENSES. A tree with an
+# unknown id fails.
+LICENSED := $(TREES) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
+licenses: | $(BUILD)
+	@perl gen/licenses.pl --sidecar LICENSES $(LICENSED)
+	@printf 'license\n  GPL-3.0-or-whatever\n  a notice\n' > $(BUILD)/badlicense.ff.txt
+	@! perl gen/licenses.pl $(BUILD)/badlicense.ff.txt > $(BUILD)/badlicense.out
+	@grep -q "unknown SPDX id GPL-3.0-or-whatever" $(BUILD)/badlicense.out
+	@echo "licenses: a tree with an unknown SPDX id fails"
+
 # Every program, after its 120-byte ELF header, must be byte-identical to
 # its GNU twin.
 check: roundtrip decls $(PROGS:%=$(P)/%.elf) $(PROGS:%=$(P)/%.twin.bin)
@@ -529,4 +541,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean
+.PHONY: all test roundtrip decls licenses check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean
