@@ -68,7 +68,7 @@ bootstrap:
 # a gc root, ~/.cache/ttp/gcroots/<name>, which `make gcroots` points at
 # what the flake names now.
 GCROOTS := $(HOME)/.cache/ttp/gcroots
-GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 C2FF_CLANG
+GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG
 gcroots:
 	@mkdir -p $(GCROOTS)
 	@for v in $(GCROOT_VARS); do \
