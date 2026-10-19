@@ -43,6 +43,8 @@
 #                   dropped (ttpc places a function on a 4-byte boundary)
 #   .weak X         X undefined here (crti's __gmon_start__): X: / weak /
 #                   function / void, at 0 unless something defines it
+#   --zero name     the objects c2ff --zero makes (else a zero object's
+#                   aliases, which then name nothing, are left out)
 #   other sections  .data .bss .section: a zeroed object (.zero N) is c2ff
 #                   --zero's global, its other labels aliases; an init
 #                   array is left out; any other bytes stop the translation
@@ -56,7 +58,7 @@ use FF qw(node write_txt);
 
 my $page = 'glibc asm';
 my @files;
-my ($size, $items, $locals, $skipopt, @then);
+my ($size, $items, $locals, $skipopt, @then, %zeroed);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -65,6 +67,7 @@ while (@ARGV) {
     if ($a eq '--locals') { $locals = 1; next }
     if ($a eq '--skip') { $skipopt = 1; next }
     if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
+    if ($a eq '--zero') { $zeroed{ shift @ARGV } = 1; next }
     push @files, $a;
 }
 my $src = $files[0] // die "usage: s2ff-aarch64.pl [--page name | --items | --size] file.s file.dump | --locals file.s\n";
@@ -277,8 +280,12 @@ my (%line, %alias, @fns, @data, %rodata, %weakref);
                 $st = '.zero ' . { long => 4, word => 4, quad => 8, xword => 8, byte => 1, hword => 2 }->{$1} if $st =~ /^\.(long|word|quad|xword|byte|hword)\s+0$/;
                 if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
                     my ($first, @more) = @pending;
-                    $datadef{$_} = 1 for @pending;
-                    push @data, map { node("$_:", node('alias'), node($first)) } @more;
+                    # (its aliases only where c2ff --zero makes it, --zero here
+                    # too: start.S's __data_start, which no C declares, is not)
+                    if (!%zeroed || $zeroed{$first}) {
+                        $datadef{$_} = 1 for @pending;
+                        push @data, map { node("$_:", node('alias'), node($first)) } @more;
+                    }
                     warn "s2ff: $where: $first is zero, c2ff --zero $first makes it\n";
                     @pending = ();
                     next;
