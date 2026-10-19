@@ -58,7 +58,10 @@ my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'sh
     'int' => 'i32', 'unsigned int' => 'u32', 'long' => 'i64', 'long long' => 'i64', 'unsigned long' => 'u64',
     'unsigned long long' => 'u64', '_Bool' => 'u8', 'float' => 'float', 'double' => 'double',
     'long double' => 'ldouble', '__float128' => 'ldouble', 'void' => 'void', '__builtin_va_list' => 'va', 'va_list' => 'va', '__va_list_tag' => 'va');
-sub tstr {
+# (each answer once per AST: tstr is the same for the same type there)
+our %tmemo;
+sub tstr { my ($s) = @_; defined $s ? $tmemo{$s} //= tstr1($s) : tstr1($s) }
+sub tstr1 {
     my ($s) = @_;
     $s = noattr($s);
     $s =~ s/\b(const|volatile|restrict|__restrict)\b//g;
@@ -259,7 +262,7 @@ sub str {
     ($p ne '' && $p ne 'u8' ? 'w' : '') . join(',', @b);
 }
 sub is_atomiccall { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') =~ /^__atomic_\w+_\d+$/ }
-sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $d = (strip((kids($s))[0]) // {})->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
+sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $d = (strip((kids($s))[0]) // {})->{referencedDecl} or return 0; asmfn(name_of($d)) }
 sub is_zero { my ($n) = @_; my $s = strip($n); ($s->{kind} // '') =~ /^(IntegerLiteral|FloatingLiteral)$/ && $s->{value} == 0 }
 sub is_null {
     my ($n) = @_;
@@ -298,7 +301,7 @@ sub call {
         }
         @args = ($args[0]) if $name eq '__builtin_va_start';
         # an asm function has no C type in ff: C's conversions of its arguments are not there
-        @args = map { unimplicit($_) } @args if $asmfn{$name};
+        @args = map { unimplicit($_) } @args if asmfn($name);
         return '(asm)' if $name =~ /^_+asm_/;
         return '(syscall ' . join(' ', map { E(strip($_)) } @args) . ')' if $name eq '__ff_syscall';
         if ($side eq 'ff' && $name =~ /^__atomic_(\w+)_\d+$/ && $atomicop{$1}) { return "(atomic $1 " . join(' ', map { E(strip($_)) } @args) . ')' }
@@ -401,26 +404,6 @@ sub gnorm {
     '(global ' . (tcls($d) =~ s/^enum$/i32/r) . " $i)";
 }
 sub balanced { my ($s) = @_; my $d = 0; for my $c (split //, $s) { $d++ if $c eq '('; $d--, ($d < 0 and return 0) if $c eq ')' } !$d }
-# The values of an AST's enum constants (clang's, else one more than the one before)
-sub enumvals {
-    my ($ast) = @_;
-    my %v;
-    my @q = ($ast);
-    while (my $n = shift @q) {
-        if (($n->{kind} // '') eq 'EnumDecl') {
-            my $x = -1;
-            for my $c (grep { $_->{kind} eq 'EnumConstantDecl' } kids($n)) {
-                my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($c);
-                $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
-                $x = $e && $e->{kind} eq 'ConstantExpr' ? $e->{value} : $x + 1;
-                $v{ $c->{name} } //= $x;
-            }
-            next;
-        }
-        push @q, @{ $n->{inner} || [] };
-    }
-    %v;
-}
 sub holds { my ($n, $k) = @_; (($n->{kind} // '') eq $k) || grep { holds($_, $k) } kids($n) }
 # Statements, as a list.
 sub S {
@@ -528,16 +511,29 @@ sub fnorm {
 
 # The typedefs of a unit: name, the type it stands for
 sub typedefs { my ($ast) = @_; map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} eq 'TypedefDecl' } kids($ast) }
-sub typeofs {
+
+# An AST's typeof types (what clang says each typeof (expression) is) and
+# the values of its enum constants (clang's, else one more than the one
+# before), in one walk of it
+sub ast_tables {
     my ($ast) = @_;
-    my %t;
+    my (%t, %v);
     my @q = ($ast);
     while (my $n = shift @q) {
         my $ty = $n->{type};
         $t{ $ty->{qualType} } //= $ty->{desugaredQualType} if $ty && defined $ty->{desugaredQualType} && $ty->{qualType} =~ /typeof/;
+        if (($n->{kind} // '') eq 'EnumDecl') {
+            my $x = -1;
+            for my $c (grep { $_->{kind} eq 'EnumConstantDecl' } kids($n)) {
+                my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($c);
+                $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
+                $x = $e && $e->{kind} eq 'ConstantExpr' ? $e->{value} : $x + 1;
+                $v{ $c->{name} } //= $x;
+            }
+        }
         push @q, @{ $n->{inner} || [] };
     }
-    %t;
+    (\%t, \%v);
 }
 
 # ---- the comparison -----------------------------------------------------------
@@ -547,9 +543,11 @@ my (%back, %backg);
     my $ast = load($backjson);
     local $side = 'ff';
     local %tdef = typedefs($ast);
-    local %typeof = typeofs($ast);
+    local %tmemo;
+    my ($ty, $ev) = ast_tables($ast);
+    local %typeof = %$ty;
     local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
-    local %enumval = enumvals($ast);
+    local %enumval = %$ev;
     for my $d (kids($ast)) {
         if ($d->{kind} eq 'VarDecl' && ($d->{storageClass} // '') ne 'extern') { $backg{ $d->{name} } = gnorm($d); next }
         next unless $d->{kind} eq 'FunctionDecl' && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
@@ -567,50 +565,123 @@ for my $g (grep { $_->[3] eq 'global' } @globals) {
     my ($cid, $o, $hint) = @$g;
     push @{ $gwant{$o} }, $g;
 }
+# ---- each unit's normal forms, cached -------------------------------------------
+# What glibc's side of a unit gives (each function's normal form, each
+# global's, its functions' statics', an extern's) is the same as long as the
+# unit's AST, this script and the asm functions it asked about are: it is
+# kept beside the AST (tu.rtc), and a round trip loads only the ASTs of the
+# units asked for a form their cache has not. Its key: this script's hash,
+# the AST file's inode, size and time (in ns: an AST made again is another),
+# and the answers of %asmfn the forms were made with.
+# ROUNDTRIP_FULL=1 reads no cache: every AST is loaded, every form made (and
+# the caches written anew).
+use Storable qw(nstore retrieve);
+use Digest::SHA;
+use Time::HiRes ();
+my $full = $ENV{ROUNDTRIP_FULL};
+my $self_hash = Digest::SHA->new(256)->addfile(__FILE__)->hexdigest;
+our %asmq;                  # the asm functions asked about, and the answers
+sub asmfn { my ($n) = @_; $asmq{$n} = $asmfn{$n} ? 1 : 0 if $side eq 'glibc'; $asmfn{$n} }
+sub cache_file { (my $f = $_[0]) =~ s/\.json$//; "$f.rtc" }
+sub jstamp { my @st = Time::HiRes::stat($_[0]) or die "roundtrip: $_[0]: $!\n"; "$st[0] $st[1] $st[7] $st[9]" }
+# the unit's cache, if it is of this AST and this script, with no answer of
+# %asmfn that is another now; else an empty one
+sub cache_of {
+    my ($j) = @_;
+    my $c = !$full && -e cache_file($j) ? eval { retrieve(cache_file($j)) } : undef;
+    my $ok = $c && $c->{self} eq $self_hash && $c->{stamp} eq jstamp($j) && !grep { ($asmfn{$_} ? 1 : 0) != $c->{asmq}{$_} } keys %{ $c->{asmq} };
+    $ok ? $c : { self => $self_hash, stamp => jstamp($j), asmq => {}, f => {} };
+}
+# The forms a unit is asked for, [kind, name] each: 'ext' the type of its
+# first extern declaration of the name, 'var' its first definition of the
+# global, 'st' (name "F\tS") F's first static S, 'fn' its (last) definition
+# of the function; undef where it has none. Made from its AST where the cache
+# has not got them.
+sub unit_forms {
+    my ($j, @ask) = @_;
+    return () unless @ask;
+    my $c = cache_of($j);
+    my @miss = grep { !exists $c->{f}{"$_->[0] $_->[1]"} } @ask;
+    if (@miss) {
+        my $ast = load($j);
+        local %asmq = %{ $c->{asmq} };
+        my ($ty, $ev) = ast_tables($ast);
+        local %enumval = %$ev;
+        local $side = 'glibc';
+        local %regvar;
+        local %asmalias = map { ((kids($_))[0]{value} // '') =~ /^"\s*([.\w]+)\s*=\s*([.\w]+)\s*"$/ ? ($1 => $2) : () } grep { $_->{kind} eq 'FileScopeAsmDecl' } kids($ast);
+        local %tdef = typedefs($ast);
+        local %tmemo;
+        local %typeof = %$ty;
+        local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
+        my (%def, %ext, %var, %defs);
+        for my $d (kids($ast)) {
+            if ($d->{kind} eq 'VarDecl' && ($d->{storageClass} // '') eq 'register' && (my ($l) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($d))) {
+                $regvar{ $d->{name} } = $d->{mangledName} // $l->{label};
+            }
+            if ($d->{kind} eq 'FunctionDecl' && grep { $_->{kind} eq 'CompoundStmt' } kids($d)) { $def{ $d->{name} } = $d; push @{ $defs{ $d->{name} } }, $d }
+            next unless $d->{kind} eq 'VarDecl' && defined $d->{name};
+            if (($d->{storageClass} // '') eq 'extern') { $ext{ $d->{name} } //= $d } else { $var{ $d->{name} } //= $d }
+        }
+        for (@miss) {
+            my ($k, $name) = @$_;
+            my $f;
+            if ($k eq 'ext') { $f = '(global ' . tcls($ext{$name}) . ' (zero))' if $ext{$name} }
+            elsif ($k eq 'var') { $f = gnorm($var{$name}) if $var{$name} }
+            elsif ($k eq 'fn') { $f = fnorm($def{$name}) if $def{$name} }
+            else {
+                my ($fname, $sname) = split /\t/, $name;
+                for my $d (@{ $defs{$fname} || [] }) {
+                    my @q = kids($d);
+                    while (my $n = shift @q) {
+                        if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && ($n->{name} // '') eq $sname) { $f = gnorm($n); last }
+                        push @q, kids($n);
+                    }
+                    last if defined $f;
+                }
+            }
+            $c->{f}{"$k $name"} = $f;
+        }
+        $c->{asmq} = {%asmq};
+        my $file = cache_file($j);
+        eval { nstore($c, "$file.$$") } && rename "$file.$$", $file;
+    }
+    map { $c->{f}{"$_->[0] $_->[1]"} } @ask;
+}
+
 my %seen;
 my %gextern;
 for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
-    my $ast = load($j);
-    local %enumval = enumvals($ast);
-    local $side = 'glibc';
-    local %regvar;
-    local %asmalias = map { ((kids($_))[0]{value} // '') =~ /^"\s*([.\w]+)\s*=\s*([.\w]+)\s*"$/ ? ($1 => $2) : () } grep { $_->{kind} eq 'FileScopeAsmDecl' } kids($ast);
-    local %tdef = typedefs($ast);
-    local %typeof = typeofs($ast);
-    local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
-    my %def;
-    for my $d (kids($ast)) {
-        if ($d->{kind} eq 'VarDecl' && ($d->{storageClass} // '') eq 'register' && (my ($l) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($d))) {
-            $regvar{ $d->{name} } = $d->{mangledName} // $l->{label};
-        }
-        $def{ $d->{name} } = $d if $d->{kind} eq 'FunctionDecl' && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
-    }
+    # what the unit is asked for: the extern declaration of each global
+    # wanted that has none yet, the definition of each wanted here (a
+    # unit's own in that unit, not yet found), the statics of the functions
+    # whose bodies are this unit's, and those functions
+    my @gnames = grep { !defined $gextern{$_} } sort keys %gwant;
+    my @vnames = grep { grep { $_->[2] !~ /^in / && !$gfound{ $_->[0] } && !($_->[2] =~ /^unit (.+)$/ && $j !~ /\/\Q$1\E\.json$/) } @{ $gwant{$_} } } sort keys %gwant;
+    my @sfor = map { my $o = $_; map { [$_, $o] } grep { /^in (.+)$/ && ($fnunit{$1} // '') eq $j } map { $_->[2] } @{ $gwant{$o} } } sort keys %gwant;
+    my @fns = map { $_->[1] } @{ $byunit{$j} // [] };
+    my @ask = ((map { ['ext', $_] } @gnames), (map { ['var', $_] } @vnames), (map { ['st', ($_->[0] =~ s/^in //r) . "\t$_->[1]"] } @sfor), (map { ['fn', $_] } @fns));
+    my %form;
+    @form{ map { "$_->[0] $_->[1]" } @ask } = unit_forms($j, @ask);
     # its globals: a definition (an extern declaration is none), the first unit's
-    for my $d (kids($ast)) {
-        next unless $d->{kind} eq 'VarDecl' && defined $d->{name} && $gwant{ $d->{name} };
-        # (one glibc's asm only reserves, zero, c2ff --zero: its declaration)
-        if (($d->{storageClass} // '') eq 'extern') { $gextern{ $d->{name} } //= '(global ' . tcls($d) . ' (zero))'; next }
-        for my $g (@{ $gwant{ $d->{name} } }) {
+    for my $n (@gnames) { $gextern{$n} //= $form{"ext $n"} }
+    for my $n (@vnames) {
+        my $f = $form{"var $n"} // next;
+        for my $g (@{ $gwant{$n} }) {
             next if $g->[2] =~ /^in / || $gfound{ $g->[0] };
             next if $g->[2] =~ /^unit (.+)$/ && $j !~ /\/\Q$1\E\.json$/;
-            $gfound{ $g->[0] } = gnorm($d);
+            $gfound{ $g->[0] } = $f;
         }
     }
     # and its functions' statics
-    for my $d (kids($ast)) {
-        next unless $d->{kind} eq 'FunctionDecl' && defined $d->{name} && ($fnunit{ $d->{name} } // '') eq $j && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
-        my @q = kids($d);
-        while (my $n = shift @q) {
-            if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && $gwant{ $n->{name} // '' }) {
-                for my $g (@{ $gwant{ $n->{name} } }) { $gfound{ $g->[0] } //= gnorm($n) if $g->[2] eq "in $d->{name}" }
-            }
-            push @q, kids($n);
-        }
+    for my $s (@sfor) {
+        my ($hint, $o) = @$s;
+        my $f = $form{ 'st ' . ($hint =~ s/^in //r) . "\t$o" } // next;
+        for my $g (@{ $gwant{$o} }) { $gfound{ $g->[0] } //= $f if $g->[2] eq $hint }
     }
     for my $b (@{ $byunit{$j} // [] }) {
         my ($cid, $o) = @$b;
-        my $d = $def{$o} or do { push @diff, [$cid, "no function $o in $j"]; next };
-        my $want = fnorm($d);
+        my $want = $form{"fn $o"} // do { push @diff, [$cid, "no function $o in $j"]; next };
         my $got = $back{$cid} // do { push @diff, [$cid, 'not in the C written back']; next };
         if ($want eq $got) { $same++; next }
         push @diff, [$cid, where($want, $got)];
