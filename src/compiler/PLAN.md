@@ -659,6 +659,20 @@ float and double by arm's cc_cvt_*_p (to a float through a double rounded
 to odd, so that it is rounded once); a switch on a pair compares pairs; a
 system call takes a pair's low word.
 
+**Calls by the platform's ABI** (gen/patches/abi.pl, the user's choice):
+a target's `cc_abi` names the ABI its calls follow (0 or none: ttpc's own
+convention; 1: arm's AAPCS). The arguments are evaluated and pushed as
+before (args keeps each one's type), then placed by the ABI's
+classification (`abiclass`): on arm r0..r3, a pair in an even pair, the
+rest on the stack in the ABI's order (copied below the pushed values), sp
+8-aligned at the call, a result in memory's address in r0. The callee finds
+its parameters the same way (`abipplan`, `abipparam`); a variadic one's
+prologue pushes r0..r3 (`cc_enter_va`) so that its arguments are one array
+that va_start and va_arg walk upward. A ttpc caller of a variadic function
+puts the count of the argument words in r12, which the callee keeps, for
+va_arg_pack and va_arg_pack_len. Floating point arguments and structs by
+value follow in the next steps.
+
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
 arm 0, x86_64 traps), nor a shift by the word size or more.
 
