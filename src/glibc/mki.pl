@@ -94,6 +94,20 @@ for my $o (@want) {
     $c =~ s/ -o \S+\.(?:o|S) / -o $i /;
 
     $c =~ s/ -MD -MP -MF \S+ -MT \S+//;
+    # build.log names the compiler and the kernel's headers by their store
+    # paths: after a nixpkgs update moved them and nix gc took the old ones,
+    # the command cannot run again, and the shell would only say "No such
+    # file or directory". The reference must then be built again.
+    my %gone;
+    $gone{$_} = 1 for grep { !-e $_ } $c =~ m{(/nix/store/[a-z0-9]{32}-[^/\s'"]+)}g;
+    if (%gone) {
+        my ($cc) = $c =~ m{(?:^|\|\s*)(/nix/store/\S+)};
+        my $what = $cc && !-e $cc ? "its compiler $cc is gone"
+          : "it names " . join(', ', sort keys %gone) . ", which " . (keys %gone > 1 ? "are" : "is") . " gone";
+        die "mki: $o: build.log's command cannot run again: $what (nix gc took it after an update).\n"
+          . "mki: rebuild glibc-ref with the current toolchain, into a new BUILD (make -C src/glibc glibc-ref BUILD=...),\n"
+          . "mki: and keep the toolchain alive with `make gcroots`.\n";
+    }
     my $dir = "$src/" . ($o =~ m{^soft-fp/} ? "math" : dirname($o));
     if (system('sh', '-c', "cd '$dir' && $c") != 0) { warn "mki: $o: the compiler failed\n"; $bad = 1; next }
     if ($ext eq 'i' && $c !~ / -U__SIZEOF_INT128__ / && do { open my $h, '<', $i; local $/; <$h> =~ /^typedef unsigned (?:__int128|_BitInt\(128\)) u128;$/m }) {

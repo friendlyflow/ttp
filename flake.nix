@@ -43,8 +43,16 @@
       # headers, what glibc's build needs, and clang (unwrapped: its .i are
       # already preprocessed, and the wrapper's host flags are no riscv64
       # flags) to read its C as a tree.
+      #
+      # glibc's gcc is named by its major version (gcc 16, 16.2.0 today) on
+      # every target, never nixpkgs' default gcc: the reference build's
+      # build.log holds the compiler's store path, and src/glibc/mki.pl
+      # runs those commands again for every .i, so a nixpkgs update that
+      # moved the default (as 15.2 -> 16.2 did) must not change it
+      # silently. `make -C src/glibc gcroots` keeps these alive in nix gc.
+      glibcGcc = pkgs: cross: pkgs.pkgsCross.${cross}.buildPackages.gcc16;
       glibcTools = pkgs: with pkgs; [
-        pkgsCross.riscv64.buildPackages.gcc
+        (glibcGcc pkgs "riscv64")
         pkgsCross.riscv64.buildPackages.binutils
         # the same for aarch64 and x86_64 (GTARGET in src/glibc): glibc's
         # soft-fp for long double on those targets, from their own build
@@ -112,11 +120,11 @@
           # own glibc to every compile).
           GLIBC_SRC = "${glibc-src}";
           GLIBC_HEADERS = "${pkgs.pkgsCross.riscv64.linuxHeaders}/include";
-          GLIBC_CC = "${pkgs.pkgsCross.riscv64.buildPackages.gcc.cc}/bin/riscv64-unknown-linux-gnu-gcc";
+          GLIBC_CC = "${(glibcGcc pkgs "riscv64").cc}/bin/riscv64-unknown-linux-gnu-gcc";
           GLIBC_HEADERS_aarch64 = "${pkgs.pkgsCross.aarch64-multiplatform.linuxHeaders}/include";
-          GLIBC_CC_aarch64 = "${pkgs.pkgsCross.aarch64-multiplatform.buildPackages.gcc.cc}/bin/aarch64-unknown-linux-gnu-gcc";
+          GLIBC_CC_aarch64 = "${(glibcGcc pkgs "aarch64-multiplatform").cc}/bin/aarch64-unknown-linux-gnu-gcc";
           GLIBC_HEADERS_x86_64 = "${pkgs.pkgsCross.gnu64.linuxHeaders}/include";
-          GLIBC_CC_x86_64 = "${pkgs.pkgsCross.gnu64.buildPackages.gcc.cc}/bin/x86_64-unknown-linux-gnu-gcc";
+          GLIBC_CC_x86_64 = "${(glibcGcc pkgs "gnu64").cc}/bin/x86_64-unknown-linux-gnu-gcc";
           C2FF_CLANG = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
 
           # `nix develop` always starts bash; drop into fish instead.

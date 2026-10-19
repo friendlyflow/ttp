@@ -13,6 +13,9 @@
 #   make bootstrap  ttpc assembles itself from ff: ttpc1 == ttpc1(ttpc1.ff),
 #                   stage1 == stage2; and so on x86_64, aarch64 and arm from
 #                   their own seeds (hosts/<host>/ttpc.s), without riscv64
+#   make gcroots    keep glibc's source and toolchains (GLIBC_SRC, GLIBC_CC*,
+#                   GLIBC_HEADERS*, C2FF_CLANG) alive in nix gc, as
+#                   ~/.cache/ttp/gcroots/<name>
 #   make git-setup  register the ff diff and merge drivers (.gitattributes)
 #                   in this repository's git config
 #   make lane NAME=x  a worktree for a lane of work, ~/.cache/ttp/wt/x on a
@@ -23,7 +26,7 @@
 
 BUILD := $(CURDIR)/build
 
-.PHONY: all os compiler os-test os-console compiler-test compiler-check bootstrap git-setup lane patch clean
+.PHONY: all os compiler os-test os-console compiler-test compiler-check bootstrap gcroots git-setup lane patch clean
 
 all: os compiler
 
@@ -56,6 +59,24 @@ compiler-check: compiler
 # be what the riscv64 chain makes for it; then its C programs run.
 bootstrap:
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstraps
+
+# The store paths of glibc's source and the toolchains src/glibc builds and
+# reads it with,
+# as `nix develop` sets them: glibc's build.log names its compiler and the
+# kernel's headers by store path, and mki.pl runs those commands again, so
+# a nix gc must not take them while the reference build is there. Each is
+# a gc root, ~/.cache/ttp/gcroots/<name>, which `make gcroots` points at
+# what the flake names now.
+GCROOTS := $(HOME)/.cache/ttp/gcroots
+GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 C2FF_CLANG
+gcroots:
+	@mkdir -p $(GCROOTS)
+	@for v in $(GCROOT_VARS); do \
+	    p=$$(printenv $$v) || { echo "gcroots: $$v is not set: run this in \`nix develop\`"; exit 1; }; \
+	    s=$$(echo "$$p" | cut -d/ -f1-4); \
+	    nix build --out-link $(GCROOTS)/$$v "$$s" || exit 1; \
+	    echo "gcroots: $(GCROOTS)/$$v -> $$s"; \
+	done
 
 # ff trees are binary; git diffs them as text (fftext.pl, as textconv) and
 # merges them as text (ffmerge.sh), the drivers .gitattributes names. The

@@ -12,7 +12,16 @@
 # would share their temporaries). libc.a and crt1.o are for building the
 # same programs with gcc, to compare with.
 #
-#   make glibc-ref     configure and build  -> ~/.cache/ttp/glibc/obj
+#   make glibc-ref     configure and build  -> ~/.cache/ttp/glibc-gcc16/obj
+#
+# The folder is named for the compiler: build.log holds its store path,
+# which mki.pl runs again, so a build lives only as long as that gcc. The
+# flake pins gcc 16 (gcc16, not nixpkgs' default gcc), and glibc-ref makes
+# the build's own nix gc roots for its compiler, the kernel's headers and
+# the source (BUILD/gcroots). When the flake moves to another gcc, the
+# reference is built again in a folder of its name (and mki.pl says so
+# when build.log's compiler is gone). ~/.cache/ttp/glibc is the build of
+# gcc 15.2 (2026-10-16), whose compiler nix gc took.
 #
 # The same for aarch64 and x86_64 with GTARGET (below), each in a folder of
 # its name: so far their long double (milestone ldouble), glibc's soft-fp
@@ -31,7 +40,7 @@
 # riscv64's, in a folder of their name.
 GTARGET ?= riscv64
 TRIPLE := $(GTARGET)-unknown-linux-gnu
-BUILD ?= $(HOME)/.cache/ttp/glibc$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
+BUILD ?= $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
 JOBS ?= $(shell nproc)
 
@@ -54,12 +63,21 @@ export NIX_HARDENING_ENABLE :=
 # ... to the host's, which configure would take.
 TOOLS := $(foreach t,AR:ar NM:nm OBJCOPY:objcopy OBJDUMP:objdump READELF:readelf RANLIB:ranlib STRIP:strip GPROF:gprof LD:ld,$(word 1,$(subst :, ,$(t)))=$(XPRE)$(word 2,$(subst :, ,$(t))))
 
-.PHONY: glibc-ref clean
+.PHONY: glibc-ref build-gcroots clean
 
 # A step that fails leaves nothing behind that make would take as made.
 .DELETE_ON_ERROR:
 
-glibc-ref: $(OBJ)/libc.a
+glibc-ref: $(OBJ)/libc.a build-gcroots
+
+# The build's own nix gc roots, BUILD/gcroots/{CC,HEADERS,SRC}: what its
+# build.log names by store path, alive as long as the build is (also for an
+# obj/ linked from another build of the same compiler).
+build-gcroots:
+	mkdir -p $(BUILD)/gcroots
+	for p in CC:$(GLIBC_CC) HEADERS:$(GLIBC_HEADERS) SRC:$(GLIBC_SRC); do \
+	    nix build --out-link $(BUILD)/gcroots/$${p%%:*} $$(echo $${p#*:} | cut -d/ -f1-4) || exit 1; \
+	done
 
 $(OBJ)/config.status:
 	mkdir -p $(OBJ)
