@@ -317,6 +317,7 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
 - **Floating point** (`progs/cfloat.ff`, the user's choice: all of it now):
   `float`, `double` and `long double` are type words, codes 0x24, 0x28 and
   0x30 (bit 5 marks floating point), 4, 8 and 16 bytes on every target
+  but arm, whose long double is double as its EABI has it (pairs3.pl)
   (`tsize` and `talign` read them from the code, not `word8`). A value is
   its bits in V. `binop` takes a floating path (both operands converted to
   the wider type, then the target's primitive from the table at `cc_exts`
@@ -653,7 +654,10 @@ the first that does not fit, it and the rest are on the stack, all of them
 pushed, as past 8 arguments. A variadic call pushes the count of its slots;
 va_arg of a pair takes two. The result is V, r0:r1. / and % of pairs are a
 shift-subtract loop in the primitive, as libgcc's __aeabi_uldivmod computes
-them (gcc calls it; ttpc's program has no libgcc).
+them (gcc calls it; ttpc's program has no libgcc). A pair converts to and from
+float and double by arm's cc_cvt_*_p (to a float through a double rounded
+to odd, so that it is rounded once); a switch on a pair compares pairs; a
+system call takes a pair's low word.
 
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
 arm 0, x86_64 traps), nor a shift by the word size or more.

@@ -273,10 +273,8 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
 CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul
-# cexpr, cfloats and cgnu convert between u64 and floating types or compute
-# with long as 64 bits, which arm does not do yet (cfloats32 is cfloats
-# without u64).
-CSKIP_arm := cexpr cfloats cgnu
+# cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
+CSKIP_arm := cgnu
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per
 # page), which it reads lazily: never.ff, which it must not read, is no tree.
