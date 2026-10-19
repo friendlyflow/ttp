@@ -659,6 +659,27 @@ float and double by arm's cc_cvt_*_p (to a float through a double rounded
 to odd, so that it is rounded once); a switch on a pair compares pairs; a
 system call takes a pair's low word.
 
+**Calls by the platform's ABI** (gen/patches/abi.pl, the user's choice):
+a target's `cc_abi` names the ABI its calls follow (0 or none: ttpc's own
+convention; 1: arm's AAPCS). The arguments are evaluated and pushed as
+before (args keeps each one's type), then placed by the ABI's
+classification (`abiclass`): on arm r0..r3, a pair in an even pair, the
+rest on the stack in the ABI's order (copied below the pushed values), sp
+8-aligned at the call, a result in memory's address in r0. The callee finds
+its parameters the same way (`abipplan`, `abipparam`); a variadic one's
+prologue pushes r0..r3 (`cc_enter_va`) so that its arguments are one array
+that va_start and va_arg walk upward. A ttpc caller of a variadic function
+puts the count of the argument words in r12, which the callee keeps, for
+va_arg_pack and va_arg_pack_len. A float takes the lowest free single, a
+double the lowest free double (VFP), results come in s0/d0 (a variadic
+function's by the base standard, in core registers); a struct is its
+words in core registers and on the stack (split as the AAPCS allows), a
+homogeneous aggregate of floats or doubles VFP registers; a struct result
+of four bytes or less is in r0, an aggregate's in s0../d0.., a larger one
+goes through the address in r0 (gen/patches/abi3.pl). A call through an
+address gets room for such a result among the frame's temporaries.
+`make abi` (progs/abi) checks it against gcc's code both ways.
+
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
 arm 0, x86_64 traps), nor a shift by the word size or more.
 

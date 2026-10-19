@@ -319,6 +319,8 @@ $(I)/%.i: $(OBJ)/libc.a mki.pl
 ASREF_riscv64 := -mno-relax
 DUMPOPT_riscv64 := -M no-aliases
 DUMPOPT_x86_64 := -w
+# (arm's with its symbols and relocations: the literal pools' words)
+DUMPOPT_arm := -r -t
 $(I)/%.s: $(OBJ)/libc.a mki.pl
 	$(RUN) -t 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
@@ -390,15 +392,19 @@ asm-check: $(ASMCHECK:%=$(I)/%.asmok)
 # relocations; s2ff.pl reads riscv64's GNU as.
 ASMTRAP_riscv64 := ebreak
 ASMHDR_riscv64 := 120
+ASMTRAP_arm := udf\n    0
+ASMHDR_arm := 84
+S2FF_arm := ../compiler/gen/s2ff-arm.pl
+S2FF = $(or $(S2FF_$(GTARGET)),../compiler/gen/s2ff.pl)
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
-$(I)/%.asmok: $(I)/%.dump $(I)/%.bin ../compiler/gen/s2ff.pl $(TTPC)
+$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
 	@rm -f $@; a=$(I)/$*; \
-	{ perl ../compiler/gen/s2ff.pl $$a.s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
+	{ perl $(S2FF) $$a.s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
 	$(RUN) -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
-	size=$$(perl ../compiler/gen/s2ff.pl --size $$a.s $$a.dump) || exit 1; \
+	size=$$(perl $(S2FF) --size $$a.s $$a.dump) || exit 1; \
 	$(XPRE)objdump -r $$a.ref.o > $$a.relocs; \
 	head -c $$size $$a.bin > $$a.want.raw; \
 	tail -c +$$(($(ASMHDR) + 1)) $$a.asm | head -c $$size > $$a.got.raw; \
@@ -582,7 +588,7 @@ ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 
 CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	-fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
+	-fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 
 $(I)/%.c2ff: $(I)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
 	@$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i;) \
@@ -644,3 +650,7 @@ $(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET)
 	done
 	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt >> $(FF)/glibc.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@
+
+# the list of a kind of object, for a look at it: make print-ALL_ASM
+print-%:
+	@echo $($*)
