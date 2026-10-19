@@ -622,7 +622,7 @@ operands: pass 1 and pass 2 must lay out the same.
 | `cc_store_8` ... `cc_store_64` | [L] = V |
 | `cc_li_p lo hi`, `cc_push_p`, `cc_pop_p`, `cc_load_p`, `cc_store_p` | arm only, a pair (below): V = the two words, push V, pop L, V = [V], [L] = V |
 | `cc_ext_p` `cc_ext_pu`, `cc_ext_lp` `cc_ext_lpu` | arm: V's (L's) word widened to a pair, with its sign or with zeros |
-| `cc_add_p` `cc_sub_p` `cc_and_p` `cc_or_p` `cc_xor_p`, `cc_eq_p` ... `cc_geu_p`, `cc_neg_p` `cc_inv_p` `cc_not_p` `cc_bool_p` `cc_addx_p`, `cc_jz_p t` `cc_jnz_p t` | arm: the operators on pairs, V = L op V (a compare gives an int) |
+| `cc_add_p` `cc_sub_p` `cc_mul_p` `cc_div_p` `cc_divu_p` `cc_rem_p` `cc_remu_p` `cc_shl_p` `cc_shr_p` `cc_sar_p` `cc_and_p` `cc_or_p` `cc_xor_p`, `cc_eq_p` ... `cc_geu_p`, `cc_neg_p` `cc_inv_p` `cc_not_p` `cc_bool_p` `cc_addx_p`, `cc_jz_p t` `cc_jnz_p t` | arm: the operators on pairs, V = L op V (a compare gives an int) |
 
 Every section also has `cc_ctargs`, `cc_call_l` and `cc_ctreg`, which only
 compile time uses, on that host: the bridge from its code back into ttpc.
@@ -651,7 +651,9 @@ where the callee is known, and r0..r7 take the arguments in order, a pair
 the next even pair (r0:r1, r2:r3, r4:r5, r6:r7, as the AAPCS aligns it); from
 the first that does not fit, it and the rest are on the stack, all of them
 pushed, as past 8 arguments. A variadic call pushes the count of its slots;
-va_arg of a pair takes two. The result is V, r0:r1.
+va_arg of a pair takes two. The result is V, r0:r1. / and % of pairs are a
+shift-subtract loop in the primitive, as libgcc's __aeabi_uldivmod computes
+them (gcc calls it; ttpc's program has no libgcc).
 
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
 arm 0, x86_64 traps), nor a shift by the word size or more.
