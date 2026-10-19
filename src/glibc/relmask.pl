@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# relmask.pl — bytes of a riscv64 .text with the fields relocations fill in
+# relmask.pl — bytes of a riscv64 or arm .text with the fields relocations fill in
 # set to 0: what GNU as left for the linker (a call's auipc and jalr, a
 # GOT or TLS address) is not the assembler's to compare.
 #
@@ -24,6 +24,10 @@ my %mask = (
     J => 0xfffff000,    # jal
     CB => 0x1c7c,       # c.beqz, c.bnez
     CJ => 0x1ffc,       # c.j
+    # arm
+    A24 => 0x00ffffff,  # b, bl (A32)
+    W => 0xffffffff,    # a word of data: an address, an offset of the GOT
+    MOV => 0x000f0fff,  # movw, movt (A32)
 );
 sub field {
     my ($off, $kind) = @_;
@@ -38,7 +42,7 @@ open my $r, '<', $relocs or die "relmask: $relocs: $!\n";
 my $intext = 0;
 while (<$r>) {
     $intext = $1 eq '.text' if /^RELOCATION RECORDS FOR \[(.*)\]/;
-    next unless $intext && /^([0-9a-f]+)\s+(R_RISCV_\w+)/;
+    next unless $intext && /^([0-9a-f]+)\s+(R_(?:RISCV|ARM)_\w+)/;
     my ($off, $type) = (hex $1, $2);
     if ($type =~ /^R_RISCV_CALL(_PLT)?$/) { field($off, 'U'); field($off + 4, 'I') }
     elsif ($type =~ /_HI20$/) { field($off, 'U') }
@@ -49,6 +53,9 @@ while (<$r>) {
     elsif ($type eq 'R_RISCV_RVC_BRANCH') { field($off, 'CB') }
     elsif ($type eq 'R_RISCV_RVC_JUMP') { field($off, 'CJ') }
     elsif ($type =~ /^R_RISCV_(RELAX|ALIGN)$/) { }
+    elsif ($type =~ /^R_ARM_(CALL|JUMP24)$/) { field($off, 'A24') }
+    elsif ($type =~ /^R_ARM_(ABS32|REL32|GOTPC|GOT32|GOTOFF32|TLS_IE32|TLS_LE32)$/) { field($off, 'W') }
+    elsif ($type =~ /^R_ARM_MOV[WT]_/) { field($off, 'MOV') }
     else { die "relmask: no mask for $type\n" }
 }
 close $r;

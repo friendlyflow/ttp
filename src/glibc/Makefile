@@ -300,9 +300,17 @@ $(I)/%.i: $(OBJ)/libc.a mki.pl
 $(I)/%.s: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
+# Per target: GNU as without relaxation (riscv64) and how the dump shows the
+# instructions: riscv64's without aliases (its compressed ones by their
+# names), arm's with its symbols and relocations (the literal pools' words).
+ASFLAGS_riscv64 := -mno-relax
+ASFLAGS = $(ASFLAGS_$(GTARGET))
+DUMPFLAGS_riscv64 := -d -M no-aliases
+DUMPFLAGS_arm := -d -r -t
+DUMPFLAGS = $(or $(DUMPFLAGS_$(GTARGET)),-d)
 $(I)/%.dump $(I)/%.bin: $(I)/%.s
-	$(CAP) timeout 60 $(GLIBC_CC) -c -mno-relax -x assembler $< -o $(I)/$*.ref.o
-	$(XPRE)objdump -d -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
+	$(CAP) timeout 60 $(GLIBC_CC) -c $(ASFLAGS) -x assembler $< -o $(I)/$*.ref.o
+	$(XPRE)objdump $(DUMPFLAGS) $(I)/$*.ref.o > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
 
 # What clang does not read of gcc's C, rewritten for clang alone in a copy of
@@ -357,15 +365,19 @@ asm-check: $(ASMCHECK:%=$(I)/%.asmok)
 # relocations; s2ff.pl reads riscv64's GNU as.
 ASMTRAP_riscv64 := ebreak
 ASMHDR_riscv64 := 120
+ASMTRAP_arm := udf\n    0
+ASMHDR_arm := 84
+S2FF_arm := ../compiler/gen/s2ff-arm.pl
+S2FF = $(or $(S2FF_$(GTARGET)),../compiler/gen/s2ff.pl)
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
-$(I)/%.asmok: $(I)/%.dump $(I)/%.bin ../compiler/gen/s2ff.pl $(TTPC)
+$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
 	@a=$(I)/$*; \
-	{ perl ../compiler/gen/s2ff.pl $$a.s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
+	{ perl $(S2FF) $$a.s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
 	$(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
-	size=$$(perl ../compiler/gen/s2ff.pl --size $$a.s $$a.dump) || exit 1; \
+	size=$$(perl $(S2FF) --size $$a.s $$a.dump) || exit 1; \
 	$(XPRE)objdump -r $$a.ref.o > $$a.relocs; \
 	head -c $$size $$a.bin > $$a.want.raw; \
 	tail -c +$$(($(ASMHDR) + 1)) $$a.asm | head -c $$size > $$a.got.raw; \
@@ -482,7 +494,7 @@ ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 
 CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	-fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
+	-fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 
 $(I)/%.c2ff: $(I)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
 	@$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i;) \
@@ -517,3 +529,7 @@ all-asm:
 	echo "all-asm: $$ok of $$n asm objects byte for byte (make's output in $(I)/all-asm.log)"
 .PHONY: all-asm
 
+
+# the list of a kind of object, for a look at it: make print-ALL_ASM
+print-%:
+	@echo $($*)
