@@ -317,6 +317,7 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
 - **Floating point** (`progs/cfloat.ff`, the user's choice: all of it now):
   `float`, `double` and `long double` are type words, codes 0x24, 0x28 and
   0x30 (bit 5 marks floating point), 4, 8 and 16 bytes on every target
+  but arm, whose long double is double as its EABI has it (pairs3.pl)
   (`tsize` and `talign` read them from the code, not `word8`). A value is
   its bits in V. `binop` takes a floating path (both operands converted to
   the wider type, then the target's primitive from the table at `cc_exts`
@@ -383,8 +384,8 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   the address of nothing), `array` T n (`array` `array` `int` `3` `4`), and
   structs: `point:` `struct` `x:` `int` ..., laid out as C does; `type`
   only in compile time. `long` and `address` are a word of the target (8
-  bytes; 4 on arm, where `i64` and `u64` are refused: "not on this
-  target"). A type with a value converts it, the first word of the type on
+  bytes; 4 on arm, where `i64` and `u64` are a pair of registers: see
+  Targets). A type with a value converts it, the first word of the type on
   top, the rest of the type and the value its children: `long` / x,
   `address` / `char` / p. A struct may hold an address of itself (`next:` /
   `address` / `node`, `progs/cself.ff`): each struct has one type, made
@@ -414,8 +415,9 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   cut a store's value, `= += -= ++ --` and a conversion; operands that
   meet as `u32` are zero-extended first (`cc_uw`). A number is an `int`
   if it fits, else a `long`; in hex the first of `int`, `u32`, `long`,
-  `u64` it fits. Not yet on arm (a `long` of 4 bytes): `u32` with `long`
-  is `long` there, not C's unsigned long.
+  `u64` it fits. On arm (a `long` of 4 bytes) `u32` with `long` is `u32`,
+  C's unsigned long there, and a number that does not fit 32 bits is an
+  `i64` (or `u64`).
 - **Paths** by calling: `xs` / `i` an element, `p` / `x` a field (also
   through an address), `r` / `b` / `x` both in a row. `address` / x, x not a
   type, is C's `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
@@ -619,6 +621,9 @@ operands: pass 1 and pass 2 must lay out the same.
 | `cc_calll` | call the address in L, the arguments in their registers |
 | `cc_load_i8` ... `cc_load_i64`, `cc_load_u8` ... `cc_load_u64` | V = the value at the address V, extended |
 | `cc_store_8` ... `cc_store_64` | [L] = V |
+| `cc_li_p lo hi`, `cc_push_p`, `cc_pop_p`, `cc_load_p`, `cc_store_p` | arm only, a pair (below): V = the two words, push V, pop L, V = [V], [L] = V |
+| `cc_ext_p` `cc_ext_pu`, `cc_ext_lp` `cc_ext_lpu` | arm: V's (L's) word widened to a pair, with its sign or with zeros |
+| `cc_add_p` `cc_sub_p` `cc_mul_p` `cc_div_p` `cc_divu_p` `cc_rem_p` `cc_remu_p` `cc_shl_p` `cc_shr_p` `cc_sar_p` `cc_and_p` `cc_or_p` `cc_xor_p`, `cc_eq_p` ... `cc_geu_p`, `cc_neg_p` `cc_inv_p` `cc_not_p` `cc_bool_p` `cc_addx_p`, `cc_jz_p t` `cc_jnz_p t` | arm: the operators on pairs, V = L op V (a compare gives an int) |
 
 Every section also has `cc_ctargs`, `cc_call_l` and `cc_ctreg`, which only
 compile time uses, on that host: the bridge from its code back into ttpc.
@@ -631,6 +636,28 @@ The targets' choices (see each `c:` group):
 | x86_64 | rax r10 r11 | rbp | 8, 8 | rdi rsi rdx rcx r8 r9 r12 r13 | rax, rdi rsi rdx r10 r8 r9, `syscall` |
 | aarch64 | x0 x9 x10 | x29 | 16, 8 | x0..x7 | x8, x0..x5, `svc 0` |
 | arm (A32) | r0 r12 r8 | r11 | 4, 4 | r0..r7 | r7, r0..r6, `svc 0` |
+
+**i64 and u64 on arm** are a pair of registers (gen/patches/pairs.pl, the
+user's choice): their own type codes, 0x48 and 0x58 (the pair bit 0x40), 8
+bytes aligned to 8 as the AAPCS has them, where elsewhere `i64` is `long`. V
+is r0 (the low word) with r1, L is r12 with r9; a pair takes two slots on
+the stack, the low word first, as in memory. The pair primitives may use
+r2..r6, which hold nothing between primitives. r9 and r12 are free for it
+because ttpc links the whole program itself: no veneers, no platform use of
+r9. C's conversions widen the other operand of an operator, and the value of
+=, a declaration, an initializer's item, return and a cast (`pwiden`,
+`pwassign`, `fcvt`); a condition tests both words. In a call
+(gen/patches/pairs2.pl) an argument is converted to its parameter's type
+where the callee is known, and r0..r7 take the arguments in order, a pair
+the next even pair (r0:r1, r2:r3, r4:r5, r6:r7, as the AAPCS aligns it); from
+the first that does not fit, it and the rest are on the stack, all of them
+pushed, as past 8 arguments. A variadic call pushes the count of its slots;
+va_arg of a pair takes two. The result is V, r0:r1. / and % of pairs are a
+shift-subtract loop in the primitive, as libgcc's __aeabi_uldivmod computes
+them (gcc calls it; ttpc's program has no libgcc). A pair converts to and from
+float and double by arm's cc_cvt_*_p (to a float through a double rounded
+to odd, so that it is rounded once); a switch on a pair compares pairs; a
+system call takes a pair's low word.
 
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
 arm 0, x86_64 traps), nor a shift by the word size or more.
