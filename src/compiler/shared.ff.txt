@@ -399,29 +399,17 @@ comment
 long double:
   value
 comment
-  complex float: C's complex type of float parts, 8 bytes: its real part, then its imaginary part, each a float; real / z and imag / z are its parts.
+  complex float value: C, a complex number of two float parts, 8 bytes: its real part, then its imaginary part; real / z and imag / z are its parts.
 complex float:
-  struct
-  real part:
-    float
-  imag part:
-    float
+  value
 comment
-  complex double: C's complex type of double parts, 16 bytes: its real part, then its imaginary part, each a double; real / z and imag / z are its parts.
+  complex double value: C, a complex number of two double parts, 16 bytes: its real part, then its imaginary part; real / z and imag / z are its parts.
 complex double:
-  struct
-  real part:
-    double
-  imag part:
-    double
+  value
 comment
-  complex long double: C's complex type of long double parts, 32 bytes: its real part, then its imaginary part, each a long double; real / z and imag / z are its parts.
+  complex long double value: C, a complex number of two long double parts, 32 (16 where long double is double) bytes: its real part, then its imaginary part; real / z and imag / z are its parts.
 complex long double:
-  struct
-  real part:
-    long double
-  imag part:
-    long double
+  value
 comment
   real z: C, the real part of z, a complex value (C's __real__ z); also on the left of =.
 real:
