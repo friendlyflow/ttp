@@ -99,9 +99,9 @@ my @MEMS = qw(m0 m8 m32 s0 s8 s32 x0 x8 x32 p a32);
 # and the memory operand m; $n: no REX (checked fields); $imm: the bytes
 # of an immediate after it (for p).
 sub gmem {
-    my ($m, $reg, $n, $imm) = @_;
+    my ($m, $reg, $n, $imm, $mr, $sb) = @_;
     my $d = $MEM{$m};
-    my ($mr, $sb) = $n ? ("modrm.n", "sib.n") : ("modrm", "sib");
+    ($mr, $sb) = $n ? ("modrm.n", "sib.n") : ("modrm", "sib") unless $mr;
     if ($d->{rip}) {
         my $rel = $imm ? C("rel32.$imm", "target") : C("rel32", "target");
         return (C($mr, 0, $reg, 5), C("word", $rel));
@@ -392,5 +392,295 @@ legacy(nm => "cvtss2siq", s => "q", pre => [0xf3], op => [0x0f, 0x2d], kind => "
 # movq: m64 <-> xmm (F3 0F 7E load, 66 0F D6 store)
 legacy(nm => "movq", s => "l", pre => [0xf3], op => [0x0f, 0x7e], kind => "RM", rk => "x", mk => "x", regonly => 0, osfx => "tox");
 legacy(nm => "movq", s => "l", pre => [0x66], op => [0x0f, 0xd6], kind => "MR", rk => "x", mk => "x", regonly => 0, osfx => "fromx");
+
+# ---------------------------------------------------------------------------
+# VEX: AVX and AVX2 (and BMI's integer forms, the masks' moves and tests).
+# vex2 (C5) where GNU as takes it: map 0F, W0, the r/m register (or a
+# memory operand's base and index) among the first eight; vex3 (C4) the
+# rest. R, X, B and vvvv are inverted in the prefix (rn' xn' bn' vn').
+# ---------------------------------------------------------------------------
+
+$isa->group("gnu encodings");
+$isa->add("gnu encodings", node("comment",
+    node("vex2.b r v l pp: the byte after C5: R inverted (bit 3 of r), vvvv inverted (v), L, pp. vex3.1 r x b m and vex3.2 w v l pp: the bytes after C4. modrm.v mod reg rm: ModRM with rm among the first eight (a vex2 form)."),
+    node("rn' xn' bn' (bit 3 of a register, inverted), vn' (a register's 4 bits, inverted)")));
+for my $n (qw(rn' xn' bn')) {
+    $isa->{seen}{"$n\[0:0]"} = 1;
+    $isa->add("gnu encodings", node("$n\[0:0]:", node($n), C("srli", 3, $n, "a0"), C("andi", 1, "a0", "a0"), C("xori", 1, "a0", "a0")));
+}
+$isa->{seen}{"vn'[3:0]"} = 1;
+$isa->add("gnu encodings", node("vn'[3:0]:", node("vn'"), C("xori", 15, "vn'", "a0"), C("andi", 15, "a0", "a0")));
+$isa->def("vex2.b", "rn'[0:0]", "vn'[3:0]", "l[0:0]", "pp[1:0]");
+$isa->def("vex3.1", "rn'[0:0]", "xn'[0:0]", "bn'[0:0]", "mm[4:0]");
+$isa->def("vex3.2", "w[0:0]", "vn'[3:0]", "l[0:0]", "pp[1:0]");
+$isa->def("modrm.v", "mod[1:0]", "reg'[2:0]", "rm[2:0]");
+
+my %PP = ("" => 0, 66 => 1, f3 => 2, f2 => 3);
+my %LEN = (128 => 0, 256 => 1, lig => 0, lz => 0, 1 => 1);
+my %VK = (128 => "x", 256 => "y");
+
+# One VEX instruction in all its forms. %o:
+#   nm gnu     the name and GNU's mnemonic
+#   pp map w   66 f3 f2 or "", 1 (0F) 2 (0F38) 3 (0F3A), W
+#   lens       [128, 256], or [lig] (no length part: scalar, L 0), or
+#              [lz] (L 0, the integer forms), or [1] (L 1, no part: kord)
+#   op         the opcode byte
+#   kind       RVM: reg <- vvvv, r/m (AT&T: r/m, vvvv, reg); RM: reg <- r/m;
+#              MR: r/m <- reg; RMV: reg <- r/m, vvvv (shlx: vvvv, r/m,
+#              reg); VM: vvvv <- r/m, reg a digit (blsmsk)
+#   rk vk mk   the kinds of reg, vvvv, r/m (x y: by the length; l q k)
+#   mem        0: no memory forms; regs 0: no register forms; rev: the
+#              register form is the store opcode's (.rev)
+#   digit      ModRM.reg for VM
+sub vexf {
+    my (%o) = @_;
+    my $nm = $o{nm};
+    my $gnu = $o{gnu} // $nm;
+    my ($pp, $map, $w) = ($PP{ $o{pp} // "" }, $o{map} // 1, $o{w} // 0);
+    for my $len (@{ $o{lens} }) {
+        my $L = $LEN{$len};
+        my $lp = $len =~ /^\d\d\d$/ ? ".$len" : "";
+        my $vec = $VK{$len} // "x";
+        my ($rk, $vk, $mk) = map { my $k = $o{$_} // "v"; $k eq "v" ? $vec : $k } qw(rk vk mk);
+        for my $enc (qw(vex2 vex3)) {
+            next if $enc eq "vex2" && ($map != 1 || $w);
+            my $v2 = $enc eq "vex2";
+            my $pre = $v2 ? "" : "{vex3} ";
+            my $kind = $o{kind};
+            # the operands: reg, vvvv, r/m (a register or memory)
+            my ($reg, $vv) = $kind eq "VM" ? ($o{digit}, "vd") : ("rd", ($kind =~ /^(RVM|RMV)$/ ? "vs" : 0));
+            $reg = "rs" if $kind eq "MR";
+            my $rmname = $kind eq "MR" ? "rd" : "rs";
+            my $vreg = $kind eq "VM" ? "vd" : "vs";
+            my $prefix = sub {
+                my ($rm, $x, $b) = @_;
+                $v2 ? (gbytes(0xc5), C("vex2.b", $reg, $vv, $L, $pp))
+                    : (gbytes(0xc4), C("vex3.1", $reg, $x, $b, $map), C("vex3.2", $w, $vv, $L, $pp));
+            };
+            my @imm = defined $o{isz} ? C("byte", "imm") : ();
+            my $ig = @imm ? "\$<imm>, " : "";
+            my @ip = @imm ? ("imm:u8") : ();
+            # the order of the operands, AT&T's, as params and in GNU's line
+            my $ops = sub {
+                my ($rmp, $rmg) = @_;     # the r/m's params and spelling
+                my $c2 = $v2 ? "lo" : "any";
+                my $rv = "$vreg:" . rk($vk, "any");
+                my $rr = "$reg:" . rk($rk, "any");
+                return ([@ip, @$rmp, $rv, $rr], "$ig$rmg, <$vreg>, <$reg>") if $kind eq "RVM";
+                return ([@ip, $rv, @$rmp, $rr], "$ig<$vreg>, $rmg, <$reg>") if $kind eq "RMV";
+                return ([@ip, @$rmp, $rr], "$ig$rmg, <$reg>") if $kind eq "RM";
+                return ([@ip, $rr, @$rmp], "$ig<$reg>, $rmg") if $kind eq "MR";
+                return ([@ip, @$rmp, $rv], "$ig$rmg, <$vreg>") if $kind eq "VM";
+                die "vexf: $kind\n";
+            };
+            if ($o{regs} // 1) {
+                my $c2 = $v2 ? "lo" : "any";
+                my ($p, $g) = $ops->(["$rmname:" . rk($mk, $c2)], "<$rmname>");
+                my $name = "$nm$lp.$enc" . ($o{rev} ? ".rev" : "") . ($o{rsfx} ? ".$o{rsfx}" : "");
+                gform($name, $p, $pre . ($o{rev} ? "{store} " : "") . "$gnu $g",
+                    $prefix->($rmname, 0, $rmname), gbytes($o{op}), C($v2 ? "modrm.v" : "modrm", 3, $reg, $rmname), @imm);
+            }
+            next if defined $o{mem} && !$o{mem};
+            for my $m (@MEMS) {
+                next if $m eq "a32";
+                my $d = $MEM{$m};
+                my @mp = @{ $d->{p} };
+                @mp = map { /^(base|index):/ ? "$_.lo" : $_ } @mp if $v2;
+                my ($p, $g) = $ops->(\@mp, $d->{g});
+                my ($x, $b) = $d->{rip} ? (0, 0) : ($d->{sib} == 2 ? "index" : 0, "base");
+                gform("$nm$lp.$enc.$m" . ($o{osfx} // ""), $p, "$pre$gnu $g", $prefix->(undef, $x, $b), gbytes($o{op}),
+                    gmem($m, $reg, 0, @imm ? 1 : 0, $v2 ? "modrm.v" : "modrm", $v2 ? "sib.n" : "sib"), @imm);
+            }
+        }
+    }
+}
+
+$isa->group("gnu avx");
+for my $t (["vpaddb", 1, 0xfc], ["vpsubb", 1, 0xf8], ["vpand", 1, 0xdb], ["vpandn", 1, 0xdf], ["vpor", 1, 0xeb],
+           ["vpxor", 1, 0xef], ["vpcmpeqb", 1, 0x74], ["vpcmpeqd", 1, 0x76], ["vpcmpgtb", 1, 0x64], ["vpminub", 1, 0xda],
+           ["vpmaxub", 1, 0xde], ["vpminud", 2, 0x3b], ["vpshufb", 2, 0x00]) {
+    my ($nm, $map, $op) = @$t;
+    vexf(nm => $nm, pp => 66, map => $map, lens => [128, 256], op => $op, kind => "RVM");
+}
+for my $t (["vmovdqa", 66, 0x6f, 0x7f], ["vmovdqu", "f3", 0x6f, 0x7f], ["vmovaps", "", 0x28, 0x29], ["vmovups", "", 0x10, 0x11]) {
+    my ($nm, $pp, $ld, $st) = @$t;
+    vexf(nm => $nm, pp => $pp, lens => [128, 256], op => $ld, kind => "RM");
+    vexf(nm => $nm, pp => $pp, lens => [128, 256], op => $st, kind => "MR", rev => 1, mem => 0);
+    vexf(nm => $nm, pp => $pp, lens => [128, 256], op => $st, kind => "MR", regs => 0, osfx => "r");
+}
+vexf(nm => "vmovntdq", pp => 66, lens => [128, 256], op => 0xe7, kind => "MR", regs => 0, osfx => "r");
+for my $t (["vpbroadcastb", 0x78], ["vpbroadcastd", 0x58], ["vbroadcastss", 0x18]) {
+    vexf(nm => $t->[0], pp => 66, map => 2, lens => [128, 256], op => $t->[1], kind => "RM", mk => "x");
+}
+vexf(nm => "vpmovmskb", pp => 66, lens => [128, 256], op => 0xd7, kind => "RM", rk => "l", mem => 0);
+# the scalar moves: vmovd and vmovq between xmm and r32/r64 or memory
+vexf(nm => "vmovd", pp => 66, lens => ["lig"], op => 0x6e, kind => "RM", mk => "l", rsfx => "tox", osfx => "tox");
+vexf(nm => "vmovd", pp => 66, lens => ["lig"], op => 0x7e, kind => "MR", mk => "l", rsfx => "fromx", osfx => "fromx");
+vexf(nm => "vmovq", pp => 66, w => 1, lens => ["lig"], op => 0x6e, kind => "RM", mk => "q", mem => 0, rsfx => "tox");
+vexf(nm => "vmovq", pp => 66, w => 1, lens => ["lig"], op => 0x7e, kind => "MR", mk => "q", mem => 0, rsfx => "fromx");
+vexf(nm => "vmovq", pp => "f3", lens => ["lig"], op => 0x7e, kind => "RM", regs => 0, osfx => "tox");
+vexf(nm => "vmovq", pp => 66, lens => ["lig"], op => 0xd6, kind => "MR", regs => 0, osfx => "fromx");
+gform("vzeroupper", [], "vzeroupper", gbytes(0xc5, 0xf8, 0x77));
+gform("vzeroall", [], "vzeroall", gbytes(0xc5, 0xfc, 0x77));
+
+# the masks: kmov between k and r32/r64, kortest, kord (VEX, L0; kord L1)
+$isa->group("gnu mask");
+vexf(nm => "kmovd", pp => "f2", lens => ["lz"], op => 0x92, kind => "RM", rk => "k", mk => "l", mem => 0, rsfx => "tok", gnu => "kmovd");
+vexf(nm => "kmovd", pp => "f2", lens => ["lz"], op => 0x93, kind => "RM", rk => "l", mk => "k", mem => 0, rsfx => "fromk", gnu => "kmovd");
+vexf(nm => "kmovq", pp => "f2", w => 1, lens => ["lz"], op => 0x92, kind => "RM", rk => "k", mk => "q", mem => 0, rsfx => "tok", gnu => "kmovq");
+vexf(nm => "kmovq", pp => "f2", w => 1, lens => ["lz"], op => 0x93, kind => "RM", rk => "q", mk => "k", mem => 0, rsfx => "fromk", gnu => "kmovq");
+for my $t (["kortestb", 66, 0], ["kortestw", "", 0], ["kortestd", 66, 1], ["kortestq", "", 1]) {
+    vexf(nm => $t->[0], pp => $t->[1], w => $t->[2], lens => ["lz"], op => 0x98, kind => "RM", rk => "k", mk => "k", mem => 0);
+}
+for my $t (["kord", 66, 1], ["korq", "", 1], ["kordb", 66, 0], ["korw", "", 0]) {
+    next if $t->[0] eq "kordb";
+    vexf(nm => $t->[0], pp => $t->[1], w => $t->[2], lens => [1], op => 0x45, kind => "RVM", rk => "k", vk => "k", mk => "k", mem => 0);
+}
+
+# BMI: the integer forms in VEX (map 0F38, vex3 only), sizes by W
+$isa->group("gnu bmi");
+for my $s (qw(l q)) {
+    my $w = $s eq "q" ? 1 : 0;
+    vexf(nm => "andn$s", gnu => "andn", map => 2, w => $w, lens => ["lz"], op => 0xf2, kind => "RVM", rk => $s, vk => $s, mk => $s);
+    vexf(nm => "bzhi$s", gnu => "bzhi", map => 2, w => $w, lens => ["lz"], op => 0xf5, kind => "RMV", rk => $s, vk => $s, mk => $s);
+    vexf(nm => "blsmsk$s", gnu => "blsmsk", map => 2, w => $w, lens => ["lz"], op => 0xf3, kind => "VM", digit => 2, vk => $s, mk => $s);
+    vexf(nm => "shlx$s", gnu => "shlx", pp => 66, map => 2, w => $w, lens => ["lz"], op => 0xf7, kind => "RMV", rk => $s, vk => $s, mk => $s);
+    vexf(nm => "shrx$s", gnu => "shrx", pp => "f2", map => 2, w => $w, lens => ["lz"], op => 0xf7, kind => "RMV", rk => $s, vk => $s, mk => $s);
+    vexf(nm => "sarx$s", gnu => "sarx", pp => "f3", map => 2, w => $w, lens => ["lz"], op => 0xf7, kind => "RMV", rk => $s, vk => $s, mk => $s);
+}
+
+# ---------------------------------------------------------------------------
+# EVEX: AVX-512 (and AVX-512VL's 128 and 256), the forms glibc's evex and
+# avx512 string functions have: 62 P0 P1 P2, then the opcode. P0 R X B R'
+# 0 0 m m, P1 W vvvv 1 pp, P2 z L'L b V' aaa; R X B R' V' vvvv inverted.
+# A register's bit 4 is R' (reg), X (r/m) or V' (vvvv). A disp8 is the
+# displacement over N, the bytes of the memory operand (disp8*N): the
+# form takes the displacement itself. Marks: k, the mask register after
+# the destination (aaa); kz the same, zeroing (z); without, aaa 0.
+# ---------------------------------------------------------------------------
+
+$isa->group("gnu encodings");
+$isa->add("gnu encodings", node("comment",
+    node("evex.0 r x b r4 m: P0, x the index's bit 3 (memory); evex.0r r x4 b r4 m: P0 of a register form, x4 the r/m register's bit 4. evex.1 w v pp: P1. evex.2 z ll v4 aaa: P2. r4n' x4n' v4n': a register's bit 4, inverted."),
+    node("dN'[7:0] disp: a displacement over N (2 4 8 16 32 64), EVEX's compressed disp8.")));
+for my $n (qw(r4n' x4n' v4n')) {
+    $isa->{seen}{"$n\[0:0]"} = 1;
+    $isa->add("gnu encodings", node("$n\[0:0]:", node($n), C("srli", 4, $n, "a0"), C("andi", 1, "a0", "a0"), C("xori", 1, "a0", "a0")));
+}
+for my $k (1 .. 6) {
+    my $n = 2**$k;
+    $isa->{seen}{"d$n'[7:0]"} = 1;
+    $isa->add("gnu encodings", node("d$n'[7:0]:", node("d$n'"), C("srai", $k, "d$n'", "a0")));
+}
+$isa->def("evex.0", "rn'[0:0]", "xn'[0:0]", "bn'[0:0]", "r4n'[0:0]", "zz=00", "mm[1:0]");
+$isa->def("evex.0r", "rn'[0:0]", "x4n'[0:0]", "bn'[0:0]", "r4n'[0:0]", "zz=00", "mm[1:0]");
+$isa->def("evex.1", "w[0:0]", "vn'[3:0]", "one=1", "pp[1:0]");
+$isa->def("evex.2", "z[0:0]", "ll[1:0]", "bb=0", "v4n'[0:0]", "aaa[2:0]");
+
+my %ELEN = (128 => [0, "x"], 256 => [1, "y"], 512 => [2, "z"]);
+# the twin's class of a register kind: a vector any of 32, else any
+sub evc { $_[0] =~ /^[xyz]$/ ? "ev" : "any" }
+
+# One EVEX instruction in all its forms. %o as for vexf (nm gnu pp map w
+# op kind rk vk mk mem regs rev osfx), and:
+#   lens   of 128 256 512;  n  the disp8's N: a number, or the length's
+#          bytes (default); imm  an immediate the mnemonic stands for
+#          (vpcmpneqb: vpcmpb with 4); isz  an immediate operand (1)
+sub evexf {
+    my (%o) = @_;
+    my $nm = $o{nm};
+    my $gnu = $o{gnu} // $nm;
+    my ($pp, $map, $w) = ($PP{ $o{pp} // "" }, $o{map} // 1, $o{w} // 0);
+    my $kind = $o{kind};
+    for my $len (@{ $o{lens} }) {
+        my ($ll, $vec) = @{ $ELEN{$len} };
+        my $N = $o{n} // $len / 8;
+        my ($rk, $vk, $mk) = map { my $k = $o{$_} // "v"; $k eq "v" ? $vec : $k } qw(rk vk mk);
+        for my $mask ("", "k", "kz") {
+            next if $mask && $kind eq "MR" && !$o{rev};
+            next if $mask eq "kz" && ($o{rk} // "") eq "k";    # (a mask is never zeroed into)
+            my $mp = $mask ? ".$mask" : "";
+            my $reg = $kind eq "MR" ? "rs" : "rd";
+            my $rmname = $kind eq "MR" ? "rd" : "rs";
+            my $vv = $kind eq "RVM" ? "vs" : 0;
+            my $dst = $kind eq "MR" ? $rmname : $reg;
+            my @mkp = $mask ? ("mk:k.any") : ();
+            my $mg = $mask ? "{<mk>}" . ($mask eq "kz" ? "{z}" : "") : "";
+            my @imm = defined $o{imm} ? C("byte", $o{imm}) : defined $o{isz} ? C("byte", "imm") : ();
+            my @ip = defined $o{isz} ? ("imm:u8") : ();
+            my $ig = defined $o{isz} ? "\$<imm>, " : "";
+            my $ops = sub {
+                my ($rmp, $rmg) = @_;
+                my $rv = "vs:" . rk($vk, evc($vk));
+                my $rr = "$reg:" . rk($rk, evc($rk));
+                return ([@ip, @$rmp, $rv, $rr, @mkp], "$ig$rmg, <vs>, <$reg>$mg") if $kind eq "RVM";
+                return ([@ip, @$rmp, $rr, @mkp], "$ig$rmg, <$reg>$mg") if $kind eq "RM";
+                return ([@ip, $rr, @$rmp, @mkp], "$ig<$reg>, $rmg$mg") if $kind eq "MR";
+                die "evexf: $kind\n";
+            };
+            my $p2 = sub { C("evex.2", $mask eq "kz" ? 1 : 0, $ll, $vv, $mask ? "mk" : 0) };
+            if ($o{regs} // 1) {
+                my ($p, $g) = $ops->(["$rmname:" . rk($mk, evc($mk))], "<$rmname>");
+                gform("$nm.$len.evex" . ($kind eq "MR" ? ".rev" : "") . $mp . ($o{rsfx} ? ".$o{rsfx}" : ""), $p, "{evex} " . ($kind eq "MR" ? "{store} " : "") . "$gnu $g",
+                    gbytes(0x62), C("evex.0r", $reg, $rmname, $rmname, $reg, $map), C("evex.1", $w, $vv, $pp), $p2->(),
+                    gbytes($o{op}), C("modrm", 3, $reg, $rmname), @imm);
+            }
+            next if defined $o{mem} && !$o{mem};
+            next if $mask && $kind eq "MR";
+            for my $m (@MEMS) {
+                next if $m eq "a32";
+                my $d = $MEM{$m};
+                my @mp = map { /^disp:d8$/ ? "disp:d8x$N" : /^disp:d32$/ ? "disp:d32e" : $_ } @{ $d->{p} };
+                my ($p, $g) = $ops->(\@mp, $d->{g});
+                my ($x, $b) = $d->{rip} ? (0, 0) : ($d->{sib} == 2 ? "index" : 0, "base");
+                my @m = gmem($m, $reg, 0, scalar @imm ? 1 : 0);
+                # disp8: the displacement over N
+                @m = map { $_->{content} eq "simm8" && $N > 1 ? C("byte", C("d$N'[7:0]", "disp")) : $_ } @m;
+                gform("$nm.$len.evex$mp.$m" . ($o{osfx} // ""), $p, "{evex} $gnu $g",
+                    gbytes(0x62), C("evex.0", $reg, $x, $b, $reg, $map), C("evex.1", $w, $vv, $pp), $p2->(),
+                    gbytes($o{op}), @m, @imm);
+            }
+        }
+    }
+}
+
+$isa->group("gnu avx512");
+my @L3 = (128, 256, 512);
+for my $t (["vmovdqu64", "f3", 1, 0x6f, 0x7f], ["vmovdqu32", "f3", 0, 0x6f, 0x7f], ["vmovdqu8", "f2", 0, 0x6f, 0x7f],
+           ["vmovdqa64", 66, 1, 0x6f, 0x7f], ["vmovdqa32", 66, 0, 0x6f, 0x7f], ["vmovups", "", 0, 0x10, 0x11],
+           ["vmovaps", "", 0, 0x28, 0x29]) {
+    my ($nm, $pp, $w, $ld, $st) = @$t;
+    evexf(nm => $nm, pp => $pp, w => $w, lens => \@L3, op => $ld, kind => "RM");
+    evexf(nm => $nm, pp => $pp, w => $w, lens => \@L3, op => $st, kind => "MR", rev => 1, mem => 0);
+    evexf(nm => $nm, pp => $pp, w => $w, lens => \@L3, op => $st, kind => "MR", regs => 0, osfx => "r");
+}
+evexf(nm => "vmovntdq", pp => 66, lens => \@L3, op => 0xe7, kind => "MR", regs => 0, osfx => "r");
+# into a mask: the compares and tests
+for my $t (["vpcmpeqb", 66, 1, 0, 0x74], ["vpcmpeqd", 66, 1, 0, 0x76],
+           ["vptestmb", 66, 2, 0, 0x26], ["vptestmd", 66, 2, 0, 0x27], ["vptestnmb", "f3", 2, 0, 0x26], ["vptestnmd", "f3", 2, 0, 0x27]) {
+    my ($nm, $pp, $map, $w, $op) = @$t;
+    evexf(nm => $nm, pp => $pp, map => $map, w => $w, lens => \@L3, op => $op, kind => "RVM", rk => "k");
+}
+# vpcmp[u]b and vpcmp[u]d by their predicate: GNU's names for the immediate
+my @pred = (["eq", 0], ["lt", 1], ["le", 2], ["neq", 4], ["nlt", 5], ["nle", 6]);
+for my $t (["b", 0x3f, 0], ["ub", 0x3e, 0], ["d", 0x1f, 0], ["ud", 0x1e, 0]) {
+    my ($sfx, $op, $w) = @$t;
+    for my $pr (@pred) {
+        next if $pr->[0] eq "eq" && ($sfx eq "b" || $sfx eq "d");    # (vpcmpeqb has its own opcode)
+        evexf(nm => "vpcmp$pr->[0]$sfx", pp => 66, map => 3, w => $w, lens => \@L3, op => $op, kind => "RVM", rk => "k", imm => $pr->[1]);
+    }
+}
+for my $t (["vpminub", 1, 0, 0xda], ["vpmaxub", 1, 0, 0xde], ["vpminud", 2, 0, 0x3b], ["vpaddb", 1, 0, 0xfc], ["vpsubb", 1, 0, 0xf8],
+           ["vpxorq", 1, 1, 0xef], ["vpxord", 1, 0, 0xef], ["vporq", 1, 1, 0xeb], ["vpandq", 1, 1, 0xdb], ["vpandnq", 1, 1, 0xdf],
+           ["vpshufb", 2, 0, 0x00]) {
+    my ($nm, $map, $w, $op) = @$t;
+    evexf(nm => $nm, pp => 66, map => $map, w => $w, lens => \@L3, op => $op, kind => "RVM");
+}
+evexf(nm => "vpternlogd", pp => 66, map => 3, w => 0, lens => \@L3, op => 0x25, kind => "RVM", isz => 1);
+# broadcasts: from a byte or a dword of memory or xmm, or from r32
+evexf(nm => "vpbroadcastb", pp => 66, map => 2, lens => \@L3, op => 0x78, kind => "RM", mk => "x", n => 1);
+evexf(nm => "vpbroadcastd", pp => 66, map => 2, lens => \@L3, op => 0x58, kind => "RM", mk => "x", n => 4);
+evexf(nm => "vpbroadcastb", pp => 66, map => 2, lens => \@L3, op => 0x7a, kind => "RM", mk => "l", mem => 0, rsfx => "fromr");
+evexf(nm => "vpbroadcastd", pp => 66, map => 2, lens => \@L3, op => 0x7c, kind => "RM", mk => "l", mem => 0, rsfx => "fromr");
 
 1;
