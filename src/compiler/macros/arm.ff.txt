@@ -1560,6 +1560,20 @@ c:
       r12
       r1
   comment
+    cc_param_p i: V = the pair of argument registers i and i + 1 (i even), a parameter.
+  cc_param_p:
+    i
+    mov
+      cc_argreg
+        i
+      r0
+    mov
+      addi
+        1
+        i
+        a0
+      r1
+  comment
     cc_ext_p / cc_ext_pu: V's word widened to a pair, its sign / zeros above it; cc_ext_lp / cc_ext_lpu the same for L.
   cc_ext_p:
     asri

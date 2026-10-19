@@ -645,7 +645,13 @@ r2..r6, which hold nothing between primitives. r9 and r12 are free for it
 because ttpc links the whole program itself: no veneers, no platform use of
 r9. C's conversions widen the other operand of an operator, and the value of
 =, a declaration, an initializer's item, return and a cast (`pwiden`,
-`pwassign`, `fcvt`); a condition tests both words.
+`pwassign`, `fcvt`); a condition tests both words. In a call
+(gen/patches/pairs2.pl) an argument is converted to its parameter's type
+where the callee is known, and r0..r7 take the arguments in order, a pair
+the next even pair (r0:r1, r2:r3, r4:r5, r6:r7, as the AAPCS aligns it); from
+the first that does not fit, it and the rest are on the stack, all of them
+pushed, as past 8 arguments. A variadic call pushes the count of its slots;
+va_arg of a pair takes two. The result is V, r0:r1.
 
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
 arm 0, x86_64 traps), nor a shift by the word size or more.
