@@ -54,6 +54,7 @@ use FindBin;
 use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 use FF qw(node layers write_txt read_ff);
+use Header qw(license_nodes header_of);
 use Digest::SHA;
 use POSIX ();
 
@@ -304,6 +305,10 @@ while (@ARGV) {
 }
 die "usage: c2ff.pl [--page name | --program tree] [--target t] tu.json=tu.i ... -- root ...\n" unless @units && (@roots || $passonly);
 reserve_target($target) if $target ne 'riscv64';
+# arm is ILP32: an unsigned long is its 4-byte word, a u32 there
+$scalar{'unsigned long'} = 'u32' if $target eq 'arm';
+# and its va_list is the AAPCS's struct __va_list (a pointer), ttpc's va_list
+@scalar{'__va_list', 'struct __va_list'} = ('va_list', 'va_list') if $target eq 'arm';
 
 my %enumof;                 # each enum constant's enum, as a tag
 my $lastanon;               # the last anonymous record or enum at the top of a unit
@@ -1146,6 +1151,14 @@ sub expr {
     return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
     # the conversions C makes between integers and floating types, and
     # between those, are written out, as a cast is
+    # on arm, where a long long is a pair of registers and a word is not, the
+    # conversion of a narrower integer to it too (ttpc keeps a word's value in
+    # one register, without the high word a pair needs)
+    if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
+        my @to = ctype(qt($n));
+        my @from = ctype(qt((kids($n))[0]));
+        return cast_node(\@to, item(expr((kids($n))[0]))) if "@to" =~ /^[iu]64$/ && "@from" !~ /^[iu]64$/;
+    }
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/) {
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
@@ -2150,14 +2163,18 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
 sub groups { my ($name, @n) = @_; node("$name:", layers(@n)) }
 if (defined $program) {
-    print write_txt(node('include', node($program)), @types, (map { $_->[1] } @out),
+    # (its license first: its file's header, Header.pm)
+    my $lic = header_of($units[0]{i});
+    print write_txt(node('license', map { node($_) } $lic->{spdx}, @{ $lic->{lines} }), node('include', node($program)), @types, (map { $_->[1] } @out),
         ($start ? node('_start:', node('void'), node('syscall', node('SYS_exit'), node('main'))) : ()));
 } else {
     my (@order, %by);
     # (by directory, not by unit: the trees a program reads have 255 pages in
     # all, and M4 has more units than that; each function's comment names its
     # unit)
-    for (@out) { my $g = unit_name($_->[0]) =~ s{/.*}{}r; push @order, $g unless $by{$g}; push @{ $by{$g} }, $_->[1] }
-    print write_txt(groups("$page types", @types), map { groups("$page $_", @{ $by{$_} }) } @order);
+    my %units;
+    for (@out) { my $g = unit_name($_->[0]) =~ s{/.*}{}r; push @order, $g unless $by{$g}; push @{ $by{$g} }, $_->[1]; $units{$g}{ $_->[0]{i} } = 1 if $_->[0] }
+    # each page first has the license of each file it is made of (Header.pm)
+    print write_txt(groups("$page types", @types), map { groups("$page $_", license_nodes(sort keys %{ $units{$_} || {} }), @{ $by{$_} }) } @order);
 }
 warn "c2ff: renamed: " . join(', ', map { "$_ -> $renamed{$_}" } sort keys %renamed) . "\n" if %renamed;

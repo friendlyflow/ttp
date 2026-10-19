@@ -1,3 +1,9 @@
+/* Copyright (C) 2026 Nico Verrijdt
+   This file is part of ttp. It is free software: you can redistribute it
+   and/or modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation, version 3 of the License.
+   It comes with no warranty. See the file LICENSE for the full text.  */
+
 /* glibc's own startup: start.S's _start hands __libc_start_main the stack
    the kernel made, which runs main with argc and argv and sets __environ;
    main's status goes to exit, which flushes stdout. The check runs both

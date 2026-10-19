@@ -31,6 +31,7 @@ use FindBin;
 use lib $FindBin::Bin;
 use FF qw(read_txt);
 use FF ();
+use Header ();
 
 my %only;      # --pages a,b: only these glibc pages' bodies and globals
 if (@ARGV && $ARGV[0] eq '--pages') { shift @ARGV; $only{$_} = 1 for split /,/, shift @ARGV }
@@ -72,13 +73,22 @@ my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8
     'complex long double' => '_Complex long double');
 my (%rec, %enum, %fntype, %fn, %var, %econst, @order);
 my %glibcpage;   # functions of the glibc pages (their bodies are written)
+my @headers;    # the license of each file a page is made of: [its name, its lines]
 
 for my $page (@top) {
-    next if c($page) eq 'comment';
+    next if c($page) eq 'comment' || c($page) eq 'license';
     my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:' && (!%only || $only{ c($page) =~ s/:$//r });
+    # (each license after a comment naming its file: that file's header)
+    { my @k = FF::kids($page);
+      for my $i (1 .. $#k) {
+          next unless c($k[$i]) eq 'license' && c($k[$i - 1]) eq 'comment' && @{ $k[$i - 1]{children} };
+          my ($f) = c($k[$i - 1]{children}[0]) =~ /^glibc-\S+ (.+)$/ or next;
+          my (undef, @l) = map { c($_) } kids($k[$i]);
+          push @headers, [$f, \@l];
+      } }
     # (a page's definitions through its layers, 0: 1: ...)
     for my $d (FF::kids($page)) {
-        next if c($d) eq 'comment';
+        next if c($d) eq 'comment' || c($d) eq 'license';
         (my $name = c($d)) =~ s/:$// or fail('not a definition', $d);
         my @k = kids($d);
         my $w = @k ? c($k[0]) : '';
@@ -738,6 +748,9 @@ sub items_head {
 
 my @c;
 push @c, '/* made by ff2c.pl from ' . ($in =~ s{.*/}{}r) . ' */';
+# the header of each file, as the file has it (gen/headers.pl checks them)
+push @c, map { ("/* ff2c: the header of $_->[0] */", Header::header_text(@{ $_->[1] })) } @headers;
+push @c, '/* ff2c: the end of the headers */' if @headers;
 push @c, 'long __ff_syscall(long, ...);', 'extern void *tp;';
 # the records first as names, so that each may point at any
 push @c, map { "$rec{$_}{kind} " . cid($_) . ';' } grep { $rec{$_} } @order;

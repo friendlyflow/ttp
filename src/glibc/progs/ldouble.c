@@ -1,3 +1,9 @@
+/* Copyright (C) 2026 Nico Verrijdt
+   This file is part of ttp. It is free software: you can redistribute it
+   and/or modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation, version 3 of the License.
+   It comes with no warranty. See the file LICENSE for the full text.  */
+
 /* long double, through glibc's soft-fp (the same functions gcc takes from
    libgcc): + - * /, the comparisons, negation, and the conversions to and
    from the integers, float and double. The exit status is a hash of the

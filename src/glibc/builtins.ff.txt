@@ -1,6 +1,11 @@
 comment
   The compiler builtins glibc's C calls that have no C of their own: written by hand, the one part of glibc in ff that is not translated. c2ff keeps a call of one as it is.
 builtins:
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
   comment
     gcc's __builtin_stdc_rotate_right (C23's stdc_rotate_right) on a word: x turned right by n bits; glibc's PTR_DEMANGLE uses it on a uintptr_t.
   __builtin_stdc_rotate_right:

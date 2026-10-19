@@ -33,7 +33,10 @@ my %name = (
     l => [qw(eax ecx edx ebx esp ebp esi edi r8d r9d r10d r11d r12d r13d r14d r15d)],
     w => [qw(ax cx dx bx sp bp si di r8w r9w r10w r11w r12w r13w r14w r15w)],
     b => [qw(al cl dl bl spl bpl sil dil r8b r9b r10b r11b r12b r13b r14b r15b)],
-    x => [map { "xmm$_" } 0 .. 15],
+    x => [map { "xmm$_" } 0 .. 31],
+    y => [map { "ymm$_" } 0 .. 31],
+    z => [map { "zmm$_" } 0 .. 31],
+    k => [map { "k$_" } 0 .. 7],
 );
 # a byte register without REX: 4..7 are ah ch dh bh
 my @bn = qw(al cl dl bl ah ch dh bh);
@@ -52,6 +55,10 @@ my %vals = (
     "bx0.lo" => [0, 1, 2, 3, 4, 6, 7], "bx0.hi" => [8, 9, 10, 11, 12, 14, 15], bx0 => [0, 8, 1, 12, 2, 9, 4, 14, 6, 15],
     "base.lo" => [0, 1, 2, 3, 4, 5, 6, 7], "base.hi" => [8, 9, 12, 13, 15], base => [0, 9, 4, 13, 5, 12, 7, 15],
     "index.lo" => [0, 1, 2, 3, 5, 6, 7], "index.hi" => [8, 9, 12, 13, 15], index => [1, 9, 5, 12, 0, 15, 6],
+    kany  => [1, 2, 3, 4, 5, 6, 7], klo => [1, 2, 3, 4, 5, 6, 7],
+    ev    => [16, 3, 25, 9, 31, 20, 12, 17],
+    d32e  => [-2147483648, 2147483647, 4660, -129, 1001],
+    st    => [1, 2, 3, 4, 5, 6, 7],      # (st0 to st0: GNU as takes either opcode)
     scale => [1, 2, 4, 8],
     d0    => [0],
     d8    => [-128, 127, -1, 64, 8],
@@ -66,6 +73,8 @@ my %vals = (
 my %next;
 sub take {
     my ($k) = @_;
+    # EVEX's disp8 of N: a multiple of N that fits a byte over N
+    $vals{$k} //= [map { $_ * $1 } -128, 127, -1, 2] if $k =~ /^d8x(\d+)$/;
     my $list = $vals{$k} or die "mkgnu: no values for $k\n";
     $list->[$next{$k}++ % @$list];
 }
@@ -91,12 +100,15 @@ for my $f (@X86_GNU) {
     for (@$params) {
         my ($p, $k) = split /:/, $_, 2;
         my ($ff, $as);
-        if ($k =~ /^([qlwb])\.acc$/) {
+        if ($k eq "st.any") {
+            my $n = take("st");
+            ($ff, $as) = ("st$n", "%st($n)");
+        } elsif ($k =~ /^([qlwb])\.acc$/) {
             $ff = $name{$1}[0];
             $as = "%$ff";
-        } elsif ($k =~ /^([qlwbx])\.(lo|hi|any)$/) {
+        } elsif ($k =~ /^([qlwbxyzk])\.(lo|hi|any|ev)$/) {
             my ($sz, $c) = ($1, $2);
-            my $n = take($sz eq "b" ? "b$c" : $c);
+            my $n = take($sz eq "b" ? "b$c" : $sz eq "k" ? "k$c" : $c);
             $ff = $sz eq "b" && $c eq "lo" ? $bn[$n] : $name{$sz}[$n];
             $as = "%$ff";
         } elsif ($k =~ /^(bm0|bm|bs|bx0|base|index)(\.(lo|hi))?$/) {

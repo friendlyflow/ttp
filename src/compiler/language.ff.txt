@@ -503,6 +503,7 @@ ff, the language ttpc compiles
     asm functions
       name: / asm / instructions is an asm function: its instructions (and block labels) are placed as the asm of a page, on a definition page only when C reaches it
       C calls it by name and takes its address, as a long; it keeps the calling convention itself (glibc's .S functions, by gen/s2ff.pl)
+      align / n first after asm places the function at a multiple of n (glibc's ENTRY, .p2align: the nops inside it count from there)
       what its instructions name (a library function, C or asm, a C alias) is reached and placed before it, so asm names it by its label
       a block label whose first child is asm is one more entry of the function (glibc's _setjmp runs on into __sigsetjmp): C calls it and takes its address, and the function holding it is placed with it
       example

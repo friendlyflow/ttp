@@ -110,6 +110,13 @@ $isa->add("registers",
     # the high bytes, 4..7 in a form without REX (isa/x86_64gnu.pl)
     (map { node("$_->[0] $_->[0]:", node(bin4($_->[1]))) } [ah => 4], [ch => 5], [dh => 6], [bh => 7]),
     (map { node("xmm$_ xmm$_:", node(bin4($_))) } 0 .. 15),
+    # AVX and AVX-512 (isa/x86_64gnu.pl): xmm16..31, ymm and zmm 0..31 (a
+    # register's number is all of it: its size is the form's), the masks k
+    (map { node("xmm$_ xmm$_:", node(sprintf "%05b", $_)) } 16 .. 31),
+    (map { node("ymm$_ zmm$_:", node($_ < 16 ? bin4($_) : sprintf "%05b", $_)) } 0 .. 31),
+    (map { node("k$_ k$_:", node(bin4($_))) } 0 .. 7),
+    # the x87 stack, st(i) as sti (isa/x86_64gnu.pl)
+    (map { node("st$_ st$_:", node(bin4($_))) } 0 .. 7),
     (map { node("cr$_ cr$_:", node(bin4($_))) } 0, 2, 3, 4, 8),
     (map { node("dr$_ dr$_:", node(bin4($_))) } 0 .. 3, 6, 7),
 );
@@ -654,6 +661,11 @@ for my $s (["d", 0, "l"], ["q", 1, "q"]) {
     our %X86_HAVE = map { ($_->[0] => 1) } @X86_WIDE;
     (my $dir = __FILE__) =~ s{[^/]*$}{};
     do "${dir}x86_64gnu.pl" or die "x86_64: x86_64gnu.pl: " . ($@ || $!) . "\n";
+    # its forms go in a tree of their own (x86_64gnu.ff, gen/mkgnuff.pl),
+    # which only a build of x86_64 asm reads: of its groups, only the
+    # encodings stay in the section (the forms call them)
+    our @X86_GNU_DEFS = map { @{ $_->{children} } } grep { $_->{content} =~ /^gnu / && $_->{content} ne "gnu encodings:" } @{ $isa->{groups} };
+    $isa->{groups} = [grep { $_->{content} !~ /^gnu / || $_->{content} eq "gnu encodings:" } @{ $isa->{groups} }];
 }
 
 $isa->section("x86_64", "macros/x86_64.ff.txt");
