@@ -112,16 +112,22 @@ patch:
 # and at the end all of them in order; make fails if one did. Each heavy
 # command takes a slot of its own (src/compiler/gen/slot.sh), so
 # PCJOBS steps (6) wait for at most the machine's three slots.
-#   GBUILD   riscv64's glibc BUILD (the others' are GBUILD/<target>), else
-#            src/glibc's own default
+#   GBUILD   riscv64's glibc BUILD (the others' are GBUILD/<target>): by
+#            default the worktree's own, ~/.cache/ttp/build/<worktree>/glibc,
+#            never the shared ~/.cache/ttp/glibc-gcc16 another check may be
+#            reading. Made where it is not there yet: obj/ a link to the
+#            shared reference build's (read only), riscv64's i/ a copy of the
+#            shared one's (make then makes again what is older than its
+#            sources).
 #   PC_STEPS some of the steps only (with what they need first), e.g.
 #            make ports-check PC_STEPS="compiler-check floats-roundtrip"
 CHECKLOG ?= $(HOME)/.cache/ttp/check/$(notdir $(CURDIR))
 PCJOBS ?= 6
-GBUILD ?=
+GBUILD ?= $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/glibc
+GLIBC_REF := $(HOME)/.cache/ttp/glibc-gcc16
 PC_SLOT := sh src/compiler/gen/slot.sh -v 8000000 -t 3600
 PC_MS := $(shell sed -n 's/^MILESTONES := //p' src/glibc/Makefile)
-PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc $(if $(GBUILD),BUILD=$(GBUILD)$(if $(1),/$(1))) $(if $(1),GTARGET=$(1))
+PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$(1)) $(if $(1),GTARGET=$(1))
 PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 \
 	ldouble-aarch64 generic-aarch64 ldouble-x86_64 generic-x86_64
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
@@ -142,7 +148,17 @@ pc-bootstrap:
 	@grep -q '^PASS' $(CHECKLOG)/bootstrap.result
 pc-compiler-check: pc-bootstrap
 	$(call pc_step,compiler-check,$(PC_SLOT) $(MAKE) -j1 compiler-check)
-pc-units-riscv64: pc-bootstrap
+# the BUILDs, where they are not there yet
+pc-gbuild:
+	@test "$(abspath $(GBUILD))" != "$(abspath $(GLIBC_REF))" || { echo "ports-check: GBUILD is the shared $(GLIBC_REF): give it a folder of its own"; exit 1; }
+	@for t in riscv64 aarch64 x86_64; do \
+	    d=$(GBUILD)$$(test $$t = riscv64 || echo /$$t); s=$(GLIBC_REF)$$(test $$t = riscv64 || echo /$$t); \
+	    test -e $$d/obj && continue; \
+	    mkdir -p $$d && ln -sfn $$(readlink -f $$s/obj) $$d/obj || exit 1; \
+	    if test $$t = riscv64 && test -d $$s/i && ! test -e $$d/i; then cp -a $$s/i $$d/i || exit 1; fi; \
+	    echo "ports-check: $$d, obj from $$s"; \
+	done
+pc-units-riscv64: pc-bootstrap pc-gbuild
 	$(call pc_step,units-riscv64,$(call PC_GLIBC) units-ready)
 define pc_milestone
 pc-$(1)-check: pc-units-riscv64
@@ -154,13 +170,13 @@ $(foreach m,$(PC_MS),$(eval $(call pc_milestone,$(m))))
 pc-generic-riscv64: pc-units-riscv64
 	$(call pc_step,generic-riscv64,$(call PC_GLIBC) generic-check generic-roundtrip)
 define pc_target
-pc-ldouble-$(1): pc-bootstrap
+pc-ldouble-$(1): pc-bootstrap pc-gbuild
 	$$(call pc_step,ldouble-$(1),$$(call PC_GLIBC,$(1)) ldouble-check)
 pc-generic-$(1): pc-ldouble-$(1)
 	$$(call pc_step,generic-$(1),$$(call PC_GLIBC,$(1)) generic-check generic-roundtrip)
 endef
 $(foreach t,aarch64 x86_64,$(eval $(call pc_target,$(t))))
-.PHONY: $(PC_STEPS:%=pc-%)
+.PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
 
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean
