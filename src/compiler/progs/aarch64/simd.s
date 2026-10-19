@@ -22,6 +22,7 @@ _start:
 	addhn v3.8b, v1.8h, v0.8h
 	ushr v3.16b, v1.16b, #3
 	ushr v3.16b, v1.16b, #8
+	ushr v3.16b, v1.16b, #1
 	shrn v3.8b, v1.8h, #2
 	shrn v0.8b, v2.8h, #4
 	dup v3.16b, w1

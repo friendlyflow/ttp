@@ -98,6 +98,8 @@ my $dump = $files[1];
 
 # ---- ttpc's aarch64 instructions: fixed fields and operand slices -----------
 my @defs;
+my %inverse;    # a def's operand of a computed field: the operand from the field
+my %computed = (shr16 => sub { 16 - $_[0] });
 {
     my $section = do "$FindBin::Bin/../isa/aarch64.pl";
     die "s2ff: isa/aarch64.pl: $@" if $@;
@@ -105,12 +107,16 @@ my @defs;
         next if $g->{content} =~ /^(registers|slices|macros|elf|c|linux|rv64):$/;
         for my $d (@{ $g->{children} }) {
             my ($name) = $d->{content} =~ /^(.+):$/ or next;
+            next if $name =~ /\[/;     # a field's function (shr16[6:0])
             my (@params, @fields);
             for my $k (@{ $d->{children} }) {
                 if (!@{ $k->{children} }) { push @params, $k->{content}; next }
                 if ($k->{content} =~ /^(\w+):$/) { push @fields, [fixed => $k->{children}[0]{content}]; next }
                 $k->{content} =~ /^(\w+)\[(\d+)(?::(\d+))?\]$/ or die "s2ff: isa: $name: field $k->{content}\n";
-                push @fields, [slice => $1, $2, $3 // $2];
+                my ($fn, $hi, $lo, $p) = ($1, $2, $3 // $2, $k->{children}[0]{content});
+                # a computed field: its operand from its bits
+                if ($fn ne $p) { $inverse{$name}{$p} = $computed{$fn} // die "s2ff: isa: $name: no inverse of $fn\n" }
+                push @fields, [slice => $p, $hi, $lo];
             }
             my ($pos, $mask, $value, %slices, %top) = (32, 0, 0);
             for my $f (@fields) {
@@ -156,6 +162,7 @@ sub decode {
             $v |= (($word >> $pos) & ((1 << ($hi - $lo + 1)) - 1)) << $lo;
         }
         $v -= 1 << ($d->{top}{$p} + 1) if $p eq 'imm' && $v >> $d->{top}{$p} & 1;
+        $v = $inverse{ $d->{name} }{$p}->($v) if $inverse{ $d->{name} } && $inverse{ $d->{name} }{$p};
         $v{$p} = $v;
     }
     ($d, \%v);

@@ -48,14 +48,14 @@ package ISA::aarch64;
 
 use strict;
 use warnings;
-use FF qw(node);
+use FF qw(node call);
 use ISA;
 
 my $isa = ISA->new(width => sub {
     my ($name) = @_;
     return "4:0" if $name =~ /^(rd|rn|rm|ra|rt|rt2|rs|zd|zn|zm|zt|prfop|pattern)$/;
     return "3:0" if $name =~ /^(cond|nzcv|crm|pd|pn|pm)$/;
-    return "2:0" if $name =~ /^(pg|immb)$/;
+    return "2:0" if $name eq "pg";
     return "1:0" if $name eq "rv";
     return "5:0" if $name =~ /^(immr|imms)$/;
     return "2:0" if $name eq "option";
@@ -377,9 +377,9 @@ def("prfm", "size=11", "op=111", "v=0", "x=01", "opc=10", "uimm[14:3]", "rn", "p
 # arrangement is a dot suffix (cmeq.16b), a compare with #0 has z
 # (cmeqz.16b), an immediate i (movi, bici), a register list of two .x2
 # (ld1.16b.x2), a post-index ld1 .post (by the list's size, which the
-# instruction implies). A shift by an immediate takes its raw field immb,
-# the shift's distance from the element's size: ushr.16b immb = 8 - shift,
-# shrn.8b immb = 8 - shift (of the .8h source).
+# instruction implies). A shift by an immediate takes the shift (1 to 8),
+# as GNU writes it: its field immh:immb is 16 less it (shr16, which
+# computes it).
 # ---------------------------------------------------------------------------
 
 $isa->group("vector");
@@ -396,8 +396,30 @@ for (["cmeqz.16b", 1, "01001"], ["cmeqz.8b", 0, "01001"], ["cmltz.16b", 1, "0101
     def($m, "x=0", "q=$q", "u=0", "x=01110", "size=00", "x=10000", "opcode=$opc", "x=10", "rn", "rd");
 }
 def("addhn.8b", "x=0", "q=0", "u=0", "x=01110", "size=00", "x=1", "rm", "opcode=0100", "x=00", "rn", "rd");
-def("ushr.16b", "x=0", "q=1", "u=1", "x=011110", "immh=0001", "immb", "opcode=00000", "x=1", "rn", "rd");
-def("shrn.8b",  "x=0", "q=0", "u=0", "x=011110", "immh=0001", "immb", "opcode=10000", "x=1", "rn", "rd");
+# A field that computes its bits from an operand (not a slice of it):
+# "shr16[6:0](shift)", 16 - shift in 7 bits. Its function is in the group.
+my %computed_done;
+my %computed = (shr16 => [node("shift"), call("addi", qw(-16 shift t0)), call("sub", qw(t0 zero t1))]);
+sub cdef {
+    my ($name, @fields) = @_;
+    my (%seen, @params, @nodes);
+    for my $f (@fields) {
+        if ($f =~ /^(\w+)\[(\d+):(\d+)\]\((\w+)\)$/) {
+            my ($fn, $hi, $lo, $op) = ($1, $2, $3, $4);
+            push @params, $op unless $seen{$op}++;
+            push @nodes, call("$fn\[$hi:$lo\]", $op);
+            $isa->add($isa->{current}{content} =~ s/:$//r, node("$fn\[$hi:$lo\]:", @{ $computed{$fn} },
+                call("bits", "t1", 63 - $hi, 63 - $hi + $lo, 0))) unless $computed_done{$fn}++;
+            next;
+        }
+        (my $p = $f) =~ s/\[.*//;
+        push @params, $p unless $f =~ /=/ || $seen{$p}++;
+        push @nodes, $isa->field($f);
+    }
+    push @{ $isa->{current}{children} }, node("$name:", (map { node($_) } @params), @nodes);
+}
+cdef("ushr.16b", "x=0", "q=1", "u=1", "x=011110", "shr16[6:0](shift)", "opcode=00000", "x=1", "rn", "rd");
+cdef("shrn.8b",  "x=0", "q=0", "u=0", "x=011110", "shr16[6:0](shift)", "opcode=10000", "x=1", "rn", "rd");
 def("dup.16b", "x=0", "q=1", "op=0", "x=01110000", "imm5=00001", "x=0", "imm4=0001", "x=1", "rn", "rd");
 def("dup.4s",  "x=0", "q=1", "op=0", "x=01110000", "imm5=00100", "x=0", "imm4=0001", "x=1", "rn", "rd");
 for (["movi.16b", 1, 0, "1110"], ["mvni.4s", 1, 1, "0000"], ["mvni.4s.lsl8", 1, 1, "0010"],
