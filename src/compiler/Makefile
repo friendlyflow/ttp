@@ -41,7 +41,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit
 SHARED := shared.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
@@ -119,8 +119,9 @@ run: $(P)/exit42.elf $(P)/hello.elf
 # ttpc1 gets shared.ff in its own language
 # (frozen.pl): without the comments, which it knows only in code, and
 # without else if:, which it would take for a register. Neither emits
-# anything: stage1 is the same. ttpc2 gets it with only the sections it
-# assembles with (trim.pl), for its 4 MiB of input.
+# anything: stage1 is the same. ttpc1 and ttpc2 get it with only the
+# sections they assemble with (trim.pl), for their 4 MiB of input, and
+# insize.pl stops a link of theirs whose input passes 3.5 MiB.
 BOOT := $(BUILD)/boot
 
 $(BOOT):
@@ -132,21 +133,24 @@ $(BOOT)/ttpc1: $(TTPC1_FF) $(BIN) | $(BOOT)
 $(BOOT)/ttpc1.self: $(TTPC1_FF) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 $< $@ > $@.lst
 
-$(BOOT)/shared.ff: $(SHARED) gen/frozen.pl gen/FF.pm | $(BOOT)
+$(BOOT)/shared.ff: $(BOOT)/shared1.ff gen/frozen.pl gen/FF.pm | $(BOOT)
 	perl gen/frozen.pl $< > $@
 
-$(BOOT)/ttpc2: $(BOOT)/shared.ff $(TTPC2_SRC) $(BOOT)/ttpc1
+$(BOOT)/ttpc2: $(BOOT)/shared.ff $(TTPC2_SRC) $(BOOT)/ttpc1 gen/insize.pl
+	perl gen/insize.pl ttpc1 $(BOOT)/shared.ff $(TTPC2_SRC)
 	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(BOOT)/shared.ff $(TTPC2_SRC) $@ > $@.lst
 
-$(BOOT)/ttpc2.self: $(SHARED) $(TTPC2_SRC) $(BOOT)/ttpc2
-	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(SHARED) $(TTPC2_SRC) $@ > $@.lst
+$(BOOT)/ttpc2.self: $(BOOT)/shared1.ff $(TTPC2_SRC) $(BOOT)/ttpc2 gen/insize.pl
+	perl gen/insize.pl ttpc2 $(BOOT)/shared1.ff $(TTPC2_SRC)
+	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff $(TTPC2_SRC) $@ > $@.lst
 
-# ttpc2 reads at most 4 MiB: it gets shared.ff with only riscv64's section
-# (trim.pl), which is all that emits anything for it.
+# ttpc1 and ttpc2 read at most 4 MiB: they get shared.ff with only riscv64's
+# section (trim.pl), which is all that emits anything for them.
 $(BOOT)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BOOT)
 	perl gen/trim.pl $< riscv64 > $@
 
-$(BOOT)/ttpc3: $(TTPC3_SRC) $(BOOT)/ttpc2 $(BOOT)/shared1.ff
+$(BOOT)/ttpc3: $(TTPC3_SRC) $(BOOT)/ttpc2 $(BOOT)/shared1.ff gen/insize.pl
+	perl gen/insize.pl ttpc2 $(BOOT)/shared1.ff $(TTPC3_SRC)
 	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff $(TTPC3_SRC) $@ > $@.lst
 
 $(BOOT)/ttpc3.self: $(SHARED) $(TTPC3_SRC) $(BOOT)/ttpc3
@@ -272,7 +276,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 
@@ -400,8 +404,9 @@ $(BUILD)/$(1)/whole.ff: $(BUILD)/$(1)/ttpc2.ff $(BUILD)/$(1)/ttpc2.defs.ff gen/m
 $(BUILD)/$(1)/ttpc2: $(BUILD)/$(1)/whole.ff $(BUILD)/$(1)/seed
 	$(RUN_$(1)) $(BUILD)/$(1)/seed $$< $$@ > $$@.lst
 
-$(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2
-	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
+$(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/shared1.ff gen/insize.pl
+	perl gen/insize.pl ttpc2 $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff
+	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BUILD)/$(1)
 	perl gen/trim.pl $$< riscv64 $(1) > $$@
@@ -411,7 +416,8 @@ $(BUILD)/$(1)/ttpc3.ff: $(TTPC3_SRC) $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
 
 $(BUILD)/$(1)/ttpc3.defs.ff: $(BUILD)/$(1)/ttpc3.ff
 
-$(BUILD)/$(1)/ttpc3: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc3.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/shared1.ff
+$(BUILD)/$(1)/ttpc3: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc3.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/shared1.ff gen/insize.pl
+	perl gen/insize.pl ttpc2 $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff
 	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/ttpc3.self: $(BUILD)/$(1)/ttpc3

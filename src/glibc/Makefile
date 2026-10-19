@@ -423,7 +423,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(GLIBC_START),,--start) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
@@ -470,6 +470,30 @@ $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
 glibc-roundtrip: floats-roundtrip
 
 .PHONY: strlen-check asm-check glibc-roundtrip
+
+# ---- glibc's C constructs, on their own -------------------------------------
+# progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
+# in for all of glibc (a path from an expression, a call through a comma's
+# value, sizeof of a VLA, a label's attribute, array compound literals,
+# gcc's ffs and overflow builtins), each checked: it exits with the number
+# that fail. It needs no part of glibc but the builtins, so it is built
+# against a folder of them alone, with a _start of its own (c2ff --start)
+# on every target, and as every check with gcc + libc.a; generic-roundtrip
+# writes its ff back as C and compares the ASTs, as for a milestone.
+OWNSTART := generic
+$(FF)/generic.ff: builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt
+	mkdir -p $(FF)
+	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt > $(FF)/generic.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/generic.ff.txt > $@
+$(eval $(call check,generic))
+GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit
+generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/ff2c.pl $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
+	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w \
+	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/generic.rt.c > $(FF)/generic.rt.json
+	$(CAP) timeout 300 perl roundtrip.pl $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
+.PHONY: generic-roundtrip
 
 # ---- all of glibc --------------------------------------------------------------
 # Every object of the static libraries glibc installs for GTARGET
