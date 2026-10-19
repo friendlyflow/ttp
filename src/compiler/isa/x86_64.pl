@@ -107,6 +107,8 @@ sub bin4 { sprintf "%04b", $_[0] }
 $isa->add("registers",
     (map { node("$q[$_] $l[$_]:", node(bin4($_))) } 0 .. 15),
     (map { node("$w[$_] $b[$_]:", node(bin4($_))) } 0 .. 15),
+    # the high bytes, 4..7 in a form without REX (isa/x86_64gnu.pl)
+    (map { node("$_->[0] $_->[0]:", node(bin4($_->[1]))) } [ah => 4], [ch => 5], [dh => 6], [bh => 7]),
     (map { node("xmm$_ xmm$_:", node(bin4($_))) } 0 .. 15),
     (map { node("cr$_ cr$_:", node(bin4($_))) } 0, 2, 3, 4, 8),
     (map { node("dr$_ dr$_:", node(bin4($_))) } 0 .. 3, 6, 7),
@@ -643,6 +645,15 @@ for my $s (["d", 0, "l"], ["q", 1, "q"]) {
         modrm_body([0x66], $w, [0x0f, 0x6e], "xd", "rs"));
     form("mov$sfx.fromx", ["xs:x", "rd:$k"], "{rex} mov$sfx <xs>, <rd>",
         modrm_body([0x66], $w, [0x0f, 0x7e], "xs", "rd"));
+}
+
+# the forms GNU as picks, for glibc's asm (isa/x86_64gnu.pl), named apart
+# from the ones above
+{
+    our $X86_ISA = $isa;
+    our %X86_HAVE = map { ($_->[0] => 1) } @X86_WIDE;
+    (my $dir = __FILE__) =~ s{[^/]*$}{};
+    do "${dir}x86_64gnu.pl" or die "x86_64: x86_64gnu.pl: " . ($@ || $!) . "\n";
 }
 
 $isa->section("x86_64", "macros/x86_64.ff.txt");

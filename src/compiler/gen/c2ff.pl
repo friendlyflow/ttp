@@ -72,6 +72,7 @@ my %scalar = (
     'unsigned int' => 'u32', 'unsigned' => 'u32',
     'long' => 'long', 'signed long' => 'long', 'unsigned long' => 'u64',
     'float' => 'float', 'double' => 'double', 'long double' => 'long double',
+    '__float128' => 'long double',      # x86_64's _Float128 for clang (clang-prelude.h)
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
     '_Bool' => 'u8', 'void' => 'void',
     '__builtin_va_list' => 'va_list',
