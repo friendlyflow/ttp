@@ -117,7 +117,8 @@ run: $(P)/exit42.elf $(P)/hello.elf
 # (frozen.pl): without the comments, which it knows only in code, and
 # without else if:, which it would take for a register. Neither emits
 # anything: stage1 is the same. ttpc2 gets it with only the sections it
-# assembles with (trim.pl), for its 4 MiB of input.
+# assembles with (trim.pl), for its 4 MiB of input, and in its own C words
+# (address and content for * pointer and & address).
 BOOT := $(BUILD)/boot
 
 $(BOOT):
@@ -135,8 +136,8 @@ $(BOOT)/shared.ff: $(SHARED) gen/frozen.pl gen/FF.pm | $(BOOT)
 $(BOOT)/ttpc2: $(BOOT)/shared.ff $(TTPC2_SRC) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(BOOT)/shared.ff $(TTPC2_SRC) $@ > $@.lst
 
-$(BOOT)/ttpc2.self: $(SHARED) $(TTPC2_SRC) $(BOOT)/ttpc2
-	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(SHARED) $(TTPC2_SRC) $@ > $@.lst
+$(BOOT)/ttpc2.self: $(BOOT)/shared1.ff $(TTPC2_SRC) $(BOOT)/ttpc2
+	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff $(TTPC2_SRC) $@ > $@.lst
 
 # ttpc2 reads at most 4 MiB: it gets shared.ff with only riscv64's section
 # (trim.pl), which is all that emits anything for it.
@@ -198,7 +199,7 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # and C mixed in one compile-time function, cct keeps only the branch its
 # condition takes (a lambda with if, else and emit), cnowfail fails to
 # compile with its message, and so do creserved, which names a variable
-# content, cmisplaced, with compile time on a while, cuntyped, a global declaration
+# & address, cmisplaced, with compile time on a while, cuntyped, a global declaration
 # without a type, citems, several items on a long, cchartext, text in a
 # char, ctypeout, type outside compile time, and cbelow, a local used
 # above its declaration.
@@ -211,7 +212,7 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
 	grep -q "compile time: no" $(P)/cnowfail.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
-	grep -q "a reserved word: content" $(P)/creserved.err
+	grep -q "a reserved word: & address" $(P)/creserved.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
 	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cuntyped.ff $(P)/cuntyped.celf 2> $(P)/cuntyped.err
@@ -219,7 +220,7 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/citems.ff $(P)/citems.celf 2> $(P)/citems.err
 	grep -q "several items need array: n$$" $(P)/citems.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cchartext.ff $(P)/cchartext.celf 2> $(P)/cchartext.err
-	grep -q "text needs address char: oops$$" $(P)/cchartext.err
+	grep -q "text needs \* pointer char: oops$$" $(P)/cchartext.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/ctypeout.ff $(P)/ctypeout.celf 2> $(P)/ctypeout.err
 	grep -q "type goes only in compile time: type$$" $(P)/ctypeout.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cbelow.ff $(P)/cbelow.celf 2> $(P)/cbelow.err
@@ -383,8 +384,8 @@ $(BUILD)/$(1)/whole.ff: $(BUILD)/$(1)/ttpc2.ff $(BUILD)/$(1)/ttpc2.defs.ff gen/m
 $(BUILD)/$(1)/ttpc2: $(BUILD)/$(1)/whole.ff $(BUILD)/$(1)/seed
 	$(RUN_$(1)) $(BUILD)/$(1)/seed $$< $$@ > $$@.lst
 
-$(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2
-	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
+$(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/shared1.ff
+	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BUILD)/$(1)
 	perl gen/trim.pl $$< riscv64 $(1) > $$@

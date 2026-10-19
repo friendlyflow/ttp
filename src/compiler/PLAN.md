@@ -197,12 +197,12 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   local aggregate is zeroed first). A global is built in a staging buffer
   and written at once, the texts its items name right after it; its items
   are worked out while compiling: a number or constant, `-` and one,
-  `address` / a global or function, a text, or a `:` expression (run by
+  `* pointer` / a global or function, a text, or a `:` expression (run by
   compile time). A page item whose items have children only as `:` or
-  `address` is a global; any other is a function.
+  `* pointer` is a global; any other is a function.
 - **Functions** `name:` type params... statements...: a parameter is
   `name:` with a type and nothing else. A function without parameters is
-  called by its name alone (`address` / f is its address); `name:` in a
+  called by its name alone (`* pointer` / f is its address); `name:` in a
   body is a declaration (a label without a type), never a function. `return` is a value too: as an
   item it leaves the function there. The parameters are the leading
   `name:` nodes with only a type, so a local first in a body needs a value
@@ -265,8 +265,8 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   = len % 8` in glibc's memcpy.
 - **Casts and text** (`progs/ccast.ff`, the user's rule, 16 Oct 2026):
   `cast:` / type / value is C's cast (`primary` converts the value; as a
-  statement it is `(void) x`), and under `address` / `char` a leaf is
-  text whatever it reads as, so `address` / `char` / `3` is "3" (`textof`).
+  statement it is `(void) x`), and under `* pointer` / `char` a leaf is
+  text whatever it reads as, so `* pointer` / `char` / `3` is "3" (`textof`).
   `cast` is a reserved word (`KW_cast`, its word `cast:` in `cc_kw`).
 - **A path from an expression** (`progs/cdot.ff`): a `.` leaf among a
   node's children; the node cut there is the value (`index` evaluates a
@@ -277,7 +277,7 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   looks inside); text leaves in a row fill a char array (`gtext`).
 - **Address constants** (`progs/caddrc.ff`): in a global, a name in an
   address field is its address, `cast:` to an address type is its value's,
-  `:` / X / `+` / N adds N of what X points at, and `address` of a path is
+  `:` / X / `+` / N adds N of what X points at, and `* pointer` of a path is
   its label and offsets (`gpath`, a block of `gval`'s own). A flexible
   array member takes the items after it: `gput` keeps how far the global
   reaches and `global` lays it out again at that size. A global's `:` item
@@ -319,8 +319,8 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
 - **Conditionals** (`progs/ccond.ff`): `c` / `?` / `a` / `:` / `b` among
   siblings is C's `c ? a : b`, right to left, between `=` and `||`
   (`OP_cond`); `c` / `?` / `:` / `b` is GNU C's `c ?: b`.
-- **Labels as values** (`progs/clabels.ff`): `address` / L is the address
-  of label L (`label_addr`, given the definition node), `goto` / `content`
+- **Labels as values** (`progs/clabels.ff`): `* pointer` / L is the address
+  of label L (`label_addr`, given the definition node), `goto` / `& address`
   / p jumps to it through `cc_jv` (every target), as glibc's vfprintf
   jump tables need.
 - **alloca and variable-length arrays** (`progs/calloca.ff`, the user's
@@ -328,7 +328,7 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   of 8 MiB it maps (`alloca top`); a function that calls it or holds an
   `array` / T / n with n a value (`ccalloca` in cc) saves `alloca top` in
   its frame and gives the space back when it returns.
-- **Addresses of literals** (`progs/caddrlit.ff`): `address` over a typed
+- **Addresses of literals** (`progs/caddrlit.ff`): `* pointer` over a typed
   literal (the literal under the type word) or over a compound literal is
   the address of a temporary holding it; an array element or field of a
   floating type kept in memory takes a value (`linit`).
@@ -353,15 +353,15 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   of its block ("used before it is declared" above it), an inner one hides
   an outer one, and a callee does not see its caller's locals.
 - **Types** are a run of leaf siblings, one word per node: `char` (u8)
-  `short` `int` `long` `i8`..`i64` `u8`..`u64` `void`, `address` T (alone,
+  `short` `int` `long` `i8`..`i64` `u8`..`u64` `void`, `* pointer` T (alone,
   the address of nothing), `array` T n (`array` `array` `int` `3` `4`), and
   structs: `point:` `struct` `x:` `int` ..., laid out as C does; `type`
-  only in compile time. `long` and `address` are a word of the target (8
+  only in compile time. `long` and `* pointer` are a word of the target (8
   bytes; 4 on arm, where `i64` and `u64` are refused: "not on this
   target"). A type with a value converts it, the first word of the type on
   top, the rest of the type and the value its children: `long` / x,
-  `address` / `char` / p. A struct may hold an address of itself (`next:` /
-  `address` / `node`, `progs/cself.ff`): each struct has one type, made
+  `* pointer` / `char` / p. A struct may hold an address of itself (`next:` /
+  `* pointer` / `node`, `progs/cself.ff`): each struct has one type, made
   before its fields are laid out, so the field finds it.
 - **Unions** (`progs/cunion.ff`): `word:` / `union` / fields, as a struct
   whose fields all start at 0, as large as its largest. **Bitfields**
@@ -375,7 +375,7 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   a constant, `-` before it) or one more than the one before, and is seen
   where the enum is (enums on the page; in a function a `name:` without a
   type is a label). **Function types**: `binary:` / `function` / return
-  type / parameters; `address` / `binary` points to one, and a variable or
+  type / parameters; `* pointer` / `binary` points to one, and a variable or
   global of that type with arguments calls through it (`cc_calll`: the
   address is pushed, then the arguments, then it goes to L). `sizeof` and
   `alignof` / a type run or a variable: an unsigned long.
@@ -391,9 +391,9 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   `u64` it fits. Not yet on arm (a `long` of 4 bytes): `u32` with `long`
   is `long` there, not C's unsigned long.
 - **Paths** by calling: `xs` / `i` an element, `p` / `x` a field (also
-  through an address), `r` / `b` / `x` both in a row. `address` / x, x not a
-  type, is C's `&x`, `content` / p is C's `*p` (read, or written on the left of `=`).
-- **Reserved**: the keywords (`address`, `content`, `if`, `else if`,
+  through an address), `r` / `b` / `x` both in a row. `* pointer` / x, x not a
+  type, is C's `&x`, `& address` / p is C's `*p` (read, or written on the left of `=`).
+- **Reserved**: the keywords (`* pointer`, `& address`, `if`, `else if`,
   `while`, `for`, `do while`, `switch`, `case`, `default`, `goto`, ...,
   `compile time`, `target`), the type names and the register
   names of the target name no variable, function or struct (`type` among
@@ -414,9 +414,9 @@ the language, asm and C, is described as an ff tree in `language.ff.txt`
   statements and `goto` / name jumps to it, from anywhere in the
   function (a label sets SP for its block). `if`/`else` are a value too,
   C's `?:` (the last item of the branch taken); C's comma is a lambda.
-- **Text** `address` `char` and a leaf that names nothing: its bytes and a
-  NUL, the value their address; a declaration `my string:` / `address` /
-  `char` / `this is a string`, an argument `address` / `char` / text.
+- **Text** `* pointer` `char` and a leaf that names nothing: its bytes and a
+  NUL, the value their address; a declaration `my string:` / `* pointer` /
+  `char` / `this is a string`, an argument `* pointer` / `char` / text.
   `char` with text is an error ("text needs address char").
 - **asm**: a node naming an instruction or macro of the target is emitted
   as it is (`ecall`, `li` / `5` / `a0`). asm belongs to one target: guard
@@ -551,7 +551,7 @@ operands: pass 1 and pass 2 must lay out the same.
 |---|---|
 | `cc_v` `cc_l` `cc_x` | constants: the register numbers of V, L, X |
 | `cc_slot` | constant: bytes per push (8; 16 on aarch64, 4 on arm) |
-| `cc_word` | constant: bytes of a `long` and an `address` (8; 4 on arm) |
+| `cc_word` | constant: bytes of a `long` and an `* pointer` (8; 4 on arm) |
 | `cc_fixed` | constant: a bit per register C must not write (sp, fp, ...) |
 | `cc_push` / `cc_pop` | SP -= slot, [SP] = V / L = [SP], SP += slot |
 | `cc_drop n` | SP += n |

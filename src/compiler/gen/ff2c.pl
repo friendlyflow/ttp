@@ -107,7 +107,7 @@ sub is_function {
     for my $k (kids($d)) {
         next if leaf($k);
         my $w = c($k);
-        next if $w eq ':' || $w eq 'address' || $w eq 'cast:' || $w eq 'items';
+        next if $w eq ':' || $w eq '* pointer' || $w eq 'cast:' || $w eq 'items';
         next if (exists $scalar{$w} || $rec{$w}) && !grep { !leaf($_) } kids($k);
         return 1;
     }
@@ -120,7 +120,7 @@ sub is_function {
 
 sub is_typeword {
     my ($w) = @_;
-    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $rec{$w} || $enum{$w} || $fntype{$w};
+    exists $scalar{$w} || $w eq '* pointer' || $w eq 'array' || $rec{$w} || $enum{$w} || $fntype{$w};
 }
 
 # The type run at $$i of a list of nodes.
@@ -133,8 +133,8 @@ sub ptype {
     return [rec => $w] if $rec{$w};
     return [enum => $w] if $enum{$w};
     return [fn => $w] if $fntype{$w};
-    if ($w eq 'address') {
-        # address alone: the address of nothing, void *
+    if ($w eq '* pointer') {
+        # * pointer alone: the address of nothing, void *
         return [ptr => undef] if $$i >= @$l || !leaf($l->[$$i]) || !is_typeword(c($l->[$$i]));
         return [ptr => ptype($l, $i)];
     }
@@ -405,8 +405,8 @@ sub operand {
         my $last = $st[-1][0] eq 'expr' ? $st[-1][2] : undef;
         return ('({ ' . join(' ', map { $_->[0] eq 'expr' ? "$_->[1];" : $_->[1] } @st) . ' })', $last);
     }
-    if ($w eq 'address') {
-        # (a : around one item is that item: address / : / free is &(free))
+    if ($w eq '* pointer') {
+        # (a : around one item is that item: * pointer / : / free is &(free))
         @k = kids($k[0]) while @k == 1 && c($k[0]) eq ':' && kids($k[0]) == 1;
         my $f = $k[0];
         if (leaf($f) && is_typeword(c($f)) && !local_type(c($f)) && !gtype(c($f))) {
@@ -449,7 +449,7 @@ sub operand {
         my ($s, $t) = expr([@k]);
         return ("(&$s)", [ptr => $t]);
     }
-    if ($w eq 'content') {
+    if ($w eq '& address') {
         my ($s, $t) = expr([@k]);
         my $to = $t && $t->[0] eq 'ptr' ? $t->[1] : $t && $t->[0] eq 'arr' ? $t->[1] : undef;
         return ("(*$s)", $to);
@@ -662,7 +662,7 @@ sub control {
     return '' if $w eq 'comment';
     if ($w eq 'return') { return @k ? 'return ' . expr_item([@k]) . ';' : 'return;' }
     if ($w eq 'goto') {
-        return 'goto *' . expr_item([kids($k[0])]) . ';' if c($k[0]) eq 'content';
+        return 'goto *' . expr_item([kids($k[0])]) . ';' if c($k[0]) eq '& address';
         return 'goto ' . cid_local(c($k[0])) . ';';
     }
     if ($w eq 'if' || $w eq 'else if') {

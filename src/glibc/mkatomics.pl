@@ -16,19 +16,19 @@ use FF qw(node write_txt);
 
 sub leaf { map { node($_) } @_ }
 sub param { my ($n, @t) = @_; node("$n:", leaf(@t)) }
-sub content { node('content', node($_[0])) }
+sub content { node('& address', node($_[0])) }
 
 my @fns;
 for my $n (1, 2, 4, 8) {
     my $u = "u" . 8 * $n;
-    my @p = (param('p', 'address', $u));
+    my @p = (param('p', '* pointer', $u));
     push @fns, node("__atomic_load_$n:", leaf($u), @p, param('order', 'int'),
         node('return', content('p')));
     push @fns, node("__atomic_store_$n:", leaf('void'), @p, param('v', $u), param('order', 'int'),
         content('p'), leaf('=', 'v'));
     push @fns, node("__atomic_exchange_$n:", leaf($u), @p, param('v', $u), param('order', 'int'),
         node('old:', leaf($u), content('p')), content('p'), leaf('=', 'v'), node('return', leaf('old')));
-    push @fns, node("__atomic_compare_exchange_$n:", leaf('int'), @p, param('e', 'address', $u), param('d', $u),
+    push @fns, node("__atomic_compare_exchange_$n:", leaf('int'), @p, param('e', '* pointer', $u), param('d', $u),
         param('success', 'int'), param('failure', 'int'),
         node('if', content('p'), leaf('=='), content('e'), content('p'), leaf('=', 'd'), node('return', leaf(1))),
         content('e'), leaf('='), content('p'), node('return', leaf(0)));

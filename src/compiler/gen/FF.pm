@@ -23,7 +23,7 @@ use warnings;
 use Digest::SHA qw(sha256);
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(node call uncomment frozen read_ff write_ff read_txt write_txt);
+our @EXPORT_OK = qw(node call uncomment frozen oldwords read_ff write_ff read_txt write_txt);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
@@ -48,7 +48,7 @@ sub frozen {
     my ($n) = @_;
     my $k = $n->{children};
     return node("char", frozen($k->[1]))
-        if $n->{content} eq "address" && @$k == 2 && $k->[0]{content} eq "char"
+        if $n->{content} eq "* pointer" && @$k == 2 && $k->[0]{content} eq "char"
         && !@{ $k->[0]{children} } && !@{ $k->[1]{children} };
     node($n->{content},
         map { frozen($_) } grep {
@@ -56,6 +56,15 @@ sub frozen {
             !($_->{content} eq "comment" && @$c)
                 && !($_->{content} =~ / .*:$/ && @$c && !($c->[0]{content} =~ /^[01]+$/ && !@{ $c->[0]{children} }))
         } @{ $n->{children} });
+}
+
+# The tree under n with the C words of the frozen ttpc2: * pointer was
+# address, & address was content (C's &x and *p).
+my %oldword = ("* pointer" => "address", "& address" => "content",
+    "* pointer:" => "address:", "& address:" => "content:");
+sub oldwords {
+    my ($n) = @_;
+    node($oldword{ $n->{content} } // $n->{content}, map { oldwords($_) } @{ $n->{children} });
 }
 
 # ---------------------------------------------------------------------------

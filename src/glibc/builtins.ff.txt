@@ -548,16 +548,16 @@ builtins:
     b:
       u64
     r:
-      address
+      * pointer
       u64
-    content
+    & address
       r
     =
     a
     +
     b
     return
-      content
+      & address
         r
       <
       a
@@ -570,7 +570,7 @@ builtins:
     b:
       u32
     r:
-      address
+      * pointer
       u32
     s:
       u64
@@ -581,7 +581,7 @@ builtins:
       cast:
         u64
         b
-    content
+    & address
       r
     =
     cast:
@@ -600,9 +600,9 @@ builtins:
     b:
       u32
     r:
-      address
+      * pointer
       u64
-    content
+    & address
       r
     =
     cast:
@@ -623,7 +623,7 @@ builtins:
     b:
       u64
     r:
-      address
+      * pointer
       u64
     s:
       u64
@@ -632,7 +632,7 @@ builtins:
         a
       +
       b
-    content
+    & address
       r
     =
     s
@@ -649,7 +649,7 @@ builtins:
     b:
       int
     r:
-      address
+      * pointer
       u32
     s:
       u64
@@ -660,7 +660,7 @@ builtins:
         cast:
           long
           b
-    content
+    & address
       r
     =
     cast:
@@ -707,14 +707,14 @@ builtins:
     b:
       u64
     r:
-      address
+      * pointer
       int
     s:
       u64
       a
       +
       b
-    content
+    & address
       r
     =
     cast:
@@ -739,7 +739,7 @@ builtins:
     b:
       int
     r:
-      address
+      * pointer
       int
     s:
       long
@@ -750,7 +750,7 @@ builtins:
       cast:
         long
         b
-    content
+    & address
       r
     =
     cast:
@@ -761,7 +761,7 @@ builtins:
       !=
       cast:
         long
-        content
+        & address
           r
   comment
     __builtin_mul_overflow on words (malloc): the product wrapped, and whether it did.
@@ -772,9 +772,9 @@ builtins:
     b:
       u64
     r:
-      address
+      * pointer
       u64
-    content
+    & address
       r
     =
     a
@@ -786,7 +786,7 @@ builtins:
       0
       &&
       :
-        content
+        & address
           r
         /
         a
@@ -801,7 +801,7 @@ builtins:
     b:
       u64
     r:
-      address
+      * pointer
       u64
     s:
       u64
@@ -810,7 +810,7 @@ builtins:
         a
       *
       b
-    content
+    & address
       r
     =
     s
@@ -838,7 +838,7 @@ builtins:
     b:
       int
     r:
-      address
+      * pointer
       u32
     s:
       u64
@@ -849,7 +849,7 @@ builtins:
         cast:
           long
           b
-    content
+    & address
       r
     =
     cast:
@@ -908,11 +908,11 @@ builtins:
       double
     h:
       u64
-      content
+      & address
         cast:
-          address
+          * pointer
           u64
-          address
+          * pointer
             x
     e:
       u64
@@ -944,11 +944,11 @@ builtins:
       double
     h:
       u64
-      content
+      & address
         cast:
-          address
+          * pointer
           u64
-          address
+          * pointer
             x
     e:
       u64
@@ -996,11 +996,11 @@ builtins:
       double
     h:
       u64
-      content
+      & address
         cast:
-          address
+          * pointer
           u64
-          address
+          * pointer
             x
     e:
       u64
@@ -1033,9 +1033,9 @@ builtins:
     h:
       u64
       cast:
-        address
+        * pointer
         u64
-        address
+        * pointer
           x
         .
         1
@@ -1059,9 +1059,9 @@ builtins:
       ||
       :
         cast:
-          address
+          * pointer
           u64
-          address
+          * pointer
             x
           .
           0
@@ -1081,9 +1081,9 @@ builtins:
     h:
       u64
       cast:
-        address
+        * pointer
         u64
-        address
+        * pointer
           x
         .
         1
@@ -1107,9 +1107,9 @@ builtins:
       ||
       :
         cast:
-          address
+          * pointer
           u64
-          address
+          * pointer
             x
           .
           0
@@ -1145,9 +1145,9 @@ builtins:
     h:
       u64
       cast:
-        address
+        * pointer
         u64
-        address
+        * pointer
           x
         .
         1
@@ -1171,9 +1171,9 @@ builtins:
       ||
       :
         cast:
-          address
+          * pointer
           u64
-          address
+          * pointer
             x
           .
           0
@@ -1190,26 +1190,26 @@ builtins:
     gcc's __builtin_return_address level: where the function that calls it returns to (level 0, all glibc asks: dlopen's RETURN_ADDRESS), from ttpc's frame on riscv64, which holds the caller's s0 at s0 and its return address at s0 + 8.
     This builtin's own frame is one more: the word at its s0 is the s0 of the function that calls it.
   __builtin_return_address:
-    address
+    * pointer
     void
     level:
       u32
     f:
-      address
+      * pointer
       u64
       cast:
-        address
+        * pointer
         u64
-        content
+        & address
           cast:
-            address
+            * pointer
             u64
             s0
     return
       cast:
-        address
+        * pointer
         void
-        content
+        & address
           :
             f
             +
@@ -1217,10 +1217,10 @@ builtins:
   comment
     gcc's __builtin_extract_return_addr: the address itself, which riscv64 keeps as it is.
   __builtin_extract_return_addr:
-    address
+    * pointer
     void
     a:
-      address
+      * pointer
       void
     return
       a
@@ -1235,7 +1235,7 @@ builtins:
     size:
       u64
     p:
-      address
+      * pointer
       void
     return
       :

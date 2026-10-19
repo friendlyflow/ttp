@@ -71,7 +71,7 @@ my %scalar = (
 );
 
 # The words a type run can be made of, besides the names of types.
-my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
+my %scalar_word = map { $_ => 1 } (values %scalar, '* pointer', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
@@ -103,7 +103,7 @@ sub ctype {
     # an array of function pointers, ret (*[n]) (params): the init arrays'
     # void (*[]) (int, char **, char **)
     if ($t =~ /^(.*?)\s*\(\*\s*\[(\d*)\]\)\s*\((.*)\)$/) {
-        return ('array', 'address', fntype($1, $3), $2 eq '' ? 0 : $2);
+        return ('array', '* pointer', fntype($1, $3), $2 eq '' ? 0 : $2);
     }
     if ($t =~ /^(.*?)\s*\[(\d*)\]((?:\[\d+\])*)$/) {
         # T[] (a flexible array member, an extern array) has no elements of
@@ -111,11 +111,11 @@ sub ctype {
         my ($base, $n, $rest) = ($1, $2, $3);
         return ('array', ctype($base . $rest), $n eq '' ? 0 : $n);
     }
-    return ('address', fntype($1, $2)) if $t =~ /^(.*?)\s*\(\*\)\s*\((.*)\)$/;
+    return ('* pointer', fntype($1, $2)) if $t =~ /^(.*?)\s*\(\*\)\s*\((.*)\)$/;
     if ($t =~ /^(.*)\*$/) {
         my $base = expand($1);
         my ($r, $p) = split_fn($base);
-        return defined $r ? ('address', fntype($r, $p)) : ('address', ctype($base));
+        return defined $r ? ('* pointer', fntype($r, $p)) : ('* pointer', ctype($base));
     }
     return $scalar{$t} if exists $scalar{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};
@@ -225,12 +225,12 @@ sub qt { my ($n) = @_; my $t = $n->{type} or die "c2ff: no type\n"; $t->{desugar
 # that is one gets a ' after it (type -> type'), which no C name has.
 
 my %reserved = map { $_ => 1 } qw(
-    if else while for return break continue comment address content syscall
+    if else while for return break continue comment syscall
     array struct union enum function sizeof alignof compile emit fail number
     target import workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len zero ra sp gp tp fp pc
-), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
+), '* pointer', '& address', map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
 # group of its section in shared.ff.
@@ -720,7 +720,7 @@ sub asm_stmt {
     asm_once($name, "$template : @oc : @ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
-    my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops[$i])) : atom($ops[$i]) } @arg;
+    my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('* pointer', atom($ops[$i])) : atom($ops[$i]) } @arg;
     my $call = @args ? node($name, @args) : node($name);
     return defined $ret ? (item(expr($ops[$ret])), node('='), $call) : $call;
 }
@@ -844,7 +844,7 @@ sub asm_stmt_other {
     asm_once($name, "$template : @$oc : @$ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
-    my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
+    my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('* pointer', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
     my $call = @args ? node($name, @args) : node($name);
     return defined $ret ? (item(expr($ops->[$ret])), node('='), $call) : $call;
 }
@@ -854,15 +854,15 @@ sub expr {
     my $k = $n->{kind};
     softfp($n);
     # GNU's &&L, the address of a label of the function
-    return node('address', node(ffname($label{ $n->{labelDeclId} } // stop('the address of no label', $n)))) if $k eq 'AddrLabelExpr';
+    return node('* pointer', node(ffname($label{ $n->{labelDeclId} } // stop('the address of no label', $n)))) if $k eq 'AddrLabelExpr';
     # in a global's items, an array field that decays to its first element's
     # address (dl-support's .l_scope = _dl_main_map.l_scope_mem): the address of
     # the path, the same address, as ttpc takes an item
     if ($in_global && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'ArrayToPointerDecay' && strip((kids($n))[0])->{kind} =~ /^(MemberExpr|ArraySubscriptExpr)$/) {
-        return node('address', expr((kids($n))[0]));
+        return node('* pointer', expr((kids($n))[0]));
     }
     # a function as a value is its address (a function name alone is a call in ff)
-    return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
+    return node('* pointer', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
     # the conversions C makes between integers and floating types, and
     # between those, are written out, as a cast is
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/) {
@@ -927,7 +927,7 @@ sub expr {
         my ($type, $member) = map { s/^\s+|\s+$//gr } @part;
         my @path = map { /^\[(\d+)\]$/ ? node($1) : node(ffname($_)) } $member =~ /(\w+|\[\d+\])/g;
         return node('cast:', node('u64'),
-            node('address', node('address', (map { node($_) } ctype($type)), node('0'), node('.'), @path)));
+            node('* pointer', node('* pointer', (map { node($_) } ctype($type)), node('0'), node('.'), @path)));
     }
     if ($k eq 'BinaryOperator' || $k eq 'CompoundAssignOperator') {
         my $op = $n->{opcode};
@@ -939,7 +939,7 @@ sub expr {
     if ($k eq 'UnaryOperator') {
         my $op = $n->{opcode};
         my ($e) = kids($n);
-        return node('content', expr($e)) if $op eq '*';
+        return node('& address', expr($e)) if $op eq '*';
         # in a global's items, the address of an element of a global array is
         # the array and that many elements on, as C has it (&a[i] is a + i),
         # the form ttpc works out while compiling (__io_vtables[IO_FILE_JUMPS])
@@ -953,7 +953,7 @@ sub expr {
                 ? node($enumval{ $x->{referencedDecl}{name} }) : item(expr($i));
             return node(':', expr($b), node('+'), @i) if strip($b)->{kind} eq 'DeclRefExpr';
         }
-        return node('address', expr($e)) if $op eq '&';
+        return node('* pointer', expr($e)) if $op eq '&';
         return (node($op), atom($e)) if $op eq '-' || $op eq '!' || $op eq '~';
         return $n->{isPostfix} ? (atom($e), node($op)) : (node($op), atom($e)) if $op eq '++' || $op eq '--';
         return expr($e) if $op eq '+';
@@ -995,7 +995,7 @@ sub expr {
         }
         if ($k eq 'ArraySubscriptExpr' && $base == $n) {
             my ($b, $i) = kids($n);
-            return node('content', node(':', expr($b), node('+'), item(expr($i))));
+            return node('& address', node(':', expr($b), node('+'), item(expr($i))));
         }
         stop('a path from ' . $base->{kind}, $n);
     }
@@ -1042,7 +1042,7 @@ sub expr {
         # (__builtin_add_overflow u32 u32 u32)
         if ($name =~ /^__builtin_(add|mul)_overflow$/) {
             my @t = map { tword_int($_) } @args;
-            my $sig = "@t" =~ /^(\S+) (\S+) address (\S+)$/ ? "$1 $2 $3" : '';
+            my $sig = "@t" =~ /^(\S+) (\S+) \* pointer (\S+)$/ ? "$1 $2 $3" : '';
             $ovf{"$name $sig"} or stop("$name on @t", $n);
             return node("$name $sig", map { item(expr($_)) } @args);
         }
@@ -1111,9 +1111,9 @@ sub expr {
             return node($g);
         }
         my @t = ctype(qt($n));
-        @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne 'address' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
+        @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne '* pointer' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
         # (one of a scalar type is a typed literal, u32 / 0; ttpc gives
-        # address / u32 / 0 a temporary, C's &(unsigned int){0})
+        # * pointer / u32 / 0 a temporary, C's &(unsigned int){0})
         return node($t[0], init((kids($n))[0]));
     }
     if ($k eq 'UnaryExprOrTypeTraitExpr') {
@@ -1144,7 +1144,7 @@ sub atomic_call {
 
 # The bytes of a scalar or an address: what the atomics need
 my %wsize = (char => 1, i8 => 1, u8 => 1, short => 2, i16 => 2, u16 => 2, int => 4, i32 => 4, u32 => 4,
-    long => 8, i64 => 8, u64 => 8, address => 8);
+    long => 8, i64 => 8, u64 => 8, '* pointer' => 8);
 sub csize { my ($t) = @_; return 4 if $t =~ /^enum\b/; my ($w) = ctype($t); $wsize{$w} // die "c2ff: no size for $t\n" }
 
 # A floating constant as an exact hex float, from its bits (f after a
@@ -1184,7 +1184,7 @@ sub bytes {
     $s;
 }
 # Text leaves hold UTF-8 (an ff node's text is): the pieces, or nothing when
-# they cannot be text. Under address / char any leaf is text; among a char
+# they cannot be text. Under * pointer / char any leaf is text; among a char
 # array's items one that reads as a number is a number ($array).
 sub pieces {
     my ($s, $array) = @_;
@@ -1204,7 +1204,7 @@ sub wide_text {
     my @e = wide($n);
     pop @e while @e && $e[-1] == 0;
     push @out, [$cur_unit, node("$name:", map({ node($_) } @t), grouped(255 - @t, map { node($_) } @e))];
-    node('address', node($name));
+    node('* pointer', node($name));
 }
 sub texts {
     my ($n) = @_;
@@ -1213,14 +1213,14 @@ sub texts {
     my @p = pieces($s) or stop('a text that is not UTF-8 text', $n);
     map { node($_) } @p;
 }
-# A string literal as a value: address / char / its text. But a text that ff
+# A string literal as a value: * pointer / char / its text. But a text that ff
 # reads as something else (an operator: __dcigettext's "/", a word ff
 # reserves), holds a NUL (which a node's text cannot) or is longer than a
 # node's 255 bytes (a __PRETTY_FUNCTION__: a value is one text) is a global
 # char array of its own, text 1, 2, ..., and the value the address of its
 # first char.
 my $ntext = 0;
-# cast: type value; under address / char (or u8) a leaf is a text, so a leaf
+# cast: type value; under * pointer / char (or u8) a leaf is a text, so a leaf
 # value goes in a : (printf-parse's (const char *) format)
 sub cast_node {
     my ($t, @v) = @_;
@@ -1230,11 +1230,11 @@ sub cast_node {
 sub string_value {
     my ($n) = @_;
     my $s = bytes($n);
-    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255;
+    return node('* pointer', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255;
     my $name = 'text ' . ++$ntext;
     my @c = (unpack('C*', $s), 0);
     push @out, [$cur_unit, node("$name:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
-    node('address', node($name, node('0')));
+    node('* pointer', node($name, node('0')));
 }
 # A wide literal's elements (L"", u"", U""): each escape one element, each
 # character its code point
@@ -1418,7 +1418,7 @@ sub stmt {
     return node(ffname($n->{name}) . ':', stmt((kids($n))[0])) if $k eq 'LabelStmt';
     return node('goto', node(ffname($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     # GNU's goto *p: to the address p holds (a label's, &&L)
-    return node('goto', node('content', expr((kids($n))[0]))) if $k eq 'IndirectGotoStmt';
+    return node('goto', node('& address', expr((kids($n))[0]))) if $k eq 'IndirectGotoStmt';
     # a statement under an attribute (__attribute__ ((fallthrough)), a hint to
     # the compiler): the statement
     return map { stmt($_) } grep { $_->{kind} !~ /Attr$/ } kids($n) if $k eq 'AttributedStmt';
@@ -1502,7 +1502,7 @@ sub decl {
     my @i = $init ? init($init) : ();
     # a global takes each item as one node
     @i = node(':', @i) if $global && @i > 1 && strip($init)->{kind} ne 'InitListExpr' && !bare_string($init);
-    # under address / char a leaf is text: a value that starts with a leaf goes
+    # under * pointer / char a leaf is text: a value that starts with a leaf goes
     # in a : (vfprintf's char *workend = work_buffer + WORK_BUFFER_SIZE)
     @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i && !@{ $i[0]{children} } && !bare_string($init);
     # (a thread-local one, __thread, stays a global: with one thread that is
@@ -1561,7 +1561,7 @@ sub union_before {
     my @fs = grep { $_->{kind} eq 'FieldDecl' } @{ $r->{inner} || [] };
     my ($k) = grep { ($fs[$_]{name} // '') eq ($f->{name} // '') } 0 .. $#fs;      # (an unnamed one: errname's)
     defined $k or stop('a union set through a member it has not: ' . ($f->{name} // '?'), $l);
-    map { my @t = ctype(qt($fs[$_])); @t == 1 && $scalar_word{$t[0]} || $t[0] eq 'address' ? node(0) : node(':') } 0 .. $k - 1;
+    map { my @t = ctype(qt($fs[$_])); @t == 1 && $scalar_word{$t[0]} || $t[0] eq '* pointer' ? node(0) : node(':') } 0 .. $k - 1;
 }
 sub init_item {
     my ($n) = @_;
@@ -1573,7 +1573,7 @@ sub init_item {
         # codes where a text such as "0" would read as a number; "" an empty :
         return node(':', grouped(255, array_text($str)));
     }
-    if ($s->{kind} eq 'ImplicitValueInitExpr') { my @t = ctype(qt($s)); return @t == 1 && $scalar_word{$t[0]} || $t[0] eq 'address' ? node(0) : node(':') }
+    if ($s->{kind} eq 'ImplicitValueInitExpr') { my @t = ctype(qt($s)); return @t == 1 && $scalar_word{$t[0]} || $t[0] eq '* pointer' ? node(0) : node(':') }
     # an item of a list is one node
     my @e = item(expr($n));
     @e > 1 ? node(':', @e) : @e;
@@ -1704,7 +1704,7 @@ if (defined $program) {
     my $tcb = $target eq 'riscv64';
     print write_txt(node('import', node($program)), @types, (map { $_->[1] } @out),
         ($tcb ? node('__ff_tcb:', node('array'), node('u64'), node('1024')) : ()),
-        node('_start:', node('void'), ($tcb ? (node('tp'), node('='), node('cast:', node('u64'), node('address', node('__ff_tcb'))),
+        node('_start:', node('void'), ($tcb ? (node('tp'), node('='), node('cast:', node('u64'), node('* pointer', node('__ff_tcb'))),
             node('+'), node('4096')) : ()), ($early ? node('__libc_early_init', node('1')) : ()),
             ($exit ? node('exit', node('main')) : node('syscall', node('SYS_exit'), node('main')))));
 } else {

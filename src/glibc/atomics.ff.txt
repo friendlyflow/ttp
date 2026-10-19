@@ -4,30 +4,30 @@ atomics:
   __atomic_load_1:
     u8
     p:
-      address
+      * pointer
       u8
     order:
       int
     return
-      content
+      & address
         p
   __atomic_store_1:
     void
     p:
-      address
+      * pointer
       u8
     v:
       u8
     order:
       int
-    content
+    & address
       p
     =
     v
   __atomic_exchange_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -35,9 +35,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     v
@@ -46,10 +46,10 @@ atomics:
   __atomic_compare_exchange_1:
     int
     p:
-      address
+      * pointer
       u8
     e:
-      address
+      * pointer
       u8
     d:
       u8
@@ -58,28 +58,28 @@ atomics:
     failure:
       int
     if
-      content
+      & address
         p
       ==
-      content
+      & address
         e
-      content
+      & address
         p
       =
       d
       return
         1
-    content
+    & address
       e
     =
-    content
+    & address
       p
     return
       0
   __atomic_fetch_add_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -87,9 +87,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -100,7 +100,7 @@ atomics:
   __atomic_add_fetch_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -108,21 +108,21 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     +
     v
     return
-      content
+      & address
         p
   __atomic_fetch_sub_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -130,9 +130,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -143,7 +143,7 @@ atomics:
   __atomic_sub_fetch_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -151,21 +151,21 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     -
     v
     return
-      content
+      & address
         p
   __atomic_fetch_and_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -173,9 +173,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -186,7 +186,7 @@ atomics:
   __atomic_and_fetch_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -194,21 +194,21 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     &
     v
     return
-      content
+      & address
         p
   __atomic_fetch_or_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -216,9 +216,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -229,7 +229,7 @@ atomics:
   __atomic_or_fetch_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -237,21 +237,21 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     |
     v
     return
-      content
+      & address
         p
   __atomic_fetch_xor_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -259,9 +259,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -272,7 +272,7 @@ atomics:
   __atomic_xor_fetch_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -280,21 +280,21 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     ^
     v
     return
-      content
+      & address
         p
   __atomic_fetch_nand_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -302,9 +302,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -317,7 +317,7 @@ atomics:
   __atomic_nand_fetch_1:
     u8
     p:
-      address
+      * pointer
       u8
     v:
       u8
@@ -325,9 +325,9 @@ atomics:
       int
     old:
       u8
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -336,35 +336,35 @@ atomics:
       &
       v
     return
-      content
+      & address
         p
   __atomic_load_2:
     u16
     p:
-      address
+      * pointer
       u16
     order:
       int
     return
-      content
+      & address
         p
   __atomic_store_2:
     void
     p:
-      address
+      * pointer
       u16
     v:
       u16
     order:
       int
-    content
+    & address
       p
     =
     v
   __atomic_exchange_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -372,9 +372,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     v
@@ -383,10 +383,10 @@ atomics:
   __atomic_compare_exchange_2:
     int
     p:
-      address
+      * pointer
       u16
     e:
-      address
+      * pointer
       u16
     d:
       u16
@@ -395,28 +395,28 @@ atomics:
     failure:
       int
     if
-      content
+      & address
         p
       ==
-      content
+      & address
         e
-      content
+      & address
         p
       =
       d
       return
         1
-    content
+    & address
       e
     =
-    content
+    & address
       p
     return
       0
   __atomic_fetch_add_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -424,9 +424,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -437,7 +437,7 @@ atomics:
   __atomic_add_fetch_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -445,21 +445,21 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     +
     v
     return
-      content
+      & address
         p
   __atomic_fetch_sub_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -467,9 +467,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -480,7 +480,7 @@ atomics:
   __atomic_sub_fetch_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -488,21 +488,21 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     -
     v
     return
-      content
+      & address
         p
   __atomic_fetch_and_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -510,9 +510,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -523,7 +523,7 @@ atomics:
   __atomic_and_fetch_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -531,21 +531,21 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     &
     v
     return
-      content
+      & address
         p
   __atomic_fetch_or_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -553,9 +553,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -566,7 +566,7 @@ atomics:
   __atomic_or_fetch_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -574,21 +574,21 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     |
     v
     return
-      content
+      & address
         p
   __atomic_fetch_xor_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -596,9 +596,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -609,7 +609,7 @@ atomics:
   __atomic_xor_fetch_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -617,21 +617,21 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     ^
     v
     return
-      content
+      & address
         p
   __atomic_fetch_nand_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -639,9 +639,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -654,7 +654,7 @@ atomics:
   __atomic_nand_fetch_2:
     u16
     p:
-      address
+      * pointer
       u16
     v:
       u16
@@ -662,9 +662,9 @@ atomics:
       int
     old:
       u16
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -673,35 +673,35 @@ atomics:
       &
       v
     return
-      content
+      & address
         p
   __atomic_load_4:
     u32
     p:
-      address
+      * pointer
       u32
     order:
       int
     return
-      content
+      & address
         p
   __atomic_store_4:
     void
     p:
-      address
+      * pointer
       u32
     v:
       u32
     order:
       int
-    content
+    & address
       p
     =
     v
   __atomic_exchange_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -709,9 +709,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     v
@@ -720,10 +720,10 @@ atomics:
   __atomic_compare_exchange_4:
     int
     p:
-      address
+      * pointer
       u32
     e:
-      address
+      * pointer
       u32
     d:
       u32
@@ -732,28 +732,28 @@ atomics:
     failure:
       int
     if
-      content
+      & address
         p
       ==
-      content
+      & address
         e
-      content
+      & address
         p
       =
       d
       return
         1
-    content
+    & address
       e
     =
-    content
+    & address
       p
     return
       0
   __atomic_fetch_add_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -761,9 +761,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -774,7 +774,7 @@ atomics:
   __atomic_add_fetch_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -782,21 +782,21 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     +
     v
     return
-      content
+      & address
         p
   __atomic_fetch_sub_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -804,9 +804,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -817,7 +817,7 @@ atomics:
   __atomic_sub_fetch_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -825,21 +825,21 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     -
     v
     return
-      content
+      & address
         p
   __atomic_fetch_and_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -847,9 +847,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -860,7 +860,7 @@ atomics:
   __atomic_and_fetch_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -868,21 +868,21 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     &
     v
     return
-      content
+      & address
         p
   __atomic_fetch_or_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -890,9 +890,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -903,7 +903,7 @@ atomics:
   __atomic_or_fetch_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -911,21 +911,21 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     |
     v
     return
-      content
+      & address
         p
   __atomic_fetch_xor_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -933,9 +933,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -946,7 +946,7 @@ atomics:
   __atomic_xor_fetch_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -954,21 +954,21 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     ^
     v
     return
-      content
+      & address
         p
   __atomic_fetch_nand_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -976,9 +976,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -991,7 +991,7 @@ atomics:
   __atomic_nand_fetch_4:
     u32
     p:
-      address
+      * pointer
       u32
     v:
       u32
@@ -999,9 +999,9 @@ atomics:
       int
     old:
       u32
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -1010,35 +1010,35 @@ atomics:
       &
       v
     return
-      content
+      & address
         p
   __atomic_load_8:
     u64
     p:
-      address
+      * pointer
       u64
     order:
       int
     return
-      content
+      & address
         p
   __atomic_store_8:
     void
     p:
-      address
+      * pointer
       u64
     v:
       u64
     order:
       int
-    content
+    & address
       p
     =
     v
   __atomic_exchange_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1046,9 +1046,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     v
@@ -1057,10 +1057,10 @@ atomics:
   __atomic_compare_exchange_8:
     int
     p:
-      address
+      * pointer
       u64
     e:
-      address
+      * pointer
       u64
     d:
       u64
@@ -1069,28 +1069,28 @@ atomics:
     failure:
       int
     if
-      content
+      & address
         p
       ==
-      content
+      & address
         e
-      content
+      & address
         p
       =
       d
       return
         1
-    content
+    & address
       e
     =
-    content
+    & address
       p
     return
       0
   __atomic_fetch_add_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1098,9 +1098,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -1111,7 +1111,7 @@ atomics:
   __atomic_add_fetch_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1119,21 +1119,21 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     +
     v
     return
-      content
+      & address
         p
   __atomic_fetch_sub_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1141,9 +1141,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -1154,7 +1154,7 @@ atomics:
   __atomic_sub_fetch_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1162,21 +1162,21 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     -
     v
     return
-      content
+      & address
         p
   __atomic_fetch_and_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1184,9 +1184,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -1197,7 +1197,7 @@ atomics:
   __atomic_and_fetch_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1205,21 +1205,21 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     &
     v
     return
-      content
+      & address
         p
   __atomic_fetch_or_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1227,9 +1227,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -1240,7 +1240,7 @@ atomics:
   __atomic_or_fetch_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1248,21 +1248,21 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     |
     v
     return
-      content
+      & address
         p
   __atomic_fetch_xor_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1270,9 +1270,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
@@ -1283,7 +1283,7 @@ atomics:
   __atomic_xor_fetch_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1291,21 +1291,21 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     old
     ^
     v
     return
-      content
+      & address
         p
   __atomic_fetch_nand_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1313,9 +1313,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -1328,7 +1328,7 @@ atomics:
   __atomic_nand_fetch_8:
     u64
     p:
-      address
+      * pointer
       u64
     v:
       u64
@@ -1336,9 +1336,9 @@ atomics:
       int
     old:
       u64
-      content
+      & address
         p
-    content
+    & address
       p
     =
     ~
@@ -1347,5 +1347,5 @@ atomics:
       &
       v
     return
-      content
+      & address
         p

@@ -4,7 +4,9 @@
 # input, and the sections of all four targets with ttpc.ff came to more.
 # The other sections are kept empty, their names in place. A section emits
 # nothing unless it is the target's (or assemble time's, riscv64's), so what
-# ttpc2 makes is the same: stage1 == stage2 checks it.
+# ttpc2 makes is the same: stage1 == stage2 checks it. The C words are
+# ttpc2's own, address and content for * pointer and & address (FF.pm
+# oldwords).
 #
 #   perl trim.pl shared.ff riscv64 [host] > shared.ff
 #
@@ -13,7 +15,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use FF qw(read_ff write_ff);
+use FF qw(oldwords read_ff write_ff);
 
 die "usage: trim.pl shared.ff target ...\n" unless @ARGV >= 2;
 my ($file, @keep) = @ARGV;
@@ -26,4 +28,4 @@ my ($page) = grep { $_->{content} eq 'shared:' } @{ $root->{children} } or die "
 # the others stay, empty: their names are values (target == x86_64)
 $_->{children} = [] for grep { $section{ $_->{content} } && !$keep{ $_->{content} } } @{ $page->{children} };
 binmode STDOUT;
-print write_ff($root);
+print write_ff(oldwords($root));

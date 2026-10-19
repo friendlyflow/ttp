@@ -97,14 +97,14 @@ syscall:
   number
   arguments
 comment
-  address of: C, the address of a variable (C's &x). As a type, address and then a type, siblings, is a pointer to it, a word of the target; address alone points to nothing. address with a type and a value as its children converts the value.
-address:
+  * pointer of: C, the address of a variable (C's &x). As a type, * pointer and then a type, siblings, is a pointer to it, a word of the target; * pointer alone points to nothing. * pointer with a type and a value as its children converts the value.
+* pointer:
   of
 comment
   weak: C, first under a name, before its type: a global that may stay undefined (C's #pragma weak, a weak symbol nothing defines); its address is 0. weak / function / type is a function, called through 0.
 weak:
 comment
-  cast: type value: C's cast, the value converted to the type: cast: / address / char / p is (char *) p. Under address / char a leaf is text, whatever it reads as: address / char / 3 is "3".
+  cast: type value: C's cast, the value converted to the type: cast: / * pointer / char / p is (char *) p. Under * pointer / char a leaf is text, whatever it reads as: * pointer / char / 3 is "3".
 cast::
   type
   value
@@ -113,11 +113,11 @@ comment
 items:
   values
 comment
-  .: C, a leaf among a node's children: the node before it (cut there) is a value, after it come fields and indexes as after a variable; C's ((point *) p)->y is address / point / p / . / y.
+  .: C, a leaf among a node's children: the node before it (cut there) is a value, after it come fields and indexes as after a variable; C's ((point *) p)->y is * pointer / point / p / . / y.
 .:
 comment
-  content address: C, what the address holds (C's *p), read, or written on the left of =.
-content:
+  & address address: C, what the address holds (C's *p), read, or written on the left of =.
+& address:
   address
 comment
   array element count: C, a type, siblings: count elements of the type element; the items of a declaration come after count.
@@ -197,19 +197,19 @@ comment
 ifunc hwcap:
   long
   stack:
-    address
+    * pointer
     long
   p:
-    address
+    * pointer
     long
     stack
     +
-    content
+    & address
       stack
     +
     2
   while
-    content
+    & address
       p
     !=
     0
@@ -220,18 +220,18 @@ ifunc hwcap:
   +=
   1
   while
-    content
+    & address
       p
     !=
     0
     if
-      content
+      & address
         p
       ==
       16
       return
         long
-          content
+          & address
             :
               p
               +
@@ -250,7 +250,7 @@ comment
   alloca n: C, n bytes (16-aligned) for the function that calls it until it returns: C's alloca, and what a variable-length array takes.
   From a stack of 8 MiB mapped when first used; ttpc keeps alloca top on entry to such a function and puts it back when it returns.
 alloca:
-  address
+  * pointer
   void
   n:
     long
@@ -289,7 +289,7 @@ alloca:
       16
   return
     cast:
-      address
+      * pointer
       void
       p
 comment
@@ -337,7 +337,7 @@ comment
 compile:
   w
 comment
-  char value: C, an unsigned byte; called with a value, converts it. Text is address char with a leaf that names nothing: its bytes and a NUL, the value their address.
+  char value: C, an unsigned byte; called with a value, converts it. Text is * pointer char with a leaf that names nothing: its bytes and a NUL, the value their address.
 char:
   value
 comment
@@ -669,6 +669,6 @@ comment
   else
     fail
       target
-      address
+      * pointer
         char
         is not a target
