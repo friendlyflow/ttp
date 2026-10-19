@@ -772,8 +772,9 @@ my %asmfn;
 my %asmsig;
 sub asm_once { my ($name, $sig, $n) = @_; stop("two asm statements named $name", $n) if ($asmsig{$name} //= $sig) ne $sig }
 # the overflow builtins builtins.ff.txt has, by name and operand types
-my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int';
+my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long';
 $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32';
+$ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 sub asm_ins {
     my ($n, $op, @a) = @_;
@@ -1206,7 +1207,7 @@ sub expr {
         # gcc's type-generic overflow builtins: one function in builtins.ff.txt
         # for each set of operand types glibc uses, named for them
         # (__builtin_add_overflow u32 u32 u32)
-        if ($name =~ /^__builtin_(add|mul)_overflow$/) {
+        if ($name =~ /^__builtin_(add|sub|mul)_overflow$/) {
             my @t = map { tword_int($_) } @args;
             my $sig = "@t" =~ /^(\S+) (\S+) address (\S+)$/ ? "$1 $2 $3" : '';
             $ovf{"$name $sig"} or stop("$name on @t", $n);
@@ -1227,7 +1228,7 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|thread_pointer)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|thread_pointer|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
