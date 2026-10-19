@@ -19,7 +19,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../../gen";
-use FF qw(node write_ff);
+use FF qw(node ttp_license write_ff);
 
 my $dir = $FindBin::Bin;
 my $top = "$FindBin::Bin/../..";
@@ -116,7 +116,7 @@ push @page, node("gnu_fwd:");
 push @s, "gnu_fwd:";
 
 open my $out, ">:raw", "$dir/gnu.ff" or die "mkgnu: gnu.ff: $!\n";
-print $out write_ff(node("",
+print $out write_ff(node("", ttp_license(),
     node("comment", node("gnu.ff: every form of isa/x86_64gnu.pl once, the encodings GNU as picks, made by mkgnu.pl with its GNU twin gnu.s. Run, it exits at once.")),
     node("origin", node("elf_base")),
     node("elf_header", map { node($_) } qw(_start file_end mem_end)),

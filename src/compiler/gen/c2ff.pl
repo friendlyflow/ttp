@@ -250,7 +250,7 @@ my $target = 'riscv64';
 sub reserve_target {
     my ($t) = @_;
     open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "c2ff: cannot open shared.ff: $!\n";
-    my ($shared) = @{ read_ff(do { local $/; <$h> })->{children} };
+    my ($shared) = grep { $_->{content} eq "shared:" } @{ read_ff(do { local $/; <$h> })->{children} };
     my ($sec) = grep { $_->{content} eq "$t:" } @{ $shared->{children} } or die "c2ff: $t is not a target\n";
     my ($regs) = grep { $_->{content} eq 'registers:' } @{ $sec->{children} } or die "c2ff: $t has no registers\n";
     delete $reserved{$_} for grep { /^(?:x|a|s|t|f|fa|fs|ft)\d+$|^(?:zero|ra|sp|gp|tp|fp|pc)$/ } keys %reserved;
