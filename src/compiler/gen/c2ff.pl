@@ -1165,11 +1165,12 @@ sub expr {
             push @{ $p[0]{children} }, @args ? map { item(expr($_)) } @args : node('.');
             return @p;
         }
-        if ($c->{kind} =~ /^(CStyleCastExpr|ConditionalOperator|CallExpr)$/) {
+        if ($c->{kind} =~ /^(CStyleCastExpr|ConditionalOperator|CallExpr|BinaryOperator)$/) {
             # through a function pointer that is a value, not a variable (dl-fini's
-            # ((fini_t) array[i]) ()): the value, a ., then the arguments
+            # ((fini_t) array[i]) (), backtrace's ((void) x, &_Unwind_Backtrace)
+            # (...)): the value, a ., then the arguments
             my @p = expr($c);
-            @p = node(':', @p) if @p > 1;    # (a conditional)
+            @p = node(':', @p) if @p > 1;    # (a conditional, an operator's)
             @p == 1 or stop('a call through ' . $c->{kind} . ' of several nodes', $n);
             push @{ $p[0]{children} }, node('.'), map { item(expr($_)) } @args;
             return @p;

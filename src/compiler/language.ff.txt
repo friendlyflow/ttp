@@ -485,6 +485,7 @@ ff, the language ttpc compiles
     paths
       calling a variable indexes or selects: xs i an element, p x a field (also through an address), r b x both in a row
       a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is cast: / address / point / p / . / y
+      address of a function is a function pointer, called where it stands, its result of the type its definition says: C's ((void) x, &f) (a, b) is : / : / cast: / void / x / address / f / . / a / b
       address x is C's &x, content p is C's *p, read, or written on the left of =
     registers
       a register name in C is that register: reading t2 is its value now, t2 = expr writes it; values pass between C and asm this way
