@@ -1,16 +1,20 @@
 #!/usr/bin/env perl
-# relmask.pl — bytes of a riscv64 .text with the fields relocations fill in
-# set to 0: what GNU as left for the linker (a call's auipc and jalr, a
-# GOT or TLS address) is not the assembler's to compare.
+# relmask.pl — bytes of a riscv64 or aarch64 .text with the fields
+# relocations fill in set to 0: what GNU as left for the linker (a call's
+# auipc and jalr, a GOT or TLS address; aarch64's branch, adrp and lo12
+# fields) is not the assembler's to compare.
 #
-#   perl relmask.pl <objdump -r of the object> <.text bytes> > masked
+#   perl relmask.pl <objdump -r of the object> <.text bytes> [skip] > masked
+#
+# skip: the bytes the .text has before the ones given (its offsets less).
 #
 # A host tool (core Perl only).
 use strict;
 use warnings;
 
-die "usage: relmask.pl relocs bin\n" unless @ARGV == 2;
-my ($relocs, $bin) = @ARGV;
+die "usage: relmask.pl relocs bin [skip]\n" unless @ARGV == 2 || @ARGV == 3;
+my ($relocs, $bin, $skip) = @ARGV;
+$skip //= 0;
 open my $b, '<:raw', $bin or die "relmask: $bin: $!\n";
 my $text = do { local $/; <$b> };
 close $b;
@@ -24,6 +28,11 @@ my %mask = (
     J => 0xfffff000,    # jal
     CB => 0x1c7c,       # c.beqz, c.bnez
     CJ => 0x1ffc,       # c.j
+    A_PAGE => 0x60ffffe0,   # aarch64 adrp: immlo, immhi
+    A_LO12 => 0x003ffc00,   # add, ldr, str: imm12
+    A_B26 => 0x03ffffff,    # b, bl
+    A_B19 => 0x00ffffe0,    # b.cond, cbz, ldr literal
+    A_B14 => 0x0007ffe0,    # tbz
 );
 sub field {
     my ($off, $kind) = @_;
@@ -38,8 +47,9 @@ open my $r, '<', $relocs or die "relmask: $relocs: $!\n";
 my $intext = 0;
 while (<$r>) {
     $intext = $1 eq '.text' if /^RELOCATION RECORDS FOR \[(.*)\]/;
-    next unless $intext && /^([0-9a-f]+)\s+(R_RISCV_\w+)/;
-    my ($off, $type) = (hex $1, $2);
+    next unless $intext && /^([0-9a-f]+)\s+(R_(?:RISCV|AARCH64)_\w+)/;
+    my ($off, $type) = (hex($1) - $skip, $2);
+    next if $off < 0;
     if ($type =~ /^R_RISCV_CALL(_PLT)?$/) { field($off, 'U'); field($off + 4, 'I') }
     elsif ($type =~ /_HI20$/) { field($off, 'U') }
     elsif ($type =~ /_LO12_I$/) { field($off, 'I') }
@@ -49,6 +59,11 @@ while (<$r>) {
     elsif ($type eq 'R_RISCV_RVC_BRANCH') { field($off, 'CB') }
     elsif ($type eq 'R_RISCV_RVC_JUMP') { field($off, 'CJ') }
     elsif ($type =~ /^R_RISCV_(RELAX|ALIGN)$/) { }
+    elsif ($type =~ /^R_AARCH64_(ADR_PREL_PG_HI21|ADR_GOT_PAGE|TLSIE_ADR_GOTTPREL_PAGE21)$/) { field($off, 'A_PAGE') }
+    elsif ($type =~ /^R_AARCH64_(ADD_ABS_LO12_NC|LDST\d+_ABS_LO12_NC|LD64_GOT_LO12_NC|TLSIE_LD64_GOTTPREL_LO12_NC)$/) { field($off, 'A_LO12') }
+    elsif ($type =~ /^R_AARCH64_(CALL26|JUMP26)$/) { field($off, 'A_B26') }
+    elsif ($type =~ /^R_AARCH64_(CONDBR19|LD_PREL_LO19)$/) { field($off, 'A_B19') }
+    elsif ($type eq 'R_AARCH64_TSTBR14') { field($off, 'A_B14') }
     else { die "relmask: no mask for $type\n" }
 }
 close $r;

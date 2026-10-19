@@ -280,7 +280,7 @@ WEAKS_start := __fini_array_start __fini_array_end _startup_fatal_not_constant _
 uniq = $(strip $(if $(1),$(firstword $(1)) $(call uniq,$(filter-out $(firstword $(1)),$(1)))))
 with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_start)))
 
-.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
+.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.L.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -292,9 +292,33 @@ $(I)/%.i: $(OBJ)/libc.a mki.pl
 $(I)/%.s: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
-$(I)/%.dump $(I)/%.bin: $(I)/%.s
-	$(CAP) timeout 60 $(GLIBC_CC) -c -mno-relax -x assembler $< -o $(I)/$*.ref.o
-	$(XPRE)objdump -d -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
+#
+# aarch64 (s2ff-aarch64.pl): the instructions are read from the object
+# alone, as GNU as made them (its macros, aliases, .inst words), and its
+# labels from the symbol table: the .s with its numeric labels named
+# (.L.s, s2ff-aarch64.pl --locals) is assembled with -L, which keeps local
+# labels, and dumped with its relocations and symbols. Its .text is the
+# same bytes as glibc's own object's (asm-check compares them too).
+S2FF_riscv64 := ../compiler/gen/s2ff.pl
+S2FF_aarch64 := ../compiler/gen/s2ff-aarch64.pl
+S2FF := $(S2FF_$(GTARGET))
+# the .s s2ff reads: riscv64 the .s itself, aarch64 the .L.s
+SL_aarch64 := .L
+SL := $(SL_$(GTARGET))
+ASREF_riscv64 := -mno-relax
+ASREF_aarch64 := -Wa,-L
+DUMPFLAGS_aarch64 := -r -t
+# an instruction for what asm-check's program needs from elsewhere
+STANDIN_riscv64 := ebreak
+STANDIN_aarch64 := brk\n    0
+STANDIN := $(STANDIN_$(GTARGET))
+
+$(I)/%.L.s: $(I)/%.s $(S2FF_aarch64)
+	perl $(S2FF_aarch64) --locals $< > $@
+
+$(I)/%.dump $(I)/%.bin: $(I)/%$(SL).s
+	$(CAP) timeout 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
+	$(XPRE)objdump -d $(DUMPFLAGS_$(GTARGET)) -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
 
 # What clang does not read of gcc's C, rewritten for clang alone in a copy of
@@ -319,13 +343,13 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 define milestone
 OBJS_all_$(1) := $$(call with_start,OBJS,$(1))
 ASMS_all_$(1) := $$(call with_start,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl $$(S2FF)
 	mkdir -p $$(FF)
 	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
 	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
 	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_all_$(1)); do \
-	    $$(CAP) timeout 60 perl ../compiler/gen/s2ff.pl --items $$(I)/$$$$a.s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
+	    $$(CAP) timeout 60 perl $$(S2FF) --items $$(I)/$$$$a$$(SL).s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
 	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
@@ -338,21 +362,26 @@ $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end; the fields relocations fill in (relmask.pl) are the linker's, not
 # compared, and what it names from elsewhere is a stand-in label after it.
+# (aarch64: from the bytes after the padding before its first label, which
+# s2ff-aarch64.pl --skip counts; and glibc's own object has the same .text.)
 ASMCHECK := $(ASMS_stdio) $(if $(GLIBC_START),csu/start)
-asm-check: $(ASMCHECK:%=$(I)/%.dump) $(ASMCHECK:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
+asm-check: $(ASMCHECK:%=$(I)/%.dump) $(ASMCHECK:%=$(I)/%.bin) $(S2FF)
 	mkdir -p $(FF)
 	@for a in $(ASMCHECK); do \
 	    n=$$(basename $$a); \
-	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
-	      $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
+	    { perl $(S2FF) $(I)/$$a$(SL).s $(I)/$$a.dump && printf '_start:\n  $(STANDIN)\n' && \
+	      $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(STANDIN)\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
 	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
 	    $(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $(FF)/$$n.asm.ff $(FF)/$$n.asm > $(FF)/$$n.asm.lst || exit 1; \
-	    size=$$(perl ../compiler/gen/s2ff.pl --size $(I)/$$a.s $(I)/$$a.dump) || exit 1; \
+	    size=$$(perl $(S2FF) --size $(I)/$$a$(SL).s $(I)/$$a.dump) || exit 1; \
+	    skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $(I)/$$a$(SL).s $(I)/$$a.dump) || exit 1,0); \
+	    $(if $(filter aarch64,$(GTARGET)),$(XPRE)objcopy -O binary -j .text $(OBJ)/$$a.o $(FF)/$$n.glibc.bin && \
+	        cmp -s $(FF)/$$n.glibc.bin $(I)/$$a.bin || { echo "asm-check: $$a: the .s does not make glibc's object"; exit 1; };) \
 	    $(XPRE)objdump -r $(I)/$$a.ref.o > $(FF)/$$n.relocs; \
-	    head -c $$size $(I)/$$a.bin > $(FF)/$$n.want.raw; \
+	    tail -c +$$((skip + 1)) $(I)/$$a.bin | head -c $$size > $(FF)/$$n.want.raw; \
 	    tail -c +121 $(FF)/$$n.asm | head -c $$size > $(FF)/$$n.got.raw; \
-	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.want.raw > $(FF)/$$n.want || exit 1; \
-	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.got.raw > $(FF)/$$n.got || exit 1; \
+	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.want.raw $$skip > $(FF)/$$n.want || exit 1; \
+	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.got.raw $$skip > $(FF)/$$n.got || exit 1; \
 	    cmp $(FF)/$$n.got $(FF)/$$n.want || exit 1; \
 	    echo "asm-check: $$a: ttpc and glibc's compiler agree ($$size bytes)"; \
 	done
