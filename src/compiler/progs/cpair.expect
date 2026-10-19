@@ -28,4 +28,5 @@ ok an array element
 ok through an address
 ok an if as a value
 ok a switch on a pair
+ok char with i64 (signed char on x86_64)
 ok i64 to double and back
