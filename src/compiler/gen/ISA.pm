@@ -9,14 +9,14 @@
 #   $isa->add("registers", @nodes);             # ready-made nodes
 #   my $section = $isa->section("riscv64", "macros/riscv64.ff.txt");
 #
-# A node holds at most 255 children: a group must stay below that.
+# A node holds at most 255 children: a group with more is put in layers.
 
 package ISA;
 
 use strict;
 use warnings;
 use File::Basename qw(dirname);
-use FF qw(node call read_txt);
+use FF qw(node call read_txt layers);
 
 sub new {
     my ($class, %opt) = @_;
@@ -105,10 +105,9 @@ sub section {
     my @groups = @{ $self->{groups} };
     push @groups, node("slices:", map { slice($_) } @{ $self->{slices} }) if @{ $self->{slices} };
     push @groups, read_txt(slurp(dirname(__FILE__) . "/../$macros"), $macros) if $macros;
-    for (@groups) {
-        my $n = @{ $_->{children} };
-        die "ISA: $name: group $_->{content} has $n children (max 255)\n" if $n > 255;
-    }
+    # a group of more than a node holds is in layers (0: 1: ..., FF.pm),
+    # which every scope looks through
+    for (@groups) { $_->{children} = [layers(@{ $_->{children} })] }
     node("$name:", @groups);
 }
 

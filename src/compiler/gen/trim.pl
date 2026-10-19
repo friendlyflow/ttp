@@ -4,7 +4,8 @@
 # input, and the sections of all four targets with ttpc.ff came to more.
 # The other sections are kept empty, their names in place. A section emits
 # nothing unless it is the target's (or assemble time's, riscv64's), so what
-# ttpc2 makes is the same: stage1 == stage2 checks it.
+# ttpc2 makes is the same: stage1 == stage2 checks it. Of a section kept,
+# its gnu groups go too: glibc's asm alone calls them.
 #
 #   perl trim.pl shared.ff riscv64 [host] > shared.ff
 #
@@ -25,5 +26,10 @@ close $h;
 my ($page) = grep { $_->{content} eq 'shared:' } @{ $root->{children} } or die "trim: no shared: page\n";
 # the others stay, empty: their names are values (target == x86_64)
 $_->{children} = [] for grep { $section{ $_->{content} } && !$keep{ $_->{content} } } @{ $page->{children} };
+# and of the ones kept, the groups of glibc's asm alone (gnu ...: the
+# forms GNU as picks, isa/x86_64gnu.pl), which ttpc's own code never calls
+for my $s (grep { $section{ $_->{content} } && $keep{ $_->{content} } } @{ $page->{children} }) {
+    $s->{children} = [grep { $_->{content} !~ /^gnu / } @{ $s->{children} }];
+}
 binmode STDOUT;
 print write_ff($root);
