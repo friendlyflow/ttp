@@ -6,7 +6,9 @@
 # cc_ldhi + 8 set to say a literal left it there. wlit writes all 16 bytes
 # into the temporary of a long double value; gstore, for a long double
 # global, the high word after the low; wgate gives a function with such a
-# literal its temporaries, as it does one that names long double.
+# literal its temporaries, as it does one that names long double. Where long
+# double is double (arm's EABI, pairs3.pl), the literal is that double,
+# rounded to nearest as gcc rounds it there.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 # hexf: a literal ending with L is the long double one
@@ -144,6 +146,78 @@ LZ:
     bnez L8 s9
     j LW
 LW:
+    # where long double is double (arm, a word of 4 bytes, outside
+    # compile time, as tyname has it): the value rounded to a double, to
+    # nearest, ties to even; past its range an infinity, below it 0
+    la ccs t0
+    ld CC_jit t0 t0
+    bnez LX t0
+    la targ_word t0
+    ld 0 t0 t0
+    li 8 t1
+    beq rel:LX t1 t0
+    srli 48 s6 t0
+    beqz LD0 t0
+    li32 16383 t1
+    sub t1 t0 t0
+    li32 1023 t1
+    blt rel:LDI t0 t1
+    slli 16 s6 t2
+    srli 16 t2 t2
+    slli 4 t2 t2
+    srli 60 s7 t3
+    or t3 t2 t2
+    slli 4 s7 t3
+    srli 4 t3 t3
+    li 1 t4
+    slli 52 t4 t4
+    or t4 t2 t2
+    li 1 t4
+    slli 59 t4 t4
+    bltu rel:LDU t3 t4
+    bne rel:LDN t4 t3
+    andi 1 t2 t5
+    beqz LDN t5
+    j LDU
+LDU:
+    addi 1 t2 t2
+    li 1 t4
+    slli 53 t4 t4
+    bne rel:LDN t4 t2
+    srli 1 t2 t2
+    addi 1 t0 t0
+    li32 1023 t1
+    blt rel:LDI t0 t1
+    j LDN
+LDN:
+    li32 1022 t1
+    add t1 t0 t1
+    blez LDS t1
+    addi 1 t1 t1
+    slli 52 t1 t1
+    li 1 t4
+    slli 52 t4 t4
+    addi -1 t4 t4
+    and t4 t2 t2
+    or t2 t1 a0
+    j LDE
+LDS:
+    neg t1 t1
+    li 63 t4
+    bltu rel:LD0 t4 t1
+    srl t1 t2 a0
+    j LDE
+LDI:
+    li 2047 t1
+    slli 52 t1 a0
+    j LDE
+LD0:
+    li 0 a0
+    j LDE
+LDE:
+    li TY_DOUBLE s11
+    j L30
+LX:
     la cc_ldhi t0
     sd 0 s6 t0
     li 1 t1
@@ -250,12 +324,16 @@ LY:
     leave3
 "));
 
-# ginit: a long double global is no aggregate here: its one item, a
-# literal, goes through gstore
+# ginit: a long double global is no aggregate here, nor a double where it
+# is kept in memory (arm): its one item, a literal, goes through gstore
 edit(\$t, 'ginit',
     "        call\n          isagg\n        bnez\n          L41\n          a0\n",
     "        call\n          isagg\n" . asm(8, "
     li TY_LDOUBLE t0
+    xor s4 t0 t1
+    sltu t1 zero t1
+    and t1 a0 a0
+    li TY_DOUBLE t0
     xor s4 t0 t1
     sltu t1 zero t1
     and t1 a0 a0

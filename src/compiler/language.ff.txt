@@ -205,6 +205,7 @@ ff, the language ttpc compiles
             3
             4
       sizeof and alignof: of a type run or a variable, an unsigned long
+      sizeof of a variable-length array is its size in bytes, worked out where it is declared
     arithmetic, as in C
       char and short, signed or not, become int first
       then both operands get one type: of 8 bytes if either is (unsigned if an 8-byte one is), else unsigned int if either is one, else int
@@ -321,6 +322,7 @@ ff, the language ttpc compiles
               ap
               long
       a struct or union name with items, as a value, is a temporary of that type (a compound literal, C's (point){1, 2}), the rest zero
+      array with the rest of an array's type and its items under it, as a value, is a temporary array, its value its address (C's (char *const[]){ "sh", NULL } is array / address / char / 2 / items)
       example
         s:
           long
@@ -486,6 +488,7 @@ ff, the language ttpc compiles
     paths
       calling a variable indexes or selects: xs i an element, p x a field (also through an address), r b x both in a row
       a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is cast: / address / point / p / . / y
+      address of a function is a function pointer, called where it stands, its result of the type its definition says: C's ((void) x, &f) (a, b) is : / : / cast: / void / x / address / f / . / a / b
       address x is C's &x, content p is C's *p, read, or written on the left of =
     registers
       a register name in C is that register: reading t2 is its value now, t2 = expr writes it; values pass between C and asm this way

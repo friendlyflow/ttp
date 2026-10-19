@@ -1,0 +1,4 @@
+exit 0
+ok a call through a comma's value, (x, &f) (a, b)
+ok a call through &f itself
+ok its result has the definition's type (int, sign-extended)

@@ -1,0 +1,13 @@
+exit 0
+ok an i64 argument and result
+ok int, i64, int
+ok five pairs, one on the stack
+ok pairs in r2:r3 and r6:r7, the rest on the stack
+ok an int argument to an i64 parameter
+ok an i64 argument to an int parameter
+ok an int result widened
+ok recursion
+ok varargs of i64 and int
+ok an i64 before the ...
+ok a call through an address
+ok a struct result

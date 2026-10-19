@@ -836,8 +836,9 @@ sub asm_once {
     "${name}_$h";
 }
 # the overflow builtins builtins.ff.txt has, by name and operand types
-my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'u64 u32 u64', 'u64 int u64';
+my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
 $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int';
+$ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 sub asm_ins {
     my ($n, $op, @a) = @_;
@@ -997,6 +998,7 @@ sub asm_stmt {
 my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9 r12 r13)]);
 my %retreg = (aarch64 => 'x0', x86_64 => 'rax');
 my %fpsysreg = (fpcr => 0xDA20, fpsr => 0xDA21);
+our $asm_size;      # x86_64: the size (l, q) of the register output's C type
 sub asm_ins_other {
     my ($n, $op, @a) = @_;
     if ($target eq 'aarch64') {
@@ -1007,7 +1009,17 @@ sub asm_ins_other {
             return node("$op.$w", node($a[2]), node($a[1]), node($a[0]));
         }
     } elsif ($target eq 'x86_64') {
-        return node('fwait') if $op eq 'fwait' && !@a;
+        # instructions without operands (ABORT_INSTRUCTION's hlt, the spin
+        # loops' pause, cpuid with its fixed registers)
+        return node($op) if !@a && $op =~ /^(?:fwait|hlt|pause|nop|cpuid|rdtsc|mfence|lfence|sfence)$/;
+        # an integer instruction on registers: ttpc's name has the size,
+        # GNU's may leave it to the operands (bsr %1, %0: the C type of the
+        # register output's, $asm_size)
+        if (@a && !grep { !/^%\w+$/ } @a) {
+            my $o = $op;
+            $o .= $asm_size if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)$/ && $asm_size;
+            return node($o, map { node(s/^%//r) } @a) if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)[lq]$/;
+        }
         return node($op, node($1)) if $op =~ /^(?:div|mul)q$/ && @a == 1 && $a[0] =~ /^%(\w+)$/;
         if ($op =~ /^(?:ldmxcsr|stmxcsr|fldenv|fnstenv)$/ && @a == 1 && $a[0] =~ /^(-?\d*)\(%(\w+)\)$/) {
             return node("$op.m", node($1 eq '' ? 0 : $1), node($2));
@@ -1019,7 +1031,14 @@ sub asm_stmt_other {
     my ($n) = @_;
     my $regs = $argregs{$target} or stop("an asm statement on $target", $n);
     my ($template, $oc, $ic, $ops) = asm_parts($n);
-    my %fixed = $target eq 'x86_64' ? (a => 'rax', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
+    # (rbx too: the C layer keeps nothing in it across a call)
+    my %fixed = $target eq 'x86_64' ? (a => 'rax', b => 'rbx', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
+    local $asm_size;
+    if ($target eq 'x86_64' && @$oc) {
+        my ($first) = grep { ($oc->[$_] =~ s/[=+&]//gr) =~ /^(r|rm|q)$/ } 0 .. $#$oc;
+        my $t = defined $first ? tword_int($ops->[$first]) : '';
+        $asm_size = $t =~ /^(long|u64|i64|address)$/ ? 'q' : $t =~ /^(int|u32|i32)$/ ? 'l' : undef;
+    }
     # each operand: what it is, and the register it wants (x86's a, d ...)
     my (@want, $ret, @code, @after, %text);
     for my $i (0 .. $#$ops) {
@@ -1257,7 +1276,8 @@ sub expr {
         # a path from an expression: after a . among the base node's children
         if (@path && $base != $n) {
             my @b = expr($base);
-            @b == 1 or stop('a path from ' . $base->{kind} . ' of several nodes', $n);
+            # (of several nodes, (child++)->argp, a : holds them)
+            @b = node(':', @b) if @b > 1;
             push @{ $b[0]{children} }, node('.'), @path;
             return @b;
         }
@@ -1281,11 +1301,12 @@ sub expr {
             push @{ $p[0]{children} }, @args ? map { item(expr($_)) } @args : node('.');
             return @p;
         }
-        if ($c->{kind} =~ /^(CStyleCastExpr|ConditionalOperator|CallExpr)$/) {
+        if ($c->{kind} =~ /^(CStyleCastExpr|ConditionalOperator|CallExpr|BinaryOperator)$/) {
             # through a function pointer that is a value, not a variable (dl-fini's
-            # ((fini_t) array[i]) ()): the value, a ., then the arguments
+            # ((fini_t) array[i]) (), backtrace's ((void) x, &_Unwind_Backtrace)
+            # (...)): the value, a ., then the arguments
             my @p = expr($c);
-            @p = node(':', @p) if @p > 1;    # (a conditional)
+            @p = node(':', @p) if @p > 1;    # (a conditional, an operator's)
             @p == 1 or stop('a call through ' . $c->{kind} . ' of several nodes', $n);
             push @{ $p[0]{children} }, node('.'), map { item(expr($_)) } @args;
             return @p;
@@ -1320,7 +1341,7 @@ sub expr {
         # gcc's type-generic overflow builtins: one function in builtins.ff.txt
         # for each set of operand types glibc uses, named for them
         # (__builtin_add_overflow u32 u32 u32)
-        if ($name =~ /^__builtin_(add|mul)_overflow$/) {
+        if ($name =~ /^__builtin_(add|sub|mul)_overflow$/) {
             my @t = map { tword_int($_) } @args;
             my $sig = "@t" =~ /^(\S+) (\S+) address (\S+)$/ ? "$1 $2 $3" : '';
             $ovf{"$name $sig"} or stop("$name on @t", $n);
@@ -1343,7 +1364,7 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
@@ -1393,6 +1414,10 @@ sub expr {
             return node($g);
         }
         my @t = ctype(qt($n));
+        # of an array (popen's (char *const[]){ "sh", "-c", ... }): as a typed
+        # literal, the type's first word on top, the rest of the type and then
+        # the items under it
+        return node('array', map({ node($_) } @t[1 .. $#t]), init((kids($n))[0])) if $t[0] eq 'array';
         @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne 'address' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
         # (one of a scalar type is a typed literal, u32 / 0; ttpc gives
         # address / u32 / 0 a temporary, C's &(unsigned int){0})
@@ -1402,6 +1427,13 @@ sub expr {
         my $w = $n->{name};
         my $t = $n->{argType} ? ($n->{argType}{desugaredQualType} // $n->{argType}{qualType}) : qt((kids($n))[0]);
         $w = 'alignof' if $w eq '__alignof' || $w eq '_Alignof';   # GNU's and C11's spellings, one on riscv64
+        # of a variable-length array (gmon's sizeof (buf)): of the variable,
+        # whose size ttpc keeps from its declaration
+        if (!$n->{argType} && $w eq 'sizeof' && $t =~ /\[[^\[\]]*[A-Za-z_][^\[\]]*\]$/) {
+            my $v = strip((kids($n))[0]);
+            $v = strip((kids($v))[0]) while $v->{kind} eq 'ParenExpr';
+            return node('sizeof', expr($v)) if $v->{kind} eq 'DeclRefExpr';
+        }
         return node($w, map { node($_) } ctype($t)) if $w eq 'sizeof' || $w eq 'alignof';
         stop("the trait $w", $n);
     }
@@ -1487,6 +1519,19 @@ sub hexfloat {
 use Math::BigInt;
 sub ldhexfloat {
     my ($s) = @_;
+    # (where long double is double, arm's EABI: the double nearest, written
+    # as the same hex float, which binary128 holds exactly)
+    if ($target eq 'arm') {
+        my $d = ldround($s, 53, -1074, 1023);
+        return defined $d ? $d : die "c2ff: a long double literal past a double: $s\n";
+    }
+    ldround($s, 113, -16494, 16383) // die "c2ff: a long double literal past the largest: $s\n";
+}
+# The decimal $s to the nearest number of $p bits (ties to even), its
+# exponent no lower than $emin (the subnormals) and its top bit's no higher
+# than $emax, as binary128's exact hex float with L; undef past $emax.
+sub ldround {
+    my ($s, $p, $emin, $emax) = @_;
     $s =~ /^([0-9]*)(?:\.([0-9]*))?(?:[eE]([-+]?[0-9]+))?$/ or die "c2ff: a long double literal that is no decimal: $s\n";
     my ($i, $f, $e) = ($1, $2 // '', $3 // 0);
     my $m = Math::BigInt->new(($i . $f) =~ s/^0+(?=.)//r);
@@ -1494,8 +1539,8 @@ sub ldhexfloat {
     return '0x0p+0L' if $m->is_zero;
     my ($n, $d) = $e10 >= 0 ? ($m * Math::BigInt->new(10)->bpow($e10), Math::BigInt->new(1)) : ($m, Math::BigInt->new(10)->bpow(-$e10));
     my $bits = sub { length($_[0]->as_bin) - 2 };
-    # e2: value / 2^e2 in [2^112, 2^113)
-    my $e2 = $bits->($n) - $bits->($d) - 113;
+    # e2: value / 2^e2 in [2^(p-1), 2^p)
+    my $e2 = $bits->($n) - $bits->($d) - $p;
     my $q;
     my $div = sub {
         my ($e2) = @_;
@@ -1507,23 +1552,30 @@ sub ldhexfloat {
         $qq->binc if $c > 0 || ($c == 0 && $qq->is_odd);
         $qq;
     };
-    my $two112 = Math::BigInt->new(2)->bpow(112);
-    my $two113 = Math::BigInt->new(2)->bpow(113);
-    $e2++ while ($div->($e2))->bcmp($two113) >= 0;
-    $e2-- while ($div->($e2))->bcmp($two112) < 0 && $e2 > -16494;
-    $e2 = -16494 if $e2 < -16494;
+    my $top = Math::BigInt->new(2)->bpow($p - 1);
+    my $over = Math::BigInt->new(2)->bpow($p);
+    $e2++ while ($div->($e2))->bcmp($over) >= 0;
+    $e2-- while ($div->($e2))->bcmp($top) < 0 && $e2 > $emin;
+    $e2 = $emin if $e2 < $emin;
     $q = $div->($e2);
-    if ($q->bcmp($two113) >= 0) { $e2++; $q = $div->($e2) }
-    if ($q->bcmp($two112) >= 0) {
-        my $exp = $e2 + 112;
-        die "c2ff: a long double literal past the largest: $s\n" if $exp > 16383;
-        my $hex = substr(($q - $two112)->as_hex, 2);
+    if ($q->bcmp($over) >= 0) { $e2++; $q = $div->($e2) }
+    return '0x0p+0L' if $q->is_zero;
+    # q * 2^e2, as binary128 writes it: its top bit the leading 1, or, below
+    # binary128's normal range, a subnormal 0x0.<digits>p-16382
+    my $lead = length($q->as_bin) - 3;
+    my $exp = $e2 + $lead;
+    return undef if $exp > $emax;
+    my $g = $q->copy;
+    if ($exp >= -16382) {
+        $g->bsub(Math::BigInt->new(2)->bpow($lead));
+        $g->blsft(112 - $lead);
+        my $hex = substr($g->as_hex, 2);
         $hex = ('0' x (28 - length $hex)) . $hex;
         $hex =~ s/0+$//;
-        return sprintf "0x1%sp%+dL", ($hex eq '' ? '' : ".$hex"), $exp;
+        return sprintf "0x1%sp%+dL", ($hex eq '0' || $hex eq '' ? '' : ".$hex"), $exp;
     }
-    return '0x0p+0L' if $q->is_zero;
-    my $hex = substr($q->as_hex, 2);
+    $g->blsft($e2 + 16494);
+    my $hex = substr($g->as_hex, 2);
     $hex = ('0' x (28 - length $hex)) . $hex;
     $hex =~ s/0+$//;
     sprintf "0x0.%sp-16382L", $hex;
@@ -1682,6 +1734,7 @@ sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n
 # = the arguments, the asm scall, the result from a0.
 sub syscall_idiom {
     my ($cs) = @_;
+    return syscall_idiom_x86($cs) if $target eq 'x86_64';
     my @st = kids($cs);
     my ($inner) = grep { $_->{kind} eq 'CompoundStmt' } @st;
     return () unless $inner && grep { $_->{kind} eq 'GCCAsmStmt' } kids($inner);
@@ -1709,6 +1762,36 @@ sub syscall_idiom {
         push @args, item(expr($e));
     }
     node('syscall', item(expr($reg{a7})), @args);
+}
+# x86_64's: register variables rdi rsi rdx r10 r8 r9 = the arguments (from
+# the __argN before them), the asm syscall with the number its input in the
+# output's place ("0", the output "=a" rax), the result that output.
+sub syscall_idiom_x86 {
+    my ($cs) = @_;
+    my @st = kids($cs);
+    my ($asm) = grep { $_->{kind} eq 'GCCAsmStmt' } @st;
+    return () unless $asm;
+    my ($template, $oc, $ic, $ops) = asm_parts($asm);
+    return () unless $template =~ /^\s*syscall[\s;]*$/ && @$oc == 1 && $oc->[0] eq '=a';
+    my ($num) = grep { $ic->[$_] eq '0' } 0 .. $#$ic;
+    defined $num or stop('a syscall without its number', $asm);
+    my (%reg, %local);
+    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st) {
+        for my $v (kids($s)) {
+            my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
+            my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+            next unless $init;
+            if ($lab) { my $r = $lab->{label} // (($v->{name} // '') =~ /^_a([1-6])$/ ? (qw(rdi rsi rdx r10 r8 r9))[$1 - 1] : undef); $reg{$r} = $init if defined $r } elsif (defined $v->{name}) { $local{ $v->{name} } = $init }
+        }
+    }
+    my @args;
+    for my $r (qw(rdi rsi rdx r10 r8 r9)) {
+        my $e = $reg{$r} or last;
+        my $s = strip($e);
+        $e = $local{ $s->{referencedDecl}{name} } if $s->{kind} eq 'DeclRefExpr' && $local{ $s->{referencedDecl}{name} };
+        push @args, item(expr($e));
+    }
+    node('syscall', item(expr($ops->[@$oc + $num])), @args);
 }
 
 # ---- statements ---------------------------------------------------------------
@@ -1784,7 +1867,8 @@ sub stmt {
         return node('switch', item(expr($v)), cases($b->{kind} eq 'CompoundStmt' ? kids($b) : $b));
     }
     return labelled($n) if $k eq 'CaseStmt' || $k eq 'DefaultStmt';
-    return node(ffname($n->{name}) . ':', stmt((kids($n))[0])) if $k eq 'LabelStmt';
+    # (a label's attribute, ret0: __attribute__ ((unused)), says nothing of its code)
+    return node(ffname($n->{name}) . ':', stmt((grep { $_->{kind} !~ /Attr$/ } kids($n))[0])) if $k eq 'LabelStmt';
     return node('goto', node(ffname($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     # GNU's goto *p: to the address p holds (a label's, &&L)
     return node('goto', node('content', expr((kids($n))[0]))) if $k eq 'IndirectGotoStmt';
@@ -1967,7 +2051,8 @@ sub function {
     node(ffname($name) . ':', map({ node($_) } ctype($ret)),
         map({ $i++; node(ffname($_->{name} // "p$i") . ':', map { node($_) } ctype(qt($_))) } @p),
         ($d->{variadic} ? node('...') : ()),
-        node('comment', node("glibc-2.44 $d->{file}")),
+        # (the .i, not the copy of it clang read: CLANGFIX)
+        node('comment', node("glibc-2.44 " . ($d->{file} =~ s/\.clang\.i$/.i/r))),
         body($cs));
 }
 

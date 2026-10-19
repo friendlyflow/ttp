@@ -39,7 +39,12 @@
 # of their own (milestone ldouble). The other targets build next to
 # riscv64's, in a folder of their name.
 GTARGET ?= riscv64
-TRIPLE := $(GTARGET)-unknown-linux-gnu
+# arm is 32-bit armv7-a with hard-float EABI: gcc's triple and clang's
+# target say so (clang's arm-linux-gnu alone would be soft-float armv4t)
+TRIPLE_arm := armv7l-unknown-linux-gnueabihf
+TRIPLE := $(or $(TRIPLE_$(GTARGET)),$(GTARGET)-unknown-linux-gnu)
+CTARGET_arm := armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16
+CTARGET := $(or $(CTARGET_$(GTARGET)),$(GTARGET)-linux-gnu)
 BUILD ?= $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
 JOBS ?= $(shell nproc)
@@ -127,10 +132,13 @@ comma := ,
 CPUS_riscv64 := rv64 rv64,v=false
 CPUS_aarch64 := max
 CPUS_x86_64 := max
+CPUS_arm := max
 CPUS := $(CPUS_$(GTARGET))
 PROGFLAGS_x86_64 := -mlong-double-128
 PROGFLAGS := $(PROGFLAGS_$(GTARGET))
-CAP := ulimit -v 4000000;
+# qemu-arm reserves the 32-bit address space (guest_base): 8 GB there
+CAP_arm := ulimit -v 8000000;
+CAP := $(or $(CAP_$(GTARGET)),ulimit -v 4000000;)
 
 # M1, string: strlen, memcpy, memset, strcmp and strchr, each its ifunc, its
 # generic C and its asm (vector; memcpy also for fast misaligned access),
@@ -318,7 +326,7 @@ CLANGFIX := $(CLANGFIX_$(GTARGET))
 $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i)
 	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	    -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
+	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
 # its asm parts name from elsewhere: setjmp's tail __sigjmp_save), then
@@ -412,8 +420,8 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	mkdir -p $(FF)
 	$(CAP) timeout 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	    -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(GLIBC_START),,--start) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
@@ -448,7 +456,7 @@ $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl
 	$(CAP) timeout 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
 
 $(FF)/%.rt.json: $(FF)/%.rt.c
-	$(CAP) timeout 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w \
+	$(CAP) timeout 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
 
 define roundtrip
@@ -460,6 +468,30 @@ $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
 glibc-roundtrip: floats-roundtrip
 
 .PHONY: strlen-check asm-check glibc-roundtrip
+
+# ---- glibc's C constructs, on their own -------------------------------------
+# progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
+# in for all of glibc (a path from an expression, a call through a comma's
+# value, sizeof of a VLA, a label's attribute, array compound literals,
+# gcc's ffs and overflow builtins), each checked: it exits with the number
+# that fail. It needs no part of glibc but the builtins, so it is built
+# against a folder of them alone, with a _start of its own (c2ff --start)
+# on every target, and as every check with gcc + libc.a; generic-roundtrip
+# writes its ff back as C and compares the ASTs, as for a milestone.
+OWNSTART := generic
+$(FF)/generic.ff: builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt
+	mkdir -p $(FF)
+	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt > $(FF)/generic.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/generic.ff.txt > $@
+$(eval $(call check,generic))
+GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit
+generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
+	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
+	$(CAP) timeout 120 perl ../compiler/gen/ff2c.pl $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
+	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -w \
+	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/generic.rt.c > $(FF)/generic.rt.json
+	$(CAP) timeout 300 perl roundtrip.pl $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
+.PHONY: generic-roundtrip
 
 # ---- all of glibc --------------------------------------------------------------
 # Every object of the static libraries glibc installs for GTARGET
