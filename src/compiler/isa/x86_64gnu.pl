@@ -30,10 +30,13 @@
 # register is one of the first eight (checked: its fields take 3 bits),
 # and a byte register 4..7 is ah ch dh bh.
 #
-# The groups are named gnu ...: trim.pl leaves them out of the shared page
-# the frozen links (ttpc1, ttpc2) read, which do not assemble glibc.
-# progs/x86_64/mkgnu.pl reads @main::X86_GNU, filled here as @X86_WIDE is,
-# and writes the GNU twin of every form (make x86gnu).
+# The groups are named gnu ...; but for gnu encodings (the parts the forms
+# are made of, in the section) they go in a tree of their own,
+# x86_64gnu.ff (gen/mkgnuff.pl), which only a build of x86_64 asm reads
+# after shared.ff: the 14864 forms are 13 MB, and every other compile on
+# every target would read them. progs/x86_64/mkgnu.pl reads
+# @main::X86_GNU, filled here as @X86_WIDE is, and writes the GNU twin of
+# every form (make x86gnu).
 #
 # Loaded by isa/x86_64.pl (do), with its $isa ($main::X86_ISA) and helpers.
 
@@ -682,5 +685,85 @@ evexf(nm => "vpbroadcastb", pp => 66, map => 2, lens => \@L3, op => 0x78, kind =
 evexf(nm => "vpbroadcastd", pp => 66, map => 2, lens => \@L3, op => 0x58, kind => "RM", mk => "x", n => 4);
 evexf(nm => "vpbroadcastb", pp => 66, map => 2, lens => \@L3, op => 0x7a, kind => "RM", mk => "l", mem => 0, rsfx => "fromr");
 evexf(nm => "vpbroadcastd", pp => 66, map => 2, lens => \@L3, op => 0x7c, kind => "RM", mk => "l", mem => 0, rsfx => "fromr");
+
+# ---------------------------------------------------------------------------
+# x87 (libm's long double of the x87, the floating point state) and the
+# rest glibc's asm has: the state saves (fxsave, xsave ...), prefetch, the
+# MXCSR. A memory operand's form is M's (the digit in ModRM.reg), its size
+# in the mnemonic (s l t: 32 64 80 bits; for integers s l ll: 16 32 64);
+# st(i) is sti.
+# ---------------------------------------------------------------------------
+
+$isa->group("gnu x87");
+for my $t (["flds", 0xd9, 0], ["fldl", 0xdd, 0], ["fldt", 0xdb, 5], ["fsts", 0xd9, 2], ["fstl", 0xdd, 2],
+           ["fstps", 0xd9, 3], ["fstpl", 0xdd, 3], ["fstpt", 0xdb, 7],
+           ["filds", 0xdf, 0], ["fildl", 0xdb, 0], ["fildll", 0xdf, 5], ["fists", 0xdf, 2], ["fistl", 0xdb, 2],
+           ["fistps", 0xdf, 3], ["fistpl", 0xdb, 3], ["fistpll", 0xdf, 7],
+           ["fadds", 0xd8, 0], ["faddl", 0xdc, 0], ["fmuls", 0xd8, 1], ["fmull", 0xdc, 1], ["fcoms", 0xd8, 2], ["fcoml", 0xdc, 2],
+           ["fcomps", 0xd8, 3], ["fcompl", 0xdc, 3], ["fsubs", 0xd8, 4], ["fsubl", 0xdc, 4], ["fsubrs", 0xd8, 5], ["fsubrl", 0xdc, 5],
+           ["fdivs", 0xd8, 6], ["fdivl", 0xdc, 6], ["fdivrs", 0xd8, 7], ["fdivrl", 0xdc, 7],
+           ["fnstcw", 0xd9, 7], ["fldcw", 0xd9, 5], ["fnstsw", 0xdd, 7], ["fnstenv", 0xd9, 6], ["fldenv", 0xd9, 4],
+           ["fstcw", [0x9b, 0xd9], 7], ["fstsw", [0x9b, 0xdd], 7], ["fstenv", [0x9b, 0xd9], 6]) {
+    my ($nm, $op, $digit) = @$t;
+    my @op = ref $op ? @$op : ($op);
+    my @pre = @op > 1 ? ($op[0]) : ();
+    legacy(nm => $nm, s => "l", pre => \@pre, op => [$op[-1]], kind => "M", digit => $digit, regonly => 0);
+}
+# st(i): [name, opcode, base of the second byte, GNU's operands]
+for my $t (["fld", 0xd9, 0xc0, "<rs>"], ["fst", 0xdd, 0xd0, "<rs>"], ["fstp", 0xdd, 0xd8, "<rs>"], ["fxch", 0xd9, 0xc8, "<rs>"],
+           ["ffree", 0xdd, 0xc0, "<rs>"], ["ffreep", 0xdf, 0xc0, "<rs>"], ["fucom", 0xdd, 0xe0, "<rs>"], ["fucomp", 0xdd, 0xe8, "<rs>"],
+           ["fcom", 0xd8, 0xd0, "<rs>"], ["fcomp", 0xd8, 0xd8, "<rs>"],
+           ["fcomi", 0xdb, 0xf0, "<rs>, %st"], ["fcomip", 0xdf, 0xf0, "<rs>, %st"], ["fucomi", 0xdb, 0xe8, "<rs>, %st"], ["fucomip", 0xdf, 0xe8, "<rs>, %st"],
+           ["fadd", 0xd8, 0xc0, "<rs>, %st"], ["fmul", 0xd8, 0xc8, "<rs>, %st"], ["fsub", 0xd8, 0xe0, "<rs>, %st"], ["fsubr", 0xd8, 0xe8, "<rs>, %st"],
+           ["fdiv", 0xd8, 0xf0, "<rs>, %st"], ["fdivr", 0xd8, 0xf8, "<rs>, %st"],
+           # (AT&T's sub and subr, div and divr to st(i) are the other opcode's)
+           ["fadd.tost", 0xdc, 0xc0, "%st, <rs>"], ["fmul.tost", 0xdc, 0xc8, "%st, <rs>"], ["fsub.tost", 0xdc, 0xe0, "%st, <rs>"],
+           ["fsubr.tost", 0xdc, 0xe8, "%st, <rs>"], ["fdiv.tost", 0xdc, 0xf0, "%st, <rs>"], ["fdivr.tost", 0xdc, 0xf8, "%st, <rs>"],
+           ["faddp", 0xde, 0xc0, "%st, <rs>"], ["fmulp", 0xde, 0xc8, "%st, <rs>"], ["fsubp", 0xde, 0xe0, "%st, <rs>"],
+           ["fsubrp", 0xde, 0xe8, "%st, <rs>"], ["fdivp", 0xde, 0xf0, "%st, <rs>"], ["fdivrp", 0xde, 0xf8, "%st, <rs>"]) {
+    my ($nm, $op, $b, $g) = @$t;
+    (my $gnu = $nm) =~ s/\..*//;
+    gform($nm, ["rs:st.any"], "$gnu $g", gbytes($op), C("opreg", hex2($b), "rs"));
+}
+for my $t (["fld1", 0xd9, 0xe8], ["fldz", 0xd9, 0xee], ["fldl2e", 0xd9, 0xea], ["fldl2t", 0xd9, 0xe9], ["fldlg2", 0xd9, 0xec],
+           ["fldln2", 0xd9, 0xed], ["fldpi", 0xd9, 0xeb], ["f2xm1", 0xd9, 0xf0], ["fscale", 0xd9, 0xfd], ["fprem", 0xd9, 0xf8],
+           ["fprem1", 0xd9, 0xf5], ["frndint", 0xd9, 0xfc], ["fxam", 0xd9, 0xe5], ["fxtract", 0xd9, 0xf4], ["fyl2x", 0xd9, 0xf1],
+           ["fyl2xp1", 0xd9, 0xf9], ["fabs", 0xd9, 0xe1], ["fchs", 0xd9, 0xe0], ["fsqrt", 0xd9, 0xfa], ["fsin", 0xd9, 0xfe],
+           ["fcos", 0xd9, 0xff], ["fsincos", 0xd9, 0xfb], ["fptan", 0xd9, 0xf2], ["fpatan", 0xd9, 0xf3], ["ftst", 0xd9, 0xe4],
+           ["fcompp", 0xde, 0xd9], ["fucompp", 0xda, 0xe9], ["fnclex", 0xdb, 0xe2], ["fninit", 0xdb, 0xe3], ["fdecstp", 0xd9, 0xf6],
+           ["fincstp", 0xd9, 0xf7]) {
+    my ($nm, @b) = @$t;
+    gform($nm, [], $nm, gbytes(@b));
+}
+gform("fnstsw.ai", ["rd:w.acc"], "fnstsw <rd>", gbytes(0xdf), C("byte", C("acc", "0xe0", "rd")));
+gform("fstsw.ai", ["rd:w.acc"], "fstsw <rd>", gbytes(0x9b, 0xdf), C("byte", C("acc", "0xe0", "rd")));
+
+$isa->group("gnu system");
+for my $t (["fxsave", 0x0f, 0xae, 0], ["fxrstor", 0x0f, 0xae, 1], ["xsave", 0x0f, 0xae, 4], ["xrstor", 0x0f, 0xae, 5],
+           ["xsavec", 0x0f, 0xc7, 4], ["ldmxcsr", 0x0f, 0xae, 2], ["stmxcsr", 0x0f, 0xae, 3],
+           ["prefetcht0", 0x0f, 0x18, 1], ["prefetcht1", 0x0f, 0x18, 2], ["prefetcht2", 0x0f, 0x18, 3], ["prefetchnta", 0x0f, 0x18, 0]) {
+    my ($nm, @op) = @$t;
+    my $digit = pop @op;
+    legacy(nm => $nm, s => "l", op => \@op, kind => "M", digit => $digit, regonly => 0);
+}
+for my $t (["xsave64", 0x0f, 0xae, 4], ["xrstor64", 0x0f, 0xae, 5], ["xsavec64", 0x0f, 0xc7, 4], ["fxsave64", 0x0f, 0xae, 0], ["fxrstor64", 0x0f, 0xae, 1]) {
+    my ($nm, @op) = @$t;
+    my $digit = pop @op;
+    legacy(nm => $nm, s => "q", op => \@op, kind => "M", digit => $digit, regonly => 0);
+}
+for my $t (["movbel", "l", 0xf0, 0xf1], ["movbeq", "q", 0xf0, 0xf1]) {
+    my ($nm, $s, $ld, $st) = @$t;
+    legacy(nm => $nm, s => $s, op => [0x0f, 0x38, $ld], kind => "RM", regonly => 0, gnu => "movbe");
+    legacy(nm => $nm, s => $s, op => [0x0f, 0x38, $st], kind => "MR", regonly => 0, gnu => "movbe");
+}
+for my $t (["xtest", 0x0f, 0x01, 0xd6], ["xgetbv", 0x0f, 0x01, 0xd0], ["rdpkru", 0x0f, 0x01, 0xee], ["wrpkru", 0x0f, 0x01, 0xef],
+           ["endbr64", 0xf3, 0x0f, 0x1e, 0xfa]) {
+    my ($nm, @b) = @$t;
+    gform($nm, [], $nm, gbytes(@b));
+}
+# the prefixes GNU as writes before an instruction, each a call of its own
+for my $t (["fs", 0x64], ["gs", 0x65], ["cs", 0x2e], ["ds", 0x3e], ["data16", 0x66], ["addr32", 0x67], ["notrack", 0x3e]) {
+    gform($t->[0], [], sprintf(".byte 0x%02x", $t->[1]), gbytes($t->[1]));
+}
 
 1;

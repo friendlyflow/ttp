@@ -58,6 +58,7 @@ my %vals = (
     kany  => [1, 2, 3, 4, 5, 6, 7], klo => [1, 2, 3, 4, 5, 6, 7],
     ev    => [16, 3, 25, 9, 31, 20, 12, 17],
     d32e  => [-2147483648, 2147483647, 4660, -129, 1001],
+    st    => [1, 2, 3, 4, 5, 6, 7],      # (st0 to st0: GNU as takes either opcode)
     scale => [1, 2, 4, 8],
     d0    => [0],
     d8    => [-128, 127, -1, 64, 8],
@@ -99,7 +100,10 @@ for my $f (@X86_GNU) {
     for (@$params) {
         my ($p, $k) = split /:/, $_, 2;
         my ($ff, $as);
-        if ($k =~ /^([qlwb])\.acc$/) {
+        if ($k eq "st.any") {
+            my $n = take("st");
+            ($ff, $as) = ("st$n", "%st($n)");
+        } elsif ($k =~ /^([qlwb])\.acc$/) {
             $ff = $name{$1}[0];
             $as = "%$ff";
         } elsif ($k =~ /^([qlwbxyzk])\.(lo|hi|any|ev)$/) {
