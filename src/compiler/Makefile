@@ -289,6 +289,8 @@ CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse c
 # cexpr, cint64, cfloats and cgnu compute with u64, which a target of 4-byte
 # words does not have (cfloats32 is cfloats without it).
 CSKIP_arm := cexpr cint64 cfloats cgnu
+# C tests of one target only, beside the portable ones
+CONLY_aarch64 := ctlsa64
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per
 # page), which it reads lazily: never.ff, which it must not read, is no tree.
@@ -335,8 +337,8 @@ check-$(1): $(PROGS:%=$(P)/$(1)/%.elf) $(PROGS:%=$(P)/$(1)/%.twin.bin)
 	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/$(1)/hello.out
 	@echo "check-$(1): exit42 and hello run"
 
-ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE)))
-	@for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)); do \
+ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE)) $(CONLY_$(1)))
+	@for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)) $(CONLY_$(1)); do \
 	    e=progs/$$$$p.$(1).expect; test -f $$$$e || e=progs/$$$$p.expect; \
 	    tail -n +2 $$$$e > $(P)/$(1)/$$$$p.want; \
 	    qemu-$(1) $(P)/$(1)/$$$$p.celf > $(P)/$(1)/$$$$p.out; s=$$$$?; \
