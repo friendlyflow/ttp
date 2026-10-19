@@ -1,3 +1,8 @@
+license
+  GPL-3.0-only
+  Copyright (C) 2026 Nico Verrijdt
+  This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+  It comes with no warranty. See the file LICENSE for the full text.
 ff, the language ttpc compiles
   the tree
     a node holds one thing, its content (at most 255 bytes, any bytes, no NUL), and at most 255 children
