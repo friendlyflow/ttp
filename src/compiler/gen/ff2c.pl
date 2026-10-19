@@ -68,7 +68,8 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
-    va_list => '__builtin_va_list');
+    va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
+    'complex long double' => '_Complex long double');
 my (%rec, %enum, %fntype, %fn, %var, %econst, @order);
 my %glibcpage;   # functions of the glibc pages (their bodies are written)
 
@@ -459,6 +460,11 @@ sub operand {
         if (@k == 1 && leaf($f) && !local_type(c($f)) && !gtype(c($f)) && !$econst{ c($f) }) { $fn{ c($f) } = { kind => 'asm', missing => 1 }; push @order, c($f); return ('(&' . cid(c($f)) . ')', [ptr => undef]) }
         my ($s, $t) = expr([@k]);
         return ("(&$s)", [ptr => $t]);
+    }
+    # a complex value's parts: C's __real__ and __imag__
+    if ($w eq 'real' || $w eq 'imag') {
+        my ($s, $t) = expr([@k]);
+        return ("(__${w}__ ($s))", $t && $t->[0] eq 'scalar' && $t->[1] =~ /^complex (.+)$/ ? [scalar => $1] : undef);
     }
     if ($w eq 'content') {
         my ($s, $t) = expr([@k]);
