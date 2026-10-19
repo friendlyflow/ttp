@@ -280,7 +280,7 @@ WEAKS_start := __fini_array_start __fini_array_end _startup_fatal_not_constant _
 uniq = $(strip $(if $(1),$(firstword $(1)) $(call uniq,$(filter-out $(firstword $(1)),$(1)))))
 with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_start)))
 
-.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
+.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -339,23 +339,32 @@ $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 # end; the fields relocations fill in (relmask.pl) are the linker's, not
 # compared, and what it names from elsewhere is a stand-in label after it.
 ASMCHECK := $(ASMS_stdio) $(if $(GLIBC_START),csu/start)
-asm-check: $(ASMCHECK:%=$(I)/%.dump) $(ASMCHECK:%=$(I)/%.bin) ../compiler/gen/s2ff.pl
-	mkdir -p $(FF)
-	@for a in $(ASMCHECK); do \
-	    n=$$(basename $$a); \
-	    { perl ../compiler/gen/s2ff.pl $(I)/$$a.s $(I)/$$a.dump && printf '_start:\n  ebreak\n' && \
-	      $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  ebreak\n", $$NF }'; } > $(FF)/$$n.asm.ff.txt || exit 1; \
-	    perl ../compiler/gen/fftext.pl ff $(FF)/$$n.asm.ff.txt > $(FF)/$$n.asm.ff; \
-	    $(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $(FF)/$$n.asm.ff $(FF)/$$n.asm > $(FF)/$$n.asm.lst || exit 1; \
-	    size=$$(perl ../compiler/gen/s2ff.pl --size $(I)/$$a.s $(I)/$$a.dump) || exit 1; \
-	    $(XPRE)objdump -r $(I)/$$a.ref.o > $(FF)/$$n.relocs; \
-	    head -c $$size $(I)/$$a.bin > $(FF)/$$n.want.raw; \
-	    tail -c +121 $(FF)/$$n.asm | head -c $$size > $(FF)/$$n.got.raw; \
-	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.want.raw > $(FF)/$$n.want || exit 1; \
-	    perl relmask.pl $(FF)/$$n.relocs $(FF)/$$n.got.raw > $(FF)/$$n.got || exit 1; \
-	    cmp $(FF)/$$n.got $(FF)/$$n.want || exit 1; \
-	    echo "asm-check: $$a: ttpc and glibc's compiler agree ($$size bytes)"; \
-	done
+asm-check: $(ASMCHECK:%=$(I)/%.asmok)
+	@for a in $(ASMCHECK); do cat $(I)/$$a.asmok; done
+
+# one asm part's check: $(I)/x.asmok holds what it found, made only where
+# ttpc and glibc's compiler agree. Per target: the instruction of a
+# stand-in label (ASMTRAP) and where ttpc's code starts in its output
+# (ASMHDR, after the ELF and program headers). relmask.pl knows riscv64's
+# relocations; s2ff.pl reads riscv64's GNU as.
+ASMTRAP_riscv64 := ebreak
+ASMHDR_riscv64 := 120
+ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
+ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
+$(I)/%.asmok: $(I)/%.dump $(I)/%.bin ../compiler/gen/s2ff.pl $(TTPC)
+	@a=$(I)/$*; \
+	{ perl ../compiler/gen/s2ff.pl $$a.s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
+	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
+	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
+	$(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
+	size=$$(perl ../compiler/gen/s2ff.pl --size $$a.s $$a.dump) || exit 1; \
+	$(XPRE)objdump -r $$a.ref.o > $$a.relocs; \
+	head -c $$size $$a.bin > $$a.want.raw; \
+	tail -c +$$(($(ASMHDR) + 1)) $$a.asm | head -c $$size > $$a.got.raw; \
+	perl relmask.pl $$a.relocs $$a.want.raw > $$a.want || exit 1; \
+	perl relmask.pl $$a.relocs $$a.got.raw > $$a.got || exit 1; \
+	cmp $$a.got $$a.want || exit 1; \
+	echo "asm-check: $*: ttpc and glibc's compiler agree ($$size bytes)" > $@
 
 # progs/strlen.ff includes string.ff from its own folder, so both go there
 strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
@@ -441,3 +450,62 @@ $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
 glibc-roundtrip: floats-roundtrip
 
 .PHONY: strlen-check asm-check glibc-roundtrip
+
+# ---- all of glibc --------------------------------------------------------------
+# Every object of the static libraries glibc installs for GTARGET
+# (allobjs.pl: libc.a, libm.a, libmvec.a where there is one, libresolv.a,
+# libBrokenLocale.a, libg.a, libmcheck.a, and crt1.o's parts, crti.o and
+# crtn.o; libutil.a, libanl.a, libpthread.a, librt.a and libdl.a are
+# empty), each C object as c2ff's pass of its AST (tu.c2ff), each asm
+# object as its .s and what glibc's compiler made of it.
+#
+#   make all-units       the .i or .s of each, and each C object's pass
+#
+# A C object's AST is made for its pass and then deleted (all of glibc's
+# take some 16 GB): c2ff takes its pass while the .i is the same, and the
+# pass is made again only where c2ff's pass itself changed (c2ff exits 3:
+# the AST is made again; unit.sh). Each object's heavy step runs in one of
+# the machine's shared slots (slot.sh), make -j3 at most.
+SLOT := sh ../compiler/gen/slot.sh -v 4000000
+ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
+# (worked out once, where a target needs it)
+ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
+ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
+ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
+
+CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+	-fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
+
+$(I)/%.c2ff: $(I)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
+	@$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i;) \
+	sh unit.sh $(GTARGET) $< $(I)/$*.json $(if $(CLANGFIX),$(I)/$*.clang.i,$<) $(CLANG_AST)
+	@touch $@
+
+all-units: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
+	@echo "all-units: $(words $(ALL_C)) C objects, $(words $(ALL_ASM)) asm objects"
+.PHONY: all-units
+
+# Each C object alone (all-survey): c2ff of its pass, from the names its
+# object defines (nm), as what c2ff makes of it ($(I)/x.one.ff.txt) or why
+# it cannot yet ($(I)/x.one.err, its last line c2ff's message); the names
+# it takes from other objects are left out (c2ff says so). A count of the
+# objects done and the reasons of the others, most first.
+$(I)/%.one: $(I)/%.c2ff ../compiler/gen/c2ff.pl
+	@s=0; $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(I)/$*.json=$(I)/$*.i \
+	    -- $$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }') > $(I)/$*.one.ff.txt 2> $(I)/$*.one.err || s=$$?; \
+	echo $$s > $@
+
+all-survey: $(ALL_C:%=$(I)/%.one)
+	@cd $(I) && n=0; ok=0; for o in $(ALL_C); do n=$$((n + 1)); test "$$(cat $$o.one)" = 0 && ok=$$((ok + 1)); done; \
+	echo "all-survey: $$ok of $$n C objects in ff"; \
+	for o in $(ALL_C); do test "$$(cat $$o.one)" = 0 || { tail -n 1 $$o.one.err | sed -e 's/ (at .*//' -e 's/^c2ff: //'; }; done | sort | uniq -c | sort -rn | head -60
+.PHONY: all-survey
+
+# Each asm object's check (all-asm, with make -k): how many agree, and the
+# others.
+all-asm:
+	-@$(MAKE) -k --no-print-directory $(ALL_ASM:%=$(I)/%.asmok) > $(I)/all-asm.log 2>&1
+	@n=0; ok=0; for a in $(ALL_ASM); do n=$$((n + 1)); if test -e $(I)/$$a.asmok; then ok=$$((ok + 1)); else echo "all-asm: $$a: not yet"; fi; done; \
+	echo "all-asm: $$ok of $$n asm objects byte for byte (make's output in $(I)/all-asm.log)"
+.PHONY: all-asm
+
