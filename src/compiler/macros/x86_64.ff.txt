@@ -263,6 +263,13 @@ c:
       zero
       a0
   comment
+    cc_char: the code of the type char, C's char as the target's ABI has it: 65, signed (one byte, not u8's 17, which a target without cc_char has: unsigned).
+  cc_char:
+    addi
+      65
+      zero
+      a0
+  comment
     cc_argoff: bytes from the callee's FP to the last word its caller pushed (the return address and FP its prologue keeps).
   cc_argoff:
     addi

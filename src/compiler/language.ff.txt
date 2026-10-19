@@ -112,7 +112,7 @@ ff, the language ttpc compiles
             1
     types
       a type is a run of leaf siblings, one word per node, the first word first; a node with children ends the run
-      scalars: char (unsigned 1 byte), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void, va_list (a word)
+      scalars: char (1 byte, signed on x86_64, unsigned on riscv64, aarch64 and arm, as their ABIs say: the target's cc_char), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void, va_list (a word)
       i64 and u64 are refused on arm
       address T: a word, the address of a T; address alone, the address of nothing (C's void *)
       array T n: n elements of T; n a number or a constant; arrays of arrays nest, array array int 3 4

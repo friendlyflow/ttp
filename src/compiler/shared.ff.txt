@@ -338,7 +338,8 @@ comment
 compile:
   w
 comment
-  char value: C, an unsigned byte; called with a value, converts it. Text is address char with a leaf that names nothing: its bytes and a NUL, the value their address.
+  char value: C, a byte, signed or unsigned as the target says (signed on x86_64, unsigned on riscv64, aarch64 and arm: its cc_char); called with a value, converts it.
+  Text is address char with a leaf that names nothing: its bytes and a NUL, the value their address.
 char:
   value
 comment

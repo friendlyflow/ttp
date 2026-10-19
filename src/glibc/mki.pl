@@ -21,6 +21,10 @@
 # too, the path glibc has for a target without a 128-bit integer.
 #
 #   perl mki.pl <obj dir> <glibc source> string/strlen.o ...
+#   perl mki.pl --dry <obj dir> <glibc source> string/strlen.o ...
+#
+# --dry only prints the file each object would get (its .i or .s), making
+# none: which objects are C and which asm.
 #
 # A host tool (core Perl only).
 use strict;
@@ -29,7 +33,8 @@ use File::Path qw(make_path);
 use File::Basename qw(dirname);
 use Cwd ();
 
-die "usage: mki.pl <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
+my $dry = @ARGV && $ARGV[0] eq '--dry' && shift @ARGV;
+die "usage: mki.pl [--dry] <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
 my ($obj, $src, @want) = @ARGV;
 # (the folder of the build, as given: its i/ is next to obj/, also where obj
 # is a link to another build's, whose build.log names its own folder)
@@ -89,6 +94,7 @@ for my $o (@want) {
     chomp $c;
     my $ext = !$gen{$o} && $c =~ m{\.S\s| -x assembler-with-cpp } ? "s" : "i";
     (my $i = "$build/i/$o") =~ s/\.o$/.$ext/;
+    if ($dry) { print "$i\n"; next }
     make_path(dirname($i));
     $c =~ s/ -c / -E / or $c =~ s/ -S(\s|$)/ -E$1/;
     $c =~ s/ -o \S+\.(?:o|S) / -o $i /;
@@ -108,7 +114,8 @@ for my $o (@want) {
           . "mki: rebuild glibc-ref with the current toolchain, into a new BUILD (make -C src/glibc glibc-ref BUILD=...),\n"
           . "mki: and keep the toolchain alive with `make gcroots`.\n";
     }
-    my $dir = "$src/" . ($o =~ m{^soft-fp/} ? "math" : dirname($o));
+    # (libg.a's dummy.o, at the top of the build, is made in misc)
+    my $dir = "$src/" . ($o =~ m{^soft-fp/} ? "math" : $o !~ m{/} ? "misc" : dirname($o));
     if (system('sh', '-c', "cd '$dir' && $c") != 0) { warn "mki: $o: the compiler failed\n"; $bad = 1; next }
     if ($ext eq 'i' && $c !~ / -U__SIZEOF_INT128__ / && do { open my $h, '<', $i; local $/; <$h> =~ /^typedef unsigned (?:__int128|_BitInt\(128\)) u128;$/m }) {
         $c =~ s/ -o / -U__SIZEOF_INT128__ -U__BITINT_MAXWIDTH__ -o /;

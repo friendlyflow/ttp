@@ -1,0 +1,8 @@
+exit 0
+char is unsigned
+a char of an array is unsigned
+a char through an address is unsigned
+ok a text fills an array of u8
+ok a text fills an array of char
+ok i8 is signed
+ok u8 is unsigned
