@@ -1,0 +1,29 @@
+exit 0
+ok a literal of 33 bits
+ok + carries
+ok u64 + carries
+ok - borrows
+ok i64 < 0
+ok signed compare high words
+ok signed compare low words
+ok u64 compares unsigned
+ok > <= >=
+ok unary -
+ok ~
+ok & | ^
+ok int widens with its sign
+ok u32 widens with zeros
+ok int + i64 is i64
+ok u32 + i64 is i64
+ok a cast to int keeps the low word
+ok a pair is true
+ok ! of a pair
+ok && and || of pairs
+ok ++ carries
+ok -- borrows
+ok +=
+ok = widens an int
+ok a struct field
+ok an array element
+ok through an address
+ok an if as a value
