@@ -889,6 +889,7 @@ sub asm_stmt {
 my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9 r12 r13)]);
 my %retreg = (aarch64 => 'x0', x86_64 => 'rax');
 my %fpsysreg = (fpcr => 0xDA20, fpsr => 0xDA21);
+our $asm_size;      # x86_64: the size (l, q) of the register output's C type
 sub asm_ins_other {
     my ($n, $op, @a) = @_;
     if ($target eq 'aarch64') {
@@ -899,7 +900,17 @@ sub asm_ins_other {
             return node("$op.$w", node($a[2]), node($a[1]), node($a[0]));
         }
     } elsif ($target eq 'x86_64') {
-        return node('fwait') if $op eq 'fwait' && !@a;
+        # instructions without operands (ABORT_INSTRUCTION's hlt, the spin
+        # loops' pause, cpuid with its fixed registers)
+        return node($op) if !@a && $op =~ /^(?:fwait|hlt|pause|nop|cpuid|rdtsc|mfence|lfence|sfence)$/;
+        # an integer instruction on registers: ttpc's name has the size,
+        # GNU's may leave it to the operands (bsr %1, %0: the C type of the
+        # register output's, $asm_size)
+        if (@a && !grep { !/^%\w+$/ } @a) {
+            my $o = $op;
+            $o .= $asm_size if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)$/ && $asm_size;
+            return node($o, map { node(s/^%//r) } @a) if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)[lq]$/;
+        }
         return node($op, node($1)) if $op =~ /^(?:div|mul)q$/ && @a == 1 && $a[0] =~ /^%(\w+)$/;
         if ($op =~ /^(?:ldmxcsr|stmxcsr|fldenv|fnstenv)$/ && @a == 1 && $a[0] =~ /^(-?\d*)\(%(\w+)\)$/) {
             return node("$op.m", node($1 eq '' ? 0 : $1), node($2));
@@ -911,7 +922,14 @@ sub asm_stmt_other {
     my ($n) = @_;
     my $regs = $argregs{$target} or stop("an asm statement on $target", $n);
     my ($template, $oc, $ic, $ops) = asm_parts($n);
-    my %fixed = $target eq 'x86_64' ? (a => 'rax', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
+    # (rbx too: the C layer keeps nothing in it across a call)
+    my %fixed = $target eq 'x86_64' ? (a => 'rax', b => 'rbx', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
+    local $asm_size;
+    if ($target eq 'x86_64' && @$oc) {
+        my ($first) = grep { ($oc->[$_] =~ s/[=+&]//gr) =~ /^(r|rm|q)$/ } 0 .. $#$oc;
+        my $t = defined $first ? tword_int($ops->[$first]) : '';
+        $asm_size = $t =~ /^(long|u64|i64|address)$/ ? 'q' : $t =~ /^(int|u32|i32)$/ ? 'l' : undef;
+    }
     # each operand: what it is, and the register it wants (x86's a, d ...)
     my (@want, $ret, @code, @after, %text);
     for my $i (0 .. $#$ops) {
@@ -1501,6 +1519,7 @@ sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n
 # = the arguments, the asm scall, the result from a0.
 sub syscall_idiom {
     my ($cs) = @_;
+    return syscall_idiom_x86($cs) if $target eq 'x86_64';
     my @st = kids($cs);
     my ($inner) = grep { $_->{kind} eq 'CompoundStmt' } @st;
     return () unless $inner && grep { $_->{kind} eq 'GCCAsmStmt' } kids($inner);
@@ -1528,6 +1547,36 @@ sub syscall_idiom {
         push @args, item(expr($e));
     }
     node('syscall', item(expr($reg{a7})), @args);
+}
+# x86_64's: register variables rdi rsi rdx r10 r8 r9 = the arguments (from
+# the __argN before them), the asm syscall with the number its input in the
+# output's place ("0", the output "=a" rax), the result that output.
+sub syscall_idiom_x86 {
+    my ($cs) = @_;
+    my @st = kids($cs);
+    my ($asm) = grep { $_->{kind} eq 'GCCAsmStmt' } @st;
+    return () unless $asm;
+    my ($template, $oc, $ic, $ops) = asm_parts($asm);
+    return () unless $template =~ /^\s*syscall[\s;]*$/ && @$oc == 1 && $oc->[0] eq '=a';
+    my ($num) = grep { $ic->[$_] eq '0' } 0 .. $#$ic;
+    defined $num or stop('a syscall without its number', $asm);
+    my (%reg, %local);
+    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st) {
+        for my $v (kids($s)) {
+            my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
+            my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+            next unless $init;
+            if ($lab) { my $r = $lab->{label} // (($v->{name} // '') =~ /^_a([1-6])$/ ? (qw(rdi rsi rdx r10 r8 r9))[$1 - 1] : undef); $reg{$r} = $init if defined $r } elsif (defined $v->{name}) { $local{ $v->{name} } = $init }
+        }
+    }
+    my @args;
+    for my $r (qw(rdi rsi rdx r10 r8 r9)) {
+        my $e = $reg{$r} or last;
+        my $s = strip($e);
+        $e = $local{ $s->{referencedDecl}{name} } if $s->{kind} eq 'DeclRefExpr' && $local{ $s->{referencedDecl}{name} };
+        push @args, item(expr($e));
+    }
+    node('syscall', item(expr($ops->[@$oc + $num])), @args);
 }
 
 # ---- statements ---------------------------------------------------------------
@@ -1787,7 +1836,8 @@ sub function {
     node(ffname($name) . ':', map({ node($_) } ctype($ret)),
         map({ $i++; node(ffname($_->{name} // "p$i") . ':', map { node($_) } ctype(qt($_))) } @p),
         ($d->{variadic} ? node('...') : ()),
-        node('comment', node("glibc-2.44 $d->{file}")),
+        # (the .i, not the copy of it clang read: CLANGFIX)
+        node('comment', node("glibc-2.44 " . ($d->{file} =~ s/\.clang\.i$/.i/r))),
         body($cs));
 }
 
