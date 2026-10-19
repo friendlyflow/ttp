@@ -1276,6 +1276,10 @@ sub expr {
             return node($g);
         }
         my @t = ctype(qt($n));
+        # of an array (popen's (char *const[]){ "sh", "-c", ... }): as a typed
+        # literal, the type's first word on top, the rest of the type and then
+        # the items under it
+        return node('array', map({ node($_) } @t[1 .. $#t]), init((kids($n))[0])) if $t[0] eq 'array';
         @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne 'address' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
         # (one of a scalar type is a typed literal, u32 / 0; ttpc gives
         # address / u32 / 0 a temporary, C's &(unsigned int){0})

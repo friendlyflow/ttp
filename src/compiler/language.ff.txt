@@ -321,6 +321,7 @@ ff, the language ttpc compiles
               ap
               long
       a struct or union name with items, as a value, is a temporary of that type (a compound literal, C's (point){1, 2}), the rest zero
+      array with the rest of an array's type and its items under it, as a value, is a temporary array, its value its address (C's (char *const[]){ "sh", NULL } is array / address / char / 2 / items)
       example
         s:
           long
