@@ -54,6 +54,7 @@ use FindBin;
 use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 use FF qw(node layers write_txt read_ff);
+use Header qw(license_nodes header_of);
 use Digest::SHA;
 use POSIX ();
 
@@ -1983,14 +1984,18 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
 sub groups { my ($name, @n) = @_; node("$name:", layers(@n)) }
 if (defined $program) {
-    print write_txt(node('include', node($program)), @types, (map { $_->[1] } @out),
+    # (its license first: its file's header, Header.pm)
+    my $lic = header_of($units[0]{i});
+    print write_txt(node('license', map { node($_) } $lic->{spdx}, @{ $lic->{lines} }), node('include', node($program)), @types, (map { $_->[1] } @out),
         ($start ? node('_start:', node('void'), node('syscall', node('SYS_exit'), node('main'))) : ()));
 } else {
     my (@order, %by);
     # (by directory, not by unit: the trees a program reads have 255 pages in
     # all, and M4 has more units than that; each function's comment names its
     # unit)
-    for (@out) { my $g = unit_name($_->[0]) =~ s{/.*}{}r; push @order, $g unless $by{$g}; push @{ $by{$g} }, $_->[1] }
-    print write_txt(groups("$page types", @types), map { groups("$page $_", @{ $by{$_} }) } @order);
+    my %units;
+    for (@out) { my $g = unit_name($_->[0]) =~ s{/.*}{}r; push @order, $g unless $by{$g}; push @{ $by{$g} }, $_->[1]; $units{$g}{ $_->[0]{i} } = 1 if $_->[0] }
+    # each page first has the license of each file it is made of (Header.pm)
+    print write_txt(groups("$page types", @types), map { groups("$page $_", license_nodes(sort keys %{ $units{$_} || {} }), @{ $by{$_} }) } @order);
 }
 warn "c2ff: renamed: " . join(', ', map { "$_ -> $renamed{$_}" } sort keys %renamed) . "\n" if %renamed;

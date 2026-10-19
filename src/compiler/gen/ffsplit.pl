@@ -9,7 +9,7 @@
 #
 # A page goes into a file named after it, without the first word of the
 # first page's name: glibc elf: is elf.ff, glibc types: types.ff, builtins:
-# builtins.ff; a comment before a page goes with it. (Pages of one name, glibc elf and glibc elf 2 as c2ff once made
+# builtins.ff; a comment before a page goes with it. The tree's license (at its root) is at the root of each file. (Pages of one name, glibc elf and glibc elf 2 as c2ff once made
 # them, are one page, in layers where it holds more than 255.)
 #
 # index.ff is one page, index:, of name: / file for each function, global,
@@ -31,8 +31,10 @@ my @top = read_txt(do { local $/; <$h> }, $in);
 close $h;
 
 # the pages by name, in order, each with the comments before it
-my (@order, %page, @comments);
+my (@order, %page, @comments, @license);
 for my $n (@top) {
+    # (the tree's license, at its root: at the root of every file too)
+    if ($n->{content} eq 'license') { push @license, $n; next }
     if ($n->{content} eq 'comment') { push @comments, $n; next }
     $n->{content} =~ /^(.+):$/ or die "ffsplit: not a page: $n->{content}\n";
     my $name = $1;
@@ -71,12 +73,12 @@ for my $name (@order) {
     die "ffsplit: index.ff is the index\n" if $f eq 'index.ff';
     my $p = $page{$name};
     open my $o, '>:raw', "$dir/$f" or die "ffsplit: cannot write $dir/$f: $!\n";
-    print $o write_ff(node('', @{ $p->{comments} }, node("$name:", layers(@{ $p->{children} }))));
+    print $o write_ff(node('', @license, @{ $p->{comments} }, node("$name:", layers(@{ $p->{children} }))));
     close $o or die "ffsplit: cannot write $dir/$f: $!\n";
     for my $n (names(@{ $p->{children} })) { next if $of{$n}; $of{$n} = $f; push @index, node("$n:", node($f)) }
 }
 open my $o, '>:raw', "$dir/index.ff" or die "ffsplit: cannot write $dir/index.ff: $!\n";
-print $o write_ff(node('', node('comment', node('the names the files of this folder define and the file of each: a program that includes the folder reads a file when a name it needs is in it')),
+print $o write_ff(node('', @license, node('comment', node('the names the files of this folder define and the file of each: a program that includes the folder reads a file when a name it needs is in it')),
     node('index:', layers(@index))));
 close $o or die "ffsplit: cannot write $dir/index.ff: $!\n";
 printf STDERR "ffsplit: %d files, %d names\n", scalar(@order), scalar(@index);

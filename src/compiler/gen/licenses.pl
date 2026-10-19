@@ -5,13 +5,16 @@
 # AND, OR, WITH (an exception after it) and parentheses. Every license in a
 # tree, at any depth, has that form.
 #
-#   perl licenses.pl [--sidecar LICENSES] [--pages] tree.ff|tree.ff.txt ...
+#   perl licenses.pl [--sidecar LICENSES] [--pages | --fragment] tree.ff|tree.ff.txt ...
 #
 # --sidecar names a file of `path SPDX` lines (paths from its folder) for the
 # frozen files, which carry no license node: a tree it names needs none, and
-# each of its ids must be known. --pages: each page of a tree (a child of its
-# root that is a function, name:, other than an index) has a license of its
-# own too, as a page made from a source file does (c2ff, s2ff).
+# each of its ids must be known. --pages: each page of a tree made from
+# source files (a child of its root, name:, holding code or a global, not
+# only types or weak names; not an index) has a license of its own too, as
+# c2ff and s2ff give it the header of each of its files. --fragment: a file
+# of pages that join another tree (builtins.ff.txt), whose license is that
+# tree's: it needs none at its root, its pages theirs (implies --pages).
 # Exits 1 and names each tree that fails.
 #
 # A host tool (core Perl only), not part of ttpc.
@@ -22,16 +25,17 @@ use FindBin;
 use lib $FindBin::Bin;
 use File::Basename qw(dirname);
 use File::Spec;
-use FF qw(is_license read_ff read_txt);
+use FF qw(is_license kids read_ff read_txt);
 
-my ($sidecar, $pages);
+my ($sidecar, $pages, $fragment);
 while (@ARGV && $ARGV[0] =~ /^--/) {
     my $o = shift;
     if ($o eq '--sidecar') { $sidecar = shift // die "licenses: --sidecar needs a file\n" }
     elsif ($o eq '--pages') { $pages = 1 }
+    elsif ($o eq '--fragment') { $pages = $fragment = 1 }
     else { die "licenses: unknown option $o\n" }
 }
-die "usage: licenses.pl [--sidecar LICENSES] [--pages] tree.ff|tree.ff.txt ...\n" unless @ARGV;
+die "usage: licenses.pl [--sidecar LICENSES] [--pages | --fragment] tree.ff|tree.ff.txt ...\n" unless @ARGV;
 
 sub slurp { my ($f) = @_; open my $h, '<:raw', $f or die "licenses: cannot open $f: $!\n"; local $/; <$h> }
 
@@ -82,6 +86,15 @@ sub form {
     return;
 }
 
+# A page made from source: one of its definitions (through its layers) is
+# code or a global, not a type (struct, union, enum, function) or a weak name.
+sub made {
+    grep {
+        my $c = $_->{children};
+        $_->{content} =~ /:$/ && @$c && $c->[0]{content} !~ /^(?:struct|union|enum|function|weak)$/
+    } kids($_[0]);
+}
+
 my (%frozen, $bad);
 if ($sidecar) {
     my $dir = dirname($sidecar);
@@ -102,7 +115,7 @@ for my $file (@ARGV) {
     my @roots = $file =~ /\.ff\.txt$/ ? read_txt($bytes, $file) : @{ read_ff($bytes)->{children} };
     my @why;
     my @l = grep { is_license($_) } @roots;
-    push @why, "no license at its root" unless @l;
+    push @why, "no license at its root" unless @l || $fragment;
     push @why, "two licenses at its root" if @l > 1;
     my $walk;
     $walk = sub {
@@ -114,8 +127,8 @@ for my $file (@ARGV) {
     };
     $walk->({ children => \@roots }, '');
     if ($pages) {
-        for my $p (grep { $_->{content} =~ /:$/ && $_->{content} ne 'index:' && @{ $_->{children} } } @roots) {
-            push @why, "page $p->{content} has no license" unless grep { is_license($_) } @{ $p->{children} };
+        for my $p (grep { $_->{content} =~ /:$/ && $_->{content} ne 'index:' && made($_) } @roots) {
+            push @why, "page $p->{content} has no license" unless grep { is_license($_) } kids($p);
         }
     }
     $n++;

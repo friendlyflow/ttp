@@ -1,3 +1,9 @@
+/* Copyright (C) 2026 Nico Verrijdt
+   This file is part of ttp. It is free software: you can redistribute it
+   and/or modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation, version 3 of the License.
+   It comes with no warranty. See the file LICENSE for the full text.  */
+
 /* M4, floats: glibc's printf of double and long double (printf_fp,
    printf_fphex): %f %F %e %E %g %G %a %A, with flags, width and precision,
    rounding, the large and the small, infinity and NaN, and the same with L

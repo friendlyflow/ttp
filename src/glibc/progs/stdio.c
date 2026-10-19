@@ -1,3 +1,9 @@
+/* Copyright (C) 2026 Nico Verrijdt
+   This file is part of ttp. It is free software: you can redistribute it
+   and/or modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation, version 3 of the License.
+   It comes with no warranty. See the file LICENSE for the full text.  */
+
 /* M4: glibc's printf without floats, puts and putchar, on stdout, which
    exit flushes: the conversions d i u o x X c s % and n, the flags - + space
    # 0, width and precision, also from the arguments (*), the lengths hh h l

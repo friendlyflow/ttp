@@ -1,3 +1,9 @@
+/* Copyright (C) 2026 Nico Verrijdt
+   This file is part of ttp. It is free software: you can redistribute it
+   and/or modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation, version 3 of the License.
+   It comes with no warranty. See the file LICENSE for the full text.  */
+
 /* M3: glibc's malloc, free, realloc and calloc, and qsort, which needs
    them: small blocks of many sizes (their bins, tcache), frees that leave
    holes, realloc growing and shrinking in place and by moving, a block
