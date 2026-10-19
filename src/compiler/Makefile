@@ -195,6 +195,19 @@ rvv: $(P)/rvv.velf $(P)/rvv.twin.bin
 	tail -c +121 $(P)/rvv.velf | head -c $$(wc -c < $(P)/rvv.twin.bin) | cmp - $(P)/rvv.twin.bin
 	@echo "rvv: ttpc and GNU as agree on the vector instructions"
 
+# The instructions of aarch64 that glibc's asm needs beyond the base
+# (Advanced SIMD, SVE, SME, MTE, MOPS, the q registers, hints): stage2
+# assembles progs/aarch64/simd.ff, which mksimd.pl writes with its GNU twin
+# simd.s; byte-identical after the ELF header, as rvv.
+$(P)/aarch64/simd.twin.bin: progs/aarch64/simd.s $(TLDS_aarch64) | $(P)/aarch64
+	$(CROSS_aarch64)as -march=armv9.4-a+sve+sme+memtag+mops $< -o $(P)/aarch64/simd.twin.o
+	$(CROSS_aarch64)ld --no-relax --no-warn-rwx-segments -T $(TLDS_aarch64) $(P)/aarch64/simd.twin.o -o $(P)/aarch64/simd.twin
+	$(CROSS_aarch64)objcopy -O binary $(P)/aarch64/simd.twin $@
+
+simd: $(P)/aarch64/simd.elf $(P)/aarch64/simd.twin.bin
+	tail -c +121 $(P)/aarch64/simd.elf | head -c $$(wc -c < $(P)/aarch64/simd.twin.bin) | cmp - $(P)/aarch64/simd.twin.bin
+	@echo "simd: ttpc and GNU as agree on aarch64's SIMD, SVE, SME, MTE and MOPS instructions"
+
 ctest: $(CPROGS:%=$(P)/%.celf)
 	@for p in $(CPROGS); do \
 	    tail -n +2 progs/$$p.expect > $(P)/$$p.want; \
@@ -514,4 +527,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean
+.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean

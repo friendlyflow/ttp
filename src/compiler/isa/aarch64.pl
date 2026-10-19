@@ -1,7 +1,10 @@
 # isa/aarch64.pl — the aarch64 section of the shared page (mkff.pl does it):
-# the A64 base instructions a program needs, without SIMD vectors (data
-# processing immediate and register, branches, system, loads and stores,
-# exclusives, LSE atomics, scalar floating point for s and d), its
+# the A64 base instructions a program needs (data processing immediate and
+# register, branches, system, loads and stores, exclusives, LSE atomics,
+# scalar floating point for s and d), and the forms glibc's asm has beyond
+# them (Advanced SIMD on v0..v31 and the q, b, h registers in memory, SVE
+# on z0..z31 and p0..p15, SME, MTE, MOPS, the hints of BTI, PAC and GCS),
+# byte-checked against GNU as by progs/aarch64/simd.ff (mksimd.pl); its
 # registers, and macros/aarch64.ff.txt.
 #
 # An instruction is a function: its operands are its parameters, in field
@@ -50,8 +53,10 @@ use ISA;
 
 my $isa = ISA->new(width => sub {
     my ($name) = @_;
-    return "4:0" if $name =~ /^(rd|rn|rm|ra|rt|rt2|rs)$/;
-    return "3:0" if $name =~ /^(cond|nzcv|crm)$/;
+    return "4:0" if $name =~ /^(rd|rn|rm|ra|rt|rt2|rs|zd|zn|zm|zt|prfop|pattern)$/;
+    return "3:0" if $name =~ /^(cond|nzcv|crm|pd|pn|pm)$/;
+    return "2:0" if $name =~ /^(pg|immb)$/;
+    return "1:0" if $name eq "rv";
     return "5:0" if $name =~ /^(immr|imms)$/;
     return "2:0" if $name eq "option";
     return "1:0" if $name =~ /^(hw|shift)$/;
@@ -76,6 +81,8 @@ $isa->add("registers",
     (map { node("d$_ s$_:", node(sprintf "%05b", $_)) } 0 .. 31),
     (map { node("h$_ b$_:", node(sprintf "%05b", $_)) } 0 .. 31),
     (map { node("q$_ v$_:", node(sprintf "%05b", $_)) } 0 .. 31),
+    (map { node("z$_ z$_:", node(sprintf "%05b", $_)) } 0 .. 31),
+    (map { node("p$_ p$_:", node(sprintf "%04b", $_)) } 0 .. 15),
 );
 
 my @W = (["", "1"], ["w", "0"]);        # name suffix, sf
@@ -205,6 +212,18 @@ def("isb",   "op=11010101000000110011", "crm=1111", "op2=110", "rt=11111");
 def("msr",   "op=1101010100", "l=0", "sysreg", "rt");
 def("mrs",   "op=1101010100", "l=1", "sysreg", "rt");
 def("eret",  "insn=11010110100111110000001111100000");
+# the hints of branch protection, pointer authentication and GCS, each by
+# its name (GNU writes the plain ones as hint #n)
+for (["bti", "0100", "000"], ["bti.c", "0100", "010"], ["bti.j", "0100", "100"], ["bti.jc", "0100", "110"],
+     ["paciasp", "0011", "001"], ["autiasp", "0011", "101"], ["chkfeat", "0101", "000"]) {
+    def($_->[0], "op=11010101000000110010", "crm=$_->[1]", "op2=$_->[2]", "rt=11111");
+}
+# sys and sysl by the names of what they do: the data cache zeroing by
+# block (dc zva, and with MTE dc gva gzva), the guarded control stack
+for (["dc.zva", "0", "0100", "001"], ["dc.gva", "0", "0100", "011"], ["dc.gzva", "0", "0100", "100"],
+     ["gcsss1", "0", "0111", "010"], ["gcsss2", "1", "0111", "011"], ["gcspopm", "1", "0111", "001"]) {
+    def($_->[0], "op=1101010100", "l=$_->[1]", "x=01", "op1=011", "crn=0111", "crm=$_->[2]", "op2=$_->[3]", "rt");
+}
 
 # ---------------------------------------------------------------------------
 # Loads and stores
@@ -222,6 +241,9 @@ my @ls = (
     ["str", "11", 0, "00", 3], ["ldr", "11", 0, "01", 3],
     ["str.s", "10", 1, "00", 2], ["ldr.s", "10", 1, "01", 2],
     ["str.d", "11", 1, "00", 3], ["ldr.d", "11", 1, "01", 3],
+    ["str.b", "00", 1, "00", 0], ["ldr.b", "00", 1, "01", 0],
+    ["str.h", "01", 1, "00", 1], ["ldr.h", "01", 1, "01", 1],
+    ["str.q", "00", 1, "10", 4], ["ldr.q", "00", 1, "11", 4],
 );
 for (@ls) {
     my ($m, $size, $v, $opc, $sc) = @$_;
@@ -241,7 +263,8 @@ for (["ldrw.lit", "00", 0], ["ldr.lit", "01", 0], ["ldrsw.lit", "10", 0], ["ldr.
 for (["stpw", "00", 0, 0, 2], ["ldpw", "00", 0, 1, 2], ["ldpsw", "01", 0, 1, 2],
      ["stp", "10", 0, 0, 3], ["ldp", "10", 0, 1, 3],
      ["stp.s", "00", 1, 0, 2], ["ldp.s", "00", 1, 1, 2],
-     ["stp.d", "01", 1, 0, 3], ["ldp.d", "01", 1, 1, 3]) {
+     ["stp.d", "01", 1, 0, 3], ["ldp.d", "01", 1, 1, 3],
+     ["stp.q", "10", 1, 0, 4], ["ldp.q", "10", 1, 1, 4]) {
     my ($m, $opc, $v, $l, $sc) = @$_;
     my $hi = 6 + $sc;
     for (["", "010"], [".pre", "011"], [".post", "001"]) {
@@ -342,5 +365,100 @@ def("fmov.s.w", "sf=0", "x=0011110", "type=00", "x=1", "rmode=00", "opcode=111",
 def("fmov.w.s", "sf=0", "x=0011110", "type=00", "x=1", "rmode=00", "opcode=110", "x=000000", "rn", "rd");
 def("fmov.d.x", "sf=1", "x=0011110", "type=01", "x=1", "rmode=00", "opcode=111", "x=000000", "rn", "rd");
 def("fmov.x.d", "sf=1", "x=0011110", "type=01", "x=1", "rmode=00", "opcode=110", "x=000000", "rn", "rd");
+
+# the non-temporal pairs and the prefetch
+$isa->group("memory");
+def("stnp", "opc=10", "op=101", "v=0", "mode=000", "l=0", "imm[9:3]", "rt2", "rn", "rt");
+def("ldnp", "opc=10", "op=101", "v=0", "mode=000", "l=1", "imm[9:3]", "rt2", "rn", "rt");
+def("prfm", "size=11", "op=111", "v=0", "x=01", "opc=10", "uimm[14:3]", "rn", "prfop");
+
+# ---------------------------------------------------------------------------
+# Advanced SIMD (vectors of v0..v31), the forms glibc's asm has: the
+# arrangement is a dot suffix (cmeq.16b), a compare with #0 has z
+# (cmeqz.16b), an immediate i (movi, bici), a register list of two .x2
+# (ld1.16b.x2), a post-index ld1 .post (by the list's size, which the
+# instruction implies). A shift by an immediate takes its raw field immb,
+# the shift's distance from the element's size: ushr.16b immb = 8 - shift,
+# shrn.8b immb = 8 - shift (of the .8h source).
+# ---------------------------------------------------------------------------
+
+$isa->group("vector");
+
+for (["cmeq", 1, "00", "10001"], ["cmhs", 1, "00", "00111"], ["umaxp", 1, "00", "10100"], ["uminp", 1, "00", "10101"],
+     ["addp", 0, "00", "10111"], ["sshl", 0, "00", "01000"],
+     ["and", 0, "00", "00011"], ["bic", 0, "01", "00011"], ["orr", 0, "10", "00011"], ["eor", 1, "00", "00011"],
+     ["bit", 1, "10", "00011"]) {
+    my ($m, $u, $size, $opc) = @$_;
+    def("$m.16b", "x=0", "q=1", "u=$u", "x=01110", "size=$size", "x=1", "rm", "opcode=$opc", "x=1", "rn", "rd");
+}
+for (["cmeqz.16b", 1, "01001"], ["cmeqz.8b", 0, "01001"], ["cmltz.16b", 1, "01010"]) {
+    my ($m, $q, $opc) = @$_;
+    def($m, "x=0", "q=$q", "u=0", "x=01110", "size=00", "x=10000", "opcode=$opc", "x=10", "rn", "rd");
+}
+def("addhn.8b", "x=0", "q=0", "u=0", "x=01110", "size=00", "x=1", "rm", "opcode=0100", "x=00", "rn", "rd");
+def("ushr.16b", "x=0", "q=1", "u=1", "x=011110", "immh=0001", "immb", "opcode=00000", "x=1", "rn", "rd");
+def("shrn.8b",  "x=0", "q=0", "u=0", "x=011110", "immh=0001", "immb", "opcode=10000", "x=1", "rn", "rd");
+def("dup.16b", "x=0", "q=1", "op=0", "x=01110000", "imm5=00001", "x=0", "imm4=0001", "x=1", "rn", "rd");
+def("dup.4s",  "x=0", "q=1", "op=0", "x=01110000", "imm5=00100", "x=0", "imm4=0001", "x=1", "rn", "rd");
+for (["movi.16b", 1, 0, "1110"], ["mvni.4s", 1, 1, "0000"], ["mvni.4s.lsl8", 1, 1, "0010"],
+     ["bici.8h", 1, 1, "1001"], ["bici.8h.lsl8", 1, 1, "1011"]) {
+    my ($m, $q, $op, $cmode) = @$_;
+    def($m, "x=0", "q=$q", "op=$op", "x=0111100000", "imm8[7:5]", "cmode=$cmode", "o2=0", "x=1", "imm8[4:0]", "rd");
+}
+def("tbl.16b.x2", "x=0", "q=1", "x=001110", "x=000", "rm", "x=0", "len=01", "op=0", "x=00", "rn", "rd");
+for (["ld1.16b", "0111", "00"], ["ld1.16b.x2", "1010", "00"], ["ld1.2d.x2", "1010", "11"]) {
+    my ($m, $opc, $size) = @$_;
+    def($m, "x=0", "q=1", "x=0011000", "l=1", "x=000000", "opcode=$opc", "size=$size", "rn", "rt");
+    def("$m.post", "x=0", "q=1", "x=0011001", "l=1", "x=0", "rm=11111", "opcode=$opc", "size=$size", "rn", "rt");
+}
+
+# ---------------------------------------------------------------------------
+# SVE, the forms glibc's asm has (bytes, .b): z0..z31 and the predicates
+# p0..p15 (a governing one pg is p0..p7). An offset `mul vl` is a count of
+# vectors (imm), whose length the hardware decides; cntb's uimm is its mul
+# less 1; pattern is ptrue's and cntb's raw field (31: all).
+# ---------------------------------------------------------------------------
+
+$isa->group("sve");
+
+def("whilelo.b", "x=00100101", "size=00", "x=1", "rm", "x=000", "sf=1", "u=1", "lt=1", "rn", "eq=0", "pd");
+def("ld1b",     "x=1010010", "dtype=0000", "x=0", "imm[3:0]", "x=101", "pg", "rn", "zt");
+def("ld1b.reg", "x=1010010", "dtype=0000", "rm", "x=010", "pg", "rn", "zt");
+def("st1b",     "x=1110010", "msz=00", "size=00", "x=0", "imm[3:0]", "x=111", "pg", "rn", "zt");
+def("st1b.reg", "x=1110010", "msz=00", "size=00", "rm", "x=010", "pg", "rn", "zt");
+def("cmpne.b", "x=00100100", "size=00", "x=0", "zm", "x=101", "pg", "zn", "ne=1", "pd");
+def("cmphi.b", "x=00100100", "size=00", "x=0", "zm", "x=000", "pg", "zn", "ne=1", "pd");
+def("ptrue.b", "x=00100101", "size=00", "x=011", "x=00", "s=0", "x=111000", "pattern", "x=0", "pd");
+def("cntb", "x=00000100", "size=00", "x=10", "uimm[3:0]", "x=111000", "pattern", "rd");
+def("dup.b", "x=00000101", "size=00", "x=1", "x=00000", "x=001110", "rn", "zd");
+
+# SME: what glibc's __arm_za_disable does (its saved ZA, then smstop).
+# str.za: ZA's vector w12 + rv, uimm, to rn + uimm vectors.
+$isa->group("sme");
+
+def("addsvl", "x=00000100", "x=001", "rn", "x=01011", "imm[5:0]", "rd");
+def("str.za", "x=1110000100100000", "x=0", "rv", "x=000", "rn", "x=0", "uimm[3:0]");
+def("smstop",    "insn=11010101000000110100011001111111");
+def("smstop.za", "insn=11010101000000110100010001111111");
+
+# MTE's tag stores (by 16-byte granules: the offset in bytes) and the
+# memory copy and set of FEAT_MOPS (prologue p, main m, epilogue e).
+$isa->group("tags and copies");
+
+for (["stg", "00"], ["stzg", "01"], ["st2g", "10"], ["stz2g", "11"]) {
+    my ($m, $opc) = @$_;
+    for (["", "10"], [".pre", "11"], [".post", "01"]) {
+        def("$m$_->[0]", "x=11011001", "opc=$opc", "x=1", "imm[12:4]", "op2=$_->[1]", "rn", "rt");
+    }
+}
+for (["cpyf", "0"], ["cpy", "1"]) {
+    my ($m, $o0) = @$_;
+    for (["p", "00"], ["m", "01"], ["e", "10"]) {
+        def("$m$_->[0]", "sz=00", "x=011", "o0=$o0", "x=01", "op1=$_->[1]", "x=0", "rs", "op2=0000", "x=01", "rn", "rd");
+    }
+}
+for (["setp", "0000"], ["setm", "0100"], ["sete", "1000"]) {
+    def($_->[0], "sz=00", "x=011", "o0=0", "x=01", "op1=11", "x=0", "rs", "op2=$_->[1]", "x=01", "rn", "rd");
+}
 
 $isa->section("aarch64", "macros/aarch64.ff.txt");

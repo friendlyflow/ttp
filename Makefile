@@ -51,7 +51,7 @@ compiler-test: compiler
 # Assemble the programs, check them against GNU as and run them; build and
 # run the C programs; the seeds of the other hosts agree with ttpc.s.
 compiler-check: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check rvv run ctest ctime cws targets seeds
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check rvv simd run ctest ctime cws targets seeds
 
 # ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
 # stage2: they must be the same. So too from the seed of each other host
