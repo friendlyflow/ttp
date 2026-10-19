@@ -275,6 +275,11 @@ c:
       zero
       a0
   comment
+    cc_falign: before each function: A32's instructions are 4 bytes (Thumb's 2).
+  cc_falign:
+    align
+      4
+  comment
     The registers C must not write, a bit each: r11 (fp), sp, lr, pc.
   cc_fixed:
     addi

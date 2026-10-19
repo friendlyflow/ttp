@@ -493,6 +493,11 @@ c:
       zero
       a0
   comment
+    cc_falign: before each function: RVC's instructions are 2 bytes.
+  cc_falign:
+    align
+      2
+  comment
     The registers C must not write, a bit each: zero, ra, sp, s0.
   cc_fixed:
     addi
