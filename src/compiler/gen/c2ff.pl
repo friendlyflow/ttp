@@ -935,11 +935,32 @@ sub asm_stmt {
 # the C around it), passes through a register as it is.
 my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9 r12 r13)]);
 my %retreg = (aarch64 => 'x0', x86_64 => 'rax');
-my %fpsysreg = (fpcr => 0xDA20, fpsr => 0xDA21);
+# aarch64's system registers as mrs and msr take them: op0 op1 CRn CRm op2
+# in 16 bits (tpidr_el0 56962), by name or as GNU's s3_3_c13_c0_2
+my %sysreg = (fpcr => [3, 3, 4, 4, 0], fpsr => [3, 3, 4, 4, 1], tpidr_el0 => [3, 3, 13, 0, 2],
+    tpidrro_el0 => [3, 3, 13, 0, 3], ctr_el0 => [3, 3, 0, 0, 1], tpidr2_el0 => [3, 3, 13, 0, 5], dczid_el0 => [3, 3, 0, 0, 7],
+    midr_el1 => [3, 0, 0, 0, 0], cntvct_el0 => [3, 3, 14, 0, 2], cntfrq_el0 => [3, 3, 14, 0, 0],
+    id_aa64pfr0_el1 => [3, 0, 0, 4, 0], id_aa64pfr1_el1 => [3, 0, 0, 4, 1], id_aa64zfr0_el1 => [3, 0, 0, 4, 4],
+    id_aa64isar0_el1 => [3, 0, 0, 6, 0], id_aa64isar1_el1 => [3, 0, 0, 6, 1], id_aa64mmfr1_el1 => [3, 0, 0, 7, 1]);
+sub sysreg {
+    my ($r) = @_;
+    my $f = $sysreg{ lc $r } // ($r =~ /^s(\d)_(\d)_c(\d+)_c(\d+)_(\d)$/i ? [$1, $2, $3, $4, $5] : return undef);
+    $f->[0] << 14 | $f->[1] << 11 | $f->[2] << 7 | $f->[3] << 3 | $f->[4];
+}
 sub asm_ins_other {
     my ($n, $op, @a) = @_;
     if ($target eq 'aarch64') {
-        return node('mrs', node($fpsysreg{$a[1]}), node($a[0])) if $op eq 'mrs' && @a == 2 && defined $fpsysreg{$a[1]};
+        return node('mrs', node(sysreg($a[1])), node($a[0])) if $op eq 'mrs' && @a == 2 && defined sysreg($a[1]);
+        return node('msr', node(sysreg($a[0])), node($a[1])) if $op eq 'msr' && @a == 2 && defined sysreg($a[0]);
+        # an immediate (brk #1000: abort's trap), none (yield, isb), a
+        # barrier's option (dmb ish)
+        return node($op, node($1 =~ /^0x/i ? hex $1 : $1)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
+        return node($op) if $op =~ /^(?:nop|yield|wfe|wfi|sev|sevl|isb|clrex)$/ && !@a;
+        # a hint by its number: ttpc names the ones it has (hint 40 is chkfeat)
+        my %hint = (0 => 'nop', 1 => 'yield', 25 => 'paciasp', 29 => 'autiasp', 32 => 'bti', 34 => 'bti.c', 36 => 'bti.j', 38 => 'bti.jc', 40 => 'chkfeat');
+        return node($hint{$1}) if $op eq 'hint' && @a == 1 && $a[0] =~ /^#?(\d+)$/ && $hint{$1};
+        my %barrier = (oshld => 1, oshst => 2, osh => 3, nshld => 5, nshst => 6, nsh => 7, ishld => 9, ishst => 10, ish => 11, ld => 13, st => 14, sy => 15);
+        return node($op, node($barrier{ lc $a[0] })) if $op =~ /^(?:dmb|dsb)$/ && @a == 1 && defined $barrier{ lc $a[0] };
         if ($op =~ /^f(?:add|sub|mul|div)$/ && @a == 3 && "@a" =~ /^([sd])\d+ [sd]\d+ [sd]\d+$/) {
             my $w = $1;
             stop("the asm instruction $op @a", $n) unless "@a" =~ /^$w\d+ $w\d+ $w\d+$/;
@@ -1189,7 +1210,10 @@ sub expr {
         # a path from an expression: after a . among the base node's children
         if (@path && $base != $n) {
             my @b = expr($base);
-            @b == 1 or stop('a path from ' . $base->{kind} . ' of several nodes', $n);
+            # (a value of several nodes, x - 1, is a : of them under a cast:
+            # to its own type, the form of a path from a cast: aarch64's
+            # THREAD_SELF, ((struct pthread *) tp - 1)->tid)
+            @b = cast_node([ctype(qt($base))], node(':', @b)) if @b > 1;
             push @{ $b[0]{children} }, node('.'), @path;
             return @b;
         }
@@ -1532,36 +1556,48 @@ sub holds { my ($n, $k) = @_; (($n->{kind} // '') eq $k) || grep { holds($_, $k)
 sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n : ()), map { locals($_) } kids($n) }
 
 # glibc's INTERNAL_SYSCALL on riscv: register variables a7 = number, a0 ...
-# = the arguments, the asm scall, the result from a0.
+# = the arguments, the asm scall, the result from a0. On aarch64 x8 = the
+# number, x0 ... the arguments (x0 given its value by an assignment after
+# its declaration, _x0 = _x0tmp), the asm svc 0.
 sub syscall_idiom {
     my ($cs) = @_;
+    my ($nr, $ar) = $target eq 'aarch64' ? ('x8', 'x') : ('a7', 'a');
     my @st = kids($cs);
     my ($inner) = grep { $_->{kind} eq 'CompoundStmt' } @st;
     return () unless $inner && grep { $_->{kind} eq 'GCCAsmStmt' } kids($inner);
-    my %reg;
+    my (%reg, %regof);
     for my $s (grep { $_->{kind} eq 'DeclStmt' } kids($inner)) {
         for my $v (kids($s)) {
             my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
             my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
-            next unless $lab && $init;
+            next unless $lab;
             # glibc's macro names each variable after its register: __a7, __a0, ...
-            my $reg = $lab->{label} // (($v->{name} // '') =~ /^__(a[0-7])$/ ? $1 : undef);
-            $reg{$reg} = $init if defined $reg;
+            # (aarch64: _x8, _x0, ...)
+            my $reg = $lab->{label} // (($v->{name} // '') =~ /^(?:__(a[0-7])|_(x[0-8]))$/ ? $1 // $2 : undef);
+            next unless defined $reg;
+            $regof{ $v->{id} } = $reg;
+            $reg{$reg} = $init if $init;
         }
     }
-    return () unless $reg{a7};
+    # (a register variable's value by an assignment: aarch64's _x0 = _x0tmp)
+    for my $s (grep { $_->{kind} eq 'BinaryOperator' && ($_->{opcode} // '') eq '=' } kids($inner)) {
+        my ($l, $r) = kids($s);
+        $l = strip($l);
+        $reg{ $regof{ $l->{referencedDecl}{id} } } //= $r if $l->{kind} eq 'DeclRefExpr' && $regof{ $l->{referencedDecl}{id} // '' };
+    }
+    return () unless $reg{$nr};
     my %local;      # the _argN of the outer block, by name
-    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st) {
-        for my $v (kids($s)) { my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v); $local{ $v->{name} } = $init if $init }
+    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st, grep { $_->{kind} eq 'DeclStmt' } kids($inner)) {
+        for my $v (kids($s)) { my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v); $local{ $v->{name} } = $init if $init && !$regof{ $v->{id} } }
     }
     my @args;
     for my $i (0 .. 5) {
-        my $e = $reg{"a$i"} or last;
+        my $e = $reg{"$ar$i"} or last;
         my $s = strip($e);
         $e = $local{ $s->{referencedDecl}{name} } if $s->{kind} eq 'DeclRefExpr' && $local{ $s->{referencedDecl}{name} };
         push @args, item(expr($e));
     }
-    node('syscall', item(expr($reg{a7})), @args);
+    node('syscall', item(expr($reg{$nr})), @args);
 }
 
 # ---- statements ---------------------------------------------------------------

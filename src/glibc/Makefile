@@ -139,7 +139,8 @@ CAP := ulimit -v 4000000;
 M1 := strlen memcpy memset strcmp strchr
 OBJS_string := $(foreach f,$(M1),string/$(f) string/$(f)-generic) string/wordcopy string/strchrnul misc/hwprobe elf/dl-support
 ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment
-ROOTS_string := $(M1) __riscv_hwprobe
+ROOTS_string := $(M1) $(ROOTS_string_$(GTARGET))
+ROOTS_string_riscv64 := __riscv_hwprobe
 
 # M2, stdlib: atoi, strtol and abs, with M1. strtol takes the locale (the C
 # locale's tables, reached through the thread's locale pointer), errno, the
@@ -268,7 +269,7 @@ MILESTONES := string stdlib ldouble malloc stdio floats args
 # are zero (c2ff --zero), their other names aliases (s2ff). Another target
 # has no startup in ff yet: its programs have a _start of their own (c2ff
 # --start).
-GLIBC_START := $(filter riscv64,$(GTARGET))
+GLIBC_START := $(filter riscv64 aarch64,$(GTARGET))
 OBJS_start := csu/static-reloc csu/init csu/check_fds elf/dl-early_allocate nptl/nptl_deallocate_tsd nptl/nptl_nthreads \
 	elf/dl-tls_init_tp stdlib/setenv elf/dl-execstack-tunable nptl/pthread_keys
 ASMS_start := csu/start elf/dl-rseq-symbols
@@ -280,7 +281,27 @@ WEAKS_start := __fini_array_start __fini_array_end _startup_fatal_not_constant _
 uniq = $(strip $(if $(1),$(firstword $(1)) $(call uniq,$(filter-out $(firstword $(1)),$(1)))))
 with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_start)))
 
-.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.L.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
+# aarch64: a milestone's objects are those its program's gcc build links
+# (linkobjs.pl, from the link map of NAME.ref: the members of libc.a gcc's
+# static program has), with crt1.o's C (static-reloc, init), start.S and
+# crti.S (crtn.S ends crti's _init and _fini: s2ff-aarch64.pl --then), and
+# glibc's soft-fp (ldouble's: gcc's program takes long double's arithmetic
+# from libgcc). c2ff translates what the roots reach of them.
+# (each C object's AST is c2ff's pass of it, all-units', not its JSON)
+UNITDEP_aarch64 := c2ff
+UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
+LINKED_aarch64 := string stdlib malloc stdio floats args
+LINKED := $(LINKED_$(GTARGET))
+# and the C objects c2ff reaches that gcc's optimizer left no call of
+# (ctype_l's __toupper_l, abs; check_fds, which riscv64's startup has too)
+OBJS_crt := $(OBJS_start) ctype/ctype_l stdlib/abs
+ASMS_crt := csu/start csu/crti
+ifneq ($(LINKED),)
+-include $(LINKED:%=$(FF)/%.objs.mk)
+endif
+objs_of = $(if $(filter $(2),$(LINKED)),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble))),$(call with_start,$(1),$(2)))
+
+.PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.L.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -337,15 +358,16 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # atomics.ff.txt). The asm parts share one page, glibc asm: the trees a
 # program reads have 255 pages in all (c2ff makes a page per directory).
 define milestone
-OBJS_all_$(1) := $$(call with_start,OBJS,$(1))
-ASMS_all_$(1) := $$(call with_start,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl $$(S2FF)
+OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
+ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl $$(S2FF)
 	mkdir -p $$(FF)
 	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
 	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
 	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_all_$(1)); do \
-	    $$(CAP) timeout 60 perl $$(S2FF) --items $$(I)/$$$$a$$(SL).s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
+	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SL).s $$(I)/csu/crtn.dump"; \
+	    $$(CAP) timeout 60 perl $$(S2FF) --items $$(I)/$$$$a$$(SL).s $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
 	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
@@ -358,8 +380,15 @@ $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end; the fields relocations fill in (relmask.pl) are the linker's, not
 # compared, and what it names from elsewhere is a stand-in label after it.
-ASMCHECK := $(ASMS_stdio) $(if $(GLIBC_START),csu/start)
-asm-check: $(ASMCHECK:%=$(I)/%.asmok)
+ASMCHECK_riscv64 = $(ASMS_stdio) csu/start
+# (aarch64: every asm object of glibc, but crti and crtn, whose .init and
+# .fini are not .text)
+ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
+ASMCHECK ?= $(or $(ASMCHECK_$(GTARGET)),$(ASMS_stdio))
+# (made by a make of its own: aarch64's list is all of glibc's asm, which
+# this Makefile works out only after this rule)
+asm-check:
+	@$(MAKE) --no-print-directory $(ASMCHECK:%=$(I)/%.asmok)
 	@for a in $(ASMCHECK); do cat $(I)/$$a.asmok; done
 
 # one asm part's check: $(I)/x.asmok holds what it found, made only where
@@ -414,11 +443,15 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
-$(FF)/%.ref: progs/%.c $(OBJ)/libc.a
+$(FF)/%.ref $(FF)/%.map &: progs/%.c $(OBJ)/libc.a
 	mkdir -p $(FF)
 	$(CAP) timeout 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) -c $< -o $(FF)/$*.ref.o
-	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
+	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -Wl,-Map=$(FF)/$*.map -o $(FF)/$*.ref $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
+
+# what a milestone's program links of glibc (aarch64's milestones)
+$(FF)/%.objs.mk: $(FF)/%.map linkobjs.pl allobjs.pl mki.pl
+	perl linkobjs.pl $* $(FF)/$*.map $(OBJ) $(GLIBC_SRC) > $@
 
 # A milestone as a folder that a program includes lazily (ffsplit.pl): a file
 # per page and index.ff, the file of each name; ttpc reads only the files
@@ -444,7 +477,7 @@ $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
 expect = $(firstword $(wildcard progs/$(1).$(GTARGET).expect) progs/$(1).expect)
 
 define check
-$(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter riscv64,$(GTARGET)),asm-check)
+$(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter riscv64 aarch64,$(GTARGET)),asm-check)
 	@want=$$$$(head -n 1 $$(call expect,$(1)) | cut -d" " -f2); \
 	tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1).want; \
 	for b in $(1).ref $(1)-prog; do \

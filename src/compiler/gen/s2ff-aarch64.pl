@@ -10,6 +10,9 @@
 #   perl s2ff-aarch64.pl --items file.s file.dump    its functions alone
 #   perl s2ff-aarch64.pl --size file.s file.dump     the bytes of those instructions
 #   perl s2ff-aarch64.pl --skip file.s file.dump     the bytes of padding before them
+#   perl s2ff-aarch64.pl crti.L.s crti.dump --then crtn.L.s crtn.dump
+#                        crti's functions, its _init and _fini ended by
+#                        crtn's .init and .fini, as the linker joins them
 #   perl s2ff-aarch64.pl --locals file.s > file.L.s  numeric labels named
 #
 # GNU as's macros (.macro, .if, .rept), its aliases (mov, cmp, lsl, ...,
@@ -38,6 +41,8 @@
 #   padding         the nops GNU as put in to align are kept in the
 #                   function before them, those at the end of the section
 #                   dropped (ttpc places a function on a 4-byte boundary)
+#   .weak X         X undefined here (crti's __gmon_start__): X: / weak /
+#                   function / void, at 0 unless something defines it
 #   other sections  .data .bss .section: a zeroed object (.zero N) is c2ff
 #                   --zero's global, its other labels aliases; an init
 #                   array is left out; any other bytes stop the translation
@@ -51,7 +56,7 @@ use FF qw(node write_txt);
 
 my $page = 'glibc asm';
 my @files;
-my ($size, $items, $locals, $skipopt);
+my ($size, $items, $locals, $skipopt, @then);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -59,6 +64,7 @@ while (@ARGV) {
     if ($a eq '--items') { $items = 1; next }
     if ($a eq '--locals') { $locals = 1; next }
     if ($a eq '--skip') { $skipopt = 1; next }
+    if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     push @files, $a;
 }
 my $src = $files[0] // die "usage: s2ff-aarch64.pl [--page name | --items | --size] file.s file.dump | --locals file.s\n";
@@ -169,41 +175,52 @@ sub decode {
 }
 
 # ---- what GNU as made --------------------------------------------------------
-my (@made, %sym, %sect, %type, %bind);
-open my $d, '<', $dump or die "s2ff: cannot open $dump: $!\n";
-my $insec = '';
-while (<$d>) {
-    chomp;
-    # the symbol table: value, flags, section, size, name
-    if (/^([0-9a-f]{16}) (.{7}) (\S+)\t[0-9a-f]+ (.+)$/) {
-        my ($v, $flags, $sec, $name) = (hex $1, $2, $3, $4);
-        next if $name =~ /^\$[xd]/ || $flags =~ /d/ || $sec eq '*ABS*';
-        $sect{$name} = $sec;
-        next if $sec eq '*UND*';
-        $bind{$name} = $flags =~ /^[gwu!]/ || substr($flags, 1, 1) eq 'w' ? 'global' : 'local';
-        $type{$name} = $flags =~ /F/ ? 'function' : $flags =~ /O/ ? 'object' : '';
-        push @{ $sym{$sec}{$v} }, $name;
-        next;
+# The instructions of the code sections (.text; crti's and crtn's .init and
+# .fini), in the dump's order, and (of the file itself) its symbols.
+my (%sym, %sect, %type, %bind);
+my %code = map { $_ => 1 } qw(.text .init .fini);
+sub readdump {
+    my ($file, $symbols) = @_;
+    my @made;
+    open my $d, '<', $file or die "s2ff: cannot open $file: $!\n";
+    my $insec = '';
+    while (<$d>) {
+        chomp;
+        # the symbol table: value, flags, section, size, name
+        if ($symbols && /^([0-9a-f]{16}) (.{7}) (\S+)\t[0-9a-f]+ (.+)$/) {
+            my ($v, $flags, $sec, $name) = (hex $1, $2, $3, $4);
+            $name =~ s/^\.(hidden|protected|internal) //;
+            next if $name =~ /^\$[xd]/ || $flags =~ /d/ || $sec eq '*ABS*';
+            $sect{$name} = $sec;
+            next if $sec eq '*UND*';
+            $bind{$name} = $flags =~ /^[gwu!]/ || substr($flags, 1, 1) eq 'w' ? 'global' : 'local';
+            $type{$name} = $flags =~ /F/ ? 'function' : $flags =~ /O/ ? 'object' : '';
+            push @{ $sym{$sec}{$v} }, $name;
+            next;
+        }
+        $insec = $1 if /^Disassembly of section (\S+):/;
+        next unless $code{$insec};
+        if (/^\s*([0-9a-f]+):\t([0-9a-f]{8}) \t(\S+)\s*(.*?)\s*$/) {
+            my ($a, $w, $op, $args) = (hex $1, hex $2, $3, $4);
+            $args =~ s/\s*\/\/.*$//;
+            $args =~ s/\s*<[^>]*>$//;
+            push @made, { sec => $insec, addr => $a, word => $w, op => $op, args => $args };
+            next;
+        }
+        if (/^\s*([0-9a-f]+): (R_AARCH64_\w+)\s+(\S+)$/) {
+            my ($a, $t, $s) = (hex $1, $2, $3);
+            fail "a relocation of $s at $a outside an instruction" unless @made && $made[-1]{addr} == $a;
+            # (a local label is named by its section and offset: .text+0x34)
+            if ($s =~ /^(\.[\w.]+)(?:\+0x([0-9a-f]+))?$/ && !exists $sect{$s}) { $s = [$1, hex($2 // 0)] }
+            elsif ($s =~ /[+-]0x/) { fail "a relocation $t of $s with an addend" }
+            $made[-1]{reloc} = [$t, $s];
+        }
     }
-    $insec = $1 if /^Disassembly of section (\S+):/;
-    next unless $insec eq '.text';
-    if (/^\s*([0-9a-f]+):\t([0-9a-f]{8}) \t(\S+)\s*(.*?)\s*$/) {
-        my ($a, $w, $op, $args) = (hex $1, hex $2, $3, $4);
-        $args =~ s/\s*\/\/.*$//;
-        $args =~ s/\s*<[^>]*>$//;
-        push @made, { addr => $a, word => $w, op => $op, args => $args };
-        next;
-    }
-    if (/^\s*([0-9a-f]+): (R_AARCH64_\w+)\s+(\S+)$/) {
-        my ($a, $t, $s) = (hex $1, $2, $3);
-        fail "a relocation of $s at $a outside an instruction" unless @made && $made[-1]{addr} == $a;
-        # (a local label is named by its section and offset: .text+0x34)
-        if ($s =~ /^(\.[\w.]+)(?:\+0x([0-9a-f]+))?$/ && !exists $sect{$s}) { $s = [$1, hex($2 // 0)] }
-        elsif ($s =~ /[+-]0x/) { fail "a relocation $t of $s with an addend" }
-        $made[-1]{reloc} = [$t, $s];
-    }
+    close $d;
+    @made;
 }
-close $d;
+my @all = readdump($dump, 1);
+my @made = grep { $_->{sec} eq '.text' } @all;
 # the padding at the end of the section
 pop @made while @made && $made[-1]{op} eq 'hint' && $made[-1]{args} eq '#0x0' && !($sym{'.text'}{ $made[-1]{addr} });
 # the padding before the first label (ENTRY_ALIGN_AND_PAD: strncmp's nops)
@@ -211,9 +228,10 @@ my $skip = 0;
 while (@made && $made[0]{op} eq 'hint' && $made[0]{args} eq '#0x0' && !$sym{'.text'}{ $made[0]{addr} }) { shift @made; $skip += 4 }
 if ($size) { print 4 * @made, "\n"; exit }
 if ($skipopt) { print "$skip\n"; exit }
+push @made, grep { $_->{sec} ne '.text' } @all;
 
 # ---- the source: where each label is, its aliases, its other sections ---------
-my (%line, %alias, @fns, @data, %rodata);
+my (%line, %alias, @fns, @data, %rodata, %weakref);
 {
     open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
     my ($file, $ln, $other, @pending, %datadef, %count) = ('', 0);
@@ -232,7 +250,7 @@ my (%line, %alias, @fns, @data, %rodata);
             if ($st =~ /^\.(data|bss|section\s+([^,\s]+)(,.*)?)$/ || $st =~ /^\.(previous)$/) {
                 my $sec = $2 // ".$1";
                 $sec = '.text' if $sec eq '.previous';
-                if ($sec eq '.text') { $other = undef; next }
+                if ($code{$sec}) { $other = undef; next }
                 $other = $sec;
                 @pending = ();
                 warn "s2ff: $where: $sec left out\n" if $sec =~ /^\.(pre)?init_array$|^\.fini_array$/;
@@ -255,6 +273,8 @@ my (%line, %alias, @fns, @data, %rodata);
                     @pending = ();
                     next;
                 }
+                # (a zero word is one too: start.S's __data_start, .long 0)
+                $st = '.zero ' . { long => 4, word => 4, quad => 8, xword => 8, byte => 1, hword => 2 }->{$1} if $st =~ /^\.(long|word|quad|xword|byte|hword)\s+0$/;
                 if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
                     my ($first, @more) = @pending;
                     $datadef{$_} = 1 for @pending;
@@ -271,6 +291,7 @@ my (%line, %alias, @fns, @data, %rodata);
             }
             next if $st eq '';
             if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) { $alias{$1} = $2; next }
+            $weakref{$1} = 1 if $st =~ /^\.weak\s+([.\w]+)$/;
         }
     }
     close $s;
@@ -279,15 +300,25 @@ my (%line, %alias, @fns, @data, %rodata);
 
 # ---- the functions -----------------------------------------------------------
 sub ffname { my ($n) = @_; $n =~ s/^\.L(\d+)__(\d+)$/.L$1 $2/; $n }
-my %at;         # .text address -> its labels
-for my $a (keys %{ $sym{'.text'} || {} }) { $at{$a} = [grep { !exists $alias{$_} } @{ $sym{'.text'}{$a} }] }
+my %at;         # "section address" -> its labels
+for my $sec (keys %code) { for my $a (keys %{ $sym{$sec} || {} }) { $at{"$sec $a"} = [grep { !exists $alias{$_} } @{ $sym{$sec}{$a} }] } }
 my %labelat;    # an address a branch may name
-for my $a (keys %at) { my ($l) = sort { ($a =~ /^\.L/) <=> ($b =~ /^\.L/) } grep { 1 } @{ $at{$a} }; $labelat{$a} = $l if defined $l }
-my ($fn, $block, $ends, %got, %ro, %rodone);
+for my $k (keys %at) { my ($l) = sort { ($a =~ /^\.L/) <=> ($b =~ /^\.L/) } @{ $at{$k} }; $labelat{$k} = $l if defined $l }
+my ($fn, $block, $ends, %got, %ro, %rodone, %weakb);
+my @weakgot;    # GOT words of a weak name nothing here defines: C globals
 sub finish {
+    push @{ $fn->{children} }, map { node(".Lweak $_:", node('brk', node(0))) } sort keys %weakb if $fn;
+    %weakb = ();
     return unless $fn && (%got || %ro);
-    push @{ $fn->{children} }, node('align', node(8)), map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got;
-    push @{ $fn->{children} }, map { node(ffname($_) . ':', @{ $rodata{$_} }) } sort keys %ro;
+    # (a word of the function holds a name's address; a weak name nothing
+    # defines (crti's __gmon_start__) is 0, as ttpc's C has it, so its word
+    # is a C global: address / void / address / name)
+    my @weak = grep { $weakref{$_} && ($sect{$_} // '') eq '*UND*' } keys %got;
+    delete @got{@weak};
+    push @weakgot, map { node(".Lgot $_:", node('address'), node('void'), node('address', node($_))) } sort @weak;
+    push @{ $fn->{children} }, node('align', node(8)), map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got if %got;
+    # (text ends where it ends: what follows the function starts on 8 again)
+    push @{ $fn->{children} }, (map { node(ffname($_) . ':', @{ $rodata{$_} }) } sort keys %ro), node('align', node(8)) if %ro;
     %got = %ro = ();
 }
 # a relocation's symbol: a name, or a label of the file by its section and
@@ -305,8 +336,13 @@ sub symof {
     ffname($l);
 }
 sub leaf { node($_[0]) }
+my %fnof;       # a function's node by its name
+sub emit;
+my $cursec = '';
 for my $m (@made) {
-    for my $name (sort { ($a =~ /^\.L/) <=> ($b =~ /^\.L/) || $a cmp $b } @{ $at{ $m->{addr} } || [] }) {
+    # (a function never runs on into another section: crti's _init, _fini)
+    ($ends, $cursec) = (1, $m->{sec}) if $m->{sec} ne $cursec;
+    for my $name (sort { ($a =~ /^\.L/) <=> ($b =~ /^\.L/) || $a cmp $b } @{ $at{"$m->{sec} $m->{addr}"} || [] }) {
         my $c = node('comment', node('glibc-2.44 ' . ($line{$name} // $src)));
         if ($name =~ /^\.L/) {
             fail "label $name outside a function" unless $fn;
@@ -318,11 +354,28 @@ for my $m (@made) {
         } else {
             finish();
             $fn = node("$name:", node('asm'), $c);
+            $fnof{$name} = $fn;
             push @fns, $fn;
             undef $block;
         }
     }
     fail "an instruction outside a function at $m->{addr}" unless $fn;
+    emit($m);
+}
+finish();
+# crtn's .init and .fini (--then crtn.L.s crtn.dump): the end of crti's
+# _init and _fini, the functions of those sections there, as the linker
+# puts crtn's after crti's
+if (@then) {
+    for my $m (readdump($then[1], 0)) {
+        next if $m->{sec} eq '.text';
+        my ($name) = @{ $at{"$m->{sec} 0"} || [] } or fail "no function of $m->{sec} for $then[0]";
+        ($fn, $block) = ($fnof{$name}, undef);
+        emit($m);
+    }
+}
+sub emit {
+    my ($m) = @_;
     my ($def, $v) = decode($m->{word}, $m);
     # the registers by the names objdump gives them
     my @tok;
@@ -344,12 +397,15 @@ for my $m (@made) {
             next;
         }
         if ($p eq 'imm' && pcrel($def->{name})) {
+            # (a branch to a weak name nothing defines, crti's b __gmon_start__
+            # after its cbz: to a trap the function carries, .Lweak name)
+            if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/ && $weakref{$rs} && ($sect{$rs} // '') eq '*UND*') { $weakb{$rs} = 1; push @ops, node('rel', leaf(".Lweak $rs")); next }
             if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/) { push @ops, node('rel', leaf($rs)); next }
             if ($rt && $rt eq 'R_AARCH64_ADR_PREL_PG_HI21') { push @ops, node('pagerel', leaf($rs)); next }
             if ($rt && $rt eq 'R_AARCH64_ADR_GOT_PAGE') { $got{$rs} = 1; push @ops, node('pagerel', leaf(".Lgot $rs")); next }
             fail "a relocation $rt in $m->{op}" if $rt;
             my $to = $def->{name} eq 'adrp' ? ($m->{addr} & ~4095) + $val : $m->{addr} + $val;
-            my $l = $labelat{$to} // fail "$m->{op} $m->{args}: no label at $to";
+            my $l = $labelat{"$m->{sec} $to"} // fail "$m->{op} $m->{args}: no label at $to";
             push @ops, node($def->{name} eq 'adrp' ? 'pagerel' : 'rel', leaf(ffname($l)));
             next;
         }
@@ -362,10 +418,13 @@ for my $m (@made) {
     push @{ ($block // $fn)->{children} }, node($def->{name}, @ops);
     $ends = $def->{name} =~ /^(b|br|ret|retr)$/ ? 1 : 0;
 }
-finish();
 # aliases: X = Y, of a function here
 push @fns, map { node("$_:", node('alias'), node($alias{$_})) } sort grep { exists $sect{$_} || 1 } keys %alias;
 push @fns, @data;
+# a weak name the file declares and does not define (crti's __gmon_start__):
+# a function that may stay undefined, at 0
+push @fns, map { node("$_:", node('weak'), node('function'), node('void')) } sort grep { ($sect{$_} // '') eq '*UND*' } keys %weakref;
+push @fns, @weakgot;
 # A function that jumps to a block label of a function after it (setjmp.S:
 # setjmp's b 1f, to a label in __sigsetjmp): the functions from it to that
 # one are one asm function, each later one's name an entry block in it

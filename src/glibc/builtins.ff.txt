@@ -1258,19 +1258,7 @@ builtins:
         ==
         8
   comment
-    gcc's __builtin_trap, which it makes ebreak on riscv64.
-  __builtin_trap:
-    asm
-    ebreak
-  comment
-    gcc's __atomic_thread_fence, which it makes fence rw, rw on riscv64; __atomic_signal_fence orders only what the compiler does: nothing to do here.
-  __atomic_thread_fence:
-    asm
-    fence
-      0
-      3
-      3
-    ret
+    gcc's __atomic_signal_fence orders only what the compiler does: nothing to do here. (__builtin_trap and __atomic_thread_fence are each target's: builtins-<target>.ff.txt.)
   __atomic_signal_fence:
     asm
     ret
