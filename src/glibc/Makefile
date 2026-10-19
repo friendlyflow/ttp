@@ -296,21 +296,32 @@ $(I)/%.i: $(OBJ)/libc.a mki.pl
 # An object of a .S: its .s (mki.pl again), and what glibc's compiler makes
 # of it without relaxation, as instructions (for s2ff.pl, which takes the
 # compressed ones GNU as picked) and as the bytes of its .text, which ttpc
-# must make too.
+# must make too. Per target: riscv64's relaxation off and its
+# instructions without aliases; x86_64's each on one line (-w), its bytes
+# with it, which s2ff reads the encoding GNU as picked from.
+ASREF_riscv64 := -mno-relax
+DUMPOPT_riscv64 := -M no-aliases
+DUMPOPT_x86_64 := -w
 $(I)/%.s: $(OBJ)/libc.a mki.pl
 	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
 $(I)/%.dump $(I)/%.bin: $(I)/%.s
-	$(CAP) timeout 60 $(GLIBC_CC) -c -mno-relax -x assembler $< -o $(I)/$*.ref.o
-	$(XPRE)objdump -d -M no-aliases $(I)/$*.ref.o > $(I)/$*.dump
+	$(CAP) timeout 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
+	$(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
 
 # What clang does not read of gcc's C, rewritten for clang alone in a copy of
 # the .i, each to as many bytes (c2ff finds an asm statement's text in the
 # .i itself by the offsets in clang's AST). x86_64: gcc's %v in an asm
 # template (v under AVX, nothing here: glibc is not built for AVX) and the
-# mode __libgcc_cmp_return__ (8 bytes there, as gcc says: DI).
-CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mode (__DI__               )/g'
+# mode __libgcc_cmp_return__ (8 bytes there, as gcc says: DI); the f128 or
+# F128 suffix of a _Float128 literal, which clang lacks (L: binary128 here
+# too); and gcc's _FloatN as associations of a _Generic, besides float,
+# double and long double, which for clang are those again (clang-prelude.h):
+# other types there, which no float matches.
+CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mode (__DI__               )/g' \
+	-e 's/\([0-9.]\)[fF]128\b/\1L   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
+	-e 's/_Float32x:/_Bool    :/g' -e 's/_Float64x:/unsigned :/g'
 CLANGFIX := $(CLANGFIX_$(GTARGET))
 
 $(I)/%.json: $(I)/%.i clang-prelude.h
