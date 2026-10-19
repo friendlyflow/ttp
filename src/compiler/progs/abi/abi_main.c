@@ -80,6 +80,15 @@ int main (void)
   s20 (*q) (int) = r_s20;
   s20 rq = q (7);
   check (rq.a == 7 && rq.d == 10, "a struct result through a pointer");
+  struct { s20 (*mk) (int); hd2 (*mkd) (double); } o = { r_s20, r_hd2 };
+  s20 rf = o.mk (8);
+  check (rf.a == 8 && rf.e == 12, "a struct result through a field");
+  hd2 rfd = o.mkd (0.5);
+  check (rfd.x == 0.5 && rfd.y == 1.5, "a double aggregate result through a field");
+  /* (through the address of a function of its own: an asm function's result is a word in ff) */
+  s20 ra;
+  ra = ((void) 0, &cb_r_s20) (9);
+  check (ra.a == 9 && ra.e == 13, "a struct result through a function's address");
   check (g_s () == 819, "gcc calls ttpc: structs");
   check (g_r_s20 () == 60, "gcc calls ttpc: a struct result");
   check (p_g_r_hd2 () == 9.5, "gcc calls ttpc: a double aggregate result");

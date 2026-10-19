@@ -349,6 +349,14 @@ x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
 	@echo "x86gnu: ttpc and GNU as agree on every form of isa/x86_64gnu.pl (gnu.s)"
 .PHONY: x86gnu
 
+# The calls by each target's C ABI, against gcc (progs/abi/run.sh): gcc's
+# functions of many shapes (by s2ff) and C translated by c2ff, built by
+# ttpc into one program, call each other; every check must say ok. So far
+# arm (the AAPCS, gen/patches/abi.pl).
+ABI_TARGETS := arm
+abi: $(BOOT)/stage2 $(SHARED)
+	@for t in $(ABI_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/abi/run.sh $$t $(P)/abi-$$t > $(P)/abi-$$t.log 2>&1 || { cat $(P)/abi-$$t.log; exit 1; }; tail -n 1 $(P)/abi-$$t.log; done
+
 targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%) x86gnu
 	! $(QEMU) $(BOOT)/stage2 --target mips $(SHARED) progs/cexit.ff $(P)/mips.celf 2> $(P)/mips.err
 	grep -q "compile time: mips is not a target" $(P)/mips.err
@@ -526,4 +534,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean
+.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean abi
