@@ -73,6 +73,9 @@ my %scalar = (
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
     '_Bool' => 'u8', 'void' => 'void',
     '__builtin_va_list' => 'va_list',
+    # C's complex types: the shared page's (real / z and imag / z its parts)
+    '_Complex float' => 'complex float', '_Complex double' => 'complex double', '_Complex long double' => 'complex long double',
+    'float _Complex' => 'complex float', 'double _Complex' => 'complex double', 'long double _Complex' => 'complex long double',
 );
 
 # The words a type run can be made of, besides the names of types.
@@ -237,7 +240,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len zero ra sp gp tp fp pc
+    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -1220,6 +1223,9 @@ sub expr {
         return $n->{isPostfix} ? (atom($e), node($op)) : (node($op), atom($e)) if $op eq '++' || $op eq '--';
         return expr($e) if $op eq '+';
         return expr($e) if $op eq '__extension__';     # only quiets gcc's -pedantic
+        # a complex value's parts: real / z, imag / z
+        return node('real', item(expr($e))) if $op eq '__real';
+        return node('imag', item(expr($e))) if $op eq '__imag';
         stop("the operator $op", $n);
     }
     if ($k eq 'CStyleCastExpr') {
