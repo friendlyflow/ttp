@@ -251,6 +251,8 @@ sub sig {
 sub fnptr_sig {
     my ($t) = @_;
     $t = $t->[1] if $t && $t->[0] eq 'ptr' && $t->[1];
+    # (a function's own address, C's &f: its definition's result)
+    return { ret => sig($t->[1])->{ret} } if $t && $t->[0] eq 'fndef' && sig($t->[1]);
     return undef unless $t && $t->[0] eq 'fn';
     my @l = kids($fntype{ $t->[1] });
     my $i = 1;
@@ -445,7 +447,7 @@ sub operand {
         }
         # a label's address (GNU C's &&L); a function's
         if (@k == 1 && leaf($f) && !local_type(c($f)) && our $labels->{ c($f) }) { return ('(&&' . cid_local(c($f)) . ')', [ptr => undef]) }
-        if (@k == 1 && leaf($f) && !local_type(c($f)) && !gtype(c($f)) && sig(c($f))) { return ('(&' . callee(c($f)) . ')', [ptr => undef]) }
+        if (@k == 1 && leaf($f) && !local_type(c($f)) && !gtype(c($f)) && sig(c($f))) { return ('(&' . callee(c($f)) . ')', [ptr => [fndef => c($f)]]) }
         # a name c2ff left out (an asm variant no milestone has): as an asm function
         if (@k == 1 && leaf($f) && !local_type(c($f)) && !gtype(c($f)) && !$econst{ c($f) }) { $fn{ c($f) } = { kind => 'asm', missing => 1 }; push @order, c($f); return ('(&' . cid(c($f)) . ')', [ptr => undef]) }
         my ($s, $t) = expr([@k]);
@@ -463,9 +465,20 @@ sub operand {
         return ("((" . ctype($t) . ")($v))", $t);
     }
     if ($w eq 'sizeof' || $w eq 'alignof') {
+        # of a variable (a variable-length array's)
+        if (@k == 1 && leaf($k[0]) && (local_type(c($k[0])) || gtype(c($k[0])))) {
+            return (($w eq 'sizeof' ? 'sizeof' : '_Alignof') . '(' . (operand($k[0]))[0] . ')', [scalar => 'u64']);
+        }
         my $i = 0;
         my $t = ptype(\@k, \$i);
         return (($w eq 'sizeof' ? 'sizeof' : '_Alignof') . '(' . ctype($t) . ')', [scalar => 'u64']);
+    }
+    # an array compound literal: array / its element's type / its count / items
+    if ($w eq 'array') {
+        my @l = ({ content => 'array', children => [] }, @k);
+        my $i = 0;
+        my $t = ptype(\@l, \$i);
+        return ('((' . ctype($t) . ')' . init_list($t, [@l[$i .. $#l]]) . ')', $t);
     }
     if ($w eq 'syscall') { return ('__ff_syscall(' . join(', ', map { expr_item($_) } items(@k)) . ')', [scalar => 'long']) }
     if ($w eq 'va_arg') {

@@ -458,7 +458,8 @@ sub S {
         if ($k eq 'SwitchStmt') { my ($v, $b) = kids($n); push @out, '(switch ' . E($v), body($b), ')'; next }
         if ($k eq 'CaseStmt') { my @k = kids($n); my $sub = pop @k; push @out, '(case ' . join(' ', map { E($_) } @k) . ')', S($sub); next }
         if ($k eq 'DefaultStmt') { push @out, '(default)', S(kids($n)); next }
-        if ($k eq 'LabelStmt') { push @out, "(label $n->{name})", S(kids($n)); next }
+        # (a label's attribute, ret0: __attribute__ ((unused)), says nothing of the code: c2ff leaves it)
+        if ($k eq 'LabelStmt') { push @out, "(label $n->{name})", S(grep { $_->{kind} !~ /Attr$/ } kids($n)); next }
         if ($k eq 'AttributedStmt') { push @out, S(grep { $_->{kind} !~ /Attr$/ } kids($n)); next }
         next if $k eq 'NullStmt';
         if ($k eq 'ReturnStmt') { push @out, '(return' . ($n->{inner} ? ' ' . E((kids($n))[0]) : '') . ')'; next }
