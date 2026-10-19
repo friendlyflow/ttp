@@ -58,6 +58,9 @@
         # soft-fp for long double on those targets, from their own build
         pkgsCross.aarch64-multiplatform.buildPackages.binutils
         pkgsCross.gnu64.buildPackages.binutils
+        # arm (32-bit, hard-float EABI): all of glibc for armv7l
+        (glibcGcc pkgs "armv7l-hf-multiplatform")
+        pkgsCross.armv7l-hf-multiplatform.buildPackages.binutils
         bison
         python3
         llvmPackages.clang-unwrapped
@@ -125,6 +128,8 @@
           GLIBC_CC_aarch64 = "${(glibcGcc pkgs "aarch64-multiplatform").cc}/bin/aarch64-unknown-linux-gnu-gcc";
           GLIBC_HEADERS_x86_64 = "${pkgs.pkgsCross.gnu64.linuxHeaders}/include";
           GLIBC_CC_x86_64 = "${(glibcGcc pkgs "gnu64").cc}/bin/x86_64-unknown-linux-gnu-gcc";
+          GLIBC_HEADERS_arm = "${pkgs.pkgsCross.armv7l-hf-multiplatform.linuxHeaders}/include";
+          GLIBC_CC_arm = "${(glibcGcc pkgs "armv7l-hf-multiplatform").cc}/bin/armv7l-unknown-linux-gnueabihf-gcc";
           C2FF_CLANG = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
 
           # `nix develop` always starts bash; drop into fish instead.
