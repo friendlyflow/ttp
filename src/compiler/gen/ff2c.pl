@@ -389,6 +389,7 @@ sub operand {
     }
     if (!@k) {
         return ($w, [scalar => 'int']) if $w =~ /^-?(?:0x[0-9a-fA-F]+|\d+)$/;
+        return ($w, [scalar => 'long double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+L$/i;
         return ($w, [scalar => $w =~ /f$/ ? 'float' : 'double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+f?$/i;
         return ('__builtin_va_arg_pack()', undef) if $w eq 'va_arg_pack';
         return ('__builtin_va_arg_pack_len()', undef) if $w eq 'va_arg_pack_len';

@@ -805,7 +805,7 @@ sub softfp {
                 : '__fix' . (unsigned_t($n) ? 'uns' : '') . 'tfdi');
         }
     } elsif ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean' && isld((kids($n))[0])) {
-        want($_) for '__netf2', '__extenddftf2';
+        want('__netf2');
     }
 }
 
@@ -1132,7 +1132,7 @@ sub expr {
     # double, converts
     if ($k =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($n->{castKind} // '') =~ /^(Integral|Pointer|Floating)ToBoolean$/) {
         my ($e) = kids($n);
-        my $zero = $1 eq 'Floating' ? hexfloat(0, isld($e) ? 'double' : qt($e)) : 0;
+        my $zero = $1 ne 'Floating' ? 0 : isld($e) ? ldhexfloat('0') : hexfloat(0, qt($e));
         return node(':', operand($e, $prec{'!='}, 0), node('!='), node($zero));
     }
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
@@ -1152,13 +1152,9 @@ sub expr {
         @t == 2 && ($n->{type}{qualType} // '') eq 'int' or stop('TypeTraitExpr', $n);
         return node(types_compatible(@t) ? 1 : 0);
     }
-    if ($k eq 'FloatingLiteral' && isld($n)) {
-        # a long double literal that a double holds exactly: that double, cast
-        my $v = 0 + $n->{value};
-        sprintf('%.17g', $v) eq $n->{value} || $v == 0 && $n->{value} =~ /^0(\.0*)?$/ or stop("the long double literal $n->{value}", $n);
-        want('__extenddftf2');
-        return node('cast:', node('long double'), node(hexfloat($v, 'double')));
-    }
+    # a long double literal: its exact hex float, with C's L (binary128,
+    # rounded from clang's decimal as C rounds it)
+    return node(ldhexfloat($n->{value})) if $k eq 'FloatingLiteral' && isld($n);
     return node(hexfloat($n->{value}, qt($n))) if $k eq 'FloatingLiteral';
     return wide_text($n) if $k eq 'StringLiteral' && $n->{value} =~ /^(L|u|U)"/;
     return string_value($n) if $k eq 'StringLiteral';
@@ -1478,6 +1474,53 @@ sub hexfloat {
     my ($lead, $exp) = $e == 0 ? (0, 1 - $bias) : (1, $e - $bias);
     return "0x0p+0$suffix" if $e == 0 && $f == 0;
     sprintf "0x%d%sp%+d%s", $lead, ($hex eq '' ? '' : ".$hex"), $exp, $suffix;
+}
+# A long double literal from clang's decimal: binary128's exact hex float,
+# 0x1.<28 hex digits at most>p<e>L (a subnormal 0x0.<digits>p-16382L, zero
+# 0x0p+0L), the nearest value, ties to even, as C rounds a literal.
+use Math::BigInt;
+sub ldhexfloat {
+    my ($s) = @_;
+    $s =~ /^([0-9]*)(?:\.([0-9]*))?(?:[eE]([-+]?[0-9]+))?$/ or die "c2ff: a long double literal that is no decimal: $s\n";
+    my ($i, $f, $e) = ($1, $2 // '', $3 // 0);
+    my $m = Math::BigInt->new(($i . $f) =~ s/^0+(?=.)//r);
+    my $e10 = $e - length $f;
+    return '0x0p+0L' if $m->is_zero;
+    my ($n, $d) = $e10 >= 0 ? ($m * Math::BigInt->new(10)->bpow($e10), Math::BigInt->new(1)) : ($m, Math::BigInt->new(10)->bpow(-$e10));
+    my $bits = sub { length($_[0]->as_bin) - 2 };
+    # e2: value / 2^e2 in [2^112, 2^113)
+    my $e2 = $bits->($n) - $bits->($d) - 113;
+    my $q;
+    my $div = sub {
+        my ($e2) = @_;
+        my ($nn, $dd) = ($n->copy, $d->copy);
+        if ($e2 >= 0) { $dd->blsft($e2) } else { $nn->blsft(-$e2) }
+        my ($qq, $r) = $nn->copy->bdiv($dd);
+        # round to nearest, ties to even
+        my $c = ($r * 2)->bcmp($dd);
+        $qq->binc if $c > 0 || ($c == 0 && $qq->is_odd);
+        $qq;
+    };
+    my $two112 = Math::BigInt->new(2)->bpow(112);
+    my $two113 = Math::BigInt->new(2)->bpow(113);
+    $e2++ while ($div->($e2))->bcmp($two113) >= 0;
+    $e2-- while ($div->($e2))->bcmp($two112) < 0 && $e2 > -16494;
+    $e2 = -16494 if $e2 < -16494;
+    $q = $div->($e2);
+    if ($q->bcmp($two113) >= 0) { $e2++; $q = $div->($e2) }
+    if ($q->bcmp($two112) >= 0) {
+        my $exp = $e2 + 112;
+        die "c2ff: a long double literal past the largest: $s\n" if $exp > 16383;
+        my $hex = substr(($q - $two112)->as_hex, 2);
+        $hex = ('0' x (28 - length $hex)) . $hex;
+        $hex =~ s/0+$//;
+        return sprintf "0x1%sp%+dL", ($hex eq '' ? '' : ".$hex"), $exp;
+    }
+    return '0x0p+0L' if $q->is_zero;
+    my $hex = substr($q->as_hex, 2);
+    $hex = ('0' x (28 - length $hex)) . $hex;
+    $hex =~ s/0+$//;
+    sprintf "0x0.%sp-16382L", $hex;
 }
 sub fail_float { die "c2ff: a constant with no hex form: $_[0]\n" }
 
