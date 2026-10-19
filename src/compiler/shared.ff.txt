@@ -3,8 +3,12 @@ comment
   Every name ttpc takes by itself, the builtins of asm and the words of C, declared like any function so that each is defined before it is called. ttpc takes these calls itself: the declarations are never run.
   In asm a C word is a function with an empty body: a stray if expands to nothing (a wrong number of arguments still dies).
   comment text: a comment, anywhere (code, assemble time, C, beside definitions, among the fields of an encoding); its text is never evaluated.
+  license spdx notice: a license, the SPDX expression (GPL-3.0-only, LGPL-2.1-or-later), then the notice, a line per child after it (a line over 255 bytes goes on in the next). To ttpc it is a comment, anywhere one may stand; make licenses checks that every tree has one, with a known SPDX id.
 comment:
   text
+license:
+  spdx
+  notice
 comment
   ascii bytes: emits the content of its argument as it is.
 ascii:
