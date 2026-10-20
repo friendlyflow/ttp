@@ -255,7 +255,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag zero ra sp gp tp fp pc
+    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -1315,6 +1315,20 @@ sub expr {
     }
     if ($k eq 'CStyleCastExpr') {
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
+    }
+    # C11's _Generic: generic / x / an association per type (its type words
+    # and a colon, holding its value) / default:; ttpc picks the one of x's
+    # type (clang's inner: x, x's type, then the associations)
+    if ($k eq 'GenericSelectionExpr') {
+        my ($x, @as) = grep { $_->{kind} || exists $_->{associationKind} } kids($n);
+        my @a;
+        for my $as (grep { exists $_->{associationKind} } @as) {
+            my @in = kids($as);
+            if ($as->{associationKind} eq 'default') { push @a, node('default:', expr($in[-1])); next }
+            my $t = $in[0]{type} or stop("an association without a type", $n);
+            push @a, node(join(' ', ctype($t->{desugaredQualType} // $t->{qualType})) . ':', expr($in[-1]));
+        }
+        return node('generic', atom($x), @a);
     }
     if ($k eq 'ArraySubscriptExpr' || $k eq 'MemberExpr') {
         # a path from a variable: its elements and fields in a row, xs i x

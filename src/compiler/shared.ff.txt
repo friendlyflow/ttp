@@ -429,6 +429,12 @@ comment
 imag:
   z
 comment
+  generic x associations: C, the value of the association of x's type (C11's _Generic): each association is a node named by a type and a colon (address char:, long:), holding its value; default: holds the value for any other type.
+  x is not evaluated; an array is the address of its element, a function its address.
+generic:
+  x
+  associations
+comment
   void: C, no value, the type of a function that returns none.
 void:
 comment

@@ -481,6 +481,25 @@ sub operand {
         my $to = $t && $t->[0] eq 'ptr' ? $t->[1] : $t && $t->[0] eq 'arr' ? $t->[1] : undef;
         return ("(*$s)", $to);
     }
+    # C11's _Generic: an association's name is its type, address as often as
+    # it says and then one type name
+    if ($w eq 'generic') {
+        my ($x, @as) = @k;
+        my ($xs) = expr([$x]);
+        my (@parts, $rt);
+        for my $as (@as) {
+            (my $name = c($as)) =~ s/:$//;
+            my ($v, $vt) = expr([kids($as)]);
+            $rt //= $vt;
+            if ($name eq 'default') { push @parts, "default: $v"; next }
+            my @w;
+            push @w, { content => 'address', children => [] } while $name =~ s/^address (?=.)//;
+            push @w, { content => $name, children => [] };
+            my $i = 0;
+            push @parts, ctype(ptype(\@w, \$i)) . ": $v";
+        }
+        return ("_Generic($xs, " . join(', ', @parts) . ")", $rt);
+    }
     if ($w eq 'cast:') {
         my $i = 0;
         my $t = ptype(\@k, \$i);
