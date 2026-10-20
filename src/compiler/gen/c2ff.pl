@@ -524,7 +524,7 @@ for my $u (@units) {
             if (($d->{storageClass} // '') ne 'extern' || $zero{$name}) {
                 my $k = own_name(\%var, $name, $d, $u);
                 # (a global of a named section: reached with the section's bounds)
-                if (!$var{$k} && (my ($s) = grep { $_->{kind} eq 'SectionAttr' } @in)) { push @{ $section{ $s->{section_name} } }, $k }
+                if (!$var{$k} && (my ($s) = grep { $_->{kind} eq 'SectionAttr' && $_->{section_name} =~ /^[A-Za-z_]\w*$/ } @in)) { push @{ $section{ $s->{section_name} } }, $k }
                 $var{$k} //= [$d, $u];
             }
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
@@ -2131,8 +2131,11 @@ sub decl {
     # the TLS image, where the target has one)
     my @tls = $global && $v->{tls} ? node('thread local') : ();
     # a global of a named section (section ("impls")): ttpc places it with
-    # the others of the section, between __start_impls and __stop_impls
-    my ($sec) = $global ? grep { $_->{kind} eq 'SectionAttr' } kids($v) : ();
+    # the others of the section, between __start_impls and __stop_impls. A
+    # section whose name is no C name (glibc's .data.rel.ro) has no bounds
+    # (ld defines them for a C name only) and nothing to keep together in a
+    # static program: no section there
+    my ($sec) = $global ? grep { $_->{kind} eq 'SectionAttr' && $_->{section_name} =~ /^[A-Za-z_]\w*$/ } kids($v) : ();
     unshift @tls, node('section'), node($sec->{section_name}) if $sec;
     node(($name // ffname($v->{name})) . ':', @tls, map({ node($_) } @t), grouped(255 - @t - @tls, @i));
 }
