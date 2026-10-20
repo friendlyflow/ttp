@@ -73,7 +73,7 @@ my %riscv = defined_in("riscv64", qw(integer system atomic float compressed macr
 my %reg = defined_in("riscv64", "registers");
 my %names = map { ($_ => 1) } map { split / / } keys %reg;
 # The hot registers (rv.hot: an RV64 register, the host's register it is
-# in, isa/x86_64rv.pl), by number: an op of ttpc becomes rv.op.h and a
+# in, gen/mkrv64x86.pl), by number: an op of ttpc becomes rv.op.h and a
 # letter per register operand, r where it is hot (passed as the host's
 # register), m where it is in its slot (passed as rv.<name>).
 my %num = map { my $d = $reg{$_}; map { ($_ => $d->{children}[0]{content}) } split / / } keys %reg;

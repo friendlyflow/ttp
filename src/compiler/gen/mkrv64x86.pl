@@ -1,11 +1,18 @@
-# isa/x86_64rv.pl — the hot registers of rv64: on x86_64, loaded by
-# isa/x86_64.pl into its section. ttpc is written in RV64; on x86_64 the
-# group rv64: (macros/x86_64.ff.txt) keeps each RV64 register in a slot of
-# 8 bytes at rbx, so every register access is a memory access (on
-# 2026-10-20 40% of ttpc's cycles waited on the load queue, 44-59% of its
-# loads came back from a store in flight). Here the ten registers ttpc uses
-# most (by perf, weighted by where the time goes) live in x86_64 registers
-# of their own, %HOT, and the other ones stay in their slots.
+#!/usr/bin/env perl
+# mkrv64x86.pl — the hot registers of rv64: on x86_64: writes the groups
+# rv64alu:, rv64mem: and rv64jump: at the end of macros/x86_64.ff.txt (in
+# place of the ones there), after rv64:. Run it again after changing it,
+# then make refresh.
+#
+#   perl gen/mkrv64x86.pl
+#
+# ttpc is written in RV64; on x86_64 the group rv64: keeps each RV64
+# register in a slot of 8 bytes at rbx, so every register access is a
+# memory access (on 2026-10-20 40% of ttpc's cycles waited on the load
+# queue, 44-59% of its loads came back from a store in flight). Here the
+# ten registers ttpc uses most (by perf, weighted by where the time goes)
+# live in x86_64 registers of their own, @HOT, and the others stay in their
+# slots.
 #
 # A form of a register or a slot needs other instructions, and a macro
 # cannot choose between them, so mkhost.pl does: it names each op of ttpc
@@ -23,21 +30,21 @@
 # the hot registers in their slots, rv.fill takes them back. rv.jitcall
 # spills around the code compile time made (which writes rax ... r15 but
 # rsp and rbp), cc_call_l fills around ttpc's functions it calls,
-# rv.ecall.h spills and fills around rv64:'s rv.ecall (which takes a0 ...
-# a7 from the slots), rv.start.h fills after rv64:'s rv.start. rax rcx rdx
-# stay the scratch registers, rbx the slots, rsp the call stack, rbp
-# compile time's FP.
+# rv.start.h fills after rv64:'s rv.start; rv.ecall.h moves the arguments
+# of syscall to its registers, keeping the hot registers there and in rcx
+# r11 in their slots. rax rcx rdx stay the scratch registers, rbx the
+# slots, rsp the call stack, rbp compile time's FP.
 #
-# mkhost.pl reads %HOT from rv.hot: (an RV64 register, its x86_64 one),
+# mkhost.pl reads @HOT from rv.hot: (an RV64 register, its x86_64 one),
 # which no program calls.
-
-package X86RV;
+#
+# A host tool (core Perl only), not part of ttpc.
 
 use strict;
 use warnings;
-use FF qw(node);
-
-my $isa = $main::X86_ISA;
+use FindBin;
+use lib $FindBin::Bin;
+use FF qw(node read_txt write_txt);
 
 sub arg { my ($a) = @_; ref $a ? $a : node($a) }
 sub C   { my ($name, @args) = @_; node($name, map { arg($_) } @args) }
@@ -61,7 +68,7 @@ sub put { my ($x, $p, $k) = @_; $k eq "r" ? C("movq", $x, $p) : C("movq.mr", $x,
 sub src { my ($op, $p, $k, $x) = @_; $k eq "r" ? C($op, $p, $x) : C("$op.m", slot($p), "rbx", $x) }
 
 my %bytes = (movq => 3, "movq.m" => 8, cmpq => 3, "cmpq.m" => 8, "cmpq.mr" => 8, testq => 3);
-sub size { my $n = 0; $n += $bytes{ $_->{content} } // die "x86_64rv: the size of $_->{content}\n" for @_; $n }
+sub size { my $n = 0; $n += $bytes{ $_->{content} } // die "mkrv64x86: the size of $_->{content}\n" for @_; $n }
 
 my %groups;     # group => [definitions]
 # The forms of op, one per choice of r and m for its register parameters
@@ -213,16 +220,50 @@ def("rv64jump", "jitcall", ["rs"], ["rs"], sub {
     my ($k) = @_;
     (@spill, $k->{rs} eq "r" ? C("call.r", "rs") : C("call.m", slot("rs"), "rbx"), C("movq.mr", "rax", 8 * $NUM{a0}, "rbx"), @fill);
 }, 1);
-# (a body that began with a leaf would make it a parameter: the spill first)
-def("rv64jump", "ecall", [], [], sub { (@spill, node("rv.ecall"), @fill) });
+# syscall: the number in rax, the arguments in rdi rsi rdx r10 r8 r9, the
+# result in rax; it changes rcx and r11. The hot registers there go to
+# their slots first (and back after), then each argument comes from its
+# hot register where that is not one of them, else from its slot.
+{
+    my %x = map { ($_->[1] => $_->[0]) } @HOT;
+    my %rv = map { @$_ } @HOT;
+    my @args = ([a7 => "rax"], [a0 => "rdi"], [a1 => "rsi"], [a2 => "rdx"], [a3 => "r10"], [a4 => "r8"], [a5 => "r9"]);
+    my %changed = map { ($_ => 1) } "rcx", "r11", "rax", map { $_->[0] ne ($x{ $_->[1] } // "") ? $_->[1] : () } @args;
+    $changed{rdi} = 1;      # the result, a0
+    my @keep = grep { $changed{ $_->[1] } && $_->[0] ne "a0" } @HOT;
+    my @move = map { my ($r, $to) = @$_; my $h = $rv{$r};
+        $h && $h eq $to ? () : $h && !$changed{$h} ? C("movq", $h, $to) : C("movq.m", 8 * $NUM{$r}, "rbx", $to) } @args;
+    my $a0 = $rv{a0} ? C("movq", "rax", $rv{a0}) : C("movq.mr", "rax", 8 * $NUM{a0}, "rbx");
+    my @save = map { C("movq.mr", $_->[1], 8 * $NUM{ $_->[0] }, "rbx") } @keep;
+    my @back = map { C("movq.m", 8 * $NUM{ $_->[0] }, "rbx", $_->[1]) } @keep;
+    def("rv64jump", "ecall", [], [], sub { (@save, @move, node("syscall"), $a0, @back) });
+}
 def("rv64jump", "start", [qw(regs stack)], [], sub { (C("rv.start", qw(regs stack)), @fill) });
 
-$isa->add("rv64alu", @{ $groups{rv64alu} });
-$isa->add("rv64mem", @{ $groups{rv64mem} });
-$isa->add("rv64jump", @{ $groups{rv64jump} },
+my %about = (
+    rv64alu => "what computes a register",
+    rv64mem => "the loads and stores",
+    rv64jump => "the branches, calls and the system; rv.backn, rv.spill, rv.fill, rv.hot",
+);
+push @{ $groups{rv64jump} },
     node("rv.backn:", node("imm"), node("n"), C("sub", qw(n pc a0)), C("add", qw(imm a0 a0))),
     node("rv.spill:", @spill),
     node("rv.fill:", @fill),
-    node("rv.hot:", map { C($_->[0], $_->[1]) } @HOT));
+    node("rv.hot:", map { C($_->[0], $_->[1]) } @HOT);
 
-1;
+my $file = "$FindBin::Bin/../macros/x86_64.ff.txt";
+open my $in, "<:raw", $file or die "mkrv64x86: cannot open $file: $!\n";
+my @top = read_txt(do { local $/; <$in> }, $file);
+close $in;
+@top = grep { !$about{ $_->{content} =~ s/:$//r } } @top;
+for my $g (qw(rv64alu rv64mem rv64jump)) {
+    die "mkrv64x86: $g has more than 255 nodes\n" if @{ $groups{$g} } > 254;
+    push @top, node("$g:", node("comment",
+        node("$g: the forms of rv64: with hot registers, $about{$g}: made by gen/mkrv64x86.pl, which says how they work; change it, not this."),
+        node("rv.op.h and r or m per register operand in order: r in its x86_64 register (rv.hot:), m in its slot.")),
+        @{ $groups{$g} });
+}
+open my $out, ">:raw", "$file.tmp" or die "mkrv64x86: cannot write $file.tmp: $!\n";
+print $out write_txt(@top);
+close $out or die "mkrv64x86: $file.tmp: $!\n";
+rename "$file.tmp", $file or die "mkrv64x86: $file: $!\n";
