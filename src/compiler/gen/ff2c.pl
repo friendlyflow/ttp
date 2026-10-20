@@ -114,6 +114,14 @@ for my $page (@top) {
             next;
         }
         if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1, glibc => $glibc }; next }
+        # a global of a named section; its bounds __start_ and __stop_ of
+        # the name are arrays of its type, as C declares them
+        if ($w eq 'section') {
+            my $sec = c($k[1]);
+            $var{$name} = { node => $d, from => 2, glibc => $glibc, section => $sec };
+            for my $b ("__start_$sec", "__stop_$sec") { next if $var{$b}; $var{$b} = { bound => $name }; push @order, $b }
+            next;
+        }
         if (is_function($d)) { $fn{$name} = { kind => 'c', node => $d, from => 0 }; $glibcpage{$name} = 1 if $glibc }
         else { $var{$name} = { node => $d, from => 0, glibc => $glibc } }
     }
@@ -234,6 +242,7 @@ sub gtype {
     my ($n) = @_;
     return gtype($fn{$n}{target}) if $fn{$n} && $fn{$n}{kind} eq 'alias' && !$fn{ $fn{$n}{target} };
     my $v = $var{$n} or return undef;
+    return $v->{type} //= [arr => gtype($v->{bound}), { content => '0', children => [] }] if $v->{bound};
     my @l = kids($v->{node});
     my $i = $v->{from};
     $v->{type} //= ptype(\@l, \$i);
@@ -480,6 +489,25 @@ sub operand {
         my ($s, $t) = expr([@k]);
         my $to = $t && $t->[0] eq 'ptr' ? $t->[1] : $t && $t->[0] eq 'arr' ? $t->[1] : undef;
         return ("(*$s)", $to);
+    }
+    # C11's _Generic: an association's name is its type, address as often as
+    # it says and then one type name
+    if ($w eq 'generic') {
+        my ($x, @as) = @k;
+        my ($xs) = expr([$x]);
+        my (@parts, $rt);
+        for my $as (@as) {
+            (my $name = c($as)) =~ s/:$//;
+            my ($v, $vt) = expr([kids($as)]);
+            $rt //= $vt;
+            if ($name eq 'default') { push @parts, "default: $v"; next }
+            my @w;
+            push @w, { content => 'address', children => [] } while $name =~ s/^address (?=.)//;
+            push @w, { content => $name, children => [] };
+            my $i = 0;
+            push @parts, ctype(ptype(\@w, \$i)) . ": $v";
+        }
+        return ("_Generic($xs, " . join(', ', @parts) . ")", $rt);
     }
     if ($w eq 'cast:') {
         my $i = 0;
@@ -841,7 +869,8 @@ for my $v (grep { $var{$_} && $var{$_}{glibc} && !$var{$_}{weak} && $_ !~ /^(?:w
     my @items = items_of($v);
     my $init = !@items ? '' : ($t->[0] eq 'arr' || $t->[0] eq 'rec') ? ' = ' . init_list($t, \@items) : ' = ' . expr_item([map { c($_) eq 'items' ? kids($_) : $_ } @items]);
     local $cur_fn = $v;
-    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$init;"; 1 };
+    my $sec = $var{$v}{section} ? " __attribute__((section(\"$var{$v}{section}\")))" : '';
+    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$sec$init;"; 1 };
     warn $@ unless $ok;
     # (where glibc has it: a unit's own static in that unit, a function's static in that function)
     my $hint = $v =~ /^\S+ (\S+\/\S+)$/ ? "unit $1" : $v =~ /^(\S+) \S+$/ && $fn{$1} ? 'in ' . orig($1) : '-';

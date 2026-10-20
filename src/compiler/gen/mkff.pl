@@ -56,7 +56,17 @@ sub section {
 # tree, at its root.
 my @page = read_txt(slurp("$FindBin::Bin/../shared.ff.txt"), "shared.ff.txt");
 my @license = grep { is_license($_) } @page;
-my $shared = node("shared:", (grep { !is_license($_) } @page), map { section($_) } @TARGETS);
+# (past 255 children the first definitions go in a layer, 0:, which ttpc
+# and FF.pm's kids see through; the end of shared.ff.txt, which chooses the
+# target, and the target sections stay where ttpc and the tools that pick
+# them look, among the page's own children)
+my @defs = grep { !is_license($_) } @page;
+my @sections = map { section($_) } @TARGETS;
+if (@defs + @sections > 255) {
+    my $over = @defs + @sections - 254;
+    @defs = (node("0:", @defs[0 .. $over - 1]), @defs[$over .. $#defs]);
+}
+my $shared = node("shared:", @defs, @sections);
 
 binmode STDOUT;
 print write_ff(node("", @license, $shared, map { node("$_:", read_txt(slurp($_), $_)) } @ARGV));
