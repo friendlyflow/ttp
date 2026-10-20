@@ -23,12 +23,19 @@ _start:
 	ushr v3.16b, v1.16b, #3
 	ushr v3.16b, v1.16b, #8
 	ushr v3.16b, v1.16b, #1
+	ushr d30, d30, #32
+	ushr d0, d1, #1
+	ushr d2, d7, #64
 	shrn v3.8b, v1.8h, #2
 	shrn v0.8b, v2.8h, #4
 	dup v3.16b, w1
 	dup v3.4s, w9
 	movi v3.16b, #0x5a
 	movi v29.16b, #0xff
+	movi d0, #0x0
+	movi d7, #0xff00ff00ff00ff00
+	movi v0.2d, #0
+	movi v5.2d, #0xffffffffffffffff
 	mvni v3.4s, #0x5a
 	mvni v3.4s, #0x5a, lsl 8
 	bic v3.8h, #0x5a
