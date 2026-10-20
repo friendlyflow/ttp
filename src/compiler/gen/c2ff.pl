@@ -241,7 +241,8 @@ sub params {
 sub qt { my ($n) = @_; my $t = $n->{type} or die "c2ff: no type\n"; $t->{desugaredQualType} // $t->{qualType} }
 
 # ---- names ------------------------------------------------------------------
-# ff reserves its words, type names and the registers of riscv64; a C name
+# ff reserves its words, type names and the registers of riscv64 (its
+# vector registers v0 ... v31 too: libm's v1); a C name
 # that is one gets a ' after it (type -> type'), which no C name has.
 
 my %reserved = map { $_ => 1 } qw(
@@ -250,7 +251,7 @@ my %reserved = map { $_ => 1 } qw(
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag zero ra sp gp tp fp pc
-), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_") } 0 .. 31);
+), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
 # group of its section in shared.ff.
@@ -261,7 +262,7 @@ sub reserve_target {
     my ($shared) = grep { $_->{content} eq "shared:" } @{ read_ff(do { local $/; <$h> })->{children} };
     my ($sec) = grep { $_->{content} eq "$t:" } @{ $shared->{children} } or die "c2ff: $t is not a target\n";
     my ($regs) = grep { $_->{content} eq 'registers:' } @{ $sec->{children} } or die "c2ff: $t has no registers\n";
-    delete $reserved{$_} for grep { /^(?:x|a|s|t|f|fa|fs|ft)\d+$|^(?:zero|ra|sp|gp|tp|fp|pc)$/ } keys %reserved;
+    delete $reserved{$_} for grep { /^(?:x|a|s|t|f|fa|fs|ft|v)\d+$|^(?:zero|ra|sp|gp|tp|fp|pc)$/ } keys %reserved;
     for (@{ $regs->{children} }) { (my $c = $_->{content}) =~ s/:$//; $reserved{$_} = 1 for split ' ', $c }
 }
 my %renamed;

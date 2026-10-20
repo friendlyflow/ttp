@@ -666,6 +666,10 @@ ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(AL
 # a gcc build, glibc's own code, which ttpc's long double calls)
 ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES))) $(SOFTFP:%=soft-fp/%)
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
+# crt1.o's parts, crti.o and crtn.o, which a program links before libc.a:
+# their definitions are the ones of a name libc.a defines too
+# (_dl_relocate_static_pie, static-reloc's, not static PIE's)
+ALL_CRT = $(shell perl allobjs.pl $(OBJ) crt | cut -d' ' -f2)
 
 CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	-fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
@@ -710,28 +714,40 @@ all-asm:
 # All of glibc in ff (glibc.ff, and the folder glibc/ a program includes):
 # c2ff's of every C object, from every name the objects define (nm) and
 # what the asm objects name from elsewhere, then s2ff's of every asm
-# object, then the builtins and libatomic's functions, as a milestone's.
-# The roots are in $(FF)/glibc.roots, one per line. What c2ff cannot
+# object, then the builtins and libatomic's functions, as a milestone's
+# (its license at its root, each page's files' headers). The roots are in
+# $(FF)/glibc.roots, one per line, the units in $(FF)/glibc.units, crt's
+# first (ALL_CRT: a name two units define is the first's). What c2ff cannot
 # translate yet is left out (--keep-going): its reasons are in
 # $(FF)/glibc.c2ff.err, "c2ff: left out: name: why".
+# (the asm page, with its headers more than 255 items, in layers: LAYERS)
+LAYERS := perl -I../compiler/gen -MFF=node,layers,read_txt,write_txt -0777 -ne \
+	'print write_txt(map { node($$_->{content}, layers(@{ $$_->{children} })) } read_txt($$_, $$ARGV))'
 ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
-WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start)
+# libgcc_eh's unwinder, which a static program has from gcc (glibc's
+# __pthread_unwind, backtrace): not in ff yet, its names weak (address 0),
+# as for a program that never unwinds
+UNWIND_glibc := _Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP
+WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
 $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
 	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
-	for o in $(ALL_C); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
+	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+	cp license.ff.txt $(FF)/glibc.ff.txt
 	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
-	    @$(FF)/glibc.units -- @$(FF)/glibc.roots > $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
+	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
-	echo 'glibc asm:' >> $(FF)/glibc.ff.txt
+	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
+	perl ../compiler/gen/s2ff.pl --header $(ALL_ASM:%=$(I)/%.s) | sed 's/^/  /' >> $(FF)/glibc.asm.page.txt
 	for a in $(ALL_ASM); do \
 	    $(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $(I)/$$a.s $(I)/$$a.dump > $(FF)/glibc.asm.txt || exit 1; \
-	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.ff.txt; \
+	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
+	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
 	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt >> $(FF)/glibc.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@
 
