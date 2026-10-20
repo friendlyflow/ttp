@@ -1205,7 +1205,7 @@ sub expr {
     my $k = $n->{kind};
     softfp($n);
     # GNU's &&L, the address of a label of the function
-    return node('address', node(ffname($label{ $n->{labelDeclId} } // stop('the address of no label', $n)))) if $k eq 'AddrLabelExpr';
+    return node('address', node(label_name($label{ $n->{labelDeclId} } // stop('the address of no label', $n)))) if $k eq 'AddrLabelExpr';
     # in a global's items, an array field that decays to its first element's
     # address (dl-support's .l_scope = _dl_main_map.l_scope_mem): the address of
     # the path, the same address, as ttpc takes an item
@@ -1820,6 +1820,16 @@ sub operand {
     @e;
 }
 
+# A label's name. C keeps labels apart from other names, ff does not: a
+# label named as a tag, a typedef, a global or a function is written with
+# a ' after it, as a name ff reserves is (__tzfile_compute's leap:, where
+# struct leap is the type of leaps, whose fields a path then missed).
+sub label_name {
+    my ($name) = @_;
+    my $f = ffname($name);
+    return $f if $f =~ /'$/;
+    $rec{"struct $name"} || $rec{"union $name"} || $enumd{"enum $name"} || exists $typedef{$name} || $var{$name} || $fn{$name} ? "$f'" : $f;
+}
 # The LabelStmts under a node.
 sub labels { my ($n) = @_; (($n->{kind} // '') eq 'LabelStmt' ? $n : ()), map { labels($_) } kids($n) }
 # Whether a node of that kind is under n.
@@ -1977,8 +1987,8 @@ sub stmt {
     }
     return labelled($n) if $k eq 'CaseStmt' || $k eq 'DefaultStmt';
     # (a label's attribute, ret0: __attribute__ ((unused)), says nothing of its code)
-    return node(ffname($n->{name}) . ':', stmt((grep { $_->{kind} !~ /Attr$/ } kids($n))[0])) if $k eq 'LabelStmt';
-    return node('goto', node(ffname($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
+    return node(label_name($n->{name}) . ':', stmt((grep { $_->{kind} !~ /Attr$/ } kids($n))[0])) if $k eq 'LabelStmt';
+    return node('goto', node(label_name($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     # GNU's goto *p: to the address p holds (a label's, &&L)
     return node('goto', node('content', expr((kids($n))[0]))) if $k eq 'IndirectGotoStmt';
     # a statement under an attribute (__attribute__ ((fallthrough)), a hint to

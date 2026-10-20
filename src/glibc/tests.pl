@@ -88,8 +88,11 @@ if ($cmd eq 'why') {
     my ($f) = @ARGV;
     open my $h, '<', $f or do { print "no log\n"; exit 0 };
     my @l = grep { /\S/ && !/^make(?:\[\d+\])?: (?:\*\*\*|Entering|Leaving)/ && !/^slot\.sh: / } map { s/\s+$//r } <$h>;
-    # a tool's own message first (c2ff:, ttpc's error:, the linker's), else the last line
-    my ($why) = reverse grep { /^(?:c2ff|s2ff|ffsplit|fftext|mki): |error|undefined reference|cannot|timeout|Killed/i } @l;
+    # a tool's own message first (c2ff:, ttpc:), then an error's (the
+    # linker's; not a command's, whose file names may say error), else the
+    # last line
+    my ($why) = reverse grep { /^(?:c2ff|s2ff|ffsplit|fftext|mki|ttpc): / } @l;
+    ($why) = reverse grep { !/^(?:sh|perl|qemu-\S+|\S*gcc) / && /error|undefined reference|cannot|timeout|Killed/i } @l unless defined $why;
     $why //= $l[-1] // 'no output';
     $why =~ s/^\s+//;
     $why = substr($why, 0, 200) . ' ...' if length $why > 200;
