@@ -119,8 +119,10 @@ ff, the language ttpc compiles
       a type is a run of leaf siblings, one word per node, the first word first; a node with children ends the run
       scalars: char (1 byte, signed on x86_64, unsigned on riscv64, aarch64 and arm, as their ABIs say: the target's cc_char), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void, va_list (a word)
       i64 and u64 are refused on arm
-      address T: a word, the address of a T; address alone, the address of nothing (C's void *)
-      array T n: n elements of T; n a number or a constant; arrays of arrays nest, array array int 3 4
+      T * pointer: a word, the address of a T, the base type and then * pointer, siblings, in C's order: char / * pointer is char *, char / * pointer / * pointer char **; void / * pointer the address of nothing (C's void *)
+      a type run is its base, a type word (or an array node), and the * pointer leaves after it; it ends at the first node that is neither, so the items after it are never read as a type (a variable is never named as a type)
+      array T n: n elements of T, the array node holding the element's type run and the count: (array / int / 3) is C's int [3]; n a number or a constant; no count is C's T [], no elements of its own
+      the array node's * pointer after it is a pointer to the array: (array / int / 4) / * pointer is C's int (*)[4]; (array / char / * pointer / 5) is C's char *[5]; arrays of arrays nest, (array / (array / int / 4) / 3) is C's int [3][4]
       in a function n may be any value, worked out at run time (C's variable-length array): its n elements are on the stack until the function returns; alloca n (C on the shared page) likewise gives n bytes there
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
@@ -132,34 +134,34 @@ ff, the language ttpc compiles
       type (compile time only): a word of any type, as C++'s T
       example
         my string:
-          address
           char
+          * pointer
           this is a string
       example
         grid:
           array
-          array
-          int
-          3
-          4
+            array
+              int
+              3
+            4
       example
         line:
           struct
           from:
-            address
             point
+            * pointer
           to:
-            address
             point
-      a struct may hold an address of itself or of a struct that holds one of it (next: address node): an address is a word, whatever it points to
+            * pointer
+      a struct may hold an address of itself or of a struct that holds one of it (next: node / * pointer): an address is a word, whatever it points to
       example
         node:
           struct
           value:
             long
           next:
-            address
             node
+            * pointer
       a union name is a type: word:, union, then its fields as a struct's, all at 0, as large as the largest one, aligned as the most aligned
       a field : with a struct or union type and no name is an anonymous member (C11's): its fields are seen as the outer one's own, at its offset plus theirs
       example
@@ -187,8 +189,8 @@ ff, the language ttpc compiles
           green:
             5
           blue:
-      a function type: compare:, function, its return type run, its parameters name: and a type; address compare is a pointer to such a function
-      a variable or a global holding one, called with arguments, calls the function it points to; address f is a function's address
+      a function type: compare:, function, its return type run, its parameters name: and a type; compare / * pointer is a pointer to such a function
+      a variable or a global holding one, called with arguments, calls the function it points to; f / & address is a function's address
       without arguments it is called with a . after it, f / . (C's f ()): the variable alone is its value; a path to one likewise, p / fn / .
       a path that reaches one (a field, an element) calls it with the rest of the path as arguments: p / add / x / y is C's p->add (x, y), tab / 0 / add / x / y is tab[0].add (x, y)
       example
@@ -200,10 +202,10 @@ ff, the language ttpc compiles
           b:
             long
         f:
-          address
           binary
-          address
-            add
+          * pointer
+          add
+          & address
         x:
           long
           f
@@ -230,7 +232,7 @@ ff, the language ttpc compiles
     declarations
       name:, a type run, then its items; the type is required, nothing is derived from the value
       a local in a function, a global at the top of the page
-      a global's items are worked out while compiling: a number or constant, - and one, address name (of a global or a function), a text (address char text, or the text alone where the field is an address), or a : with an expression
+      a global's items are worked out while compiling: a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a : of one expression
       no items: zero
       one item on a scalar or an address: its value, converted to the type
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
@@ -247,7 +249,7 @@ ff, the language ttpc compiles
           :
             3
             4
-      a page item whose items have children only as :, address, cast: or a typed literal (a type word over a number, u64 / 2, C's 2UL) is a global, any other is a function
+      a page item whose items have children only as :, items, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64), else a global
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
@@ -264,8 +266,8 @@ ff, the language ttpc compiles
       example
         primes:
           array
-          int
-          4
+            int
+            4
           2
           3
           5
@@ -276,32 +278,37 @@ ff, the language ttpc compiles
           3
           4
     text
-      under address char a leaf is text, whatever it reads as (a number, a name): its bytes and a NUL are put in the program, the value is their address; address char 3 is "3"
+      a leaf under char / * pointer (a declaration's item, or the value after a cast to it) is text, whatever it reads as (a number, a name): its bytes and a NUL are put in the program, the value is their address; (cast / char / * pointer), then 3, is "3"
       a text holds at most 255 bytes, a node's text: text leaves in a row are one text, as C's "ab" "cd"
       an array char n takes text leaves in a row for its items, as C's char s[16] = "hi", the rest 0 (in a global)
-      char with text is an error (a local was silently an address char, a global a char array)
-      as a value (an argument) it is address on top, char and the text its children; a value that is a variable goes in a : there, or a cast:
+      char with text is an error (a local was silently a char / * pointer, a global a char array)
+      as a value (an argument) it is a cast to char / * pointer and then the text; a value that is a variable goes in a : there
       example
         print
-          address
+          cast
             char
-            hello\n
+            * pointer
+          hello\n
     conversions
-      cast: type value is C's cast, the value converted to the type: cast: / address / char / p is (char *) p; as a statement it is (void) x
-      a type with a value converts it too, the first word of the type on top, the rest of the type and then the value as its children (not address char, whose leaf is text)
+      cast, its type run its children, is C's cast, the value after it, the next sibling, converted to the type: (cast / char / * pointer), then p, is (char *) p; as a statement it is (void) x; every conversion is one
+      cast is a prefix, as - is: its operand is the next sibling with its postfixes (cast / long, then p / * pointer, is (long) *p); an operand of several nodes goes in a :
+      a typed literal is C's suffix, then the number: U 7 is 7U, L 5 is 5L, UL 2 is 2UL, LL 1 and ULL 1, of the types C gives them on the target (UL is 32 bits on arm); a negative leaf is a number, L -5
       example
-        cast:
-          address
+        cast
           char
+          * pointer
+        :
           p
       example
-        long
-          x
-      address whose first child is not a type is the address of that variable, C's &x
+        cast
+          long
+        x
+      & address after a variable is its address, C's &x; * pointer after an address is what it holds, C's *p; both are postfixes, as ++, applied left to right: p / * pointer / * pointer is **p, x / & address / * pointer is x
       example
-        long
-          address
-            r
+        cast
+          long
+        r
+        & address
     functions
       name:, its return type run, its parameters, its statements
       a parameter is name: with a type run as its only children; no untyped leaf parameters
@@ -326,16 +333,18 @@ ff, the language ttpc compiles
             va_arg
               ap
               long
-      a struct or union name with items, as a value, is a temporary of that type (a compound literal, C's (point){1, 2}), the rest zero
-      array with the rest of an array's type and its items under it, as a value, is a temporary array, its value its address (C's (char *const[]){ "sh", NULL } is array / address / char / 2 / items)
+      a struct name as a value, its items the siblings after it, one for each of its places, is a temporary of that type (a compound literal, C's (point){1, 2} is point, 1, 2): its named fields, an anonymous member's in place, padding none; zeros written out
+      a union name as a value, then a field's name, then its item, is one of a union: (union val){ .str = "x" } is val, str, x
+      an array node with its count as a value, its count's items after it, is a temporary array, its value its address (C's (char *[]){ "sh", 0 } is (array / char / * pointer / 2), sh, 0)
+      a place that is a struct, a union or an array takes its own type and its items in turn, as nested braces
       example
         s:
           long
           sum
             point
-              1
-              2
-      address over a typed literal (the literal under the type word: address / long / 30, C's &(long){30}) or over a compound literal (address / point / 1 / 2) is the address of that temporary
+            1
+            2
+      a : holding a typed literal, then & address, is the address of a temporary holding it (C's &(long){30} is (: / L / 30) / & address); a : holding a compound literal, then & address, that temporary's address
       a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy, an argument is the callee's own copy, a result is copied into space the caller keeps for it
       example
         b:
@@ -346,7 +355,7 @@ ff, the language ttpc compiles
         mid
           a
           b
-      a function without parameters is called by its name alone, a leaf; address name is its address
+      a function without parameters is called by its name alone, a leaf; name / & address is its address
       a function holds no functions: name: in a body is a declaration, or a label when no type follows
       example
         three:
@@ -360,8 +369,8 @@ ff, the language ttpc compiles
         strlen:
           long
           s:
-            address
             char
+            * pointer
           n:
             long
             0
@@ -420,16 +429,16 @@ ff, the language ttpc compiles
         done:
           return
             r
-      address name of a label is its address, an address (GNU C's &&name); goto / content / p jumps to the label p holds (goto *p), in the same function
+      name / & address of a label is its address, an address (GNU C's &&name); goto / p / * pointer jumps to the label p holds (goto *p), in the same function
       example
         p:
-          address
           void
-          address
-            done
+          * pointer
+          done
+          & address
         goto
-          content
-            p
+          p
+          * pointer
       return, with a value or without
       return is a value too: as an item (of a declaration, an argument, an expression) it leaves the function there
       if and else are a value too, C's c ? a : b: the last item of the branch taken, converted to both branches' common type as ? : does; the comma of C is a lambda, : a b
@@ -492,9 +501,10 @@ ff, the language ttpc compiles
           4
     paths
       calling a variable indexes or selects: xs i an element, p x a field (also through an address), r b x both in a row
-      a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is cast: / address / point / p / . / y
-      address of a function is a function pointer, called where it stands, its result of the type its definition says: C's ((void) x, &f) (a, b) is : / : / cast: / void / x / address / f / . / a / b
-      address x is C's &x, content p is C's *p, read, or written on the left of =
+      a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is : / (cast / point / * pointer) / p / . / y, (*p).len is : / p / * pointer / . / len
+      a : that holds one expression, a unit with a prefix or a postfix (cast / long, x; p / * pointer), is that expression, as C's parentheses: no scope of its own; so is one as the operand of a cast or of * pointer
+      the address of a function is a function pointer, called where it stands, its result of the type its definition says: C's ((void) x, &f) (a, b) is : / (: / (cast / void) / x / f / & address) / . / a / b
+      x / & address is C's &x, p / * pointer C's *p, read, or written on the left of =
     registers
       a register name in C is that register: reading t2 is its value now, t2 = expr writes it; values pass between C and asm this way
       C itself uses V, L, X (on riscv64 a0 t0 t1) and SP, FP; it does not write the fixed ones (on riscv64 zero ra sp s0)
@@ -516,7 +526,7 @@ ff, the language ttpc compiles
           ret
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
-      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, address, content, syscall, array, struct, enum, function, sizeof, alignof, union
+      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, struct, enum, function, sizeof, alignof, union
       and: ..., va_start, va_arg, va_end, va_copy, thread local, alias, ifunc, asm, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
