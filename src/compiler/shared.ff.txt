@@ -435,6 +435,11 @@ generic:
   x
   associations
 comment
+  section name: C, first under a global's name, before its type: the global is in the section name, with its other globals together, in their order;
+  __start_name and __stop_name are where the section starts and ends (as ld has them), its globals' texts after it.
+section:
+  name
+comment
   void: C, no value, the type of a function that returns none.
 void:
 comment

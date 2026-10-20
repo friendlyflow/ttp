@@ -255,7 +255,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic zero ra sp gp tp fp pc
+    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -301,6 +301,7 @@ my $program;
 my $start;                 # --start: a _start of the program's own, SYS_exit (main ())
 my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, in .bss)
 my %forceweak;             # --weak name: nothing defines it for a static program
+my %section;               # a named section: its globals (their keys in %var), in their order
 my (@units, @roots);
 my $passonly;              # --pass: only each unit's own pass (unit_pass), made where it is not
 our $keep_going;           # --keep-going: what cannot be translated yet is left out (leave_out)
@@ -486,7 +487,12 @@ for my $u (@units) {
             }
         } elsif ($d->{kind} eq 'VarDecl') {
             if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
-            if (($d->{storageClass} // '') ne 'extern' || $zero{$name}) { my $k = own_name(\%var, $name, $d, $u); $var{$k} //= [$d, $u] }
+            if (($d->{storageClass} // '') ne 'extern' || $zero{$name}) {
+                my $k = own_name(\%var, $name, $d, $u);
+                # (a global of a named section: reached with the section's bounds)
+                if (!$var{$k} && (my ($s) = grep { $_->{kind} eq 'SectionAttr' } @in)) { push @{ $section{ $s->{section_name} } }, $k }
+                $var{$k} //= [$d, $u];
+            }
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
             $rec{"$d->{tagUsed} $name"} //= $d;
             anon_fields($d, $name);
@@ -2060,6 +2066,10 @@ sub decl {
     # a thread-local one, __thread, is ff's thread local (ttpc lays it out in
     # the TLS image, where the target has one)
     my @tls = $global && $v->{tls} ? node('thread local') : ();
+    # a global of a named section (section ("impls")): ttpc places it with
+    # the others of the section, between __start_impls and __stop_impls
+    my ($sec) = $global ? grep { $_->{kind} eq 'SectionAttr' } kids($v) : ();
+    unshift @tls, node('section'), node($sec->{section_name}) if $sec;
     node(($name // ffname($v->{name})) . ':', @tls, map({ node($_) } @t), grouped(255 - @t - @tls, @i));
 }
 # A variable-length array's count from its text: names (its locals), numbers,
@@ -2222,6 +2232,9 @@ while (defined(my $name = next_name())) {
         }
         next;
     }
+    # a section's bounds, which ttpc defines where it places the section (as
+    # ld does): the section's globals come with them
+    if ($name =~ /^__(?:start|stop)_(\w+)$/ && $section{$1}) { want($_) for @{ $section{$1} }; next }
     warn "c2ff: no definition of $name, left out\n";
 }
 
