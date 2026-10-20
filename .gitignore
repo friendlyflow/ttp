@@ -2,3 +2,5 @@ build/*
 .claude/settings.local.json
 src/compiler/progs/cexit
 *.core
+# a lane's handoff note stays in its own worktree
+/HANDOFF.md
