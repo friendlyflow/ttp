@@ -5,7 +5,7 @@
 # compile time): abicall a64call, abipplan a64pplan, abipparam a64pparam,
 # abiretf a64retf, abiresclass a64resclass, abivaarg a64vaarg, abivapush
 # (nothing), abivapackm a64vapackm, abiseq (the plain prologue), vacopy
-# a64vacopy; vastart a64vastart, tyname's va_list a64valist, hfa's long
+# a64vacopy, wcall (the C layer's soft-fp calls) a64wcall; vastart a64vastart, tyname's va_list a64valist, hfa's long
 # double.
 #
 # The classification (a64class, for a call's arguments and a function's
@@ -75,6 +75,7 @@ hook('abivapush', 'a64nop');
 hook('abivapackm', 'a64vapackm');
 hook('abiseq', 'a64seq');
 hook('vacopy', 'a64vacopy');
+hook('wcall', 'a64wcall');
 
 # vastart: AAPCS64's va_list filled in (V the address of ap)
 E('cc/vastart', 8, "
@@ -935,6 +936,102 @@ $h .= fn('a64call', "
     addi 1648 sp sp
     leave8
 ", 6);
+# a64wcall a0 a1 a2: wcall's (the soft-fp function a0 of cc_sfnames, its a1
+# arguments pushed, its result's type a2) by AAPCS64: each argument in its
+# register by the function's kinds (a64sfargs: 1 x, 3 s, 4 d, 5 q, two
+# each), the result where C has it (a64res; a long double's in a temporary,
+# whose place a0 is, as wcall's)
+$h .= fn('a64wcall', "
+    enter8
+    mv a0 s4
+    mv a1 s5
+    mv a2 s6
+    la cc_sfnames t0
+    slli 4 s4 t1
+    add t1 t0 s11
+    mv s11 a0
+    call strlen
+    addi -64 sp sp
+    sb NODE_children_len zero sp
+    sd NODE_content s11 sp
+    sb NODE_content_len a0 sp
+    mv a0 a1
+    mv s11 a0
+    mv sp a2
+    call cfind
+    addi 64 sp sp
+    bnez L0 a0
+    li 0 a0
+    call bad
+    L0:
+    mv a0 s7
+    li 0 s8
+    li 0 s9
+    li 0 s10
+    L1:
+    bge rel:L2 s5 s8
+    la a64sfargs t0
+    slli 1 s4 t1
+    add t1 t0 t0
+    add s8 t0 t0
+    lbu 0 t0 t2
+    sub s8 s5 t1
+    addi -1 t1 t1
+    slli 4 t1 a3
+    li 1 t0
+    bne rel:L11 t0 t2
+    la cc_names a0
+    addi 30 a0 a0
+    mv s9 a2
+    addi 1 s9 s9
+    j L13
+    L11:
+    la a64n_lds a0
+    li 3 t0
+    beq rel:L12 t0 t2
+    la a64n_ldd a0
+    li 4 t0
+    beq rel:L12 t0 t2
+    la a64n_ldq a0
+    L12:
+    mv s10 a2
+    addi 1 s10 s10
+    L13:
+    li 2 a1
+    call a64p
+    addi 1 s8 s8
+    j L1
+    L2:
+    mv s7 a0
+    call label_addr
+    mv a0 a1
+    la cc_auipc_ra a0
+    call seq
+    mv s5 a0
+    call popped
+    slli 4 s5 a1
+    la cc_addsp a0
+    call seq
+    mv s6 a0
+    call a64resclass
+    mv a0 s8
+    mv a1 s9
+    li 0 s10
+    li 8 t0
+    bne rel:L3 t0 s8
+    call wtemp
+    mv a0 s10
+    L3:
+    mv s8 a0
+    mv s9 a1
+    mv s10 a2
+    mv s6 a3
+    call a64res
+    mv s6 a0
+    call setty
+    mv s10 a0
+    leave8
+", 6);
 # a64pplan a0 a1: the places of the parameters (a1 of them, from a0) of the
 # function being compiled, in abi_pplan (the state, then kind, place, type,
 # a64class's a2 of each); x8 kept for a result in memory (abi_sret), x9 for
@@ -1431,6 +1528,16 @@ $h .= fn('a64valist', "
     la a64_vanode a0
     j struct
 ", 6);
+# the kinds of the soft-fp functions' arguments, by cc_sfnames: __addtf3 ..
+# __getf2 two long doubles, __negtf2 one, __floatditf __floatunditf a word,
+# __fixtfdi __fixunstfdi a long double, __extendsftf2 a float,
+# __extenddftf2 a double, __trunctfsf2 __trunctfdf2 a long double,
+# __floatsitf __floatunsitf a word, __fixtfsi __fixunstfsi a long double
+{
+    my $k = join('', map { chr } (5, 5) x 10, 5, 0, 1, 0, 1, 0, 5, 0, 5, 0, 3, 0, 4, 0, 5, 0, 5, 0, 1, 0, 1, 0, 5, 0, 5, 0);
+    $k .= "\0" x (-length($k) % 8);
+    $h .= "      a64sfargs:\n        ascii\n          " . join('', map { sprintf "\\x%02x", ord } split //, $k) . "\n";
+}
 sub esc { my $s = shift; $s =~ s/([\x00-\x1f\x7f])/sprintf "\\x%02x", ord $1/ge; $s }
 # the primitives' names: a seq's with its count of numbers first
 my @seqn = qw(x8 fwn resf resd room resv pushx8 pushx9 savex saveq retf retd retq retw1 retw2);
