@@ -41,7 +41,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense cldlit cgroupdot casmalign ccomplex cbodylayers
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -223,6 +223,19 @@ rvv: $(P)/rvv.velf $(P)/rvv.twin.bin
 	tail -c +121 $(P)/rvv.velf | head -c $$(wc -c < $(P)/rvv.twin.bin) | cmp - $(P)/rvv.twin.bin
 	@echo "rvv: ttpc and GNU as agree on the vector instructions"
 
+# The instructions of aarch64 that glibc's asm needs beyond the base
+# (Advanced SIMD, SVE, SME, MTE, MOPS, the q registers, hints): stage2
+# assembles progs/aarch64/simd.ff, which mksimd.pl writes with its GNU twin
+# simd.s; byte-identical after the ELF header, as rvv.
+$(P)/aarch64/simd.twin.bin: progs/aarch64/simd.s $(TLDS_aarch64) | $(P)/aarch64
+	$(CROSS_aarch64)as -march=armv9.4-a+sve+sme+memtag+mops $< -o $(P)/aarch64/simd.twin.o
+	$(CROSS_aarch64)ld --no-relax --no-warn-rwx-segments -T $(TLDS_aarch64) $(P)/aarch64/simd.twin.o -o $(P)/aarch64/simd.twin
+	$(CROSS_aarch64)objcopy -O binary $(P)/aarch64/simd.twin $@
+
+simd: $(P)/aarch64/simd.elf $(P)/aarch64/simd.twin.bin
+	tail -c +121 $(P)/aarch64/simd.elf | head -c $$(wc -c < $(P)/aarch64/simd.twin.bin) | cmp - $(P)/aarch64/simd.twin.bin
+	@echo "simd: ttpc and GNU as agree on aarch64's SIMD, SVE, SME, MTE and MOPS instructions"
+
 ctest: $(CPROGS:%=$(P)/%.celf)
 	@for p in $(CPROGS); do \
 	    tail -n +2 progs/$$p.expect > $(P)/$$p.want; \
@@ -300,9 +313,11 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit cldlit cgroupdot casmalign ccomplex cbodylayers
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
+# C tests of one target only, beside the portable ones
+CONLY_aarch64 := ctlsa64
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per
 # page), which it reads lazily: never.ff, which it must not read, is no tree.
@@ -349,8 +364,8 @@ check-$(1): $(PROGS:%=$(P)/$(1)/%.elf) $(PROGS:%=$(P)/$(1)/%.twin.bin)
 	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/$(1)/hello.out
 	@echo "check-$(1): exit42 and hello run"
 
-ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE)))
-	@for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)); do \
+ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE)) $(CONLY_$(1)))
+	@for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)) $(CONLY_$(1)); do \
 	    e=progs/$$$$p.$(1).expect; test -f $$$$e || e=progs/$$$$p.expect; \
 	    tail -n +2 $$$$e > $(P)/$(1)/$$$$p.want; \
 	    qemu-$(1) $(P)/$(1)/$$$$p.celf > $(P)/$(1)/$$$$p.out; s=$$$$?; \
@@ -561,4 +576,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls licenses check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean abi
+.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean licenses abi

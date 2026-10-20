@@ -5,9 +5,27 @@
     It comes with no warranty. See the file LICENSE for the full text.
   comment
     builtins-aarch64.ff.txt: the builtins of gcc for aarch64 that glibc uses, after builtins.ff.txt on its page (GTARGET=aarch64). __builtin_aarch64_get_fpcr: the FPCR (mrs, s3_3_c4_c4_0), for soft-fp's rounding mode.
+    __builtin_thread_pointer: the thread pointer, tpidr_el0 (mrs, s3_3_c13_c0_2: glibc's THREAD_SELF is below it).
   __builtin_aarch64_get_fpcr:
     asm
     mrs
       55840
       x0
+    ret
+  __builtin_thread_pointer:
+    asm
+    mrs
+      56962
+      x0
+    ret
+  comment
+    gcc's __builtin_trap, which it makes brk #1000 on aarch64; __atomic_thread_fence, which it makes dmb ish.
+  __builtin_trap:
+    asm
+    brk
+      1000
+  __atomic_thread_fence:
+    asm
+    dmb
+      11
     ret

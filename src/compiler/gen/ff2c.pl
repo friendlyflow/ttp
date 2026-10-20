@@ -891,6 +891,10 @@ print $h join("\n", @c), "\n";
 close $h;
 push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { $var{$_} || $fn{$_} } @order;
 push @names, map { join("\t", 'asm', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'asm' } @order;
+# (and the aliases of asm functions, which C calls as they are: aarch64's
+# stpcpy of __stpcpy)
+sub asm_target { my ($n, $d) = @_; return 0 if $d > 8 || !$fn{$n}; return 1 if $fn{$n}{kind} eq 'asm'; $fn{$n}{kind} eq 'alias' && asm_target($fn{$n}{target}, $d + 1) }
+push @names, map { join("\t", 'asm', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'alias' && asm_target($_, 0) } @order;
 open $h, '>', $namesout or die "ff2c: $namesout: $!\n";
 print $h map { "$_\n" } @names;
 close $h;

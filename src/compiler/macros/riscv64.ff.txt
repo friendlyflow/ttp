@@ -481,6 +481,28 @@ c:
       zero
       a0
   comment
+    cc_addtls: V += the address of the thread's TLS image, tp. cc_settls: the thread's TLS image is V (a C _start of the program's own). cc_irel: the type of an IRELATIVE relocation, R_RISCV_IRELATIVE.
+  cc_addtls:
+    add
+      a0
+      tp
+      a0
+  cc_settls:
+    addi
+      0
+      a0
+      tp
+  cc_irel:
+    addi
+      58
+      zero
+      a0
+  comment
+    cc_falign: before each function: RVC's instructions are 2 bytes.
+  cc_falign:
+    align
+      2
+  comment
     The registers C must not write, a bit each: zero, ra, sp, s0.
   cc_fixed:
     addi

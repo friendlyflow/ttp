@@ -47,7 +47,9 @@ CTARGET_arm := armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16
 CTARGET := $(or $(CTARGET_$(GTARGET)),$(GTARGET)-linux-gnu)
 BUILD ?= $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
-JOBS ?= $(shell nproc)
+# glibc builds at most 4 at once: with the slots, nproc (12) per build froze
+# the machine once (2026-10-20); the cgroup caps in slot.sh bound the rest
+JOBS ?= 4
 
 GLIBC_SRC ?= $(error GLIBC_SRC is not set: run this in `nix develop`)
 GLIBC_HEADERS ?= $(error GLIBC_HEADERS is not set: run this in `nix develop`)
@@ -131,7 +133,10 @@ SHARED := ../compiler/shared.ff $(if $(filter x86_64,$(GTARGET)),../compiler/x86
 # double is on every target, its arithmetic soft-fp's (__addtf3 ...).
 comma := ,
 CPUS_riscv64 := rv64 rv64,v=false
-CPUS_aarch64 := max
+# aarch64: SVE and MOPS (max), the same without SVE, none of them
+# (cortex-a57), and SVE at 512 and 256 bits (a64fx, neoverse-v1), whose
+# ifuncs pick glibc's other string asm (memcpy_a64fx, memcpy_sve ...)
+CPUS_aarch64 := max max,sve=off cortex-a57 a64fx neoverse-v1
 CPUS_x86_64 := max
 CPUS_arm := max
 CPUS := $(CPUS_$(GTARGET))
@@ -154,7 +159,8 @@ RUN := sh ../compiler/gen/slot.sh -v $(CAPKB)
 M1 := strlen memcpy memset strcmp strchr
 OBJS_string := $(foreach f,$(M1),string/$(f) string/$(f)-generic) string/wordcopy string/strchrnul misc/hwprobe elf/dl-support
 ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment
-ROOTS_string := $(M1) __riscv_hwprobe
+ROOTS_string := $(M1) $(ROOTS_string_$(GTARGET))
+ROOTS_string_riscv64 := __riscv_hwprobe
 
 # M2, stdlib: atoi, strtol and abs, with M1. strtol takes the locale (the C
 # locale's tables, reached through the thread's locale pointer), errno, the
@@ -293,7 +299,7 @@ MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 # are zero (c2ff --zero), their other names aliases (s2ff). Another target
 # has no startup in ff yet: its programs have a _start of their own (c2ff
 # --start).
-GLIBC_START := $(filter riscv64,$(GTARGET))
+GLIBC_START := $(filter riscv64 aarch64,$(GTARGET))
 OBJS_start := csu/static-reloc csu/init csu/check_fds elf/dl-early_allocate nptl/nptl_deallocate_tsd nptl/nptl_nthreads \
 	elf/dl-tls_init_tp stdlib/setenv elf/dl-execstack-tunable nptl/pthread_keys
 ASMS_start := csu/start elf/dl-rseq-symbols
@@ -305,7 +311,30 @@ WEAKS_start := __fini_array_start __fini_array_end _startup_fatal_not_constant _
 uniq = $(strip $(if $(1),$(firstword $(1)) $(call uniq,$(filter-out $(firstword $(1)),$(1)))))
 with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_start)))
 
-.PRECIOUS: $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
+# aarch64: a milestone's objects are those its program's gcc build links
+# (linkobjs.pl, from the link map of NAME.ref: the members of libc.a gcc's
+# static program has), with crt1.o's C (static-reloc, init), start.S and
+# crti.S (crtn.S ends crti's _init and _fini: s2ff-aarch64.pl --then), and
+# glibc's soft-fp (ldouble's: gcc's program takes long double's arithmetic
+# from libgcc). c2ff translates what the roots reach of them.
+# (each C object's AST is c2ff's pass of it, all-units', not its JSON)
+UNITDEP_aarch64 := c2ff
+UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
+LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
+LINKED := $(LINKED_$(GTARGET))
+# and the C objects c2ff reaches that gcc's optimizer left no call of
+# (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
+OBJS_crt := $(OBJS_start) ctype/ctype_l stdlib/abs libio/putc
+ASMS_crt := csu/start csu/crti
+ifneq ($(LINKED),)
+-include $(LINKED:%=$(FF)/%.objs.mk)
+endif
+# (elf/dl-debug-symbols.S only reserves _r_debug_extended, c2ff --zero's,
+# with _r_debug an alias of it: left out, as on riscv64)
+ASMS_skip := elf/dl-debug-symbols
+objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
+
+.PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
 	$(RUN) -t 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
@@ -324,7 +353,29 @@ DUMPOPT_arm := -r -t
 $(I)/%.s: $(OBJ)/libc.a mki.pl
 	$(RUN) -t 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
-$(I)/%.dump $(I)/%.bin: $(I)/%.s
+#
+# aarch64 (s2ff-aarch64.pl): the instructions are read from the object
+# alone, as GNU as made them (its macros, aliases, .inst words), and its
+# labels from the symbol table: the .s with its numeric labels named
+# (.Ls, s2ff-aarch64.pl --locals) is assembled with -L, which keeps local
+# labels, and dumped with its relocations and symbols. Its .text is the
+# same bytes as glibc's own object's (asm-check compares them too).
+S2FF_riscv64 := ../compiler/gen/s2ff.pl
+S2FF_aarch64 := ../compiler/gen/s2ff-aarch64.pl
+S2FF_arm := ../compiler/gen/s2ff-arm.pl
+S2FF := $(or $(S2FF_$(GTARGET)),../compiler/gen/s2ff.pl)
+# the file s2ff reads: riscv64 the .s itself, aarch64 the .Ls (not .L.s:
+# that would be an .s of an object x.L, which mki.pl would be asked for)
+SSRC_riscv64 := .s
+SSRC_aarch64 := .Ls
+SSRC := $(or $(SSRC_$(GTARGET)),.s)
+ASREF_aarch64 := -Wa,-L
+DUMPOPT_aarch64 := -r -t -M no-aliases
+
+$(I)/%.Ls: $(I)/%.s $(S2FF_aarch64)
+	perl $(S2FF_aarch64) --locals $< > $@
+
+$(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
 	$(RUN) -t 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
 	$(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
@@ -358,9 +409,9 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # has the license of each file it is made of, its header (c2ff, s2ff
 # --header; ../compiler/gen/Header.pm).
 define milestone
-OBJS_all_$(1) := $$(call with_start,OBJS,$(1))
-ASMS_all_$(1) := $$(call with_start,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
+ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
 	cp license.ff.txt $$(FF)/$(1).ff.txt
 	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
@@ -368,7 +419,8 @@ $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.json) $$(ASMS_all_$(1):%=$$(I)/%.dump
 	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
 	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_all_$(1)); do \
-	    $$(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $$(I)/$$$$a.s $$(I)/$$$$a.dump > $$(FF)/$(1).asm.txt || exit 1; \
+	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
+	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
 	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
@@ -381,35 +433,49 @@ $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 # bytes glibc's compiler made of it, its .text without the padding at its
 # end; the fields relocations fill in (relmask.pl) are the linker's, not
 # compared, and what it names from elsewhere is a stand-in label after it.
-ASMCHECK := $(ASMS_stdio) $(if $(GLIBC_START),csu/start)
-asm-check: $(ASMCHECK:%=$(I)/%.asmok)
+ASMCHECK_riscv64 = $(ASMS_stdio) csu/start
+# (aarch64: every asm object of glibc, but crti and crtn, whose .init and
+# .fini are not .text)
+ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
+ASMCHECK ?= $(or $(ASMCHECK_$(GTARGET)),$(ASMS_stdio))
+# (made by a make of its own: aarch64's list is all of glibc's asm, which
+# this Makefile works out only after this rule)
+asm-check:
+	@$(MAKE) --no-print-directory $(ASMCHECK:%=$(I)/%.asmok)
 	@for a in $(ASMCHECK); do cat $(I)/$$a.asmok; done
 
 # one asm part's check: $(I)/x.asmok holds what it found, made only where
 # ttpc and glibc's compiler agree. Per target: the instruction of a
 # stand-in label (ASMTRAP) and where ttpc's code starts in its output
-# (ASMHDR, after the ELF and program headers). relmask.pl knows riscv64's
-# relocations; s2ff.pl reads riscv64's GNU as.
+# (ASMHDR, after the ELF and program headers). relmask.pl knows riscv64's,
+# aarch64's and arm's relocations; s2ff.pl reads riscv64's GNU as,
+# s2ff-aarch64.pl aarch64's (from the .Ls: SSRC), s2ff-arm.pl arm's
+# (S2FF). On aarch64 the bytes start after the padding before the first
+# label (s2ff-aarch64.pl --skip: strncmp's nops), and the .s must make
+# glibc's own object (the same .text).
 ASMTRAP_riscv64 := ebreak
 ASMHDR_riscv64 := 120
+ASMTRAP_aarch64 := brk\n    0
+ASMHDR_aarch64 := 120
 ASMTRAP_arm := udf\n    0
 ASMHDR_arm := 84
-S2FF_arm := ../compiler/gen/s2ff-arm.pl
-S2FF = $(or $(S2FF_$(GTARGET)),../compiler/gen/s2ff.pl)
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
 $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
 	@rm -f $@; a=$(I)/$*; \
-	{ perl $(S2FF) $$a.s $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
+	{ perl $(S2FF) $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
 	$(RUN) -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
-	size=$$(perl $(S2FF) --size $$a.s $$a.dump) || exit 1; \
+	size=$$(perl $(S2FF) --size $$a$(SSRC) $$a.dump) || exit 1; \
+	skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $$a$(SSRC) $$a.dump) || exit 1,0); \
+	$(if $(filter aarch64,$(GTARGET)),$(XPRE)objcopy -O binary -j .text $(OBJ)/$*.o $$a.glibc.bin && \
+	    cmp -s $$a.glibc.bin $$a.bin || { echo "asm-check: $*: the .s does not make glibc's object"; exit 1; };) \
 	$(XPRE)objdump -r $$a.ref.o > $$a.relocs; \
-	head -c $$size $$a.bin > $$a.want.raw; \
+	tail -c +$$((skip + 1)) $$a.bin | head -c $$size > $$a.want.raw; \
 	tail -c +$$(($(ASMHDR) + 1)) $$a.asm | head -c $$size > $$a.got.raw; \
-	perl relmask.pl $$a.relocs $$a.want.raw > $$a.want || exit 1; \
-	perl relmask.pl $$a.relocs $$a.got.raw > $$a.got || exit 1; \
+	perl relmask.pl $$a.relocs $$a.want.raw $$skip > $$a.want || exit 1; \
+	perl relmask.pl $$a.relocs $$a.got.raw $$skip > $$a.got || exit 1; \
 	cmp $$a.got $$a.want || exit 1; \
 	echo "asm-check: $*: ttpc and glibc's compiler agree ($$size bytes)" > $@
 
@@ -432,11 +498,15 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
-$(FF)/%.ref: progs/%.c $(OBJ)/libc.a
+$(FF)/%.ref $(FF)/%.map &: progs/%.c $(OBJ)/libc.a
 	mkdir -p $(FF)
 	$(RUN) -t 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) $(CFLAGS_$*) -c $< -o $(FF)/$*.ref.o
-	$(RUN) -t 120 $(GLIBC_CC) -static -nostdlib -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
+	$(RUN) -t 120 $(GLIBC_CC) -static -nostdlib -Wl,-Map=$(FF)/$*.map -o $(FF)/$*.ref $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
+
+# what a milestone's program links of glibc (aarch64's milestones)
+$(FF)/%.objs.mk: $(FF)/%.map linkobjs.pl allobjs.pl mki.pl
+	perl linkobjs.pl $* $(FF)/$*.map $(OBJ) $(GLIBC_SRC) > $@
 
 # A milestone as a folder that a program includes lazily (ffsplit.pl): a file
 # per page and index.ff, the file of each name; ttpc reads only the files
@@ -462,7 +532,7 @@ $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
 expect = $(firstword $(wildcard progs/$(1).$(GTARGET).expect) progs/$(1).expect)
 
 define check
-$(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter riscv64,$(GTARGET)),asm-check)
+$(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter riscv64 aarch64,$(GTARGET)),asm-check)
 	@want=$$$$(head -n 1 $$(call expect,$(1)) | cut -d" " -f2); \
 	tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1).want; \
 	for b in $(1).ref $(1)-prog; do \
@@ -472,7 +542,7 @@ $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter 
 	        cmp -s $$(FF)/$$$$b.out $$(FF)/$(1).want || { echo "$(1)-check: $$$$b on $$$$cpu: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1).want | head; exit 1; }; \
 	    done; \
 	done; \
-	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree$(comma)$(if $(filter riscv64,$(GTARGET)), with V and without, on $(GTARGET)): exit $$$$want"
+	echo "$(1)-check: gcc + libc.a and ttpc + glibc in ff agree$(comma)$(if $(filter riscv64,$(GTARGET)), with V and without,) on $(GTARGET) ($$(CPUS)): exit $$$$want"
 .PHONY: $(1)-check
 endef
 $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
@@ -489,7 +559,7 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
 
 define roundtrip
-$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl
+$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json)
 	$$(RUN) -t 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
 	$$(RUN) -t 300 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
@@ -546,20 +616,28 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 # ---- every check at once --------------------------------------------------------
 # make -jN all-checks: what the ports branch is checked with on GTARGET, the
 # checks that do not need each other at once, each heavy step in a slot of
-# its own (RUN). On riscv64 each milestone's check and round trip, on the
-# others ldouble's check; on each, the generic program's check and round
-# trip. What they all read is made first, once (units-ready): the ASTs and
-# asm parts of the milestones' objects, the asm check, and c2ff's pass of
-# each unit, which each milestone's c2ff would otherwise make at the same
-# time as the others.
+# its own (RUN). On riscv64 and aarch64 each milestone's check and round
+# trip (aarch64's milestones: LINKED), on x86_64 ldouble's check; on each,
+# the generic program's check and round trip. What they all read is made
+# first, once (units-ready): the ASTs and asm parts of the milestones'
+# objects, the asm check, and c2ff's pass of each unit, which each
+# milestone's c2ff would otherwise make at the same time as the others.
+# (aarch64's units are that pass already, UNITDEP c2ff, which deletes the
+# AST: the ASTs the round trips read are made after it; the make that
+# reads this Makefile has made its milestones' objs.mk. The asm check
+# comes after the asm parts it reads.)
 CHECK_MS_riscv64 := $(MILESTONES)
+CHECK_MS_aarch64 := $(LINKED_aarch64)
 CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
 ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
+ALLCHECKS_aarch64 := $(LINKED_aarch64:%=%-check) $(LINKED_aarch64:%=%-roundtrip)
 ALLCHECKS := $(or $(ALLCHECKS_$(GTARGET)),ldouble-check) generic-check generic-roundtrip
 CHECK_OBJS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
 CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
-units-ready: $(CHECK_OBJS:%=$(I)/%.json) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter riscv64,$(GTARGET)),asm-check)
-	$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i)
+units-ready: $(CHECK_OBJS:%=$(I)/%.$(UNITDEP)) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter csu/crti,$(CHECK_ASMS)),$(I)/csu/crtn.dump)
+	$(if $(filter json,$(UNITDEP)),$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i))
+	$(if $(filter c2ff,$(UNITDEP)),@$(MAKE) --no-print-directory $(CHECK_OBJS:%=$(I)/%.json))
+	$(if $(filter riscv64 aarch64,$(GTARGET)),@$(MAKE) --no-print-directory asm-check)
 all-checks:
 	@$(MAKE) --no-print-directory units-ready
 	@$(MAKE) --no-print-directory -k $(ALLCHECKS)

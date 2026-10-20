@@ -648,37 +648,132 @@ elf:
     dword
       0x1000
   comment
-    elf_header_tls, program_headers and tls_header lay out riscv64's frame with its TLS image (macros/riscv64.ff.txt). Here they are for a riscv64 program's compile time, which runs on this host: elf_header_tls is elf_header, the other two lay out nothing.
-    On aarch64 a thread local is still a global (cc_tls 0), and its frame has no PT_TLS.
+    __tls_start and __tls_end are the linker's bounds of the TLS image, the thread locals of a C program, which the C layer lays out between them (and so places them as labels); a program with none has them at elf_base, the image empty.
+    tls_size is the image's size; tprel a thread local's offset from tpidr_el0: its offset in the image + 64 (TLS variant I: tp points at the thread's TCB, 16 bytes, the image after it at the image's alignment, 64).
+  __tls_start:
+    addi
+      0x10000
+      zero
+      a0
+  __tls_end:
+    addi
+      0x10000
+      zero
+      a0
+  tls_size:
+    sub
+      __tls_start
+      __tls_end
+      a0
+  tprel:
+    sym
+    sub
+      __tls_start
+      sym
+      a0
+    addi
+      64
+      a0
+      a0
+  comment
+    elf_header_tls: elf_header whose program headers are at phdrs (program_headers lays them out there), two: the load and the TLS image (PT_TLS, which glibc's static startup reads).
+    The 120 bytes of the header are elf_header's, so the program follows at the same place; its one program header there is no longer read.
   elf_header_tls:
     entry
     file_end
     mem_end
     phdrs
-    elf_header
+    dword
+      0x00010102464c457f
+    dword
+      0
+    half
+      2
+    half
+      183
+    word
+      1
+    dword
       entry
+    dword
+      from_base
+        phdrs
+    dword
+      0
+    word
+      0
+    half
+      64
+    half
+      56
+    half
+      2
+    half
+      64
+    half
+      0
+    half
+      0
+    program_headers
       file_end
       mem_end
   program_headers:
     file_end
     mem_end
-    align
+    word
       1
+    word
+      7
+    dword
+      0
+    dword
+      elf_base
+    dword
+      elf_base
+    dword
+      from_base
+        file_end
+    dword
+      from_base
+        mem_end
+    dword
+      0x1000
   tls_header:
-    align
-      1
+    word
+      7
+    word
+      4
+    dword
+      from_base
+        __tls_start
+    dword
+      __tls_start
+    dword
+      __tls_start
+    dword
+      tls_size
+    dword
+      tls_size
+    dword
+      64
   comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
   frame:
     origin
       elf_base
-    elf_header
+    elf_header_tls
       _start
       file_end
       mem_end
+      phdrs
     program
     align
       8
+    phdrs:
+    program_headers
+      file_end
+      mem_end
+    tls_header
     file_end:
     bss
     mem_end:
@@ -726,12 +821,46 @@ c:
       zero
       a0
   comment
-    cc_tls: 1 where a thread local is in the TLS image, at its offset from the thread pointer (not yet on aarch64: a thread local is laid out as a global); 0 where it is laid out as a global.
+    cc_tls: 1 where a thread local is in the TLS image, at its offset from the thread pointer (aarch64's: tpidr_el0, set by glibc's startup (__libc_setup_tls) or by a C _start of the program's own); 0 where it is laid out as a global.
   cc_tls:
     addi
-      0
+      1
       zero
       a0
+  comment
+    cc_addtls: V += the address of the thread's TLS image: tpidr_el0 (mrs 56962) + 64, its TCB's 16 bytes rounded up to the image's alignment (TLS variant I, as glibc's static TLS lays it out).
+    cc_settls: the thread's TLS image is V (a C _start of the program's own). x16 is their scratch.
+    cc_irel: the type of an IRELATIVE relocation, R_AARCH64_IRELATIVE.
+  cc_addtls:
+    mrs
+      56962
+      x16
+    addi
+      64
+      x16
+      x16
+    add
+      x16
+      x0
+      x0
+  cc_settls:
+    subi
+      64
+      x0
+      x16
+    msr
+      56962
+      x16
+  cc_irel:
+    addi
+      1032
+      zero
+      a0
+  comment
+    cc_falign: before each function: A64's instructions are 4 bytes.
+  cc_falign:
+    align
+      4
   comment
     The registers C must not write, a bit each: x16, x29 (fp), x30 (lr), 31 (sp, xzr).
   cc_fixed:

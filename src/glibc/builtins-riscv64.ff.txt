@@ -14,6 +14,18 @@
         void
         tp
   comment
+    gcc's __builtin_trap, which it makes ebreak on riscv64; __atomic_thread_fence, which it makes fence rw, rw.
+  __builtin_trap:
+    asm
+    ebreak
+  __atomic_thread_fence:
+    asm
+    fence
+      0
+      3
+      3
+    ret
+  comment
     gcc's __builtin_fma on riscv64: x * y + z rounded once, fmadd.d, as gcc makes it; the operands' bits go through t3 t4 t5 (C's own are a0 t0 t1) into ft3 ft4 ft5, the result's back.
   __builtin_fma:
     double
