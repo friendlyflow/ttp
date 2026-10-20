@@ -1,3 +1,8 @@
+license
+  GPL-3.0-only
+  Copyright (C) 2026 Nico Verrijdt
+  This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+  It comes with no warranty. See the file LICENSE for the full text.
 ff, the language ttpc compiles
   the tree
     a node holds one thing, its content (at most 255 bytes, any bytes, no NUL), and at most 255 children
@@ -120,6 +125,7 @@ ff, the language ttpc compiles
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
+      a long double literal has L after it, binary128's 113 bits: 0x1.921fb54442d18469898cc51701b8p+1L; a subnormal one is 0x0.<digits>p-16382L, zero 0x0p+0L
       + - * / and the comparisons work on them, - negates, cast: converts between them and to and from the integers, on every target
       a floating type larger than a word (long double; double on arm) is in memory as a struct is, a value of it the address of a temporary; arm works on its double with VFP
       long double's arithmetic calls soft-fp's functions, as gcc calls libgcc's: __addtf3 ... __getf2, __negtf2, __floatditf ... __trunctfdf2; the program has them (glibc's soft-fp)
@@ -497,6 +503,7 @@ ff, the language ttpc compiles
     asm functions
       name: / asm / instructions is an asm function: its instructions (and block labels) are placed as the asm of a page, on a definition page only when C reaches it
       C calls it by name and takes its address, as a long; it keeps the calling convention itself (glibc's .S functions, by gen/s2ff.pl)
+      align / n first after asm places the function at a multiple of n (glibc's ENTRY, .p2align: the nops inside it count from there)
       what its instructions name (a library function, C or asm, a C alias) is reached and placed before it, so asm names it by its label
       a block label whose first child is asm is one more entry of the function (glibc's _setjmp runs on into __sigsetjmp): C calls it and takes its address, and the function holding it is placed with it
       example

@@ -1,3 +1,9 @@
+/* Copyright (C) 2026 Nico Verrijdt
+   This file is part of ttp. It is free software: you can redistribute it
+   and/or modify it under the terms of the GNU General Public License as
+   published by the Free Software Foundation, version 3 of the License.
+   It comes with no warranty. See the file LICENSE for the full text.  */
+
 /* The C constructs of glibc that c2ff and ttpc took in for all of it,
    each checked (the exit status is the number that fail), with no part
    of glibc but the builtins: built with gcc + libc.a, and through c2ff

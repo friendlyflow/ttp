@@ -73,7 +73,9 @@ my $isa = ISA->new(width => sub {
 });
 
 # What mkwide.pl reads: one entry per instruction, [name, mode, GNU form,
-# params, test values]. mode is a (A32), t (16-bit Thumb), t2 (Thumb-2).
+# params, test values, fields]. mode is a (A32), t (16-bit Thumb), t2
+# (Thumb-2); the fields, MSB first, are what gen/s2ff-arm.pl decodes an
+# instruction GNU as made by.
 our @WIDE;
 
 # Fields that compute their bits (not a plain slice), by name: the brackets
@@ -152,11 +154,14 @@ sub def {
     for (keys %used) { my $u = $_; die "arm: $name: field operand $u not a parameter\n" unless grep { $_ eq $u } @params }
     die "arm: $name: more than 8 parameters\n" if @params > 8;
     push @{ $isa->{current}{children} }, node("$name:", (map { node($_) } @params), map { field($_) } @fields);
-    push @WIDE, [$name, $mode, $gnu, \@params, $test];
+    push @WIDE, [$name, $mode, $gnu, \@params, $test, [@fields]];
 }
 
 # A32: the condition first, always (1110) and, with $if, a twin name.if
-# with the condition as the first operand.
+# with the condition as the first operand. AX gives a form the twin where
+# %IFX names it: the conditional forms glibc's arm asm has (s2ff-arm.pl).
+my %IFX = map { $_ => 1 } qw(subsi rsbi add.lsr strb.pre strb.post ldrb.pre ldrb.post ldr.post str.post
+    ldrh.post strh.post ldrd.post stmia.wb);
 my @CONDS = qw(eq ne cs cc mi pl vs vc hi ls ge lt gt le);
 sub A {
     my ($name, $gnu, $test, @fields) = @_;
@@ -171,6 +176,7 @@ sub Aif {
     (my $g = $gnu) =~ s/^(\S+)/$1\{cond}/;
     def("$name.if", "a", $g, \%t, "cond", @fields);
 }
+sub AX { $IFX{$_[0]} ? Aif(@_) : A(@_) }
 # Thumb-2: the halfword with the opcode, then the second; emitted as one
 # little-endian word, so the second halfword's fields come first.
 sub T2 {
@@ -188,6 +194,8 @@ $isa->add("registers",
     (map { node("r$_ $alias[$_]:", node(sprintf "%04b", $_)) } 0 .. 15),
     (map { node("s$_ s$_:", node(sprintf "%05b", $_)) } 0 .. 31),
     (map { node("d$_ d$_:", node(sprintf "%05b", $_)) } 0 .. 31),
+    # a NEON quadword qN is the doublewords d2N, d2N+1: its fields are d2N's
+    (map { node("q$_ q$_:", node(sprintf "%05b", 2 * $_)) } 0 .. 15),
 );
 my @condnames = (eq => 0, ne => 1, cs => 2, hs => 2, cc => 3, lo => 3, mi => 4, pl => 5,
                  vs => 6, vc => 7, hi => 8, ls => 9, ge => 10, lt => 11, gt => 12, le => 13, al => 14);
@@ -218,11 +226,11 @@ for my $group (["data", qw(and eor sub rsb add adc sbc rsc)], ["data2", qw(orr b
             my $m = $op . ($s && !$cmp ? "s" : "");
             my $ops = $cmp ? "{rn}, " : $mov ? "{rd}, " : "{rd}, {rn}, ";
             my @rr = ($cmp ? "rn" : $mov ? "rn=0000" : "rn", $cmp ? "rd=0000" : "rd");
-            my $twin = $IF{$op} && ($cmp || !$s) ? \&Aif : \&A;
+            my $twin = $IF{$op} && ($cmp || !$s) ? \&Aif : \&AX;
             $twin->("${m}i", "$m $ops#{imm8}, {rot}", $IMM, "op=001", "opcode=$DP{$op}", "s=$s", @rr, "rot[4:1]", "imm8[7:0]");
             $twin->($m, "$m $ops\{rm}", undef, "op=000", "opcode=$DP{$op}", "s=$s", @rr, "sh=00000", "type=00", "r=0", "rm");
             for my $t (qw(lsl lsr asr ror)) {
-                A("$m.$t", "$m $ops\{rm}, $t #{sh}", $SHI, "op=000", "opcode=$DP{$op}", "s=$s", @rr, "sh[4:0]", "type=$SH{$t}", "r=0", "rm");
+                AX("$m.$t", "$m $ops\{rm}, $t #{sh}", $SHI, "op=000", "opcode=$DP{$op}", "s=$s", @rr, "sh[4:0]", "type=$SH{$t}", "r=0", "rm");
             }
             A("$m.rrx", "$m $ops\{rm}, rrx", undef, "op=000", "opcode=$DP{$op}", "s=$s", @rr, "sh=00000", "type=11", "r=0", "rm");
             for my $t (qw(lsl lsr asr ror)) {
@@ -291,8 +299,8 @@ my $OFFRP = { sh => [1, 31] };
 for my $x (["str", 0, 0], ["ldr", 0, 1], ["strb", 1, 0], ["ldrb", 1, 1]) {
     my ($m, $b, $l) = @$x;
     Aif($m, "$m {rt}, [{rn}, #{imm}]", $OFF12, "op=010", "p=1", "up[12](imm)", "b=$b", "w=0", "l=$l", "rn", "rt", "mag[11:0](imm)");
-    A("$m.pre",  "$m {rt}, [{rn}, #{imm}]!", $OFF12, "op=010", "p=1", "up[12](imm)", "b=$b", "w=1", "l=$l", "rn", "rt", "mag[11:0](imm)");
-    A("$m.post", "$m {rt}, [{rn}], #{imm}",  $OFF12, "op=010", "p=0", "up[12](imm)", "b=$b", "w=0", "l=$l", "rn", "rt", "mag[11:0](imm)");
+    AX("$m.pre",  "$m {rt}, [{rn}, #{imm}]!", $OFF12, "op=010", "p=1", "up[12](imm)", "b=$b", "w=1", "l=$l", "rn", "rt", "mag[11:0](imm)");
+    AX("$m.post", "$m {rt}, [{rn}], #{imm}",  $OFF12, "op=010", "p=0", "up[12](imm)", "b=$b", "w=0", "l=$l", "rn", "rt", "mag[11:0](imm)");
     A("${m}r",      "$m {rt}, [{rn}, {rm}, lsl #{sh}]",  $OFFR,  "op=011", "p=1", "u=1", "b=$b", "w=0", "l=$l", "rn", "rt", "sh[4:0]", "type=00", "z=0", "rm");
     A("${m}r.pre",  "$m {rt}, [{rn}, {rm}, lsl #{sh}]!", $OFFRP, "op=011", "p=1", "u=1", "b=$b", "w=1", "l=$l", "rn", "rt", "sh[4:0]", "type=00", "z=0", "rm");
     A("${m}r.post", "$m {rt}, [{rn}], {rm}, lsl #{sh}",  $OFFRP, "op=011", "p=0", "u=1", "b=$b", "w=0", "l=$l", "rn", "rt", "sh[4:0]", "type=00", "z=0", "rm");
@@ -309,7 +317,7 @@ for my $x (["strh", 0, "1011"], ["ldrd", 0, "1101"], ["strd", 0, "1111"],
     my $tr = $d ? { rt => [0, 10], rn => [3, 12], rm => [5, 1] } : undef;
     A($m,        "$m $rt, [{rn}, #{imm}]",  $t8, "op=000", "p=1", "up[8](imm)", "i=1", "w=0", "l=$l", "rn", "rt", "mag[7:4](imm)", "x=$sh", "mag[3:0](imm)");
     A("$m.pre",  "$m $rt, [{rn}, #{imm}]!", $t8, "op=000", "p=1", "up[8](imm)", "i=1", "w=1", "l=$l", "rn", "rt", "mag[7:4](imm)", "x=$sh", "mag[3:0](imm)");
-    A("$m.post", "$m $rt, [{rn}], #{imm}",  $t8, "op=000", "p=0", "up[8](imm)", "i=1", "w=0", "l=$l", "rn", "rt", "mag[7:4](imm)", "x=$sh", "mag[3:0](imm)");
+    AX("$m.post", "$m $rt, [{rn}], #{imm}",  $t8, "op=000", "p=0", "up[8](imm)", "i=1", "w=0", "l=$l", "rn", "rt", "mag[7:4](imm)", "x=$sh", "mag[3:0](imm)");
     A("${m}r",      "$m $rt, [{rn}, {rm}]",  $tr, "op=000", "p=1", "u=1", "i=0", "w=0", "l=$l", "rn", "rt", "z=0000", "x=$sh", "rm");
     A("${m}r.pre",  "$m $rt, [{rn}, {rm}]!", $tr, "op=000", "p=1", "u=1", "i=0", "w=1", "l=$l", "rn", "rt", "z=0000", "x=$sh", "rm");
     A("${m}r.post", "$m $rt, [{rn}], {rm}",  $tr, "op=000", "p=0", "u=1", "i=0", "w=0", "l=$l", "rn", "rt", "z=0000", "x=$sh", "rm");
@@ -320,7 +328,7 @@ for my $x (["ia", "01"], ["ib", "11"], ["da", "00"], ["db", "10"]) {
     for my $l (0, 1) {
         my $m = ($l ? "ldm" : "stm") . $am;
         A($m,       "$m {rn}, {regs}",  $LM, "op=100", "pu=$pu", "s=0", "w=0", "l=$l", "rn", "regs[15:0]");
-        A("$m.wb",  "$m {rn}!, {regs}", $LM, "op=100", "pu=$pu", "s=0", "w=1", "l=$l", "rn", "regs[15:0]");
+        AX("$m.wb",  "$m {rn}!, {regs}", $LM, "op=100", "pu=$pu", "s=0", "w=1", "l=$l", "rn", "regs[15:0]");
     }
 }
 A("push", "push {regs}", { regs => [0x5ff0, 0x0003] }, "op=100100101101", "regs[15:0]");
@@ -447,6 +455,59 @@ A("vmov.rrd", "vmov {rt}, {rt2}, {dm}", undef, "op=1100010", "o=1", "rt2", "rt",
 A("vmrs", "vmrs {rt}, fpscr", undef, "op=111011110001", "rt", "x=101000010000");
 A("vmrs.nzcv", "vmrs APSR_nzcv, fpscr", undef, "op=111011110001", "rt=1111", "x=101000010000");
 A("vmsr", "vmsr fpscr, {rt}", undef, "op=111011100001", "rt", "x=101000010000");
+
+# ---------------------------------------------------------------------------
+# What glibc's arm asm has besides: preload, parallel bytes, coprocessor
+# moves and loads (mrc; iWMMXt's ldcl/stcl in setjmp), VFP load/store
+# multiple, and the NEON of memcpy_neon and memchr_neon. A NEON operation
+# on quadwords takes qN (its d2N's fields); a structure load or store
+# names its first register, its alignment (al: 0, or 1 2 3 for :64 :128
+# :256) and the base it writes back (!).
+# ---------------------------------------------------------------------------
+
+$isa->group("a32x");
+def("pld", "a", "pld [{rn}, #{imm}]", $OFF12, "op=11110101", "up[12](imm)", "x=101", "rn", "y=1111", "mag[11:0](imm)");
+A("uqsub8", "uqsub8 {rd}, {rn}, {rm}", undef, "op=01100110", "rn", "rd", "x=11111111", "rm");
+A("uadd8", "uadd8 {rd}, {rn}, {rm}", undef, "op=01100101", "rn", "rd", "x=11111001", "rm");
+A("sel", "sel {rd}, {rn}, {rm}", undef, "op=01101000", "rn", "rd", "x=11111011", "rm");
+my $CP = { coproc => [15, 14], opc1 => [0, 7], crn => [13, 0], crm => [0, 15], opc2 => [3, 0] };
+A("mrc", "mrc p{coproc}, {opc1}, {rt}, c{crn}, c{crm}, {opc2}", $CP, "op=1110", "opc1[2:0]", "x=1", "crn[3:0]", "rt", "coproc[3:0]", "opc2[2:0]", "y=1", "crm[3:0]");
+A("mcr", "mcr p{coproc}, {opc1}, {rt}, c{crn}, c{crm}, {opc2}", $CP, "op=1110", "opc1[2:0]", "x=0", "crn[3:0]", "rt", "coproc[3:0]", "opc2[2:0]", "y=1", "crm[3:0]");
+my $CPL = { coproc => [1, 14], crd => [10, 15, 0], uimm => [8, 0, 1020] };
+A("ldcl.post", "ldcl p{coproc}, c{crd}, [{rn}], #{uimm}", $CPL, "op=110", "p=0", "u=1", "n=1", "w=1", "l=1", "rn", "crd[3:0]", "coproc[3:0]", "uimm[9:2]");
+A("stcl.post", "stcl p{coproc}, c{crd}, [{rn}], #{uimm}", $CPL, "op=110", "p=0", "u=1", "n=1", "w=1", "l=0", "rn", "crd[3:0]", "coproc[3:0]", "uimm[9:2]");
+my $VLM = { params => ["dd", "n", "rn"], dd => [8, 0, 16], n => [8, 1, 16] };
+A("vldmia.64", "vldmia {rn}!, {dd~n}", $VLM, "op=11001", vX("dd"), "w=1", "l=1", "rn", vV("dd"), "x=1011", "n[6:0]", "z=0");
+A("vstmia.64", "vstmia {rn}!, {dd~n}", $VLM, "op=11001", vX("dd"), "w=1", "l=0", "rn", vV("dd"), "x=1011", "n[6:0]", "z=0");
+A("vmov.32rd", "vmov.32 {rt}, {dn}[{lane}]", { lane => [0, 1] }, "op=1110", "u=0", "o=0", "lane[0]", "l=1", vV("dn"), "rt", "x=1011", vX("dn"), "opc2=00", "y=1", "z=0000");
+A("vdup.8q", "vdup.8 {qd}, {rt}", undef, "op=11101", "b=1", "q=1", "z=0", vV("qd"), "rt", "x=1011", vX("qd"), "y=0", "e=0", "w=1", "v=0000");
+# NEON operations: A32 1111 001U, Thumb-2 111U 1111, then the same
+my @NEON;
+sub N3 {   # name, GNU, U, the bits 21:20, the opcode bits 11:8, Q, the registers' prefix (d or q)
+    my ($name, $gnu, $u, $sz, $opc, $q, $r) = @_;
+    my ($d, $n, $m) = map { "$r$_" } qw(d n m);
+    my @rest = ("z=0", vX($d), "sz=$sz", vV($n), vV($d), "opc=$opc", vX($n), "q=$q", vX($m), "o=1", vV($m));
+    def($name, "a", $gnu, undef, "op=1111001", "u=$u", @rest);
+    push @NEON, ["t2.$name", $gnu, undef, ["op=111", "u=$u", "x=1111", @rest[0 .. 3]], [@rest[4 .. $#rest]]];
+}
+N3("vand.q", "vand {qd}, {qn}, {qm}", 0, "00", "0001", 1, "q");
+N3("vand.d", "vand {dd}, {dn}, {dm}", 0, "00", "0001", 0, "d");
+N3("vorr.q", "vorr {qd}, {qn}, {qm}", 0, "10", "0001", 1, "q");
+N3("vorr.d", "vorr {dd}, {dn}, {dm}", 0, "10", "0001", 0, "d");
+N3("vceq.i8.q", "vceq.i8 {qd}, {qn}, {qm}", 1, "00", "1000", 1, "q");
+N3("vpadd.i8", "vpadd.i8 {dd}, {dn}, {dm}", 0, "00", "1011", 0, "d");
+# vld1.8 / vst1.8 of 1 to 4 doublewords, the base written back: A32 1111 0100, Thumb-2 1111 1001
+my %VT = (1 => "0111", 2 => "1010", 3 => "0110", 4 => "0010");
+for my $l (1, 0) {
+    my $op = $l ? "vld1.8" : "vst1.8";
+    for my $k (1 .. 4) {
+        # (the alignments GNU as takes: :64 for one or three, up to :128 for two, :256 for four)
+        my $t = { params => ["al", "rn", "dd"], al => [[0, 1], [0, 1, 2], [0, 1], [0, 1, 2, 3]]->[$k - 1], dd => [0, 4, 8, 28 - $k] };
+        my @rest = ("z=0", vX("dd"), "l=$l", "y=0", "rn", vV("dd"), "type=$VT{$k}", "size=00", "al[1:0]", "rm=1101");
+        def("$op.$k", "a", "$op {dd~$k}, [{rn}{al@}]!", $t, "op=11110100", @rest);
+        push @NEON, ["t2.$op.$k", "$op {dd~$k}, [{rn}{al@}]!", $t, ["op=11111001", @rest[0 .. 4]], [@rest[5 .. $#rest]]];
+    }
+}
 
 # ---------------------------------------------------------------------------
 # Thumb, 16 bits: low registers r0..r7 are 3-bit fields
@@ -633,6 +694,40 @@ for my $c (@CC) {
     T2("t2.b$c", "b$c.w {imm^4}", $B20, ["op=11110", "imm[20]", sprintf("cond=%04b", $cc{$c}), "imm[17:12]"],
        ["x=10", "imm[18]", "y=0", "imm[19]", "imm[11:1]"]);
 }
+
+T2("t2.uadd8", "uadd8 {rd}, {rn}, {rm}", undef, ["op=111110101000", "rn"], ["x=1111", "rd", "y=0100", "rm"]);
+T2("t2.sel", "sel {rd}, {rn}, {rm}", undef, ["op=111110101010", "rn"], ["x=1111", "rd", "y=1000", "rm"]);
+T2("t2.nop", "nop.w", undef, ["op=1111001110101111"], ["x=1000000000000000"]);
+T2("t2.pld", "pld [{rn}, #{uimm}]", $U12, ["op=111110001001", "rn"], ["x=1111", "uimm[11:0]"]);
+
+# Thumb-2's VFP and NEON: the A32 encoding with 1110 for the condition (VFP)
+# or the NEON prefix moved (above): the same bits, the first halfword the
+# top one
+$isa->group("thumb2v");
+T2(@$_) for @NEON;
+sub vfp2 {   # a Thumb-2 twin of a VFP A32 def: its fields after cond, split in halfwords
+    my ($name, $gnu, $test, @f) = @_;
+    my (@hw1, @hw2);
+    my $w = 4;   # (op=1110 first)
+    for (@f) {
+        my $n = /=([01]+)$/ ? length $1 : /\[([\d:|]+)\]/ ? ARMdec_w($1) : 4;
+        if ($w < 16 && $w + $n > 16) {
+            /^(\w+)=([01]+)$/ or die "arm: $name: field $_ across the halfwords\n";
+            my $k = 16 - $w;
+            push @hw1, "$1=" . substr($2, 0, $k);
+            push @hw2, "${1}2=" . substr($2, $k);
+        } elsif ($w < 16) { push @hw1, $_ } else { push @hw2, $_ }
+        $w += $n;
+    }
+    T2($name, $gnu, $test, ["op=1110", @hw1], \@hw2);
+}
+sub ARMdec_w { my $w = 0; for (split /\|/, $_[0]) { my ($h, $l) = /^(\d+)(?::(\d+))?$/; $w += $h - ($l // $h) + 1 } $w }
+vfp2("t2.vmov.drr", "vmov {dm}, {rt}, {rt2}", undef, "op=1100010", "o=0", "rt2", "rt", "x=101100", vX("dm"), "y=1", vV("dm"));
+vfp2("t2.vmov.rrd", "vmov {rt}, {rt2}, {dm}", undef, "op=1100010", "o=1", "rt2", "rt", "x=101100", vX("dm"), "y=1", vV("dm"));
+vfp2("t2.vmov.32rd", "vmov.32 {rt}, {dn}[{lane}]", { lane => [0, 1] }, "op=1110", "u=0", "o=0", "lane[0]", "l=1", vV("dn"), "rt", "x=1011", vX("dn"), "opc2=00", "y=1", "z=0000");
+vfp2("t2.vdup.8q", "vdup.8 {qd}, {rt}", undef, "op=11101", "b=1", "q=1", "z=0", vV("qd"), "rt", "x=1011", vX("qd"), "y=0", "e=0", "w=1", "v=0000");
+vfp2("t2.vpush.64", "vpush.64 {dd~n}", $VPD, "op=11010", vX("dd"), "x=101101", vV("dd"), "y=1011", "n[6:0]", "z=0");
+vfp2("t2.vpop.64",  "vpop.64 {dd~n}",  $VPD, "op=11001", vX("dd"), "x=111101", vV("dd"), "y=1011", "n[6:0]", "z=0");
 
 $isa->add("fields",
     node("comment", node("Fields that compute their bits: up[n] the U bit of a signed offset (1 for imm >= 0), mag[..] bits of its magnitude, j1/j2 the J bits of a Thumb-2 branch, msb lsb + width - 1, wm1 width - 1. The bracket gives the reach of the operand, for the range check.")),

@@ -1,6 +1,11 @@
 comment
   The compiler builtins glibc's C calls that have no C of their own: written by hand, the one part of glibc in ff that is not translated. c2ff keeps a call of one as it is.
 builtins:
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
   comment
     gcc's __builtin_stdc_rotate_right (C23's stdc_rotate_right) on a word: x turned right by n bits; glibc's PTR_DEMANGLE uses it on a uintptr_t.
   __builtin_stdc_rotate_right:
@@ -1173,6 +1178,99 @@ builtins:
         !=
         b
   comment
+    __builtin_add_overflow of a word and an unsigned int into a word (dl-cache's tunables): the sum wrapped, and whether it did.
+  __builtin_add_overflow u64 u32 u64:
+    int
+    a:
+      u64
+    b:
+      u32
+    r:
+      address
+      u64
+    content
+      r
+    =
+    a
+    +
+    cast:
+      u64
+      b
+    return
+      content
+        r
+      <
+      a
+  comment
+    __builtin_add_overflow of a word and an int into a word (wordexp): the sum wrapped; for a b below 0, whether it went below 0, else whether it wrapped.
+  __builtin_add_overflow u64 int u64:
+    int
+    a:
+      u64
+    b:
+      int
+    r:
+      address
+      u64
+    content
+      r
+    =
+    a
+    +
+    cast:
+      u64
+      cast:
+        long
+        b
+    if
+      :
+        b
+        <
+        0
+      return
+        content
+          r
+        >
+        a
+    return
+      content
+        r
+      <
+      a
+  comment
+    __builtin_mul_overflow of ints into an int (pidfd_getpid): the product in a long, cut to an int, and whether it was more.
+  __builtin_mul_overflow int int int:
+    int
+    a:
+      int
+    b:
+      int
+    r:
+      address
+      int
+    p:
+      long
+      cast:
+        long
+        a
+      *
+      cast:
+        long
+        b
+    content
+      r
+    =
+    cast:
+      int
+      p
+    return
+      p
+      !=
+      cast:
+        long
+        content
+          r
+  comment
     __builtin_mul_overflow on a word and an int into an unsigned int (dl-open): the product, and whether it is below 0, wrapped, or is more than an unsigned int holds.
   __builtin_mul_overflow u64 int u32:
     int
@@ -1242,6 +1340,31 @@ builtins:
       b
       <
       a
+  comment
+    __builtin_mul_overflow_p as glibc uses it (gnulib's hash.c, with a ptrdiff_t 1 as its third): whether the product of two sizes is past what a long holds.
+  __builtin_mul_overflow_p:
+    int
+    a:
+      u64
+    b:
+      u64
+    c:
+      long
+    if
+      :
+        b
+        ==
+        0
+      return
+        0
+    return
+      a
+      >
+      :
+        u64
+          9223372036854775807
+        /
+        b
   comment
     gcc's type-generic __builtin_isnan, __builtin_isinf_sign and __builtin_signbit, one function for each type (c2ff names them so), from the bits: IEEE binary64, and binary128 for long double (its high word second).
     NaN is the highest exponent with a fraction, an infinity that exponent without one (isinf_sign: 1 or -1, by the sign), signbit the top bit.
@@ -1530,6 +1653,954 @@ builtins:
           >>
           63
   comment
+    gcc's type-generic __builtin_fpclassify on a float: which of its five arguments x's class is (NaN, infinite, normal, subnormal, zero), from its bits.
+    The others of C's classification, for each floating type (c2ff names them so), are classes of it with glibc's values: FP_NAN 0, FP_INFINITE 1, FP_ZERO 2, FP_SUBNORMAL 3, FP_NORMAL 4.
+  __builtin_fpclassify float:
+    int
+    fnan:
+      int
+    finf:
+      int
+    fnorm:
+      int
+    fsub:
+      int
+    fzero:
+      int
+    x:
+      float
+    h:
+      u64
+      content
+        cast:
+          address
+          u32
+          address
+            x
+    e:
+      u64
+      :
+        h
+        >>
+        23
+      &
+      255
+    f:
+      int
+      :
+        :
+          h
+          &
+          8388607
+        !=
+        0
+    if
+      :
+        e
+        ==
+        255
+      if
+        f
+        return
+          fnan
+      return
+        finf
+    if
+      :
+        e
+        !=
+        0
+      return
+        fnorm
+    if
+      f
+      return
+        fsub
+    return
+      fzero
+  comment
+    gcc's type-generic __builtin_fpclassify on a double: which of its five arguments x's class is (NaN, infinite, normal, subnormal, zero), from its bits.
+  __builtin_fpclassify double:
+    int
+    fnan:
+      int
+    finf:
+      int
+    fnorm:
+      int
+    fsub:
+      int
+    fzero:
+      int
+    x:
+      double
+    h:
+      u64
+      content
+        cast:
+          address
+          u64
+          address
+            x
+    e:
+      u64
+      :
+        h
+        >>
+        52
+      &
+      2047
+    f:
+      int
+      :
+        :
+          h
+          &
+          u64
+            4503599627370495
+        !=
+        0
+    if
+      :
+        e
+        ==
+        2047
+      if
+        f
+        return
+          fnan
+      return
+        finf
+    if
+      :
+        e
+        !=
+        0
+      return
+        fnorm
+    if
+      f
+      return
+        fsub
+    return
+      fzero
+  comment
+    gcc's type-generic __builtin_fpclassify on a long double: which of its five arguments x's class is (NaN, infinite, normal, subnormal, zero), from its bits.
+  __builtin_fpclassify long double:
+    int
+    fnan:
+      int
+    finf:
+      int
+    fnorm:
+      int
+    fsub:
+      int
+    fzero:
+      int
+    x:
+      long double
+    h:
+      u64
+      cast:
+        address
+        u64
+        address
+          x
+        .
+        1
+    e:
+      u64
+      :
+        h
+        >>
+        48
+      &
+      32767
+    f:
+      int
+      :
+        :
+          h
+          &
+          u64
+            281474976710655
+        !=
+        0
+      ||
+      :
+        cast:
+          address
+          u64
+          address
+            x
+          .
+          0
+        !=
+        0
+    if
+      :
+        e
+        ==
+        32767
+      if
+        f
+        return
+          fnan
+      return
+        finf
+    if
+      :
+        e
+        !=
+        0
+      return
+        fnorm
+    if
+      f
+      return
+        fsub
+    return
+      fzero
+  comment
+    __builtin_isfinite on a float: neither a NaN nor infinite.
+  __builtin_isfinite float:
+    int
+    x:
+      float
+    return
+      __builtin_fpclassify float
+        0
+        1
+        4
+        3
+        2
+        x
+      >=
+      2
+  comment
+    __builtin_isfinite on a double: neither a NaN nor infinite.
+  __builtin_isfinite double:
+    int
+    x:
+      double
+    return
+      __builtin_fpclassify double
+        0
+        1
+        4
+        3
+        2
+        x
+      >=
+      2
+  comment
+    __builtin_isfinite on a long double: neither a NaN nor infinite.
+  __builtin_isfinite long double:
+    int
+    x:
+      long double
+    return
+      __builtin_fpclassify long double
+        0
+        1
+        4
+        3
+        2
+        x
+      >=
+      2
+  comment
+    __builtin_isnan on a float.
+  __builtin_isnan float:
+    int
+    x:
+      float
+    return
+      __builtin_fpclassify float
+        0
+        1
+        4
+        3
+        2
+        x
+      ==
+      0
+  comment
+    __builtin_signbit on a float: its top bit.
+  __builtin_signbit float:
+    int
+    x:
+      float
+    return
+      cast:
+        int
+        :
+          content
+            cast:
+              address
+              u32
+              address
+                x
+          >>
+          31
+  comment
+    __builtin_isinf_sign on a float: 1 or -1 for an infinity, by its sign, else 0.
+  __builtin_isinf_sign float:
+    int
+    x:
+      float
+    if
+      :
+        __builtin_fpclassify float
+          0
+          1
+          4
+          3
+          2
+          x
+        !=
+        1
+      return
+        0
+    if
+      __builtin_signbit float
+        x
+      return
+        -
+        1
+    return
+      1
+  comment
+    __builtin_isunordered on floats: either is a NaN.
+    __builtin_isless and the other comparisons of C's math.h: the compare, but never on a NaN (they raise no invalid exception for one, as C's < does).
+  __builtin_isunordered float:
+    int
+    x:
+      float
+    y:
+      float
+    return
+      :
+        __builtin_fpclassify float
+          0
+          1
+          4
+          3
+          2
+          x
+        ==
+        0
+      ||
+      :
+        __builtin_fpclassify float
+          0
+          1
+          4
+          3
+          2
+          y
+        ==
+        0
+  comment
+    __builtin_isless on floats: x < y, 0 for a NaN.
+  __builtin_isless float:
+    int
+    x:
+      float
+    y:
+      float
+    if
+      __builtin_isunordered float
+        x
+        y
+      return
+        0
+    return
+      x
+      <
+      y
+  comment
+    __builtin_islessequal on floats: x <= y, 0 for a NaN.
+  __builtin_islessequal float:
+    int
+    x:
+      float
+    y:
+      float
+    if
+      __builtin_isunordered float
+        x
+        y
+      return
+        0
+    return
+      x
+      <=
+      y
+  comment
+    __builtin_isgreater on floats: x > y, 0 for a NaN.
+  __builtin_isgreater float:
+    int
+    x:
+      float
+    y:
+      float
+    if
+      __builtin_isunordered float
+        x
+        y
+      return
+        0
+    return
+      x
+      >
+      y
+  comment
+    __builtin_isgreaterequal on floats: x >= y, 0 for a NaN.
+  __builtin_isgreaterequal float:
+    int
+    x:
+      float
+    y:
+      float
+    if
+      __builtin_isunordered float
+        x
+        y
+      return
+        0
+    return
+      x
+      >=
+      y
+  comment
+    __builtin_isunordered on doubles: either is a NaN.
+  __builtin_isunordered double:
+    int
+    x:
+      double
+    y:
+      double
+    return
+      :
+        __builtin_fpclassify double
+          0
+          1
+          4
+          3
+          2
+          x
+        ==
+        0
+      ||
+      :
+        __builtin_fpclassify double
+          0
+          1
+          4
+          3
+          2
+          y
+        ==
+        0
+  comment
+    __builtin_isless on doubles: x < y, 0 for a NaN.
+  __builtin_isless double:
+    int
+    x:
+      double
+    y:
+      double
+    if
+      __builtin_isunordered double
+        x
+        y
+      return
+        0
+    return
+      x
+      <
+      y
+  comment
+    __builtin_islessequal on doubles: x <= y, 0 for a NaN.
+  __builtin_islessequal double:
+    int
+    x:
+      double
+    y:
+      double
+    if
+      __builtin_isunordered double
+        x
+        y
+      return
+        0
+    return
+      x
+      <=
+      y
+  comment
+    __builtin_isgreater on doubles: x > y, 0 for a NaN.
+  __builtin_isgreater double:
+    int
+    x:
+      double
+    y:
+      double
+    if
+      __builtin_isunordered double
+        x
+        y
+      return
+        0
+    return
+      x
+      >
+      y
+  comment
+    __builtin_isgreaterequal on doubles: x >= y, 0 for a NaN.
+  __builtin_isgreaterequal double:
+    int
+    x:
+      double
+    y:
+      double
+    if
+      __builtin_isunordered double
+        x
+        y
+      return
+        0
+    return
+      x
+      >=
+      y
+  comment
+    __builtin_isunordered on long doubles: either is a NaN.
+  __builtin_isunordered long double:
+    int
+    x:
+      long double
+    y:
+      long double
+    return
+      :
+        __builtin_fpclassify long double
+          0
+          1
+          4
+          3
+          2
+          x
+        ==
+        0
+      ||
+      :
+        __builtin_fpclassify long double
+          0
+          1
+          4
+          3
+          2
+          y
+        ==
+        0
+  comment
+    __builtin_isless on long doubles: x < y, 0 for a NaN.
+  __builtin_isless long double:
+    int
+    x:
+      long double
+    y:
+      long double
+    if
+      __builtin_isunordered long double
+        x
+        y
+      return
+        0
+    return
+      x
+      <
+      y
+  comment
+    __builtin_islessequal on long doubles: x <= y, 0 for a NaN.
+  __builtin_islessequal long double:
+    int
+    x:
+      long double
+    y:
+      long double
+    if
+      __builtin_isunordered long double
+        x
+        y
+      return
+        0
+    return
+      x
+      <=
+      y
+  comment
+    __builtin_isgreater on long doubles: x > y, 0 for a NaN.
+  __builtin_isgreater long double:
+    int
+    x:
+      long double
+    y:
+      long double
+    if
+      __builtin_isunordered long double
+        x
+        y
+      return
+        0
+    return
+      x
+      >
+      y
+  comment
+    __builtin_isgreaterequal on long doubles: x >= y, 0 for a NaN.
+  __builtin_isgreaterequal long double:
+    int
+    x:
+      long double
+    y:
+      long double
+    if
+      __builtin_isunordered long double
+        x
+        y
+      return
+        0
+    return
+      x
+      >=
+      y
+  comment
+    gcc's __builtin_fabsf: x without its sign, from its bits.
+  __builtin_fabsf:
+    float
+    x:
+      float
+    h:
+      u32
+      content
+        cast:
+          address
+          u32
+          address
+            x
+      &
+      2147483647
+    return
+      content
+        cast:
+          address
+          float
+          address
+            h
+  comment
+    gcc's __builtin_copysignf: x with y's sign, from their bits.
+  __builtin_copysignf:
+    float
+    x:
+      float
+    y:
+      float
+    h:
+      u32
+      :
+        content
+          cast:
+            address
+            u32
+            address
+              x
+        &
+        2147483647
+      |
+      :
+        content
+          cast:
+            address
+            u32
+            address
+              y
+        &
+        u32
+          2147483648
+    return
+      content
+        cast:
+          address
+          float
+          address
+            h
+  comment
+    gcc's __builtin_signbitf: __builtin_signbit on a float.
+  __builtin_signbitf:
+    int
+    x:
+      float
+    return
+      __builtin_signbit float
+        x
+  comment
+    gcc's __builtin_huge_valf: an infinity, by its bits.
+  __builtin_huge_valf:
+    float
+    h:
+      u32
+      2139095040
+    return
+      content
+        cast:
+          address
+          float
+          address
+            h
+  comment
+    gcc's __builtin_nanf: the quiet NaN (glibc asks only for nan ("")), by its bits.
+  __builtin_nanf:
+    float
+    s:
+      address
+      char
+    h:
+      u32
+      2143289344
+    return
+      content
+        cast:
+          address
+          float
+          address
+            h
+  comment
+    gcc's __builtin_inff: __builtin_huge_valf, an infinity.
+  __builtin_inff:
+    float
+    return
+      __builtin_huge_valf
+  comment
+    gcc's __builtin_fabs: x without its sign, from its bits.
+  __builtin_fabs:
+    double
+    x:
+      double
+    h:
+      u64
+      content
+        cast:
+          address
+          u64
+          address
+            x
+      &
+      u64
+        9223372036854775807
+    return
+      content
+        cast:
+          address
+          double
+          address
+            h
+  comment
+    gcc's __builtin_copysign: x with y's sign, from their bits.
+  __builtin_copysign:
+    double
+    x:
+      double
+    y:
+      double
+    h:
+      u64
+      :
+        content
+          cast:
+            address
+            u64
+            address
+              x
+        &
+        u64
+          9223372036854775807
+      |
+      :
+        content
+          cast:
+            address
+            u64
+            address
+              y
+        &
+        u64
+          9223372036854775808
+    return
+      content
+        cast:
+          address
+          double
+          address
+            h
+  comment
+    gcc's __builtin_huge_val: an infinity, by its bits.
+  __builtin_huge_val:
+    double
+    h:
+      u64
+      u64
+        9218868437227405312
+    return
+      content
+        cast:
+          address
+          double
+          address
+            h
+  comment
+    gcc's __builtin_nan: the quiet NaN (glibc asks only for nan ("")), by its bits.
+  __builtin_nan:
+    double
+    s:
+      address
+      char
+    h:
+      u64
+      u64
+        9221120237041090560
+    return
+      content
+        cast:
+          address
+          double
+          address
+            h
+  comment
+    gcc's __builtin_fabsl: x without its sign, from its bits.
+  __builtin_fabsl:
+    long double
+    x:
+      long double
+    r:
+      long double
+      :
+        x
+    cast:
+      address
+      u64
+      address
+        r
+      .
+      1
+    &=
+    u64
+      9223372036854775807
+    return
+      r
+  comment
+    gcc's __builtin_copysignl: x with y's sign, from their bits.
+  __builtin_copysignl:
+    long double
+    x:
+      long double
+    y:
+      long double
+    r:
+      long double
+      :
+        x
+    cast:
+      address
+      u64
+      address
+        r
+      .
+      1
+    =
+    :
+      cast:
+        address
+        u64
+        address
+          x
+        .
+        1
+      &
+      u64
+        9223372036854775807
+    |
+    :
+      cast:
+        address
+        u64
+        address
+          y
+        .
+        1
+      &
+      u64
+        9223372036854775808
+    return
+      r
+  comment
+    gcc's __builtin_signbitl: __builtin_signbit on a long double.
+  __builtin_signbitl:
+    int
+    x:
+      long double
+    return
+      __builtin_signbit long double
+        x
+  comment
+    gcc's __builtin_huge_vall: an infinity, by its bits.
+  __builtin_huge_vall:
+    long double
+    r:
+      long double
+      cast:
+        long double
+        0
+    cast:
+      address
+      u64
+      address
+        r
+      .
+      1
+    =
+    u64
+      9223090561878065152
+    return
+      r
+  comment
+    gcc's __builtin_nanl: the quiet NaN (glibc asks only for nan ("")), by its bits.
+  __builtin_nanl:
+    long double
+    s:
+      address
+      char
+    r:
+      long double
+      cast:
+        long double
+        0
+    cast:
+      address
+      u64
+      address
+        r
+      .
+      1
+    =
+    u64
+      9223231299366420480
+    return
+      r
+  comment
     gcc's __builtin_return_address level: where the function that calls it returns to (level 0, all glibc asks: dlopen's RETURN_ADDRESS), from ttpc's frame on riscv64, which holds the caller's s0 at s0 and its return address at s0 + 8.
     This builtin's own frame is one more: the word at its s0 is the s0 of the function that calls it.
   __builtin_return_address:
@@ -1557,6 +2628,23 @@ builtins:
             f
             +
             1
+  comment
+    gcc's __builtin_frame_address level: the frame of the function that calls it (level 0, all glibc asks: ____longjmp_chk's check that a longjmp goes up the stack), its s0 in ttpc's frame on riscv64.
+    This builtin's own frame is one more: the word at its s0 is the s0 of the function that calls it.
+  __builtin_frame_address:
+    address
+    void
+    level:
+      u32
+    return
+      cast:
+        address
+        void
+        content
+          cast:
+            address
+            u64
+            s0
   comment
     gcc's __builtin_extract_return_addr: the address itself, which riscv64 keeps as it is.
   __builtin_extract_return_addr:

@@ -122,7 +122,8 @@ else
 TTPC ?= ../../build/compiler/boot/stage2
 TTPC_RUN = qemu-riscv64 $(TTPC) --target $(GTARGET)
 endif
-SHARED := ../compiler/shared.ff
+# (and on x86_64 the forms GNU as picks, for glibc's asm: x86_64gnu.ff)
+SHARED := ../compiler/shared.ff $(if $(filter x86_64,$(GTARGET)),../compiler/x86_64gnu.ff)
 
 # Per target: the CPUs a check runs on (riscv64 with V and without), and
 # the flags of a test program. On x86_64 long double is the x87's, so the
@@ -139,9 +140,15 @@ CPUS_arm := max
 CPUS := $(CPUS_$(GTARGET))
 PROGFLAGS_x86_64 := -mlong-double-128
 PROGFLAGS := $(PROGFLAGS_$(GTARGET))
+# Every heavy step (mki.pl, clang, c2ff, gcc, ttpc, qemu) runs as RUN -t
+# SECONDS command: in one of the machine's shared slots (slot.sh), under a
+# memory cap and a timeout. A make run in a slot already (TTP_SLOT set) takes
+# no second one; one outside them (make -j) runs a step wherever a slot is
+# free, so as many at once as there are free slots.
 # qemu-arm reserves the 32-bit address space (guest_base): 8 GB there
-CAP_arm := ulimit -v 8000000;
-CAP := $(or $(CAP_$(GTARGET)),ulimit -v 4000000;)
+CAPKB_arm := 8000000
+CAPKB := $(or $(CAPKB_$(GTARGET)),4000000)
+RUN := sh ../compiler/gen/slot.sh -v $(CAPKB)
 
 # M1, string: strlen, memcpy, memset, strcmp and strchr, each its ifunc, its
 # generic C and its asm (vector; memcpy also for fast misaligned access),
@@ -263,7 +270,17 @@ WEAKS_args := $(WEAKS_stdio)
 RUN_args := one two three
 RUNENV_args := FF_ARGS=hello
 
-MILESTONES := string stdlib ldouble malloc stdio floats args
+# gnuc: gcc's builtins and the GNU C forms beyond the other milestones
+# (progs/gnuc.c: float classification and quiet comparisons, fabs,
+# copysign, inf, nan, fma, sqrt, the overflow builtins, a pointer to an
+# array, and riscv64's asm statements with "f" and "i" operands), with
+# long double's soft-fp
+OBJS_gnuc := $(OBJS_ldouble)
+CFLAGS_gnuc := -fno-math-errno
+ASMS_gnuc :=
+ROOTS_gnuc := $(ROOTS_ldouble)
+
+MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 
 # glibc's own startup, on riscv64, for the program of every milestone:
 # start.S's _start (crt1.o's, with csu/static-reloc and csu/init) calls
@@ -322,7 +339,7 @@ objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip),$(call uniq,$(
 .PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 $(I)/%.i: $(OBJ)/libc.a mki.pl
-	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+	$(RUN) -t 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
 # An object of a .S: its .s (mki.pl again), and what glibc's compiler makes
 # of it without relaxation, as instructions (for s2ff.pl, which takes the
@@ -333,8 +350,10 @@ $(I)/%.i: $(OBJ)/libc.a mki.pl
 ASREF_riscv64 := -mno-relax
 DUMPOPT_riscv64 := -M no-aliases
 DUMPOPT_x86_64 := -w
+# (arm's with its symbols and relocations: the literal pools' words)
+DUMPOPT_arm := -r -t
 $(I)/%.s: $(OBJ)/libc.a mki.pl
-	$(CAP) timeout 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+	$(RUN) -t 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
 #
 # aarch64 (s2ff-aarch64.pl): the instructions are read from the object
@@ -345,6 +364,7 @@ $(I)/%.s: $(OBJ)/libc.a mki.pl
 # same bytes as glibc's own object's (asm-check compares them too).
 S2FF_riscv64 := ../compiler/gen/s2ff.pl
 S2FF_aarch64 := ../compiler/gen/s2ff-aarch64.pl
+S2FF_arm := ../compiler/gen/s2ff-arm.pl
 S2FF := $(or $(S2FF_$(GTARGET)),../compiler/gen/s2ff.pl)
 # the file s2ff reads: riscv64 the .s itself, aarch64 the .Ls (not .L.s:
 # that would be an .s of an object x.L, which mki.pl would be asked for)
@@ -358,7 +378,7 @@ $(I)/%.Ls: $(I)/%.s $(S2FF_aarch64)
 	perl $(S2FF_aarch64) --locals $< > $@
 
 $(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
-	$(CAP) timeout 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
+	$(RUN) -t 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
 	$(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
 
@@ -378,7 +398,7 @@ CLANGFIX := $(CLANGFIX_$(GTARGET))
 
 $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i)
-	$(CAP) timeout 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
@@ -387,17 +407,22 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
 # atomics.ff.txt). The asm parts share one page, glibc asm: the trees a
 # program reads have 255 pages in all (c2ff makes a page per directory).
+# The tree's license (license.ff.txt) is at its root, and each page first
+# has the license of each file it is made of, its header (c2ff, s2ff
+# --header; ../compiler/gen/Header.pm).
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl $$(S2FF)
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
-	$$(CAP) timeout 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
-	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) > $$(FF)/$(1).ff.txt
+	cp license.ff.txt $$(FF)/$(1).ff.txt
+	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
+	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
-	    $$(CAP) timeout 60 perl $$(S2FF) --items $$(if $$(filter aarch64,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
+	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
 	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
@@ -424,24 +449,26 @@ asm-check:
 # one asm part's check: $(I)/x.asmok holds what it found, made only where
 # ttpc and glibc's compiler agree. Per target: the instruction of a
 # stand-in label (ASMTRAP) and where ttpc's code starts in its output
-# (ASMHDR, after the ELF and program headers). relmask.pl knows riscv64's
-# and aarch64's relocations; s2ff.pl reads riscv64's GNU as,
-# s2ff-aarch64.pl aarch64's (S2FF, from the .Ls: SSRC). On aarch64 the
-# bytes start after the padding before the first label (s2ff-aarch64.pl
-# --skip: strncmp's nops), and the .s must make glibc's own object (the
-# same .text).
+# (ASMHDR, after the ELF and program headers). relmask.pl knows riscv64's,
+# aarch64's and arm's relocations; s2ff.pl reads riscv64's GNU as,
+# s2ff-aarch64.pl aarch64's (from the .Ls: SSRC), s2ff-arm.pl arm's
+# (S2FF). On aarch64 the bytes start after the padding before the first
+# label (s2ff-aarch64.pl --skip: strncmp's nops), and the .s must make
+# glibc's own object (the same .text).
 ASMTRAP_riscv64 := ebreak
 ASMHDR_riscv64 := 120
 ASMTRAP_aarch64 := brk\n    0
 ASMHDR_aarch64 := 120
+ASMTRAP_arm := udf\n    0
+ASMHDR_arm := 84
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
 $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
-	@a=$(I)/$*; \
+	@rm -f $@; a=$(I)/$*; \
 	{ perl $(S2FF) $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
-	$(CAP) timeout 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
+	$(RUN) -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
 	size=$$(perl $(S2FF) --size $$a$(SSRC) $$a.dump) || exit 1; \
 	skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $$a$(SSRC) $$a.dump) || exit 1,0); \
 	$(if $(filter aarch64,$(GTARGET)),$(XPRE)objcopy -O binary -j .text $(OBJ)/$*.o $$a.glibc.bin && \
@@ -457,10 +484,10 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
 # progs/strlen.ff includes string.ff from its own folder, so both go there
 strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 	cp progs/strlen.ff $(FF)/strlen-prog.ff
-	$(CAP) timeout 120 $(TTPC_RUN) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
-	s=0; $(CAP) timeout 30 qemu-riscv64 -cpu rv64,v=false $(FF)/strlen-prog || s=$$?; test $$s -eq 12
+	$(RUN) -t 120 $(TTPC_RUN) $(SHARED) $(FF)/strlen-prog.ff $(FF)/strlen-prog > $(FF)/strlen-prog.lst
+	s=0; $(RUN) -t 30 qemu-riscv64 -cpu rv64,v=false $(FF)/strlen-prog || s=$$?; test $$s -eq 12
 	@echo "strlen-check: glibc's strlen, generic C (-cpu rv64,v=false): 12"
-	s=0; $(CAP) timeout 30 qemu-riscv64 $(FF)/strlen-prog || s=$$?; test $$s -eq 12
+	s=0; $(RUN) -t 30 qemu-riscv64 $(FF)/strlen-prog || s=$$?; test $$s -eq 12
 	@echo "strlen-check: with V its resolver picks glibc's vector asm: 12"
 
 # A test program in C, progs/NAME.c, built two ways: with gcc against
@@ -475,8 +502,8 @@ CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
 $(FF)/%.ref $(FF)/%.map &: progs/%.c $(OBJ)/libc.a
 	mkdir -p $(FF)
-	$(CAP) timeout 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) -c $< -o $(FF)/$*.ref.o
-	$(CAP) timeout 120 $(GLIBC_CC) -static -nostdlib -Wl,-Map=$(FF)/$*.map -o $(FF)/$*.ref $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
+	$(RUN) -t 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) $(CFLAGS_$*) -c $< -o $(FF)/$*.ref.o
+	$(RUN) -t 120 $(GLIBC_CC) -static -nostdlib -Wl,-Map=$(FF)/$*.map -o $(FF)/$*.ref $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
 
 # what a milestone's program links of glibc (aarch64's milestones)
@@ -488,18 +515,18 @@ $(FF)/%.objs.mk: $(FF)/%.map linkobjs.pl allobjs.pl mki.pl
 # of what the program reaches.
 $(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
 	rm -rf $(FF)/$*
-	$(CAP) timeout 120 perl ../compiler/gen/ffsplit.pl $(FF)/$*.ff.txt $(FF)/$*
+	$(RUN) -t 120 perl ../compiler/gen/ffsplit.pl $(FF)/$*.ff.txt $(FF)/$*
 
 $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	mkdir -p $(FF)
-	$(CAP) timeout 60 $(GLIBC_CC) -E -P $(PROGFLAGS) $< -o $(FF)/$*-prog.i
-	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+	$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $< -o $(FF)/$*-prog.i
+	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
-	$(CAP) timeout 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
+	$(RUN) -t 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
 
 # what a check expects: progs/NAME.expect, or progs/NAME.<target>.expect
 # where the target's glibc differs (soft-fp's NaNs: riscv64 makes them
@@ -512,7 +539,7 @@ $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter 
 	tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1).want; \
 	for b in $(1).ref $(1)-prog; do \
 	    for cpu in $$(CPUS); do \
-	        s=0; $$(CAP) $$(if $$(RUNENV_$(1)),env $$(RUNENV_$(1))) timeout 60 qemu-$$(GTARGET) -cpu $$$$cpu $$(FF)/$$$$b $$(RUN_$(1)) > $$(FF)/$$$$b.out || s=$$$$?; \
+	        s=0; $$(RUN) -t 60 $$(if $$(RUNENV_$(1)),env $$(RUNENV_$(1))) qemu-$$(GTARGET) -cpu $$$$cpu $$(FF)/$$$$b $$(RUN_$(1)) > $$(FF)/$$$$b.out || s=$$$$?; \
 	        test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b on $$$$cpu: exit status $$$$s, not $$$$want"; exit 1; }; \
 	        cmp -s $$(FF)/$$$$b.out $$(FF)/$(1).want || { echo "$(1)-check: $$$$b on $$$$cpu: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1).want | head; exit 1; }; \
 	    done; \
@@ -527,21 +554,41 @@ $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 # the AST of glibc's own, each against its .i's (roundtrip.pl). The
 # addresses of asm functions, which have no C type in ff, are let through.
 $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl
-	$(CAP) timeout 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
+	$(RUN) -t 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
 
 $(FF)/%.rt.json: $(FF)/%.rt.c
-	$(CAP) timeout 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
+	$(RUN) -t 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
 
 define roundtrip
 $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json)
-	$$(CAP) timeout 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
+	$$(RUN) -t 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
+	$$(RUN) -t 300 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
 glibc-roundtrip: floats-roundtrip
 
 .PHONY: strlen-check asm-check glibc-roundtrip
+
+# The licenses (../compiler/gen/licenses.pl): glibc's trees here (their
+# pages' licenses: builtins, atomics), and of a milestone its tree, its
+# folder (each file and the index) and its program, each with its license
+# at its root and every page made from source with the license of each
+# file it is made of. glibc-licenses checks every milestone made.
+LICENSES_PL := perl ../compiler/gen/licenses.pl
+licenses:
+	$(LICENSES_PL) --fragment builtins.ff.txt atomics.ff.txt
+	$(LICENSES_PL) license.ff.txt progs/strlen.ff
+define licenses
+$(1)-licenses: $$(FF)/$(1).ff $$(FF)/$(1)/index.ff $$(FF)/$(1)-prog.ff
+	$$(LICENSES_PL) --pages $$(FF)/$(1).ff $$(FF)/$(1)/*.ff
+	$$(LICENSES_PL) $$(FF)/$(1)-prog.ff
+.PHONY: $(1)-licenses
+endef
+$(foreach m,$(MILESTONES),$(eval $(call licenses,$(m))))
+glibc-licenses: licenses $(MILESTONES:%=%-licenses)
+.PHONY: licenses glibc-licenses
 
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
@@ -553,19 +600,42 @@ glibc-roundtrip: floats-roundtrip
 # on every target, and as every check with gcc + libc.a; generic-roundtrip
 # writes its ff back as C and compares the ASTs, as for a milestone.
 OWNSTART := generic
-$(FF)/generic.ff: builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt
+$(FF)/generic.ff: builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt
 	mkdir -p $(FF)
-	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt > $(FF)/generic.ff.txt
+	cat license.ff.txt builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt > $(FF)/generic.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/generic.ff.txt > $@
 $(eval $(call check,generic))
 GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit
 generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
-	$(CAP) timeout 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
-	$(CAP) timeout 120 perl ../compiler/gen/ff2c.pl $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
-	$(CAP) timeout 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
+	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
+	$(RUN) -t 120 perl ../compiler/gen/ff2c.pl $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
+	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/generic.rt.c > $(FF)/generic.rt.json
-	$(CAP) timeout 300 perl roundtrip.pl $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
+	$(RUN) -t 300 perl roundtrip.pl $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
+	$(RUN) -t 120 perl ../compiler/gen/headers.pl $(FF)/generic.rt.c $(FF)/generic.rt.names
 .PHONY: generic-roundtrip
+
+# ---- every check at once --------------------------------------------------------
+# make -jN all-checks: what the ports branch is checked with on GTARGET, the
+# checks that do not need each other at once, each heavy step in a slot of
+# its own (RUN). On riscv64 each milestone's check and round trip, on the
+# others ldouble's check; on each, the generic program's check and round
+# trip. What they all read is made first, once (units-ready): the ASTs and
+# asm parts of the milestones' objects, the asm check, and c2ff's pass of
+# each unit, which each milestone's c2ff would otherwise make at the same
+# time as the others.
+CHECK_MS_riscv64 := $(MILESTONES)
+CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
+ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
+ALLCHECKS := $(or $(ALLCHECKS_$(GTARGET)),ldouble-check) generic-check generic-roundtrip
+CHECK_OBJS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
+CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
+units-ready: $(CHECK_OBJS:%=$(I)/%.json) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter riscv64,$(GTARGET)),asm-check)
+	$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i)
+all-checks:
+	@$(MAKE) --no-print-directory units-ready
+	@$(MAKE) --no-print-directory -k $(ALLCHECKS)
+.PHONY: units-ready all-checks
 
 # ---- all of glibc --------------------------------------------------------------
 # Every object of the static libraries glibc installs for GTARGET
@@ -582,7 +652,7 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 # pass is made again only where c2ff's pass itself changed (c2ff exits 3:
 # the AST is made again; unit.sh). Each object's heavy step runs in one of
 # the machine's shared slots (slot.sh), make -j3 at most.
-SLOT := sh ../compiler/gen/slot.sh -v 4000000
+SLOT := $(RUN)
 ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
 # (worked out once, where a target needs it)
 ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
@@ -590,7 +660,7 @@ ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 
 CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	-fsyntax-only --target=$(GTARGET)-linux-gnu $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
+	-fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 
 $(I)/%.c2ff: $(I)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
 	@$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i;) \
@@ -606,9 +676,13 @@ all-units: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 # it cannot yet ($(I)/x.one.err, its last line c2ff's message); the names
 # it takes from other objects are left out (c2ff says so). A count of the
 # objects done and the reasons of the others, most first.
+# An object that defines nothing (riscv64's dirent/readdir.o: readdir64's
+# object defines readdir too) has nothing to translate.
 $(I)/%.one: $(I)/%.c2ff ../compiler/gen/c2ff.pl
-	@s=0; $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) $(I)/$*.json=$(I)/$*.i \
-	    -- $$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }') > $(I)/$*.one.ff.txt 2> $(I)/$*.one.err || s=$$?; \
+	@roots=$$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }'); s=0; \
+	if test -z "$$roots"; then echo "all-survey: $*: defines nothing" > $(I)/$*.one.err; : > $(I)/$*.one.ff.txt; \
+	else $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) $(I)/$*.json=$(I)/$*.i \
+	    -- $$roots > $(I)/$*.one.ff.txt 2> $(I)/$*.one.err || s=$$?; fi; \
 	echo $$s > $@
 
 all-survey: $(ALL_C:%=$(I)/%.one)
@@ -625,3 +699,30 @@ all-asm:
 	echo "all-asm: $$ok of $$n asm objects byte for byte (make's output in $(I)/all-asm.log)"
 .PHONY: all-asm
 
+# All of glibc in ff (glibc.ff, and the folder glibc/ a program includes):
+# c2ff's of every C object, from every name the objects define (nm) and
+# what the asm objects name from elsewhere, then s2ff's of every asm
+# object, then the builtins and libatomic's functions, as a milestone's.
+# The roots are in $(FF)/glibc.roots, one per line.
+ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start)
+WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start)
+$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
+	mkdir -p $(FF)
+	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
+	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; } | sort -u > $@
+
+$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
+	$(SLOT) -t 3600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
+	    $(foreach o,$(ALL_C),$(I)/$(o).json=$(I)/$(o).i) -- $$(cat $(FF)/glibc.roots) > $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
+	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
+	echo 'glibc asm:' >> $(FF)/glibc.ff.txt
+	for a in $(ALL_ASM); do \
+	    $(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $(I)/$$a.s $(I)/$$a.dump > $(FF)/glibc.asm.txt || exit 1; \
+	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.ff.txt; \
+	done
+	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt >> $(FF)/glibc.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@
+
+# the list of a kind of object, for a look at it: make print-ALL_ASM
+print-%:
+	@echo $($*)

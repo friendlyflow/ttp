@@ -172,12 +172,19 @@ sub E {
         return E($c) if $ck eq 'IntegralCast' && (tcls($n) eq 'enum' || tcls($c) eq 'enum');
         # offsetof as ff has it: the field's address in a T at 0
         if ($ck eq 'PointerToIntegral' && is_offsetof($c)) { return '(offsetof)' }
-        # long double has no literal of its own in ff: a double's, cast
+        # a double literal cast to long double: the literal
         if ($ck eq 'FloatingCast' && strip($c)->{kind} eq 'FloatingLiteral') { return '(flt ' . flt(strip($c)->{value}) . ')' }
         return "(cast $ck " . tcls($n) . ' ' . E($c) . ')';
     }
     return '(int ' . ($n->{value} // 0) . ' ' . (small_literal($n) ? 'i32' : tcls($n)) . ')' if $k eq 'IntegerLiteral';
+    # (__builtin_types_compatible_p: the constant c2ff makes of it)
+    if ($k eq 'TypeTraitExpr') {
+        my @t = map { my $q = $_->{type}{desugaredQualType} // $_->{type}{qualType} // ''; $q =~ s/\b(const|volatile|restrict)\b//g; $q =~ s/\s+/ /g; $q =~ s/^ | $//g; $q } kids($n);
+        return '(int ' . (@t == 2 && $t[0] ne '' && $t[0] eq $t[1] ? 1 : 0) . ' ' . tcls($n) . ')';
+    }
     return '(int ' . $n->{value} . ' i32)' if $k eq 'CharacterLiteral';
+    # (a long double literal, binary128: clang's decimal of it, every digit)
+    return '(fltl ' . $n->{value} . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble';
     return '(flt ' . flt($n->{value}) . ')' if $k eq 'FloatingLiteral';
     return '(str ' . str($n->{value}) . ')' if $k eq 'StringLiteral';
     return E((kids($n))[0]) if $k eq 'PredefinedExpr';
