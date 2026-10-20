@@ -378,7 +378,11 @@ $(I)/%.Ls: $(I)/%.s $(S2FF_aarch64)
 $(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
 	$(RUN) -t 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
 	$(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o > $(I)/$*.dump
-	$(XPRE)objcopy -O binary -j .text $(I)/$*.ref.o $(I)/$*.bin
+	$(XPRE)objcopy -O binary -j $(call codesec,$(I)/$*.ref.o) $(I)/$*.ref.o $(I)/$*.bin
+
+# the section of an object's code: .text, but on x86_64 the one it has
+# (glibc's multiarch asm is in .text.avx2, .text.evex ...: one an object)
+codesec = $(if $(filter x86_64,$(GTARGET)),$$($(XPRE)objdump -h $(1) | awk '$$2 ~ /^\.text/ && $$3 !~ /^0+$$/ { s = $$2 } END { print s ? s : ".text" }'),.text)
 
 # What clang does not read of gcc's C, rewritten for clang alone in a copy of
 # the .i, each to as many bytes (c2ff finds an asm statement's text in the
@@ -437,6 +441,24 @@ ASMCHECK_riscv64 = $(ASMS_stdio) csu/start
 # (aarch64: every asm object of glibc, but crti and crtn, whose .init and
 # .fini are not .text)
 ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
+# (x86_64: every asm object of glibc but those s2ff makes no ff of yet,
+# by reason: libmvec's (mathvec/: SSE and AVX's packed floats, mulpd
+# vfmadd213pd vinsertf128 ..., have no forms yet, and most have tables in
+# .rodata); bytes in another section than the code's (constants in
+# .rodata, a jump table of label differences, .int .L1 - .L2, a string);
+# crti and crtn (.init and .fini); start.S (c2ff --start's, as above);
+# jrcxz (a rel8 jump with no form yet); lea of an index with no base
+# (leaq (, %rdx, 4)); a symbol plus an offset (sym+352(%rip)))
+ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM)) \
+	math/e_exp2l math/e_exp10l math/e_expl math/s_expm1l math/e_scalbl math/e_log10l math/e_log2l math/e_logl \
+	math/e_powl math/s_log1pl string/strcasecmp_l-avx2 string/strcasecmp_l-avx2-rtm string/strcasecmp_l-sse2 \
+	string/strcasecmp_l-sse4_2 string/strncase_l-avx2 string/strncase_l-avx2-rtm string/strncase_l-sse2 \
+	string/strncase_l-sse4_2 string/strcasecmp_l-evex string/strncase_l-evex debug/____longjmp_chk \
+	string/strcmp-sse2 string/strcmp-sse4_2 string/strncmp-sse2 string/strncmp-sse4_2 string/stpcpy-sse2-unaligned \
+	string/stpncpy-sse2-unaligned string/strcat-sse2-unaligned string/strcpy-sse2-unaligned \
+	string/strncat-sse2-unaligned string/strncpy-sse2-unaligned \
+	csu/crti csu/crtn csu/start stdlib/add_n stdlib/sub_n wcsmbs/wcsncmp-avx2 wcsmbs/wcsncmp-avx2-rtm elf/dl-trampoline
+ASMCHECK_x86_64 = $(filter-out $(ASMSKIP_x86_64),$(ALL_ASM))
 ASMCHECK ?= $(or $(ASMCHECK_$(GTARGET)),$(ASMS_stdio))
 # (made by a make of its own: aarch64's list is all of glibc's asm, which
 # this Makefile works out only after this rule)
@@ -459,9 +481,15 @@ ASMTRAP_aarch64 := brk\n    0
 ASMHDR_aarch64 := 120
 ASMTRAP_arm := udf\n    0
 ASMHDR_arm := 84
+# x86_64: the first function at its alignment after the headers (s2ff
+# --align), the code in the one section the object has (codesec)
+ASMTRAP_x86_64 := int3
+ASMHDR_x86_64 := 120
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
-$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
+# (x86_64's s2ff also reads the forms of isa/, ttpc also x86_64gnu.ff)
+S2FFDEPS_x86_64 := ../compiler/gen/s2ffx86.pm ../compiler/isa/x86_64.pl ../compiler/isa/x86_64gnu.pl
+$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(S2FFDEPS_$(GTARGET)) $(SHARED) $(TTPC)
 	@rm -f $@; a=$(I)/$*; \
 	{ perl $(S2FF) $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
@@ -469,13 +497,15 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(TTPC)
 	$(RUN) -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
 	size=$$(perl $(S2FF) --size $$a$(SSRC) $$a.dump) || exit 1; \
 	skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $$a$(SSRC) $$a.dump) || exit 1,0); \
-	$(if $(filter aarch64,$(GTARGET)),$(XPRE)objcopy -O binary -j .text $(OBJ)/$*.o $$a.glibc.bin && \
+	hdr=$(if $(filter x86_64,$(GTARGET)),$$(perl $(S2FF) --align $$a$(SSRC) $$a.dump | awk '{ print int(($(ASMHDR) + $$1 - 1) / $$1) * $$1 }') || exit 1,$(ASMHDR)); \
+	sec=$(call codesec,$$a.ref.o); \
+	$(if $(filter aarch64 x86_64,$(GTARGET)),$(XPRE)objcopy -O binary -j $$sec $(OBJ)/$*.o $$a.glibc.bin && \
 	    cmp -s $$a.glibc.bin $$a.bin || { echo "asm-check: $*: the .s does not make glibc's object"; exit 1; };) \
 	$(XPRE)objdump -r $$a.ref.o > $$a.relocs; \
 	tail -c +$$((skip + 1)) $$a.bin | head -c $$size > $$a.want.raw; \
-	tail -c +$$(($(ASMHDR) + 1)) $$a.asm | head -c $$size > $$a.got.raw; \
-	perl relmask.pl $$a.relocs $$a.want.raw $$skip > $$a.want || exit 1; \
-	perl relmask.pl $$a.relocs $$a.got.raw $$skip > $$a.got || exit 1; \
+	tail -c +$$((hdr + 1)) $$a.asm | head -c $$size > $$a.got.raw; \
+	perl relmask.pl $$a.relocs $$a.want.raw $$skip $$sec > $$a.want || exit 1; \
+	perl relmask.pl $$a.relocs $$a.got.raw $$skip $$sec > $$a.got || exit 1; \
 	cmp $$a.got $$a.want || exit 1; \
 	echo "asm-check: $*: ttpc and glibc's compiler agree ($$size bytes)" > $@
 

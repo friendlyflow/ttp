@@ -107,7 +107,7 @@ decls:
 # notice, a line per child), its SPDX ids known to gen/spdx.txt; the frozen
 # files, which stay as they are, have theirs in LICENSES. A tree with an
 # unknown id fails.
-LICENSED := $(TREES) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
+LICENSED := $(TREES) $(X86GNU) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
 licenses: | $(BUILD)
 	@perl gen/licenses.pl --sidecar LICENSES $(LICENSED)
 	@printf 'license\n  GPL-3.0-or-whatever\n  a notice\n' > $(BUILD)/badlicense.ff.txt
