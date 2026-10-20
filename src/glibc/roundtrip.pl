@@ -271,6 +271,7 @@ sub str {
     ($p ne '' && $p ne 'u8' ? 'w' : '') . join(',', @b);
 }
 sub is_atomiccall { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') =~ /^__atomic_\w+_\d+$/ }
+sub is_mempcpy { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') eq '__builtin_mempcpy' }
 sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $d = (strip((kids($s))[0]) // {})->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
 sub asm_valued {
     my ($n) = @_;
@@ -328,6 +329,9 @@ sub call {
         return '(asm)' if $name =~ /^_+asm_/;
         return '(syscall ' . join(' ', map { E(strip($_)) } @args) . ')' if $name eq '__ff_syscall';
         if ($side eq 'ff' && $name =~ /^__atomic_(\w+)_\d+$/ && $atomicop{$1}) { return "(atomic $1 " . join(' ', map { E(strip($_)) } @args) . ')' }
+        # (and of a __builtin_mempcpy, whose sum ends in a conversion to
+        # void *: memset's argument in _dl_allocate_tls_init)
+        return "(call $name" . join('', map { my $e = E($_); $e =~ s/^\(cast BitCast ptr\(void\) (.*)\)$/$1/s if $side eq 'glibc' && is_mempcpy($_); ' ' . $e } @args) . ')' if $asmfn{$name};
         return "(call $name" . join('', map { ' ' . E($_) } @args) . ')';
     }
     '(call* ' . E($c) . join('', map { ' ' . E($_) } @args) . ')';
