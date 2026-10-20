@@ -1,0 +1,21 @@
+# The licenses of the frozen files of the bootstrap chain: the seeds and the
+# frozen trees, which carry no license node. Their bytes are the user's
+# audited chain of trust and stay as they are (2026-10-19), so their
+# licenses are written here. Every other tree has its license at its root
+# (license / SPDX / the notice); `make licenses` (gen/licenses.pl) checks
+# both. A path is from src/compiler, then its SPDX expression.
+#
+# Copyright (C) 2026 Nico Verrijdt. These files are part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+hosts/riscv64/ttpc.s  GPL-3.0-only
+hosts/x86_64/ttpc.s   GPL-3.0-only
+hosts/aarch64/ttpc.s  GPL-3.0-only
+hosts/arm/ttpc.s      GPL-3.0-only
+ttpc1.ff              GPL-3.0-only
+ttpc2.ff              GPL-3.0-only
+ttpc2.defs.ff         GPL-3.0-only
+ttpc3.ff              GPL-3.0-only
+ttpc3.defs.ff         GPL-3.0-only

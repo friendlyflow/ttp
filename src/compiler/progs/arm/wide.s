@@ -5,7 +5,7 @@
     .syntax unified
     .arch armv7-a
     .arch_extension idiv
-    .fpu vfpv3
+    .fpu neon
     .text
     .globl _start
     .arm
@@ -116,6 +116,9 @@ _start:
     subs r2, r11, #255, 30
     subs r5, r0, #1, 0
     subs r8, r3, #63, 2
+    subseq r7, r2, #255, 30
+    subsle r10, r5, #1, 0
+    subshi lr, r8, #63, 2
     subs r11, r6, r1
     subs r2, r11, r6, lsl #1
     subs r5, r0, r9, lsl #31
@@ -133,6 +136,9 @@ _start:
     rsb r2, r11, #255, 30
     rsb r5, r0, #1, 0
     rsb r8, r3, #63, 2
+    rsbeq r7, r2, #255, 30
+    rsble r10, r5, #1, 0
+    rsbhi lr, r8, #63, 2
     rsb r11, r6, r1
     rsb r2, r11, r6, lsl #1
     rsb r5, r0, r9, lsl #31
@@ -178,6 +184,9 @@ _start:
     add r5, r0, r9, lsl #31
     add r2, r11, r6, lsr #1
     add r5, r0, r9, lsr #31
+    addeq r7, r2, r11, lsr #1
+    addle r10, r5, r0, lsr #31
+    addhi lr, r8, r3, lsr #1
     add r2, r11, r6, asr #1
     add r5, r0, r9, asr #31
     add r2, r11, r6, ror #1
@@ -628,6 +637,9 @@ _start:
     str r11, [r6], #-4095
     str r0, [r9], #4095
     str r3, [r12], #0
+    streq r2, [r11], #-4095
+    strle r5, [r0], #4095
+    strhi r8, [r3], #0
     str r2, [r11, r6, lsl #0]
     str r5, [r0, r9, lsl #31]
     str r8, [r3, r12, lsl #2]
@@ -647,6 +659,9 @@ _start:
     ldr r11, [r6], #-4095
     ldr r0, [r9], #4095
     ldr r3, [r12], #0
+    ldreq r2, [r11], #-4095
+    ldrle r5, [r0], #4095
+    ldrhi r8, [r3], #0
     ldr r2, [r11, r6, lsl #0]
     ldr r5, [r0, r9, lsl #31]
     ldr r8, [r3, r12, lsl #2]
@@ -663,9 +678,15 @@ _start:
     strb r11, [r6, #-4095]!
     strb r0, [r9, #4095]!
     strb r3, [r12, #0]!
+    strbeq r2, [r11, #-4095]!
+    strble r5, [r0, #4095]!
+    strbhi r8, [r3, #0]!
     strb r11, [r6], #-4095
     strb r0, [r9], #4095
     strb r3, [r12], #0
+    strbeq r2, [r11], #-4095
+    strble r5, [r0], #4095
+    strbhi r8, [r3], #0
     strb r2, [r11, r6, lsl #0]
     strb r5, [r0, r9, lsl #31]
     strb r8, [r3, r12, lsl #2]
@@ -682,9 +703,15 @@ _start:
     ldrb r11, [r6, #-4095]!
     ldrb r0, [r9, #4095]!
     ldrb r3, [r12, #0]!
+    ldrbeq r2, [r11, #-4095]!
+    ldrble r5, [r0, #4095]!
+    ldrbhi r8, [r3, #0]!
     ldrb r11, [r6], #-4095
     ldrb r0, [r9], #4095
     ldrb r3, [r12], #0
+    ldrbeq r2, [r11], #-4095
+    ldrble r5, [r0], #4095
+    ldrbhi r8, [r3], #0
     ldrb r2, [r11, r6, lsl #0]
     ldrb r5, [r0, r9, lsl #31]
     ldrb r8, [r3, r12, lsl #2]
@@ -701,6 +728,9 @@ _start:
     strh r11, [r6], #-255
     strh r0, [r9], #255
     strh r3, [r12], #0
+    strheq r2, [r11], #-255
+    strhle r5, [r0], #255
+    strhhi r8, [r3], #0
     strh r11, [r6, r1]
     strh r11, [r6, r1]!
     strh r11, [r6], r1
@@ -713,6 +743,9 @@ _start:
     ldrd r0, r1, [r3], #-255
     ldrd r10, r11, [r12], #255
     ldrd r4, r5, [r1], #0
+    ldrdeq r0, r1, [r3], #-255
+    ldrdle r10, r11, [r12], #255
+    ldrdhi r4, r5, [r1], #0
     ldrd r0, r1, [r3, r5]
     ldrd r10, r11, [r12, r1]
     ldrd r0, r1, [r3, r5]!
@@ -743,6 +776,9 @@ _start:
     ldrh r11, [r6], #-255
     ldrh r0, [r9], #255
     ldrh r3, [r12], #0
+    ldrheq r2, [r11], #-255
+    ldrhle r5, [r0], #255
+    ldrhhi r8, [r3], #0
     ldrh r11, [r6, r1]
     ldrh r11, [r6, r1]!
     ldrh r11, [r6], r1
@@ -774,6 +810,9 @@ _start:
     stmia r12, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11}
     stmia r0!, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
     stmia r12!, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11}
+    stmiaeq r0!, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
+    stmiale r12!, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11}
+    stmiahi r0!, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
     ldmia r0, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
     ldmia r12, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11}
     ldmia r0!, {r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
@@ -1022,6 +1061,69 @@ _start:
     vmrs r1, fpscr
     vmrs APSR_nzcv, fpscr
     vmsr fpscr, r1
+    pld [r6, #-4095]
+    pld [r9, #4095]
+    pld [r12, #0]
+    uqsub8 r11, r6, r1
+    uadd8 r11, r6, r1
+    sel r11, r6, r1
+    mrc p15, 0, r2, c13, c0, 3
+    mrc p14, 7, r5, c0, c15, 0
+    mcr p15, 0, r2, c13, c0, 3
+    mcr p14, 7, r5, c0, c15, 0
+    ldcl p1, c10, [r6], #8
+    ldcl p14, c15, [r9], #0
+    ldcl p1, c0, [r12], #1020
+    stcl p1, c10, [r6], #8
+    stcl p14, c15, [r9], #0
+    stcl p1, c0, [r12], #1020
+    vldmia r11!, {d8-d15}
+    vldmia r0!, {d0}
+    vldmia r3!, {d16-d31}
+    vstmia r11!, {d8-d15}
+    vstmia r0!, {d0}
+    vstmia r3!, {d16-d31}
+    vmov.32 r11, d10[0]
+    vmov.32 r0, d17[1]
+    vdup.8 q10, r1
+    vand q1, q10, q3
+    vand d21, d10, d31
+    vorr q1, q10, q3
+    vorr d21, d10, d31
+    vceq.i8 q1, q10, q3
+    vpadd.i8 d21, d10, d31
+    vld1.8 {d0}, [r6]!
+    vld1.8 {d4}, [r9 :64]!
+    vld1.8 {d8}, [r12]!
+    vld1.8 {d27}, [r1 :64]!
+    vld1.8 {d0-d1}, [r6]!
+    vld1.8 {d4-d5}, [r9 :64]!
+    vld1.8 {d8-d9}, [r12 :128]!
+    vld1.8 {d26-d27}, [r1]!
+    vld1.8 {d0-d2}, [r6]!
+    vld1.8 {d4-d6}, [r9 :64]!
+    vld1.8 {d8-d10}, [r12]!
+    vld1.8 {d25-d27}, [r1 :64]!
+    vld1.8 {d0-d3}, [r6]!
+    vld1.8 {d4-d7}, [r9 :64]!
+    vld1.8 {d8-d11}, [r12 :128]!
+    vld1.8 {d24-d27}, [r1 :256]!
+    vst1.8 {d0}, [r6]!
+    vst1.8 {d4}, [r9 :64]!
+    vst1.8 {d8}, [r12]!
+    vst1.8 {d27}, [r1 :64]!
+    vst1.8 {d0-d1}, [r6]!
+    vst1.8 {d4-d5}, [r9 :64]!
+    vst1.8 {d8-d9}, [r12 :128]!
+    vst1.8 {d26-d27}, [r1]!
+    vst1.8 {d0-d2}, [r6]!
+    vst1.8 {d4-d6}, [r9 :64]!
+    vst1.8 {d8-d10}, [r12]!
+    vst1.8 {d25-d27}, [r1 :64]!
+    vst1.8 {d0-d3}, [r6]!
+    vst1.8 {d4-d7}, [r9 :64]!
+    vst1.8 {d8-d11}, [r12 :128]!
+    vst1.8 {d24-d27}, [r1 :256]!
     .thumb
     lsls r7, r4, #1
     lsls r2, r7, #31
@@ -1888,3 +1990,60 @@ _start:
     ble.w .-1048572
     ble.w .+1048578
     ble.w .+4
+    uadd8 r11, r6, r1
+    sel r11, r6, r1
+    nop.w
+    pld [r6, #0]
+    pld [r9, #4095]
+    pld [r12, #291]
+    vand q1, q10, q3
+    vand d21, d10, d31
+    vorr q1, q10, q3
+    vorr d21, d10, d31
+    vceq.i8 q1, q10, q3
+    vpadd.i8 d21, d10, d31
+    vld1.8 {d0}, [r6]!
+    vld1.8 {d4}, [r9 :64]!
+    vld1.8 {d8}, [r12]!
+    vld1.8 {d27}, [r1 :64]!
+    vld1.8 {d0-d1}, [r6]!
+    vld1.8 {d4-d5}, [r9 :64]!
+    vld1.8 {d8-d9}, [r12 :128]!
+    vld1.8 {d26-d27}, [r1]!
+    vld1.8 {d0-d2}, [r6]!
+    vld1.8 {d4-d6}, [r9 :64]!
+    vld1.8 {d8-d10}, [r12]!
+    vld1.8 {d25-d27}, [r1 :64]!
+    vld1.8 {d0-d3}, [r6]!
+    vld1.8 {d4-d7}, [r9 :64]!
+    vld1.8 {d8-d11}, [r12 :128]!
+    vld1.8 {d24-d27}, [r1 :256]!
+    vst1.8 {d0}, [r6]!
+    vst1.8 {d4}, [r9 :64]!
+    vst1.8 {d8}, [r12]!
+    vst1.8 {d27}, [r1 :64]!
+    vst1.8 {d0-d1}, [r6]!
+    vst1.8 {d4-d5}, [r9 :64]!
+    vst1.8 {d8-d9}, [r12 :128]!
+    vst1.8 {d26-d27}, [r1]!
+    vst1.8 {d0-d2}, [r6]!
+    vst1.8 {d4-d6}, [r9 :64]!
+    vst1.8 {d8-d10}, [r12]!
+    vst1.8 {d25-d27}, [r1 :64]!
+    vst1.8 {d0-d3}, [r6]!
+    vst1.8 {d4-d7}, [r9 :64]!
+    vst1.8 {d8-d11}, [r12 :128]!
+    vst1.8 {d24-d27}, [r1 :256]!
+    vmov d21, r6, r1
+    vmov r11, r6, d31
+    vmov.32 r11, d10[0]
+    vmov.32 r0, d17[1]
+    vdup.8 q10, r1
+    vpush.64 {d0-d15}
+    vpush.64 {d16-d31}
+    vpush.64 {d8-d15}
+    vpush.64 {d31}
+    vpop.64 {d0-d15}
+    vpop.64 {d16-d31}
+    vpop.64 {d8-d15}
+    vpop.64 {d31}

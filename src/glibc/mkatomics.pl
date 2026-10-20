@@ -12,7 +12,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../compiler/gen";
-use FF qw(node write_txt);
+use FF qw(node ttp_license write_txt);
 
 sub leaf { map { node($_) } @_ }
 sub param { my ($n, @t) = @_; node("$n:", leaf(@t)) }
@@ -43,4 +43,4 @@ for my $n (1, 2, 4, 8) {
     }
 }
 print write_txt(node('comment', node("libatomic's functions for one thread, written by mkatomics.pl.")),
-    node('atomics:', @fns));
+    node('atomics:', ttp_license(), @fns));

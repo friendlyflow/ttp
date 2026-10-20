@@ -62,6 +62,7 @@ sub kind {
     return "r" if $RREG{$p};
     return "s" if $p =~ /^s[dnm]$/;
     return "d" if $p =~ /^d[dnm]$/;
+    return "q" if $p =~ /^q[dnm]$/;
     "n";
 }
 
@@ -81,13 +82,14 @@ for my $e (@ARM::WIDE) {
             if ($kind eq "r") {
                 if ($mode eq "t") { $v{$p} = (3 * $k + 3 * $i + 1) % 8 }
                 else { my @pool = (0 .. 12, 14); $v{$p} = $pool[(3 * $k + 5 * $i + 1) % @pool] }
-            } else { $v{$p} = (7 * $k + 11 * $i + 31) % 32 }
+            } elsif ($kind eq "q") { $v{$p} = (5 * $k + 7 * $i + 3) % 16 }
+            else { $v{$p} = (7 * $k + 11 * $i + 31) % 32 }
         }
         # ff: the call, its operands as ttpc reads them
         my @args = map {
             my $p = $_;
             my $kind = kind($p);
-            $kind eq "r" ? rname($v{$p}) : $kind eq "s" ? "s$v{$p}" : $kind eq "d" ? "d$v{$p}"
+            $kind eq "r" ? rname($v{$p}) : $kind eq "s" ? "s$v{$p}" : $kind eq "d" ? "d$v{$p}" : $kind eq "q" ? "q$v{$p}"
             : $p =~ /^(cond|firstcond)$/ ? "cond.$CC[$v{$p}]"
             : $p eq "regs" ? sprintf("0x%x", $v{$p}) : $v{$p}
         } @$params;
@@ -119,7 +121,9 @@ sub render {
     : $how eq "~" ? sprintf("0x%x", thumb_imm($x))
     : $how =~ /^%(f32|f64)$/ ? vfp_imm($x)
     : $how eq "~n" ? do { my $r = substr($p, 0, 1); $v{n} == 1 ? "{$r$x}" : "{$r$x-$r" . ($x + $v{n} - 1) . "}" }
-    : $kind eq "r" ? rname($x) : $kind eq "s" ? "s$x" : $kind eq "d" ? "d$x"
+    : $how =~ /^~(\d)$/ ? do { my $r = substr($p, 0, 1); $1 == 1 ? "{$r$x}" : "{$r$x-$r" . ($x + $1 - 1) . "}" }
+    : $how eq "@" ? ("", " :64", " :128", " :256")[$x]
+    : $kind eq "r" ? rname($x) : $kind eq "s" ? "s$x" : $kind eq "d" ? "d$x" : $kind eq "q" ? "q$x"
     : $p eq "regs" ? reglist($x)
     : $p eq "option" ? $BAR{$x}
     : $p eq "cond" || $p eq "firstcond" ? $CC[$x]
@@ -166,7 +170,7 @@ print $o <<'EOF';
     .syntax unified
     .arch armv7-a
     .arch_extension idiv
-    .fpu vfpv3
+    .fpu neon
     .text
     .globl _start
     .arm

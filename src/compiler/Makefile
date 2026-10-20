@@ -41,13 +41,25 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit cldlit ccomplex cbodylayers clicense
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense cldlit cgroupdot casmalign ccomplex cbodylayers
 SHARED := shared.ff
+# the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
+X86GNU := x86_64gnu.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
-	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff language.ff
+	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff language.ff
 P := $(BUILD)/progs
+
+# The trees as the frozen ttpcs read them (stage0 and the seeds of the
+# hosts, ttpc1, ttpc2, ttpc3): without their licenses, a word younger than
+# they are (gen/unlicense.pl). A license emits nothing, so what they make is
+# the same; stage1 makes stage2 from the trees with their licenses, and
+# stage1 == stage2 checks it.
+NL := $(BUILD)/nl
+$(NL)/%.ff: %.ff gen/unlicense.pl gen/FF.pm
+	@mkdir -p $(dir $@)
+	perl gen/unlicense.pl $< > $@
 
 all: $(BIN)
 
@@ -66,7 +78,7 @@ test: $(BIN)
 	$(QEMU) $(BIN) $(FF)
 
 # ttpc assembles a program, its listing goes to <name>.lst.
-$(P)/%.elf: progs/riscv64/%.ff $(BIN) | $(P)
+$(P)/%.elf: $(NL)/progs/riscv64/%.ff $(BIN) | $(P)
 	$(QEMU) $(BIN) $< $@ > $(P)/$*.lst
 
 $(P)/%.twin.bin: progs/riscv64/%.s ff64.ld | $(P)
@@ -90,6 +102,18 @@ roundtrip: | $(BUILD)
 # (comment:), so that an editor can offer a call of it.
 decls:
 	@perl gen/decls.pl shared.ff.txt $(TTPC_FF)
+
+# Every tree has its license at its root (license / SPDX expression / the
+# notice, a line per child), its SPDX ids known to gen/spdx.txt; the frozen
+# files, which stay as they are, have theirs in LICENSES. A tree with an
+# unknown id fails.
+LICENSED := $(TREES) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
+licenses: | $(BUILD)
+	@perl gen/licenses.pl --sidecar LICENSES $(LICENSED)
+	@printf 'license\n  GPL-3.0-or-whatever\n  a notice\n' > $(BUILD)/badlicense.ff.txt
+	@! perl gen/licenses.pl $(BUILD)/badlicense.ff.txt > $(BUILD)/badlicense.out
+	@grep -q "unknown SPDX id GPL-3.0-or-whatever" $(BUILD)/badlicense.out
+	@echo "licenses: a tree with an unknown SPDX id fails"
 
 # Every program, after its 120-byte ELF header, must be byte-identical to
 # its GNU twin.
@@ -146,18 +170,18 @@ $(BOOT)/ttpc2.self: $(BOOT)/shared1.ff $(TTPC2_SRC) $(BOOT)/ttpc2 gen/insize.pl
 
 # ttpc1 and ttpc2 read at most 4 MiB: they get shared.ff with only riscv64's
 # section (trim.pl), which is all that emits anything for them.
-$(BOOT)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BOOT)
+$(BOOT)/shared1.ff: $(NL)/$(SHARED) gen/trim.pl gen/FF.pm | $(BOOT)
 	perl gen/trim.pl $< riscv64 > $@
 
 $(BOOT)/ttpc3: $(TTPC3_SRC) $(BOOT)/ttpc2 $(BOOT)/shared1.ff gen/insize.pl
 	perl gen/insize.pl ttpc2 $(BOOT)/shared1.ff $(TTPC3_SRC)
 	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff $(TTPC3_SRC) $@ > $@.lst
 
-$(BOOT)/ttpc3.self: $(SHARED) $(TTPC3_SRC) $(BOOT)/ttpc3
-	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(SHARED) $(TTPC3_SRC) $@ > $@.lst
+$(BOOT)/ttpc3.self: $(NL)/$(SHARED) $(TTPC3_SRC) $(BOOT)/ttpc3
+	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(NL)/$(SHARED) $(TTPC3_SRC) $@ > $@.lst
 
-$(BOOT)/stage1: $(TTPC_SRC) $(BOOT)/ttpc3
-	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(TTPC_SRC) $@ > $@.lst
+$(BOOT)/stage1: $(TTPC_SRC:%=$(NL)/%) $(BOOT)/ttpc3
+	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(TTPC_SRC:%=$(NL)/%) $@ > $@.lst
 
 $(BOOT)/stage2: $(TTPC_SRC) $(BOOT)/stage1
 	$(QEMU) $(BOOT)/stage1 --target riscv64 $(TTPC_SRC) $@ > $@.lst
@@ -172,7 +196,7 @@ bootstrap: $(BOOT)/ttpc1.self $(BOOT)/ttpc2.self $(BOOT)/ttpc3.self $(BOOT)/stag
 	cmp $(BOOT)/stage1 $(BOOT)/stage2
 	@echo "bootstrap: stage1 == stage2"
 	@for p in $(PROGS); do \
-	    $(QEMU) $(BOOT)/ttpc1 progs/riscv64/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
+	    $(QEMU) $(BOOT)/ttpc1 $(NL)/progs/riscv64/$$p.ff $(BOOT)/$$p.elf > $(BOOT)/$$p.lst && \
 	    cmp $(BOOT)/$$p.elf $(P)/$$p.elf && cmp $(BOOT)/$$p.lst $(P)/$$p.lst || exit 1; \
 	done
 	$(QEMU) $(BIN) $(TTPC1_FF) > $(BOOT)/tree0.txt
@@ -276,7 +300,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit cldlit ccomplex cbodylayers
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit cldlit cgroupdot casmalign ccomplex cbodylayers
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 
@@ -344,10 +368,20 @@ $(foreach t,$(TARGETS),$(eval $(call target,$(t))))
 
 # the forms GNU as picks for glibc's asm (isa/x86_64gnu.pl): every one in
 # progs/x86_64/gnu.ff (mkgnu.pl), byte for byte its GNU twin gnu.s
+$(P)/x86_64/gnu.elf: progs/x86_64/gnu.ff $(SHARED) $(X86GNU) $(BOOT)/stage2 | $(P)/x86_64
+	$(QEMU) $(BOOT)/stage2 --target x86_64 $(SHARED) $(X86GNU) $< $@ > $(P)/x86_64/gnu.lst
 x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
 	tail -c +$$(($(THDR_x86_64) + 1)) $(P)/x86_64/gnu.elf | cmp - $(P)/x86_64/gnu.twin.bin
 	@echo "x86gnu: ttpc and GNU as agree on every form of isa/x86_64gnu.pl (gnu.s)"
 .PHONY: x86gnu
+
+# The calls by each target's C ABI, against gcc (progs/abi/run.sh): gcc's
+# functions of many shapes (by s2ff) and C translated by c2ff, built by
+# ttpc into one program, call each other; every check must say ok. So far
+# arm (the AAPCS, gen/patches/abi.pl).
+ABI_TARGETS := arm
+abi: $(BOOT)/stage2 $(SHARED)
+	@for t in $(ABI_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/abi/run.sh $$t $(P)/abi-$$t > $(P)/abi-$$t.log 2>&1 || { cat $(P)/abi-$$t.log; exit 1; }; tail -n 1 $(P)/abi-$$t.log; done
 
 targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%) x86gnu
 	! $(QEMU) $(BOOT)/stage2 --target mips $(SHARED) progs/cexit.ff $(P)/mips.celf 2> $(P)/mips.err
@@ -384,7 +418,7 @@ SEEDCROSS_arm := $(call native_or,armv7l,arm-none-eabi-)
 SASFLAGS_x86_64 :=
 SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
-SEED_FF := ttpc1.ff $(PROGS:%=progs/riscv64/%.ff)
+SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
 
 define host
 
@@ -395,8 +429,8 @@ $(BUILD)/$(1)/seed: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
 	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
 	$(SEEDCROSS_$(1))ld -static -e _start $$@.o -o $$@
 
-$(BUILD)/$(1)/ttpc.ff: $(TTPC_FF) ttpc.defs.ff $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
-	perl gen/mkhost.pl $(1) $(BUILD)/$(1) ttpc.defs.ff $(TTPC_FF)
+$(BUILD)/$(1)/ttpc.ff: $(NL)/$(TTPC_FF) $(NL)/ttpc.defs.ff $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
+	perl gen/mkhost.pl $(1) $(BUILD)/$(1) $(NL)/ttpc.defs.ff $(NL)/$(TTPC_FF)
 
 $(BUILD)/$(1)/ttpc.defs.ff: $(BUILD)/$(1)/ttpc.ff
 
@@ -415,7 +449,7 @@ $(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/shared1.ff gen/insiz
 	perl gen/insize.pl ttpc2 $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff
 	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
 
-$(BUILD)/$(1)/shared1.ff: $(SHARED) gen/trim.pl gen/FF.pm | $(BUILD)/$(1)
+$(BUILD)/$(1)/shared1.ff: $(NL)/$(SHARED) gen/trim.pl gen/FF.pm | $(BUILD)/$(1)
 	perl gen/trim.pl $$< riscv64 $(1) > $$@
 
 $(BUILD)/$(1)/ttpc3.ff: $(TTPC3_SRC) $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
@@ -427,11 +461,11 @@ $(BUILD)/$(1)/ttpc3: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc3.ff $(BUILD)/$(1)/tt
 	perl gen/insize.pl ttpc2 $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff
 	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
 
-$(BUILD)/$(1)/ttpc3.self: $(BUILD)/$(1)/ttpc3
-	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
+$(BUILD)/$(1)/ttpc3.self: $(BUILD)/$(1)/ttpc3 $(NL)/$(SHARED)
+	$(RUN_$(1)) $$< --target $(1) $(NL)/$(SHARED) $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
 
-$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc.ff
-	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc.ff $(NL)/$(SHARED)
+	$(RUN_$(1)) $$< --target $(1) $(NL)/$(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/stage2: $(BUILD)/$(1)/stage1
 	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
@@ -440,10 +474,10 @@ $(BUILD)/$(1)/cross: $(BOOT)/stage2 $(BUILD)/$(1)/ttpc.ff
 	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 # The seed against ttpc.s: the same output, listing, errors and status.
-seed-$(1): $(BUILD)/$(1)/seed $(BIN) | $(BUILD)/$(1)
+seed-$(1): $(BUILD)/$(1)/seed $(BIN) $(SEED_FF) | $(BUILD)/$(1)
 	@set -e; d=$(BUILD)/$(1)/seedcheck; mkdir -p $$$$d; \
-	head -c 1000 progs/riscv64/exit42.ff > $$$$d/truncated.ff; \
-	cat progs/riscv64/exit42.ff progs/riscv64/exit42.ff > $$$$d/trailing.ff; \
+	head -c 1000 $(NL)/progs/riscv64/exit42.ff > $$$$d/truncated.ff; \
+	cat $(NL)/progs/riscv64/exit42.ff $(NL)/progs/riscv64/exit42.ff > $$$$d/trailing.ff; \
 	run() { n=$$$$1; shift; \
 	    s=0; $(QEMU) $(BIN) "$$$$@" $$$$d/$$$$n.out0 > $$$$d/$$$$n.1 2> $$$$d/$$$$n.2 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.3; \
 	    s=0; $(RUN_$(1)) $(BUILD)/$(1)/seed "$$$$@" $$$$d/$$$$n.out1 > $$$$d/$$$$n.4 2> $$$$d/$$$$n.5 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.6; \
@@ -456,7 +490,7 @@ seed-$(1): $(BUILD)/$(1)/seed $(BIN) | $(BUILD)/$(1)
 	    s=0; $(RUN_$(1)) $(BUILD)/$(1)/seed "$$$$@" > $$$$d/$$$$n.4 2> $$$$d/$$$$n.5 || s=$$$$?; echo $$$$s > $$$$d/$$$$n.6; \
 	    cmp $$$$d/$$$$n.1 $$$$d/$$$$n.4; cmp $$$$d/$$$$n.2 $$$$d/$$$$n.5; cmp $$$$d/$$$$n.3 $$$$d/$$$$n.6; \
 	    echo "seed-$(1): $$$$n: as ttpc.s"; }; \
-	pr print-ttpc1 ttpc1.ff; pr print-hello progs/riscv64/hello.ff; pr toolarge $(SHARED); pr usage; \
+	pr print-ttpc1 ttpc1.ff; pr print-hello $(NL)/progs/riscv64/hello.ff; pr toolarge $(SHARED); pr usage; \
 	pr toomany a b c; pr missing $$$$d/none.ff; pr truncated $$$$d/truncated.ff; pr trailing $$$$d/trailing.ff
 
 bootstrap-$(1): $(BUILD)/$(1)/ttpc2.self $(BUILD)/$(1)/ttpc3.self $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),$(BUILD)/$(1)/cross)
@@ -509,6 +543,7 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # changing any of them. The whole trees keep the shared pages they have.
 refresh:
 	perl gen/mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
+	perl gen/mkgnuff.pl > $(X86GNU).tmp && mv $(X86GNU).tmp $(X86GNU)
 
 # A change of ttpc is a patch script (gen/patches/*.pl, see gen/patchlib.pl),
 # committed with the tree it changes, so that it can be replayed when a
@@ -526,4 +561,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean
+.PHONY: all test roundtrip decls licenses check rvv run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean abi

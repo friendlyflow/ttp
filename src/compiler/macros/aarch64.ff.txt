@@ -1,3 +1,8 @@
+license
+  GPL-3.0-only
+  Copyright (C) 2026 Nico Verrijdt
+  This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+  It comes with no warranty. See the file LICENSE for the full text.
 macros:
   comment
     macros/aarch64.ff.txt: the groups of the aarch64 section after its instructions (isa/aarch64.pl reads it, mkff.pl puts it in shared.ff): macros:, elf: (the ELF header and frame:), c: (the primitives of the C layer), linux: (the system calls).

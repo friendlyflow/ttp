@@ -12,9 +12,9 @@
 # ttpc for a host: perl mkwhole.pl x86_64 ttpc.defs.ff ttpc.ff, of the trees
 # mkhost.pl made. prog.ff is a program of only its own (its root's children
 # are the program), or a whole tree, whose last page is the program and
-# whose other pages are definitions. Comments, else if: (stage0 would take
-# it for a register, see FF.pm frozen) and the compile-time choice of a
-# target are left out. Only the definitions the program reaches are kept,
+# whose other pages are definitions. Comments, licenses, else if: (stage0
+# would take it for a register, see FF.pm frozen) and the compile-time
+# choice of a target are left out. Only the definitions the program reaches are kept,
 # for stage0's 1 MiB.
 #
 # A host tool (core Perl only), not part of ttpc.
@@ -36,7 +36,7 @@ sub slurp {
     <$in>;
 }
 
-my ($shared) = @{ frozen(read_ff(slurp("$FindBin::Bin/../shared.ff")))->{children} };
+my ($shared) = grep { $_->{content} eq "shared:" } @{ frozen(read_ff(slurp("$FindBin::Bin/../shared.ff")))->{children} };
 my %section = map { ($_->{content}, $_) } grep { $_->{content} =~ /^\w+:$/ && @{ $_->{children} }
     && $_->{children}[0]{content} =~ /^\w+:$/ } @{ $shared->{children} };
 die "mkwhole: $target is not a target\n" unless $section{"$target:"};

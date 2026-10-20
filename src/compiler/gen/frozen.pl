@@ -3,8 +3,9 @@
 #
 #   perl frozen.pl shared.ff > boot/shared.ff
 #
-# ttpc1 knows comment only in code: it takes no comment beside the groups
-# of a section or the definitions of a group. And it takes any definition
+# ttpc1 knows no license (FF.pm frozen drops them) and comment only in
+# code: it takes no comment beside the groups of a section or the
+# definitions of a group. And it takes any definition
 # whose name has a space and which has children for a register, so the
 # declaration else if: / condition would name registers else and if. The
 # bootstrap hands it shared.ff without either (see FF.pm frozen, the
