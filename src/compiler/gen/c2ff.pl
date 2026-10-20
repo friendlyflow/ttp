@@ -1251,6 +1251,13 @@ sub expr {
         return cast_node(\@to, item(expr((kids($n))[0]))) if "@to" =~ /^[iu]64$/ && "@from" !~ /^[iu]64$/;
     }
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/) {
+        # (in a global's value, a float or double literal made long double is
+        # the long double literal of its value, which binary128 holds
+        # exactly: ttpc has no conversion to run there, libm's zero = 0.0)
+        my $e = strip((kids($n))[0]);
+        if ($in_global && isld($n) && $e->{kind} eq 'FloatingLiteral' && (my $t = tword($e)) =~ /^(float|double)$/) {
+            return node($target eq 'arm' || $t eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : ldround($e->{value}, 24, -149, 127));
+        }
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
     # C's conversion to _Bool (in ff a u8) gives 0 or 1: the value compared
@@ -1337,9 +1344,13 @@ sub expr {
         if ($op eq '&' && $in_global && $s->{kind} eq 'ArraySubscriptExpr') {
             my ($b, $i) = kids($s);
             # (the index a number, as ttpc wants it there: an enum constant its value)
+            # (or a constant: random.c's &randtbl[SEP_3 + 1], &randtbl[sizeof
+            # (randtbl) / sizeof (randtbl[0])], which ttpc works out only as a
+            # number)
             my $x = strip($i);
+            my $c = int_const($i);
             my @i = $x->{kind} eq 'DeclRefExpr' && $x->{referencedDecl}{kind} eq 'EnumConstantDecl' && defined $enumval{ $x->{referencedDecl}{name} }
-                ? node($enumval{ $x->{referencedDecl}{name} }) : item(expr($i));
+                ? node($enumval{ $x->{referencedDecl}{name} }) : defined $c ? node($c) : item(expr($i));
             return node(':', expr($b), node('+'), @i) if strip($b)->{kind} eq 'DeclRefExpr';
         }
         return node('address', expr($e)) if $op eq '&';
@@ -1576,6 +1587,16 @@ sub int_const {
         $v += 0;
         return $n->{opcode} eq '-' ? -$v : $n->{opcode} eq '~' ? ~$v : $n->{opcode} eq '+' ? $v : undef;
     }
+    # sizeof of a scalar, or of an array of scalars
+    if ($k eq 'UnaryExprOrTypeTraitExpr' && ($n->{name} // '') eq 'sizeof') {
+        my $t = $n->{argType} ? ($n->{argType}{desugaredQualType} // $n->{argType}{qualType}) : (kids($n))[0] ? qt((kids($n))[0]) : undef;
+        defined $t or return;
+        $t =~ s/\b(const|volatile)\b//g;
+        $t = trim($t);
+        my $count = $t =~ s/\s*\[(\d+)\]$// ? $1 : 1;
+        my $z = eval { csize($t) } // return;
+        return $count * $z;
+    }
     if ($k eq 'BinaryOperator') {
         # (as numbers: | on two strings, as JSON has them, is a string's)
         my ($a, $b) = map { int_const($_) } kids($n);
@@ -1584,7 +1605,7 @@ sub int_const {
         use integer;
         my $o = $n->{opcode};
         return $o eq '|' ? $a | $b : $o eq '&' ? $a & $b : $o eq '^' ? $a ^ $b : $o eq '+' ? $a + $b : $o eq '-' ? $a - $b
-            : $o eq '*' ? $a * $b : $o eq '<<' ? $a << $b : $o eq '>>' ? $a >> $b : undef;
+            : $o eq '*' ? $a * $b : $o eq '<<' ? $a << $b : $o eq '>>' ? $a >> $b : $o eq '/' && $b ? $a / $b : undef;
     }
     undef;
 }
