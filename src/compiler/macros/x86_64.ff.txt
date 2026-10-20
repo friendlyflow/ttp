@@ -1459,6 +1459,7 @@ c:
   comment
     For compile time only, when ttpc runs on x86_64 (assembled with rv64:): the bridge to ttpc, whose registers are the slots at rbx.
     cc_ctargs: a1 = X (r11, at 88: the C layer gives a1 there), a2 = SP (rsp, at 96). cc_call_l: a0 = V (rax, at 80), call the address in L, then V = a0.
+    Compile time runs with ttpc's registers in their slots (rv.jitcall spills the hot ones, isa/x86_64rv.pl): cc_call_l fills them for the call and spills them after.
   cc_ctargs:
     movq.mr
       r11
@@ -1478,8 +1479,13 @@ c:
       rax
       80
       rbx
-    call.r
+    movq
       r10
+      rax
+    rv.fill
+    call.r
+      rax
+    rv.spill
     movq.m
       80
       rbx
@@ -1489,6 +1495,7 @@ rv64:
     rv64: ttpc's own instructions, RV64 in ff order (the destination last), in x86_64 instructions: what ttpc, written in RV64, is assembled with to run on x86_64.
     mkhost.pl renames each op of ttpc to rv.op and each register to rv.reg; mkwhole.pl puts this group in the whole tree of ttpc for the seed.
     The RV64 registers are slots of 8 bytes in memory, rbx holds their address: x86_64 has too few registers, and the same slots for all of them keep every instruction one fixed size.
+    These are the forms with every register in its slot; the ten most used live in x86_64 registers of their own, in the forms rv.op.h... of isa/x86_64rv.pl, which mkhost.pl picks.
     rax rcx rdx are the scratch registers, rsp is the call stack of call and ret, ra a slot that nothing reads. mkhost.pl names them rv.a0 ... (x86_64 has an sp of its own).
     rv.start regs stack: first in _start, rbx = regs, the slot of sp = rsp (argc and argv stay at 0(sp) and 8(sp) ...), rsp = stack, the end of the call stack.
   rv.x0 rv.zero:

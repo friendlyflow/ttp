@@ -668,4 +668,12 @@ for my $s (["d", 0, "l"], ["q", 1, "q"]) {
     $isa->{groups} = [grep { $_->{content} !~ /^gnu / || $_->{content} eq "gnu encodings:" } @{ $isa->{groups} }];
 }
 
+# the hot registers of rv64: (isa/x86_64rv.pl): its ops with RV64's most used
+# registers in x86_64 registers of their own
+{
+    our $X86_ISA = $isa;
+    (my $dir = __FILE__) =~ s{[^/]*$}{};
+    do "${dir}x86_64rv.pl" or die "x86_64: x86_64rv.pl: " . ($@ || $!) . "\n";
+}
+
 $isa->section("x86_64", "macros/x86_64.ff.txt");
