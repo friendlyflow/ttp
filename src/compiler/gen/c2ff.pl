@@ -5,7 +5,7 @@
 # C layer has no form for stops the translation, named, with where it is.
 #
 #   perl c2ff.pl [--page name] [--target t] tu.json=tu.i ... -- root ... > out.ff.txt
-#   perl c2ff.pl --program tree [--target t] tu.json=tu.i -- main > prog.ff.txt
+#   perl c2ff.pl --program tree [--index tree/index.ff] [--target t] tu.json=tu.i -- main > prog.ff.txt
 #   perl c2ff.pl --types        (the type words, for a look)
 #   perl c2ff.pl --pass [--target t] tu.json=tu.i ...   (each unit's own pass, cached)
 #   an argument @file stands for the lines of file
@@ -32,7 +32,11 @@
 # page itself, after include / tree (glibc in ff, which has the rest, its
 # startup too: start.S's _start, which calls __libc_start_main with main).
 # With --start, for a target whose glibc in ff has no startup of its own
-# yet, the program has a _start that exits with what main returns.
+# yet, the program has a _start that exits with what main returns. With
+# --index, the index.ff of the tree's folder: a weak name of the program's
+# that the tree defines is the tree's, as the linker takes an object's
+# definition for an undefined weak one (libsupport's mallopt), and so is a
+# function of the tree's that a header has as a gnu89 extern inline one.
 #
 # --zero name: an object glibc's asm only reserves, zeroed in .bss (elf/dl-debug-
 # symbols.S's _r_debug_extended), is a global of the type C declares, zero.
@@ -87,6 +91,7 @@ my %scalar = (
 # The words a type run can be made of, besides the names of types.
 my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
+my %treedefs;              # --index file: the names the program's tree defines
 my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
 my %desugar;                # a typeof (expression) as clang writes it, and the type it is
@@ -309,6 +314,13 @@ while (@ARGV) {
     if ($a eq '--start') { $start = 1; next }
     if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
+    if ($a eq '--index') {
+        my $f = shift @ARGV;
+        open my $h, '<:raw', $f or die "c2ff: cannot open $f: $!\n";
+        my ($index) = grep { $_->{content} eq 'index:' } @{ read_ff(do { local $/; <$h> })->{children} } or die "c2ff: $f has no index\n";
+        $treedefs{ $_->{content} =~ s/:$//r } = 1 for FF::kids($index);
+        next;
+    }
     if ($a eq '--target') { $target = shift @ARGV; next }
     if ($a eq '--pass') { $passonly = 1; next }
     if ($a eq '--keep-going') { $keep_going = 1; next }
@@ -454,7 +466,12 @@ for my $u (@units) {
         if ($d->{kind} eq 'FunctionDecl') {
             if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
             if (my ($r) = grep { $_->{kind} eq 'IFuncAttr' } @in) { $ifunc{$name} = [$d, $u, resolver($u, $r)]; next }
-            if (grep { $_->{kind} eq 'CompoundStmt' } @in) { my $k = own_name(\%fn, $name, $d, $u); $fn{$k} //= [$d, $u] }
+            # (a program's gnu89 extern inline function, a header's, is no
+            # definition where its tree has the function: gcc never emits it,
+            # and its body may only inline, error.h's error with
+            # __builtin_va_arg_pack)
+            my $inline_only = %treedefs && $d->{inline} && ($d->{storageClass} // '') eq 'extern' && $treedefs{ ffname($name) };
+            if (!$inline_only && grep { $_->{kind} eq 'CompoundStmt' } @in) { my $k = own_name(\%fn, $name, $d, $u); $fn{$k} //= [$d, $u] }
             # (and under address a local named as a tag would be the type: struct
             # msort_param msort_param in qsort)
             # (both found by the unit's own pass, unit_pass)
@@ -1424,7 +1441,10 @@ sub expr {
         # variable alone is its value; pthread_once's init_routine (), the
         # atexit functions of exit)
         if ($c->{referencedDecl}{kind} ne 'FunctionDecl' && !@args) { my ($v) = expr($c); push @{ $v->{children} }, node('.'); return $v }
-        return node(ffname($name), map { item(expr($_)) } @args);
+        # (through a function's static, its name as a global: tst-strerror-fail's
+        # original_malloc)
+        my $sn = $c->{referencedDecl}{kind} eq 'VarDecl' && $staticname{"$cur_unit $c->{referencedDecl}{id}"};
+        return node($sn || ffname($name), map { item(expr($_)) } @args);
     }
     if ($k eq 'AtomicExpr') {
         # gcc's atomic builtins: a call of libatomic's function for the size,
@@ -2172,7 +2192,9 @@ while (defined(my $name = next_name())) {
         eval { push @out, [$v->[1], decl($v->[0], 1, $name ne $v->[0]{name} ? ffname($name) : undef)]; 1 } or leave_out($name);
         next;
     }
-    # a weak name nothing defines: its address is 0 (ttpc's weak)
+    # a weak name nothing defines: its address is 0 (ttpc's weak); one the
+    # program's tree defines is the tree's
+    if ($weak{$name} && $treedefs{ ffname($name) }) { warn "c2ff: weak, the tree's: $name\n"; next }
     if (my $w = $weak{$name}) {
         # (said, so that the reach can add what defines it where an object
         # it links references it strongly, as the linker does: vtables'
