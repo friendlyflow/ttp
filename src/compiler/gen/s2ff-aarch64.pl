@@ -319,10 +319,10 @@ sub finish {
     return unless $fn && (%got || %ro);
     # (a word of the function holds a name's address; a weak name nothing
     # defines (crti's __gmon_start__) is 0, as ttpc's C has it, so its word
-    # is a C global: address / void / address / name)
+    # is a C global: void / * pointer / name / & address)
     my @weak = grep { $weakref{$_} && ($sect{$_} // '') eq '*UND*' } keys %got;
     delete @got{@weak};
-    push @weakgot, map { node(".Lgot $_:", node('address'), node('void'), node('address', node($_))) } sort @weak;
+    push @weakgot, map { node(".Lgot $_:", node('void'), node('* pointer'), node($_), node('& address')) } sort @weak;
     push @{ $fn->{children} }, node('align', node(8)), map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got if %got;
     # (text ends where it ends: what follows the function starts on 8 again)
     push @{ $fn->{children} }, (map { node(ffname($_) . ':', @{ $rodata{$_} }) } sort keys %ro), node('align', node(8)) if %ro;

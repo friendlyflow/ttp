@@ -54,6 +54,7 @@ use FindBin;
 use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 use FF qw(node layers write_txt read_ff);
+use Words;
 use Header qw(license_nodes header_of);
 use Digest::SHA;
 use POSIX ();
@@ -100,6 +101,18 @@ our $cur_unit;              # the unit whose definition is being translated
 
 sub trim { my ($s) = @_; $s =~ s/^\s+|\s+$//g; $s }
 
+# the names of the records' fields (as ff names them), made again when there
+# are more records
+my (%fieldname, $nfieldrec);
+sub is_fieldname {
+    my ($n) = @_;
+    if (($nfieldrec // -1) != keys %rec) {
+        %fieldname = ();
+        for my $r (values %rec) { $fieldname{ ffname($_->{name}) } = 1 for grep { ($_->{kind} // '') eq 'FieldDecl' && defined $_->{name} && $_->{name} ne '' } @{ $r->{inner} || [] } }
+        $nfieldrec = keys %rec;
+    }
+    $fieldname{$n};
+}
 # A C type string to a list of ff words. A pointer to a function names a
 # function type of its own (fn1:, fn2:, ...), made once per spelling.
 our $ctype_depth = 0;
@@ -116,16 +129,16 @@ sub ctype {
     # an array of function pointers, ret (*[n]) (params): the init arrays'
     # void (*[]) (int, char **, char **)
     if ($t =~ /^(.*?)\s*\(\*\s*\[(\d*)\]\)\s*\((.*)\)$/) {
-        return ('array', 'address', fntype($1, $3), $2 eq '' ? 0 : $2);
+        return ('array', 'address', fntype($1, $3), $2 eq '' ? '[]' : $2);
     }
     # a pointer to an array, T (*)[n]: what an array of arrays parameter
     # is (libm's const double c[][2])
     return ('address', ctype("$1$2")) if $t =~ /^(.*?)\s*\(\*\)\s*((?:\[\d+\])+)$/;
     if ($t =~ /^(.*?)\s*\[(\d*)\]((?:\[\d+\])*)$/) {
         # T[] (a flexible array member, an extern array) has no elements of
-        # its own: 0
+        # its own: no count ([] until Words.pm writes it)
         my ($base, $n, $rest) = ($1, $2, $3);
-        return ('array', ctype($base . $rest), $n eq '' ? 0 : $n);
+        return ('array', ctype($base . $rest), $n eq '' ? '[]' : $n);
     }
     return ('address', fntype($1, $2)) if $t =~ /^(.*?)\s*\(\*\)\s*\((.*)\)$/;
     if ($t =~ /^(.*)\*$/) {
@@ -145,8 +158,9 @@ sub ctype {
     if ($t =~ /^(struct|union|enum) (\S+)$/) {
         $wanttag{"$1 $2"} = 1;
         # C keeps tags apart from other names, ff does not: a tag that is
-        # also a global's or a function's name is named with its kind
-        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $localname{$2} ? "$2 $1" : ffname($2);
+        # also a global's, a function's or a field's name is named with its
+        # kind (a struct's name as a value is its compound literal)
+        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $localname{$2} || is_fieldname(ffname($2)) ? "$2 $1" : ffname($2);
     }
     # glibc's array check (array_length): sizeof (struct { _Static_assert
     # (...); }), a struct clang writes no declaration of; it has no fields
@@ -241,7 +255,7 @@ sub qt { my ($n) = @_; my $t = $n->{type} or die "c2ff: no type\n"; $t->{desugar
 # that is one gets a ' after it (type -> type'), which no C name has.
 
 my %reserved = map { $_ => 1 } qw(
-    if else while for return break continue comment address content syscall
+    if else while for return break continue comment syscall U L UL LL ULL
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
@@ -1199,8 +1213,11 @@ sub expr {
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
     return node(':', expr((kids($n))[0])) if $k eq 'ParenExpr';
     if ($k eq 'IntegerLiteral') {
-        # a literal keeps its type (2UL is a u64): an int is a plain number,
-        # another type a typed literal, the type word over the number
+        # a literal keeps its type: an int is a plain number, C's suffixes
+        # (2UL) their word and then the number, another type a cast
+        my $c = qt($n) =~ s/^\s+|\s+$//gr;
+        my %suffix = ('unsigned int' => 'U', 'long' => 'L', 'unsigned long' => 'UL', 'long long' => 'LL', 'unsigned long long' => 'ULL');
+        return node($suffix{$c}, node($n->{value})) if $suffix{$c};
         my @t = ctype(qt($n));
         return @t == 1 && $t[0] ne 'int' ? node($t[0], node($n->{value})) : node($n->{value});
     }
@@ -2200,6 +2217,15 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 # overflow of a node, see FF.pm layers).
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
 sub groups { my ($name, @n) = @_; node("$name:", layers(@n)) }
+# the words now (Words.pm): what was made in the words of before, written in
+# them; the types the shared page's and the output's own
+{
+    my $t = {};
+    { open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "c2ff: shared.ff: $!\n"; local $/; Words::typenames($t, read_ff(<$h>)) }
+    my @n = Words::newwords($t, @types, map { $_->[1] } @out);
+    @types = splice @n, 0, scalar @types;
+    $out[$_][1] = $n[$_] for 0 .. $#out;
+}
 if (defined $program) {
     # (its license first: its file's header, Header.pm)
     my $lic = header_of($units[0]{i});

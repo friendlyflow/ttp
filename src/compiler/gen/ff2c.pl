@@ -38,6 +38,27 @@ if (@ARGV && $ARGV[0] eq '--pages') { shift @ARGV; $only{$_} = 1 for split /,/, 
 my ($in, $out, $namesout) = @ARGV;
 die "usage: ff2c.pl [--pages page,...] tree.ff.txt out.c names.txt\n" unless defined $namesout;
 my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt(<$h>, $in) };
+# The C words now (Words.pm): read in the words of before, which the rest of
+# ff2c knows; a : field of a scalar type (C's unnamed bitfield) is padding n:
+# again
+{
+    require Words;
+    my $t = {};
+    { open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "ff2c: shared.ff: $!\n"; local $/; Words::typenames($t, FF::read_ff(<$h>)) }
+    @top = Words::oldwords($t, @top);
+    my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 u8 u16 u32 u64);
+    my $pad;
+    $pad = sub {
+        my ($n) = @_;
+        my $k = $n->{children};
+        if (@$k && !@{ $k->[0]{children} } && $k->[0]{content} =~ /^(?:struct|union)$/) {
+            my $i = 0;
+            for (@$k[1 .. $#$k]) { $_->{content} = 'padding ' . ++$i . ':' if $_->{content} eq ':' && @{ $_->{children} } && $scalar{ $_->{children}[0]{content} } }
+        }
+        $pad->($_) for @$k;
+    };
+    $pad->($_) for @top;
+}
 
 sub kids { @{ $_[0]{children} } }
 sub leaf { !@{ $_[0]{children} } }
