@@ -2,3 +2,4 @@ build/*
 .claude/settings.local.json
 src/compiler/progs/cexit
 *.core
+.claude/worktrees/
