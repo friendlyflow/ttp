@@ -14,8 +14,23 @@
 # TTP_SLOTS (the folder) and TTP_NSLOTS (3) change the slots. With
 # TTP_SLOTLOG set, each command that takes a slot adds a line to that file:
 # the seconds it waited for one, and the command.
+#
+# ulimit -v caps one process, never their sum, and what a slotted command
+# starts runs in that slot without a lock of its own: on 2026-10-20 a make
+# that called itself without end froze the machine, which has no swap. So a
+# command that takes a slot also runs in a systemd user scope of its own,
+# capped at TTP_SCOPEMAX (8G), inside the slice ttp.slice, capped at
+# TTP_SLICEMAX (18G) for all slots together. Past a cap the kernel kills that
+# command and what it started, not the desktop. Nesting past TTP_MAXDEPTH (8)
+# stops with a message: a command that calls itself without end.
 
 set -u
+depth=$(( ${TTP_DEPTH:-0} + 1 ))
+if test "$depth" -gt "${TTP_MAXDEPTH:-8}"; then
+    echo "slot.sh: nested $depth deep, past TTP_MAXDEPTH: does a command call itself without end? $*" | cut -c1-300 >&2
+    exit 3
+fi
+TTP_DEPTH=$depth; export TTP_DEPTH
 mem= secs=
 while test $# -gt 0; do
     case $1 in
@@ -30,6 +45,22 @@ test $# -gt 0 || { echo "usage: slot.sh [-v KB] [-t SECONDS] CMD ARG..." >&2; ex
 run() {
     test -n "$mem" && { ulimit -v "$mem" || exit 2; }
     if test -n "$secs"; then exec timeout "$secs" "$@"; else exec "$@"; fi
+}
+
+# the scope of a command that takes a slot: its own cap, in ttp.slice, whose
+# cap covers all slots (set once, persistent in ~/.config/systemd/user.control)
+scoped() {
+    if command -v systemd-run > /dev/null && systemctl --user show-environment > /dev/null 2>&1; then
+        if test "$(systemctl --user show ttp.slice -p MemoryMax --value 2> /dev/null)" = infinity; then
+            systemctl --user set-property ttp.slice MemoryMax="${TTP_SLICEMAX:-18G}" MemorySwapMax=0 2> /dev/null
+        fi
+        test -n "$mem" && { ulimit -v "$mem" || exit 2; }
+        set -- systemd-run --user --scope --quiet --collect --slice=ttp.slice \
+            -p MemoryMax="${TTP_SCOPEMAX:-8G}" -p MemorySwapMax=0 -- "$@"
+        if test -n "$secs"; then exec timeout "$secs" "$@"; else exec "$@"; fi
+    fi
+    echo "slot.sh: no systemd user session, so no memory scope: $*" | cut -c1-200 >&2
+    run "$@"
 }
 
 test -n "${TTP_SLOT:-}" && run "$@"
@@ -47,7 +78,7 @@ while :; do
             test -n "$waited" && echo "slot.sh: got slot $i" >&2
             test -n "${TTP_SLOTLOG:-}" && echo "$(( $(date +%s) - start )) $*" | cut -c1-200 >> "$TTP_SLOTLOG"
             TTP_SLOT=$i; export TTP_SLOT
-            run "$@"
+            scoped "$@"
         fi
         exec 9>&-
         i=$((i + 1))

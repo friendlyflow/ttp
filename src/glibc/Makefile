@@ -47,7 +47,9 @@ CTARGET_arm := armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16
 CTARGET := $(or $(CTARGET_$(GTARGET)),$(GTARGET)-linux-gnu)
 BUILD ?= $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
-JOBS ?= $(shell nproc)
+# glibc builds at most 4 at once: with the slots, nproc (12) per build froze
+# the machine once (2026-10-20); the cgroup caps in slot.sh bound the rest
+JOBS ?= 4
 
 GLIBC_SRC ?= $(error GLIBC_SRC is not set: run this in `nix develop`)
 GLIBC_HEADERS ?= $(error GLIBC_HEADERS is not set: run this in `nix develop`)

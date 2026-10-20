@@ -118,7 +118,7 @@ patch:
 #   PC_STEPS some of the steps only (with what they need first), e.g.
 #            make ports-check PC_STEPS="compiler-check floats-roundtrip"
 CHECKLOG ?= $(HOME)/.cache/ttp/check/$(notdir $(CURDIR))
-PCJOBS ?= 6
+PCJOBS ?= 3
 GBUILD ?=
 PC_SLOT := sh src/compiler/gen/slot.sh -v 8000000 -t 3600
 PC_MS := $(shell sed -n 's/^MILESTONES := //p' src/glibc/Makefile)
