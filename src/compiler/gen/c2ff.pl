@@ -92,6 +92,8 @@ my %scalar = (
 my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
+my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
+my %owntd;                 # a unit's own typedefs, where another unit's came first
 my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
 my %desugar;                # a typeof (expression) as clang writes it, and the type it is
@@ -143,6 +145,7 @@ sub ctype {
         return defined $r ? ('address', fntype($r, $p)) : ('address', ctype($base));
     }
     return $scalar{$t} if exists $scalar{$t};
+    return ctype($owntd{$cur_unit}{$t}) if $cur_unit && $owntd{$cur_unit} && exists $owntd{$cur_unit}{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($desugar{$t}) if exists $desugar{$t};
     return ctype($typeof{$1}) if $t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1};
@@ -152,6 +155,11 @@ sub ctype {
         return $tagname{$tag} //= $name;
     }
     if ($t =~ /^(struct|union|enum) (\S+)$/) {
+        # (a unit's own definition of the tag, reg_rec)
+        if ($cur_unit && $ownrec{$cur_unit} && (my $own = $ownrec{$cur_unit}{"$1 $2"})) {
+            $wanttag{$own} = 1;
+            return $tagname{$own} //= ffname($2) . ' ' . unit_name($cur_unit);
+        }
         $wanttag{"$1 $2"} = 1;
         # C keeps tags apart from other names, ff does not: a tag that is
         # also a global's or a function's name is named with its kind; so is
@@ -184,6 +192,7 @@ sub expand {
         $t =~ s/\s*__attribute__\s*(\(\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\))?//g;
         $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
         $t = trim($t);
+        if ($cur_unit && $owntd{$cur_unit} && exists $owntd{$cur_unit}{$t}) { $t = $owntd{$cur_unit}{$t}; next }
         if (exists $typedef{$t}) { $t = $typedef{$t}; next }
         if ($t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1}) { $t = $typeof{$1}; next }
         if (exists $desugar{$t}) { $t = $desugar{$t}; next }
@@ -395,6 +404,20 @@ sub own_name {
     return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]);
     $own{$u}{$name} = "$name " . unit_name($u);
 }
+# A record tag's definition (key "struct x"). The first is everyone's; a
+# unit that defines the tag otherwise (its own struct locked_FILE, as
+# memstream.c and fmemopen.c each have) has its own, named with the unit
+# (x libio/memstream), as its own static is: 1 where it is the first.
+sub reg_rec {
+    my ($key, $d, $u) = @_;
+    if (!$rec{$key}) { $rec{$key} = $d; $recunit{$key} = $u; return 1 }
+    return 0 if !$recunit{$key} || $recunit{$key} == $u || def_text($d, $u) eq def_text($rec{$key}, $recunit{$key});
+    my $own = "$key " . unit_name($u);
+    $rec{$own} //= $d;
+    $recunit{$own} //= $u;
+    $ownrec{$u}{$key} = $own;
+    0;
+}
 sub own { my ($name) = @_; $cur_unit && $own{$cur_unit} && $own{$cur_unit}{$name} // $name }
 sub inner_tags { my ($n) = @_; (($n->{kind} // '') =~ /^(EnumDecl|RecordDecl)$/ ? $n : ()), map { inner_tags($_) } @{ $n->{inner} || [] } }
 units_ready(@units);
@@ -465,8 +488,12 @@ for my $u (@units) {
                 # (a typedef that other units leave void, opaque behind an address,
                 # takes the struct: _IO_lock_t outside and inside libio's lock)
                 $typedef{$name} = $d->{type}{qualType} if ($typedef{$name} // 'void') eq 'void';
+                $owntd{$u}{$name} = $d->{type}{qualType} if $typedef{$name} ne $d->{type}{qualType};
             } else {
                 $typedef{$name} = qt($d) if ($typedef{$name} // 'void') eq 'void';
+                # (a unit's own typedef of the name: strxfrm_l.c's and
+                # strcoll_l.c's locale_data_t, each its own struct)
+                $owntd{$u}{$name} = qt($d) if $typedef{$name} ne qt($d) && qt($d) ne 'void';
             }
         }
         $typeof{$name} //= qt($d) if $d->{kind} =~ /^(FunctionDecl|VarDecl)$/ && $d->{type};
@@ -489,7 +516,7 @@ for my $u (@units) {
                 if ($t->{kind} eq 'EnumDecl') { index_enum($t) }
                 elsif ($t->{completeDefinition}) {
                     $recid{$t->{id}} = $t;
-                    if (defined $t->{name} && $t->{name} ne '') { $rec{"$t->{tagUsed} $t->{name}"} //= $t; anon_fields($t, $t->{name}) }
+                    if (defined $t->{name} && $t->{name} ne '') { reg_rec("$t->{tagUsed} $t->{name}", $t, $u) and anon_fields($t, $t->{name}) }
                 }
             }
         } elsif ($d->{kind} eq 'VarDecl') {
@@ -501,8 +528,7 @@ for my $u (@units) {
                 $var{$k} //= [$d, $u];
             }
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
-            $rec{"$d->{tagUsed} $name"} //= $d;
-            anon_fields($d, $name);
+            reg_rec("$d->{tagUsed} $name", $d, $u) and anon_fields($d, $name);
         } elsif ($d->{kind} eq 'EnumDecl') {
             $enumd{"enum $name"} //= $d;
         }
@@ -2271,6 +2297,8 @@ while ($fdone < @fntypes) {
 while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
     for my $tag (@t) {
         $tdone{$tag} = 1;
+        # (its fields' types as its unit has them)
+        local $cur_unit = $recunit{$tag} // $cur_unit;
         # a tag C only declares (struct rtld_catch;) is an incomplete type, used
         # through an address: a struct without fields
         my $d = $rec{$tag} // $enumd{$tag} // ($tag =~ /^(struct|union) / ? { kind => 'RecordDecl', tagUsed => $1, inner => [] } : undef)
