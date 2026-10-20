@@ -255,3 +255,10 @@ RAM NODE:
 - A4: een oproep via een adres (een variabele, een veld, `address f / .`) met een resultaat in het geheugen krijgt ruimte in de tijdelijke plaatsen van het frame; treserve legt die vast bij het begin van de functie, vóór de oproepen gezien zijn: de eerste pass houdt per functie bij hoeveel ruimte zulke oproepen vragen (abi_xtab, op de knoop van de functie), de tweede reserveert ze (op arm verandert dat geen codegrootte)
 - de interop-test (progs/abi, `make abi` in compiler-check): gcc's functies van veel vormen (via s2ff-arm) en C via c2ff roepen elkaar op: >4 ints, paren, doubles en floats door elkaar, structs van 4/8/12/20 bytes, hfa's, een struct van int en double, struct-resultaten, variadisch, via pointers, velden en een functie-adres; 30 checks, alle ok op arm
 - grenzen: het resultaat van een asm-functie is voor ff een woord (een functie van gcc met een ander resultaat roept de test via een pointer van het juiste type op); va_arg_pack met argumenten op de stack stopt ttpc
+
+## 2026-10-20: the C words, the user's (lane words)
+
+- `p` / `* pointer` is C's `*p`, `x` / `& address` is `&x`: postfixen, links naar rechts (ttpc `chain`); een type is zijn basis en de `* pointer`s erna (`char` / `* pointer`), `array` houdt type en aantal (`(array / int / 3)`)
+- `cast` houdt het type, de waarde is de volgende broer; elke conversie is een cast; een getypte constante is C's suffix en dan het getal (`UL` / `2`)
+- een samengestelde constante is het type en dan zijn items als broers: een struct zijn velden (anonieme leden plat, padding geen), een union naam / veld / waarde, een array zijn aantal
+- `gen/newwords.pl` zet een boom van voordien om; de bevroren ttpcs krijgen alles in hun eigen woorden (`gen/Words.pm` oldwords, via `gen/unlicense.pl`)
