@@ -317,10 +317,6 @@ with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_s
 # from libgcc). c2ff translates what the roots reach of them.
 # (each C object's AST is c2ff's pass of it, all-units', not its JSON)
 UNITDEP_aarch64 := c2ff
-# (and a path from a value of several nodes under a cast:, for ttpc's
-# "unknown name" of a : path in a large function, until it is fixed)
-C2FFFLAGS_aarch64 := --path-cast
-C2FFFLAGS := $(C2FFFLAGS_$(GTARGET))
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
 LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
 LINKED := $(LINKED_$(GTARGET))
@@ -416,7 +412,7 @@ ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
 $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
 	cp license.ff.txt $$(FF)/$(1).ff.txt
-	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
 	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
 	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).ff.txt)
@@ -522,7 +518,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
 	$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(GLIBC_START),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
@@ -618,20 +614,28 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 # ---- every check at once --------------------------------------------------------
 # make -jN all-checks: what the ports branch is checked with on GTARGET, the
 # checks that do not need each other at once, each heavy step in a slot of
-# its own (RUN). On riscv64 each milestone's check and round trip, on the
-# others ldouble's check; on each, the generic program's check and round
-# trip. What they all read is made first, once (units-ready): the ASTs and
-# asm parts of the milestones' objects, the asm check, and c2ff's pass of
-# each unit, which each milestone's c2ff would otherwise make at the same
-# time as the others.
+# its own (RUN). On riscv64 and aarch64 each milestone's check and round
+# trip (aarch64's milestones: LINKED), on x86_64 ldouble's check; on each,
+# the generic program's check and round trip. What they all read is made
+# first, once (units-ready): the ASTs and asm parts of the milestones'
+# objects, the asm check, and c2ff's pass of each unit, which each
+# milestone's c2ff would otherwise make at the same time as the others.
+# (aarch64's units are that pass already, UNITDEP c2ff, which deletes the
+# AST: the ASTs the round trips read are made after it; the make that
+# reads this Makefile has made its milestones' objs.mk. The asm check
+# comes after the asm parts it reads.)
 CHECK_MS_riscv64 := $(MILESTONES)
+CHECK_MS_aarch64 := $(LINKED_aarch64)
 CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
 ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
+ALLCHECKS_aarch64 := $(LINKED_aarch64:%=%-check) $(LINKED_aarch64:%=%-roundtrip)
 ALLCHECKS := $(or $(ALLCHECKS_$(GTARGET)),ldouble-check) generic-check generic-roundtrip
 CHECK_OBJS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
 CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
-units-ready: $(CHECK_OBJS:%=$(I)/%.json) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter riscv64,$(GTARGET)),asm-check)
-	$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i)
+units-ready: $(CHECK_OBJS:%=$(I)/%.$(UNITDEP)) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter csu/crti,$(CHECK_ASMS)),$(I)/csu/crtn.dump)
+	$(if $(filter json,$(UNITDEP)),$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i))
+	$(if $(filter c2ff,$(UNITDEP)),@$(MAKE) --no-print-directory $(CHECK_OBJS:%=$(I)/%.json))
+	$(if $(filter riscv64 aarch64,$(GTARGET)),@$(MAKE) --no-print-directory asm-check)
 all-checks:
 	@$(MAKE) --no-print-directory units-ready
 	@$(MAKE) --no-print-directory -k $(ALLCHECKS)
@@ -681,7 +685,7 @@ all-units: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 $(I)/%.one: $(I)/%.c2ff ../compiler/gen/c2ff.pl
 	@roots=$$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }'); s=0; \
 	if test -z "$$roots"; then echo "all-survey: $*: defines nothing" > $(I)/$*.one.err; : > $(I)/$*.one.ff.txt; \
-	else $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS) $(I)/$*.json=$(I)/$*.i \
+	else $(SLOT) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(I)/$*.json=$(I)/$*.i \
 	    -- $$roots > $(I)/$*.one.ff.txt 2> $(I)/$*.one.err || s=$$?; fi; \
 	echo $$s > $@
 
