@@ -678,6 +678,14 @@ homogeneous aggregate of floats or doubles VFP registers; a struct result
 of four bytes or less is in r0, an aggregate's in s0../d0.., a larger one
 goes through the address in r0 (gen/patches/abi3.pl). A call through an
 address gets room for such a result among the frame's temporaries.
+On aarch64 (`cc_abi` 2, gen/patches/abia64.pl) calls go by AAPCS64 as
+Linux has it: x0..x7 and v0..v7 (s, d, q; an hfa of up to four floats,
+doubles or long doubles in consecutive ones), a struct of 16 bytes or less
+in one or two x registers, a larger one by the address of the caller's
+copy, then the stack in 8-byte slots; variadic arguments as any other.
+Results in x0, s0, d0, q0, x0:x1, an hfa's registers, or in memory at x8.
+va_list is AAPCS64's 32-byte struct, va_start and va_arg AAPCS64's
+algorithm over the register save areas a variadic function keeps.
 `make abi` (progs/abi) checks it against gcc's code both ways.
 
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,

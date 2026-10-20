@@ -20,6 +20,107 @@ long long cb_var (int n, ...)
 { va_list ap; long long s = 0; va_start (ap, n);
   for (int i = 0; i < n; i++) { s += va_arg (ap, int); s += 2 * va_arg (ap, long long); }
   va_end (ap); return s; }
+#ifdef __aarch64__
+long cb_i10 (int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
+{ return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j; }
+double cb_mixn (int a, double b, int c, double d, int e, double f, int g, double h, int i, double j, int k, double l,
+                int m, double n, int o, double p, int q, double r, int s, float t)
+{ return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j + 11 * k + 12 * l
+    + 13 * m + 14 * n + 15 * o + 16 * p + 17 * q + 18 * r + 19 * s + 20 * t; }
+long cb_s16 (int a, int b, int c, int d, int e, int f, int g, s16 x, int h)
+{ return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * x.a + 9 * x.b + 10 * h; }
+long cb_s24mod (s24 x) { x.a = 99; return x.a + x.b + x.c; }
+double cb_hd4 (hd4 a, hd4 b, hd4 c)
+{ return a.a + 2 * a.b + 3 * a.c + 4 * a.d + 5 * b.a + 6 * b.b + 7 * b.c + 8 * b.d + 9 * c.a + 10 * c.b + 11 * c.c + 12 * c.d; }
+float cb_f (float a, float b, int c, float d) { return a + 2 * b + 3 * c + 4 * d; }
+hd4 cb_r_hd4 (double a) { hd4 r = { a, a + 1, a + 2, a + 3 }; return r; }
+s16 cb_r_s16 (long a) { s16 r = { a, a + 1 }; return r; }
+long double cb_ld (int a, long double b, double c, long double d) { return a == 1 && c == 2.5 ? d : b; }
+long double cb_varld (int n, ...)
+{ va_list ap; long double r = 0.0L; va_start (ap, n);
+  for (int i = 0; i < n; i++) { (void) va_arg (ap, double); r = va_arg (ap, long double); }
+  va_end (ap); return r; }
+long long cb_vsum (int n, va_list ap)
+{ va_list aq; double s = 0; va_copy (aq, ap);
+  for (int i = 0; i < n; i++) { s += va_arg (ap, int); s += 3 * va_arg (ap, double); }
+  for (int i = 0; i < n; i++) { s += va_arg (aq, int); s += 3 * va_arg (aq, double); }
+  va_end (aq); return s; }
+long long cb_vard (int n, ...) { va_list ap; va_start (ap, n); long long r = f_vsum (n, ap); va_end (ap); return r; }
+/* a long double by its bytes: ttpc's program has no soft-fp to compare */
+static int ldeq (long double a, long double b)
+{ unsigned char *p = (unsigned char *) &a, *q = (unsigned char *) &b;
+  for (int i = 0; i < 16; i++) if (p[i] != q[i]) return 0;
+  return 1; }
+static void a64 (void)
+{
+  long (*p_f_i10) (int, int, int, int, int, int, int, int, int, int) = f_i10;
+  double (*p_f_mixn) (int, double, int, double, int, double, int, double, int, double, int, double,
+                      int, double, int, double, int, double, int, float) = f_mixn;
+  long (*p_f_s16) (int, int, int, int, int, int, int, s16, int) = f_s16;
+  long (*p_f_s16r) (int, s16, s16) = f_s16r;
+  long (*p_f_s24) (s24, int) = f_s24;
+  long (*p_f_s24mod) (s24) = f_s24mod;
+  long (*p_f_s24stk) (int, int, int, int, int, int, int, int, s24, int) = f_s24stk;
+  double (*p_f_hd4) (hd4, hd4, hd4) = f_hd4;
+  float (*p_f_hf4) (float, hf4) = f_hf4;
+  hd4 (*p_r_hd4) (double) = r_hd4;
+  hf4 (*p_r_hf4) (float) = r_hf4;
+  s16 (*p_r_s16) (long) = r_s16;
+  long double (*p_f_ld) (int, long double, double, long double) = f_ld;
+  long double (*p_r_ld2) (hq2) = r_ld2;
+  hq2 (*p_r_hq2) (long double, long double) = r_hq2;
+  long double (*p_f_varld) (int, ...) = f_varld;
+  long long (*p_f_vwrap) (int, ...) = f_vwrap;
+  long (*p_g_i10) (void) = g_i10;
+  double (*p_g_mixn) (void) = g_mixn;
+  long (*p_g_s16) (void) = g_s16;
+  long (*p_g_s24mod) (void) = g_s24mod;
+  double (*p_g_hd4) (void) = g_hd4;
+  float (*p_g_f) (void) = g_f;
+  double (*p_g_r_hd4) (void) = g_r_hd4;
+  long (*p_g_r_s16) (void) = g_r_s16;
+  long double (*p_g_ld) (void) = g_ld;
+  long double (*p_g_varld) (void) = g_varld;
+  long long (*p_g_vard) (void) = g_vard;
+  check (p_f_i10 (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) == 385, "a64: ints on the stack's 8-byte slots");
+  check (p_f_mixn (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20) == 2870, "a64: ints and doubles past x7 and v7");
+  s16 x = { 8, 9 }, y = { 4, 5 };
+  check (p_f_s16 (1, 2, 3, 4, 5, 6, 7, x, 10) == 385, "a64: a 16-byte struct past x7 on the stack");
+  check (p_f_s16r (1, x, y) == 1 + 16 + 27 + 16 + 25, "a64: 16-byte structs in x registers");
+  s24 z = { 1, 2, 3 };
+  check (p_f_s24 (z, 4) == 1 + 4 + 9 + 16, "a64: a 24-byte struct by its copy's address");
+  check (p_f_s24mod (z) == 99 + 2 + 3 && z.a == 1, "a64: the callee's copy is its own");
+  check (p_f_s24stk (1, 1, 1, 1, 1, 1, 1, 1, z, 2) == 8 + 2 + 6 + 12 + 10, "a64: a copy's address on the stack");
+  hd4 a = { 1, 2, 3, 4 }, b = { 5, 6, 7, 8 }, c = { 9, 10, 11, 12 };
+  check (p_f_hd4 (a, b, c) == 650, "a64: hfas of four doubles, the third on the stack");
+  hf4 f4 = { 1, 2, 3, 4 };
+  check (p_f_hf4 (0.5f, f4) == 0.5f + 2 + 6 + 12 + 20, "a64: an hfa of four floats");
+  hd4 rd = p_r_hd4 (1.5);
+  check (rd.a == 1.5 && rd.d == 4.5, "a64: an hfa of four doubles as a result");
+  hf4 rf = p_r_hf4 (1.5f);
+  check (rf.a == 1.5f && rf.d == 4.5f, "a64: an hfa of four floats as a result");
+  s16 rs = p_r_s16 (7);
+  check (rs.a == 7 && rs.b == 8, "a64: a 16-byte struct result in x0 and x1");
+  check (ldeq (p_f_ld (1, 3.0L, 2.5, 7.0L), 7.0L), "a64: long doubles in q registers");
+  hq2 q2 = { 1.0L, 2.0L };
+  check (ldeq (p_r_ld2 (q2), 2.0L), "a64: an hfa of long doubles");
+  hq2 rq = p_r_hq2 (1.0L, 2.0L);
+  check (ldeq (rq.a, 2.0L) && ldeq (rq.b, 1.0L), "a64: an hfa of long doubles as a result");
+  check (ldeq (p_f_varld (2, 1.0, 1.0L, 2.0, 2.0L), 2.0L), "a64: variadic long doubles");
+  check (p_f_vwrap (10, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5) == 2 * (55 + 180), "a64: gcc's va_list to ttpc's va_arg and va_copy");
+  check (p_g_i10 () == 385, "a64: gcc calls ttpc: ints on the stack");
+  check (p_g_mixn () == 2870, "a64: gcc calls ttpc: ints and doubles past x7 and v7");
+  check (p_g_s16 () == 385, "a64: gcc calls ttpc: a 16-byte struct on the stack");
+  check (p_g_s24mod () == 104, "a64: gcc calls ttpc: the callee's copy is its own");
+  check (p_g_hd4 () == 650, "a64: gcc calls ttpc: hfas of four doubles");
+  check (p_g_f () == 32.5f, "a64: gcc calls ttpc: floats");
+  check (p_g_r_hd4 () == 1.5 + 5 + 10.5 + 18, "a64: gcc calls ttpc: an hfa result");
+  check (p_g_r_s16 () == 302, "a64: gcc calls ttpc: a 16-byte struct result");
+  check (ldeq (p_g_ld (), 7.0L), "a64: gcc calls ttpc: long doubles");
+  check (ldeq (p_g_varld (), 3.0L), "a64: gcc calls ttpc: variadic long doubles");
+  check (p_g_vard () == 55 + 180, "a64: gcc calls ttpc: variadic doubles past v7, ttpc's va_list to gcc");
+}
+#endif
 int main (void)
 {
   /* the functions of gcc whose result is not an int: through pointers of
@@ -92,5 +193,8 @@ int main (void)
   check (g_s () == 819, "gcc calls ttpc: structs");
   check (g_r_s20 () == 60, "gcc calls ttpc: a struct result");
   check (p_g_r_hd2 () == 9.5, "gcc calls ttpc: a double aggregate result");
+#ifdef __aarch64__
+  a64 ();
+#endif
   return fails;
 }

@@ -1000,8 +1000,9 @@ sub asm_stmt {
 # there: an input in a register is an argument, in the target's argument
 # registers (aarch64 x0 ..., x86_64 rdi rsi rdx rcx r8 r9), a memory operand
 # its address as one, the register output the function's value (x0, rax).
-# aarch64's FP/SIMD operand (w, a float) is moved from its argument to s16
-# ... (sfp-machine.h's fdiv, fadd ... that raise its exceptions); x86_64's
+# aarch64's FP/SIMD operand (w, a float) comes in s0, s1 ... by AAPCS64 and
+# is moved to s16 ... (sfp-machine.h's fdiv, fadd ... that raise its
+# exceptions); x86_64's
 # x operand, only in an empty template (sfp-exceptions.c: the division is
 # the C around it), passes through a register as it is.
 my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9 r12 r13)]);
@@ -1110,25 +1111,30 @@ sub asm_stmt_other {
     my %slotof = map { ($regs->[$_] => $_) } 0 .. $#$regs;
     my (@slot, %taken);
     for my $w (@want) { my $r = $w->[2]; next unless defined $r && defined $slotof{$r} && !$taken{ $slotof{$r} }; $w->[3] = $slotof{$r}; $taken{ $slotof{$r} } = 1 }
-    my $next = 0;
-    for my $w (@want) { next if defined $w->[3]; $next++ while $taken{$next}; $w->[3] = $next; $taken{$next++} = 1 }
-    stop('an asm statement with too many operands', $n) if grep { $_->[3] > $#$regs } @want;
+    # (aarch64's FP/SIMD operands come in v0, v1 ... by AAPCS64, counted
+    # apart from the x registers: after the others, from 100 on here)
+    my ($next, $fpn) = (0, 0);
+    for my $w (@want) { next if defined $w->[3] || ($target eq 'aarch64' && ($w->[2] // '') eq 'w'); $next++ while $taken{$next}; $w->[3] = $next; $taken{$next++} = 1 }
+    for my $w (@want) { next if defined $w->[3]; $w->[3] = 100 + $fpn++ }
+    stop('an asm statement with too many operands', $n) if grep { $_->[3] > $#$regs && $_->[3] < 100 } @want or $fpn > 8;
     my @arg;
     for my $w (sort { $a->[3] <=> $b->[3] } @want) {
         my ($i, $how, $r, $j) = @$w;
-        my $a = $regs->[$j];
+        my $a = $j < 100 ? $regs->[$j] : undef;
         $arg[$j] = [$i, $how eq 'value' ? 'value' : 'address'];
         if ($how eq 'address') {
             push @after, $target eq 'x86_64' ? node('movq.mr', node($text{$i}), node(0), node($a)) : stop("the asm output $oc->[$i]", $n);
         } elsif ($how eq 'mem') {
             $text{$i} = $target eq 'x86_64' ? "0(%$a)" : "[$a]";
         } elsif (defined $r && $r eq 'w') {
-            # aarch64's FP/SIMD operand, a float or a double, from its argument
+            # aarch64's FP/SIMD operand, a float or a double, from its
+            # argument's register (s or d k, AAPCS64's), to s or d 16 + k
             my $t = tword($ops->[$i]);
             stop("the asm operand w of a $t", $n) unless $t eq 'float' || $t eq 'double';
-            my $v = 16 + $j;
-            push @code, $t eq 'float' ? node('fmov.s.w', node("w$j"), node("s$v")) : node('fmov.d.x', node($a), node("d$v"));
-            $text{$i} = ($t eq 'float' ? 's' : 'd') . $v;
+            my $k = $j - 100;
+            my ($p, $v) = ($t eq 'float' ? 's' : 'd', 16 + $k);
+            push @code, node("fmov.$p", node("$p$k"), node("$p$v"));
+            $text{$i} = "$p$v";
         } elsif (defined $r && $r ne $a) {
             push @code, $target eq 'aarch64' ? node('orr', node($a), node('xzr'), node($r)) : node('movq', node($a), node($r));
         } else {
