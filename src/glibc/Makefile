@@ -523,7 +523,9 @@ SLOT := sh ../compiler/gen/slot.sh -v 4000000
 ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
 # (worked out once, where a target needs it)
 ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
-ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
+# (and long double's soft-fp, as the ldouble milestone has it: libgcc's on
+# a gcc build, glibc's own code, which ttpc's long double calls)
+ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES))) $(SOFTFP:%=soft-fp/%)
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 
 CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
@@ -578,7 +580,8 @@ WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start)
 $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
-	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; } | sort -u > $@
+	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
+	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
 	for o in $(ALL_C); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 
 $(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
