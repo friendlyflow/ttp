@@ -154,8 +154,11 @@ sub ctype {
     if ($t =~ /^(struct|union|enum) (\S+)$/) {
         $wanttag{"$1 $2"} = 1;
         # C keeps tags apart from other names, ff does not: a tag that is
-        # also a global's or a function's name is named with its kind
-        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $localname{$2} ? "$2 $1" : ffname($2);
+        # also a global's or a function's name is named with its kind; so is
+        # a program's tag that its tree (--index) has too, whose code must
+        # keep its own (the public headers' struct _IO_FILE has _lock as a
+        # void *, libio's own an _IO_lock_t *)
+        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $localname{$2} || $treedefs{ ffname($2) } ? "$2 $1" : ffname($2);
     }
     # glibc's array check (array_length): sizeof (struct { _Static_assert
     # (...); }), a struct clang writes no declaration of; it has no fields
@@ -221,7 +224,11 @@ sub fntype {
     my ($ret, $params) = @_;
     my $key = trim($ret) . ' (' . trim($params) . ')';
     return $fntype{$key} if $fntype{$key};
-    my $name = 'fn' . (@fntypes + 1);
+    # (with --index, not a name of the tree's own: its code would take the
+    # program's function type for its own fnN)
+    our $fnlast //= 0;
+    1 while $treedefs{ 'fn' . ++$fnlast };
+    my $name = "fn$fnlast";
     $fntype{$key} = $name;
     push @fntypes, [$name, trim($ret), trim($params)];
     $name;
