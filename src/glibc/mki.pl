@@ -22,9 +22,12 @@
 #
 #   perl mki.pl <obj dir> <glibc source> string/strlen.o ...
 #   perl mki.pl --dry <obj dir> <glibc source> string/strlen.o ...
+#   perl mki.pl --log tests/string.log ... <obj dir> <glibc source> string/tst-strlen.o ...
 #
 # --dry only prints the file each object would get (its .i or .s), making
-# none: which objects are C and which asm.
+# none: which objects are C and which asm. --log (once or more) reads the
+# commands from that log of the build instead of build.log: glibc's tests
+# and libsupport, which `make check` compiles (tests-ref).
 #
 # A host tool (core Perl only).
 use strict;
@@ -33,18 +36,24 @@ use File::Path qw(make_path);
 use File::Basename qw(dirname);
 use Cwd ();
 
-my $dry = @ARGV && $ARGV[0] eq '--dry' && shift @ARGV;
-die "usage: mki.pl [--dry] <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
+my ($dry, @logs);
+while (@ARGV && $ARGV[0] =~ /^--(dry|log)$/) {
+    shift @ARGV;
+    if ($1 eq 'dry') { $dry = 1 } else { push @logs, shift @ARGV }
+}
+die "usage: mki.pl [--dry] [--log file]... <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
 my ($obj, $src, @want) = @ARGV;
 # (the folder of the build, as given: its i/ is next to obj/, also where obj
 # is a link to another build's, whose build.log names its own folder)
 (my $build = $obj) =~ s{/+[^/]+/*$}{};
 my $real = Cwd::abs_path($obj);
 
-open my $log, '<', "$obj/build.log" or die "mki: cannot open $obj/build.log: $!\n";
+@logs = ("$obj/build.log") unless @logs;
 my %cmd;
 my %gen;       # objects whose asm gcc made from C: that command
 my @block;      # a command over several lines (each but the last ending in \): (echo ...; ...) | gcc ... -
+for my $logname (@logs) {
+open my $log, '<', $logname or die "mki: cannot open $logname: $!\n";
 while (my $l = <$log>) {
     if ($l =~ /^\(echo / || @block) {
         push @block, $l;
@@ -55,12 +64,15 @@ while (my $l = <$log>) {
     # an object whose asm is gcc's -S of a C file (errlist-data.S includes
     # errlist-data-aux.S, from errlist-data-gen.c): that C is its source
     if ($l =~ / -S(?:\s|$)/ && $l =~ / -o (?:\Q$obj\E|\Q$real\E)\/(\S+)-aux\.S /) { $gen{"$1.o"} //= $l; next }
-    next unless $l =~ / -c / && $l =~ / -o (\S+\.o) /;
+    # (and the .oS objects of a static-only library, libsupport_nonshared.a,
+    # and the .os of a test's shared module)
+    next unless $l =~ / -c / && $l =~ / -o (\S+\.o[sS]?) /;
     my $o = $1;
     next unless $o =~ s/^\Q$obj\E\/// || $o =~ s/^\Q$real\E\///;
     $cmd{$o} //= $l;
 }
 close $log;
+}
 
 # the command of libm's soft-fp code: of e_sqrtl or e_sqrtf128, the one
 # whose source includes soft-fp (x86_64's e_sqrtl is the x87's)
@@ -77,7 +89,9 @@ sub softfp_cmd {
 
 my $bad = 0;
 for my $o (@want) {
-    my $c = $gen{$o} // $cmd{$o};
+    # (an object of libsupport_nonshared.a is x.oS, a test's shared module
+    # x.os: x.o names them too)
+    my $c = $gen{$o} // $cmd{$o} // $cmd{"${o}S"} // $cmd{"${o}s"};
     if (!$c && $o =~ m{^soft-fp/(\w+)\.o$} && (my $t = softfp_cmd())) {
         my $f = $1;
         ($c = $t) =~ s{ \.\./sysdeps/\S+/e_sqrt(?:l|f128)\.c }{ ../soft-fp/$f.c } or die "mki: no e_sqrt source in its command\n";
@@ -90,14 +104,14 @@ for my $o (@want) {
         $c =~ s/ -o / -D__gcc_CMPtype=__gcc_CMPtype_GCC -o / if $t =~ m{/sysdeps/x86/fpu/e_sqrtf128\.c };
         $c =~ s{ -o \S+\.o }{ -o $obj/soft-fp/$f.o };
     }
-    $c or do { warn "mki: no command for $o in build.log\n"; $bad = 1; next };
+    $c or do { warn "mki: no command for $o in " . join(', ', @logs) . "\n"; $bad = 1; next };
     chomp $c;
     my $ext = !$gen{$o} && $c =~ m{\.S\s| -x assembler-with-cpp } ? "s" : "i";
-    (my $i = "$build/i/$o") =~ s/\.o$/.$ext/;
+    (my $i = "$build/i/$o") =~ s/\.o[sS]?$/.$ext/;
     if ($dry) { print "$i\n"; next }
     make_path(dirname($i));
     $c =~ s/ -c / -E / or $c =~ s/ -S(\s|$)/ -E$1/;
-    $c =~ s/ -o \S+\.(?:o|S) / -o $i /;
+    $c =~ s/ -o \S+\.(?:o[sS]?|S) / -o $i /;
 
     $c =~ s/ -MD -MP -MF \S+ -MT \S+//;
     # build.log names the compiler and the kernel's headers by their store

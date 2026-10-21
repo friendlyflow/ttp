@@ -43,6 +43,9 @@ sub layers { require FF; FF::layers(@_) }
 sub leaf { !@{ $_[0]{children} } }
 sub kids { @{ $_[0]{children} } }
 sub is { my ($n, $w) = @_; $n && leaf($n) && $n->{content} eq $w }
+# a _Generic association's name, before and now
+sub gen_new { my ($w) = @_; my $n = 0; $w = "address void:" if $w eq "address:"; $n++ while $w =~ s/^address (?=.)//; $w =~ s/:$//; $w . (' * pointer' x $n) . ':' }
+sub gen_old { my ($w) = @_; my $n = 0; $w =~ s/:$//; $n++ while $w =~ s/(?<=.) \* pointer$//; ('address ' x $n) . $w . ':' }
 
 my %scalarword = map { $_ => 1 } ('char', 'short', 'int', 'long', 'i8', 'i16', 'i32', 'i64',
     'u8', 'u16', 'u32', 'u64', 'void', 'type', 'va_list', 'float', 'double', 'long double');
@@ -82,7 +85,7 @@ sub newtypes { my ($t) = @_; my %c = %$t; $c{word} = { %{ $t->{word} || {} } }; 
 
 sub has_newwords {
     my ($n) = @_;
-    return 1 if $n->{content} =~ /^(?:\* pointer|& address):?$/ || $n->{content} eq 'cast' && !leaf($n);
+    return 1 if $n->{content} =~ /^(?:\* pointer|& address):?$/ || $n->{content} =~ / \* pointer:$/ || $n->{content} eq 'cast' && !leaf($n);
     # (a declaration's type an array node: before, array was a leaf there)
     if ($n->{content} =~ /.:$/) { my @k = kids($n); my $i = marks(\@k); return 1 if $i < @k && $k[$i]{content} eq 'array' && !leaf($k[$i]) }
     for (kids($n)) { return 1 if has_newwords($_) }
@@ -259,6 +262,9 @@ sub newnode {
     # the shared page's declarations: their parameters stay
     return node($newdecl{$w}, map { node($_->{content}, kids($_)) } @k) if $newdecl{$w};
     return $n if !@k;
+    # C11's _Generic: an association's name is its type run in one name
+    # (address char: before, char * pointer: now)
+    if ($w eq 'generic') { my ($x, @as) = @k; return node($w, newone($t, $x, 'fn'), map { node(gen_new($_->{content}), newlist($t, [kids($_)], 'fn')) } @as) }
     if ($w eq 'content') { return with_path($t, \@k, sub { (operand($t, 0, @{ $_[0] }), node('* pointer')) }) }
     if ($w eq 'address') {
         my ($r, $j) = newrun($t, \@k, 0);
@@ -315,11 +321,11 @@ sub newlist {
 }
 # a definition: its marks, its type run, then its items (a function's
 # parameters and statements)
-my %mark = map { $_ => 1 } ('thread local', 'weak', 'function', 'ifunc', 'alias', 'asm', 'struct', 'union', 'enum');
+my %mark = map { $_ => 1 } ('thread local', 'weak', 'function', 'ifunc', 'section', 'alias', 'asm', 'struct', 'union', 'enum');
 sub marks {
     my ($k) = @_;
     my $i = 0;
-    while ($i < @$k && leaf($k->[$i]) && $mark{ $k->[$i]{content} }) { $i += $k->[$i]{content} eq 'ifunc' ? 2 : 1 }
+    while ($i < @$k && leaf($k->[$i]) && $mark{ $k->[$i]{content} }) { $i += $k->[$i]{content} =~ /^(?:ifunc|section)$/ ? 2 : 1 }
     $i > @$k ? scalar @$k : $i;
 }
 sub newdef {
@@ -565,6 +571,7 @@ sub oldnode {
             if ($j == @v && @$o == 1) { push @{ $o->[0]{children} }, oldvals($t, [@k[$dot .. $#k]]) if defined $dot; return $o->[0] }
         }
     }
+    if ($w eq 'generic') { my ($x, @as) = @k; return node($w, oldvals($t, [$x]), map { node(gen_old($_->{content}), oldvals($t, [kids($_)])) } @as) }
     die "words: a cast out of a run\n" if $w eq 'cast';
     die "words: an array type out of a type run\n" if $w eq 'array';
     return node($w, olddef($t, \@k)) if $w =~ /^(.+):$/ && $w ne ':';

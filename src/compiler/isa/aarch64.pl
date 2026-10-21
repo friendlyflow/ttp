@@ -399,7 +399,8 @@ def("addhn.8b", "x=0", "q=0", "u=0", "x=01110", "size=00", "x=1", "rm", "opcode=
 # A field that computes its bits from an operand (not a slice of it):
 # "shr16[6:0](shift)", 16 - shift in 7 bits. Its function is in the group.
 my %computed_done;
-my %computed = (shr16 => [node("shift"), call("addi", qw(-16 shift t0)), call("sub", qw(t0 zero t1))]);
+my %computed = (shr16 => [node("shift"), call("addi", qw(-16 shift t0)), call("sub", qw(t0 zero t1))],
+    shr128 => [node("shift"), call("addi", qw(-128 shift t0)), call("sub", qw(t0 zero t1))]);
 sub cdef {
     my ($name, @fields) = @_;
     my (%seen, @params, @nodes);
@@ -419,10 +420,13 @@ sub cdef {
     push @{ $isa->{current}{children} }, node("$name:", (map { node($_) } @params), @nodes);
 }
 cdef("ushr.16b", "x=0", "q=1", "u=1", "x=011110", "shr16[6:0](shift)", "opcode=00000", "x=1", "rn", "rd");
+# (ushr.d: the scalar d form, gcc's ushr d0, d1, #32: immh:immb 128 less the shift)
+cdef("ushr.d",   "x=01", "u=1", "x=111110", "shr128[6:0](shift)", "opcode=00000", "x=1", "rn", "rd");
 cdef("shrn.8b",  "x=0", "q=0", "u=0", "x=011110", "shr16[6:0](shift)", "opcode=10000", "x=1", "rn", "rd");
 def("dup.16b", "x=0", "q=1", "op=0", "x=01110000", "imm5=00001", "x=0", "imm4=0001", "x=1", "rn", "rd");
 def("dup.4s",  "x=0", "q=1", "op=0", "x=01110000", "imm5=00100", "x=0", "imm4=0001", "x=1", "rn", "rd");
-for (["movi.16b", 1, 0, "1110"], ["mvni.4s", 1, 1, "0000"], ["mvni.4s.lsl8", 1, 1, "0010"],
+# (movi.d, movi.2d: the d forms, each bit of imm8 a byte of ones, gcc's movi d0, #0)
+for (["movi.16b", 1, 0, "1110"], ["movi.d", 0, 1, "1110"], ["movi.2d", 1, 1, "1110"], ["mvni.4s", 1, 1, "0000"], ["mvni.4s.lsl8", 1, 1, "0010"],
      ["bici.8h", 1, 1, "1001"], ["bici.8h.lsl8", 1, 1, "1011"]) {
     my ($m, $q, $op, $cmode) = @$_;
     def($m, "x=0", "q=$q", "op=$op", "x=0111100000", "imm8[7:5]", "cmode=$cmode", "o2=0", "x=1", "imm8[4:0]", "rd");

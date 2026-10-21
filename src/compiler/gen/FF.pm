@@ -125,8 +125,9 @@ sub frozen {
     return node("char", frozen($k->[1]))
         if $n->{content} eq "address" && @$k == 2 && $k->[0]{content} eq "char"
         && !@{ $k->[0]{children} } && !@{ $k->[1]{children} };
+    # (a layer's children are its holder's: the frozen ones read no layers)
     node($n->{content},
-        map { frozen($_) } grep {
+        map { is_layer($_) ? @{ frozen($_)->{children} } : frozen($_) } grep {
             my $c = $_->{children};
             !($_->{content} eq "comment" && @$c) && !is_license($_)
                 && !($_->{content} =~ / .*:$/ && @$c && !($c->[0]{content} =~ /^[01]+$/ && !@{ $c->[0]{children} }))

@@ -3,3 +3,5 @@ build/*
 src/compiler/progs/cexit
 *.core
 .claude/worktrees/
+# a lane's handoff note stays in its own worktree
+/HANDOFF.md

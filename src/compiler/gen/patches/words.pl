@@ -25,7 +25,10 @@
 # definition's type run, a cast's, sizeof's, va_arg's) and one for a typed
 # literal's address; decl reads a variable-length array from its array
 # node; fail's items are expressions; open, group and tscan look through
-# a node's layers (flatkids). Run on ttpc.ff.
+# a node's layers (flatkids); generic's association names are type runs in
+# one name (char * pointer:, gentype); a section's bounds are an array node
+# (secentry). Run on ttpc.ff (ports' since
+# its merge), with gen/patches/wordsdefs.pl on ttpc.defs.ff.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 my @top = tree();
@@ -79,7 +82,7 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     my ($a, $b) = map { $_->{children}[0] } @{ kids($kw) };
     $a->{content} =~ s/:\0address\0content\0syscall\0/:\0& address\0* pointer\0syscall\0/ or die "words: cc_kw 1\n";
     $b->{content} =~ s/\0cast:\0weak\0/\0cast\0weak\0/ or die "words: cc_kw cast\n";
-    $b->{content} =~ s/\0imag\0\0$/\0imag\0U\0L\0UL\0LL\0ULL\0\0/ or die "words: cc_kw end\n";
+    $b->{content} =~ s/\0section\0\0$/\0section\0U\0L\0UL\0LL\0ULL\0\0/ or die "words: cc_kw end\n";
     my $n = 0;
     my $walk;
     $walk = sub {
@@ -1958,6 +1961,121 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     la ctend a0
     call bridge
     leave2
+");
+}
+
+# --- generic: an association's name, its type run in one name (char
+# * pointer:): the base type's words, then a * pointer for each at its end
+{
+    my $g = fnd('gen_words')->{children}[0]{children}[0];
+    $g->{content} eq "default:address \0" or die "words: gen_words\n";
+    $g->{content} = "default: * pointer\0";
+    @{ kids(fnd('gentype')) } = code("
+    # the type of the association a0's name, read by typerun from its words
+    # as nodes: the type name, then * pointer as often as it ends with it;
+    # below 0 if none
+    enter5
+    ld NODE_content a0 s4
+    lbu NODE_content_len a0 s5
+    addi -1 s5 s5
+    addi -672 sp sp
+    li 0 s6
+    T1:
+    li 10 t0
+    bgeu rel:T2 s5 t0
+    li 8 t0
+    bgeu rel:T2 t0 s6
+    add s5 s4 a0
+    addi -10 a0 a0
+    li 10 a1
+    la gen_words a2
+    addi 8 a2 a2
+    li 10 a3
+    call streq
+    beqz T2 a0
+    addi 1 s6 s6
+    addi -10 s5 s5
+    j T1
+    # (nodes at sp, 64 bytes each, their addresses at sp + 576; no hash, as
+    # litk and flatkids keep theirs there)
+    T2:
+    # (sp through s7: aarch64 stores no sp)
+    mv sp s7
+    sd 0 zero s7
+    sb NODE_children_len zero s7
+    sb NODE_content_len s5 s7
+    sd NODE_content s4 s7
+    addi 576 s7 t1
+    sd 0 s7 t1
+    li 0 t2
+    T3:
+    bgeu rel:T4 s6 t2
+    addi 1 t2 t2
+    slli 6 t2 t3
+    add t3 sp t3
+    sd 0 zero t3
+    sb NODE_children_len zero t3
+    li 9 t4
+    sb NODE_content_len t4 t3
+    la gen_words t4
+    addi 9 t4 t4
+    sd NODE_content t4 t3
+    slli 3 t2 t4
+    add t4 sp t4
+    addi 576 t4 t4
+    sd 0 t3 t4
+    j T3
+    T4:
+    addi 576 sp a0
+    addi 1 s6 t0
+    slli 3 t0 t0
+    add t0 a0 a1
+    call typerun
+    addi 672 sp sp
+    leave5
+");
+}
+# --- section: the bounds' type, an array node (array / T / 0, its element's
+# type run and 0 as its children), in the section's record, which grows to
+# 512 bytes for it ----------------------------------------------------------
+{
+    my $sv = fnd('sec_vars')->{children}[0]{children}[0];
+    $sv->{content} eq '4104' or die "words: sec_vars\n";
+    $sv->{content} = '8200';
+    my $n = 0;
+    my $w;
+    $w = sub { for my $x (@{ $_[0] }) { if (sig($x) =~ /^slli 8 (?:s8 t0|s7 t0|s5 t0|t2 t3)$/) { $x->{children}[0]{content} = '9'; $n++ } $w->(kids($x)) } };
+    $w->(kids(fnd($_))) for qw(secentry secplace secbound);
+    die "words: the sections' records $n times, not 4\n" unless $n == 4;
+    @{ kids(lab(fnd('secentry'), 'E6')) } = code("
+    la sec_nodes t0
+    addi 64 t0 t0
+    sd 0 t0 t3
+    # (the array node at 256 in the record, no hash: its children the type
+    # run and 0, after the list's first)
+    addi 256 s9 t0
+    sd 0 zero t0
+    sb NODE_children_len t4 t0
+    addi 8 s11 t1
+    sd NODE_children t1 t0
+    li 5 t1
+    sb NODE_content_len t1 t0
+    la sec_words t1
+    sd NODE_content t1 t0
+    sd 0 t0 s11
+    li 1 t4
+    addi 32 s9 t0
+    sb NODE_children_len t4 t0
+    sd NODE_children s11 t0
+    sb NODE_content_len s5 t0
+    sd NODE_content s4 t0
+    addi 96 s9 t0
+    sb NODE_children_len t4 t0
+    sd NODE_children s11 t0
+    sb NODE_content_len s5 t0
+    sd NODE_content s4 t0
+    mv s9 a0
+    leave8
 ");
 }
 

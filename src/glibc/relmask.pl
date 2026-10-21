@@ -1,20 +1,23 @@
 #!/usr/bin/env perl
-# relmask.pl — bytes of a riscv64, aarch64 or arm .text with the fields
-# relocations fill in set to 0: what GNU as left for the linker (a call's
-# auipc and jalr, a GOT or TLS address; aarch64's branch, adrp and lo12
-# fields) is not the assembler's to compare.
+# relmask.pl — bytes of a riscv64, aarch64, arm or x86_64 .text with the
+# fields relocations fill in set to 0: what GNU as left for the linker (a
+# call's auipc and jalr, a GOT or TLS address; aarch64's branch, adrp and
+# lo12 fields; x86_64's rel32 and GOT fields) is not the assembler's to
+# compare.
 #
-#   perl relmask.pl <objdump -r of the object> <.text bytes> [skip] > masked
+#   perl relmask.pl <objdump -r of the object> <.text bytes> [skip [section]] > masked
 #
-# skip: the bytes the .text has before the ones given (its offsets less).
+# skip: the bytes the .text has before the ones given (its offsets less);
+# section: the code's, if not .text (x86_64's .text.avx2 ...).
 #
 # A host tool (core Perl only).
 use strict;
 use warnings;
 
-die "usage: relmask.pl relocs bin [skip]\n" unless @ARGV == 2 || @ARGV == 3;
-my ($relocs, $bin, $skip) = @ARGV;
+die "usage: relmask.pl relocs bin [skip [section]]\n" unless @ARGV >= 2 && @ARGV <= 4;
+my ($relocs, $bin, $skip, $section) = @ARGV;
 $skip //= 0;
+$section //= '.text';
 open my $b, '<:raw', $bin or die "relmask: $bin: $!\n";
 my $text = do { local $/; <$b> };
 close $b;
@@ -50,8 +53,8 @@ sub field {
 open my $r, '<', $relocs or die "relmask: $relocs: $!\n";
 my $intext = 0;
 while (<$r>) {
-    $intext = $1 eq '.text' if /^RELOCATION RECORDS FOR \[(.*)\]/;
-    next unless $intext && /^([0-9a-f]+)\s+(R_(?:RISCV|AARCH64|ARM)_\w+)/;
+    $intext = $1 eq $section if /^RELOCATION RECORDS FOR \[(.*)\]/;
+    next unless $intext && /^([0-9a-f]+)\s+(R_(?:RISCV|AARCH64|ARM|X86_64)_\w+)/;
     my ($off, $type) = (hex($1) - $skip, $2);
     next if $off < 0;
     if ($type =~ /^R_RISCV_CALL(_PLT)?$/) { field($off, 'U'); field($off + 4, 'I') }
@@ -71,6 +74,8 @@ while (<$r>) {
     elsif ($type =~ /^R_ARM_(CALL|JUMP24)$/) { field($off, 'A24') }
     elsif ($type =~ /^R_ARM_(ABS32|REL32|GOTPC|GOT32|GOTOFF32|TLS_IE32|TLS_LE32)$/) { field($off, 'W') }
     elsif ($type =~ /^R_ARM_MOV[WT]_/) { field($off, 'MOV') }
+    # x86_64: a 32-bit field, a branch's or a rip-relative operand's
+    elsif ($type =~ /^R_X86_64_(PC32|PLT32|GOTPCREL|GOTPCRELX|REX_GOTPCRELX|GOTTPOFF|TPOFF32|32|32S)$/) { field($off, 'W') }
     else { die "relmask: no mask for $type\n" }
 }
 close $r;

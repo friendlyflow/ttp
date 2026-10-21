@@ -41,7 +41,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -107,7 +107,7 @@ decls:
 # notice, a line per child), its SPDX ids known to gen/spdx.txt; the frozen
 # files, which stay as they are, have theirs in LICENSES. A tree with an
 # unknown id fails.
-LICENSED := $(TREES) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
+LICENSED := $(TREES) $(X86GNU) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
 licenses: | $(BUILD)
 	@perl gen/licenses.pl --sidecar LICENSES $(LICENSED)
 	@printf 'license\n  GPL-3.0-or-whatever\n  a notice\n' > $(BUILD)/badlicense.ff.txt
@@ -313,7 +313,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign cglobcast
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # C tests of one target only, beside the portable ones
@@ -392,9 +392,9 @@ x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
 
 # The calls by each target's C ABI, against gcc (progs/abi/run.sh): gcc's
 # functions of many shapes (by s2ff) and C translated by c2ff, built by
-# ttpc into one program, call each other; every check must say ok. So far
-# arm (the AAPCS, gen/patches/abi.pl).
-ABI_TARGETS := arm
+# ttpc into one program, call each other; every check must say ok: arm
+# (the AAPCS, gen/patches/abi.pl) and aarch64 (AAPCS64, abia64.pl).
+ABI_TARGETS := arm aarch64
 abi: $(BOOT)/stage2 $(SHARED)
 	@for t in $(ABI_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/abi/run.sh $$t $(P)/abi-$$t > $(P)/abi-$$t.log 2>&1 || { cat $(P)/abi-$$t.log; exit 1; }; tail -n 1 $(P)/abi-$$t.log; done
 

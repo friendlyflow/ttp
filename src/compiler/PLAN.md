@@ -63,8 +63,8 @@ ttpc assembles itself from ff. The pieces, all in this folder:
 | `gen/FF.pm`, `gen/fftext.pl` | the ff tree for the host tools; `.ff` <-> `.ff.txt`, the text form, for reading, diffs and editing without sicompass. |
 | `language.ff.txt`, `language.ff` | the language, asm and C, described as an ff tree: what can be written and what it means. |
 | `hosts/<host>/ttpc.s` | **the seeds of the other hosts** (x86_64, aarch64, arm), frozen: ports of `ttpc.s`, function by function, that must agree with it byte for byte (`make seeds`), with one difference: `OUT_SIZE` 1 MiB, since ttpc for those hosts is larger than stage0's 64 KiB. |
-| `rv64:` in `macros/<host>.ff.txt` | ttpc's own ops of RV64 (`rv.add`, `rv.ld`, ..., 50 or so) and its registers (`rv.a0`, ...) in the host's instructions: on x86_64 and arm the registers are 8-byte slots in memory, on aarch64 registers of its own. Also per host: `host_name`, `cc_ctargs` / `cc_call_l` / `cc_ctreg` (the bridge from compile time to ttpc), `ldword`. |
-| `gen/mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host. |
+| `rv64:` in `macros/<host>.ff.txt` | ttpc's own ops of RV64 (`rv.add`, `rv.ld`, ..., 50 or so) and its registers (`rv.a0`, ...) in the host's instructions: on arm the registers are 8-byte slots in memory, on aarch64 registers of its own; on x86_64 the ten most used (t0 t1 a0 sp a1 s4 s6 a2 s5 t2) are in x86_64 registers and the others in slots, with a form of each op per choice of where its registers are, `rv.op.h` + `r`/`m` per register operand, in the groups `rv64alu:` `rv64mem:` `rv64jump:` that `gen/mkrv64x86.pl` writes after `rv64:` and mkhost.pl picks from (2026-10-20: ttpc on x86_64 2.4-4.5x faster). Also per host: `host_name`, `cc_ctargs` / `cc_call_l` / `cc_ctreg` (the bridge from compile time to ttpc), `ldword`. |
+| `gen/mkhost.pl` | ttpc for a host: renames every op and register of `ttpc.ff` and the macros of `ttpc.defs.ff` it calls to `rv.<name>`, so that the one source assembles for the host; with hot registers (`rv.hot:`, x86_64) an op to `rv.<name>.h` + where its registers are, a hot register to the host's. |
 | `gen/mkwhole.pl` | a whole tree in the language of stage0: the target's section as pages, the shared definitions, the given pages, the exec ops, the program; only what the program reaches (stage0 reads 1 MiB). |
 | `gen/frozen.pl` | a tree in the language of the frozen ttpc1 and stage0: `shared.ff` without comments (known only in code) and without `else if:` (which they take for a register). |
 
@@ -689,6 +689,14 @@ homogeneous aggregate of floats or doubles VFP registers; a struct result
 of four bytes or less is in r0, an aggregate's in s0../d0.., a larger one
 goes through the address in r0 (gen/patches/abi3.pl). A call through an
 address gets room for such a result among the frame's temporaries.
+On aarch64 (`cc_abi` 2, gen/patches/abia64.pl) calls go by AAPCS64 as
+Linux has it: x0..x7 and v0..v7 (s, d, q; an hfa of up to four floats,
+doubles or long doubles in consecutive ones), a struct of 16 bytes or less
+in one or two x registers, a larger one by the address of the caller's
+copy, then the stack in 8-byte slots; variadic arguments as any other.
+Results in x0, s0, d0, q0, x0:x1, an hfa's registers, or in memory at x8.
+va_list is AAPCS64's 32-byte struct, va_start and va_arg AAPCS64's
+algorithm over the register save areas a variadic function keeps.
 `make abi` (progs/abi) checks it against gcc's code both ways.
 
 A division by zero is not the same everywhere (riscv64 and aarch64 give -1,
