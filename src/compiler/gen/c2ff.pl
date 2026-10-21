@@ -1579,7 +1579,10 @@ sub expr {
         @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne 'address' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
         # (one of a scalar type is a typed literal, u32 / 0; ttpc gives
         # address / u32 / 0 a temporary, C's &(unsigned int){0})
-        return node($t[0], init((kids($n))[0]));
+        # (an empty one, C23's and GNU's {}, is {0}: support_blob_repeat_free's
+        # *blob = (struct support_blob_repeat) {})
+        my @i = init((kids($n))[0]);
+        return node($t[0], @i ? @i : node('0'));
     }
     if ($k eq 'UnaryExprOrTypeTraitExpr') {
         my $w = $n->{name};
