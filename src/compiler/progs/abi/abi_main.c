@@ -20,7 +20,7 @@ long long cb_var (int n, ...)
 { va_list ap; long long s = 0; va_start (ap, n);
   for (int i = 0; i < n; i++) { s += va_arg (ap, int); s += 2 * va_arg (ap, long long); }
   va_end (ap); return s; }
-#ifdef __aarch64__
+#if defined __aarch64__ || defined __x86_64__
 long cb_i10 (int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
 { return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j; }
 double cb_mixn (int a, double b, int c, double d, int e, double f, int g, double h, int i, double j, int k, double l,
@@ -121,6 +121,42 @@ static void a64 (void)
   check (p_g_vard () == 55 + 180, "a64: gcc calls ttpc: variadic doubles past v7, ttpc's va_list to gcc");
 }
 #endif
+#ifdef __x86_64__
+long cb_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g)
+{ return a.l + 2 * b.l + 3 * c.l + 4 * d.l + 5 * e.l + 6 * f.l + 7 * g.l + (long) (2 * (a.d + b.d + c.d + d.d + e.d + f.d + g.d)); }
+dl cb_r_dl (double d, long l) { dl r = { d, l }; return r; }
+fid cb_r_fid (float f, int i, double d) { fid r = { f, i, d }; return r; }
+long cb_vs (int n, ...)
+{ va_list ap; long s = 0; va_start (ap, n);
+  for (int i = 0; i < n; i++) { s16 x = va_arg (ap, s16); s24 y = va_arg (ap, s24); s += x.a + 2 * x.b + 3 * y.a + 4 * y.b + 5 * y.c; }
+  va_end (ap); return s; }
+static void x64 (void)
+{
+  long (*p_f_dl) (dl, dl, dl, dl, dl, dl, dl) = f_dl;
+  double (*p_f_ifl) (ifl, fid) = f_ifl;
+  dl (*p_r_dl) (double, long) = r_dl;
+  fid (*p_r_fid) (float, int, double) = r_fid;
+  long (*p_f_vs) (int, ...) = f_vs;
+  long (*p_g_dl) (void) = g_dl;
+  double (*p_g_r_dl) (void) = g_r_dl;
+  double (*p_g_r_fid) (void) = g_r_fid;
+  long (*p_g_vs) (void) = g_vs;
+  dl a = { 1.5, 1 }, b = { 2.5, 2 }, c = { 3.5, 3 }, d = { 4.5, 4 }, e = { 5.5, 5 }, f = { 6.5, 6 }, g = { 7.5, 7 };
+  check (p_f_dl (a, b, c, d, e, f, g) == 203, "x64: a double and a long in an xmm and a general register, the last struct on the stack");
+  ifl i = { 3, 1.5f }; fid j = { 2.5f, 4, 0.25 };
+  check (p_f_ifl (i, j) == 31.5, "x64: an int and a float in one general register");
+  dl rd = p_r_dl (2.5, 7);
+  check (rd.d == 2.5 && rd.l == 7, "x64: a struct result in xmm0 and rax");
+  fid rf = p_r_fid (1.5f, 3, 4.25);
+  check (rf.f == 1.5f && rf.i == 3 && rf.d == 4.25, "x64: a struct result in rax and xmm0");
+  s16 x1 = { 1, 2 }, x2 = { 6, 7 }, x3 = { 11, 12 }; s24 y1 = { 3, 4, 5 }, y2 = { 8, 9, 10 }, y3 = { 13, 14, 15 };
+  check (p_f_vs (3, x1, y1, x2, y2, x3, y3) == 390, "x64: variadic structs in registers, in memory, past r9");
+  check (p_g_dl () == 203, "x64: gcc calls ttpc: a double and a long, past r9");
+  check (p_g_r_dl () == 9.5, "x64: gcc calls ttpc: a struct result in xmm0 and rax");
+  check (p_g_r_fid () == 8.75, "x64: gcc calls ttpc: a struct result in rax and xmm0");
+  check (p_g_vs () == 390, "x64: gcc calls ttpc: variadic structs");
+}
+#endif
 int main (void)
 {
   /* the functions of gcc whose result is not an int: through pointers of
@@ -193,8 +229,11 @@ int main (void)
   check (g_s () == 819, "gcc calls ttpc: structs");
   check (g_r_s20 () == 60, "gcc calls ttpc: a struct result");
   check (p_g_r_hd2 () == 9.5, "gcc calls ttpc: a double aggregate result");
-#ifdef __aarch64__
+#if defined __aarch64__ || defined __x86_64__
   a64 ();
+#endif
+#ifdef __x86_64__
+  x64 ();
 #endif
   return fails;
 }

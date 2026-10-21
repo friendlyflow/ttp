@@ -134,6 +134,8 @@ sub ctype {
     $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
     $t = trim($t);
     $t =~ s/\s+/ /g;
+    # (x86_64's va_list, before the arrays and pointers: %scalar has it)
+    return $scalar{$t} if $t =~ /^struct __va_list_tag\b/ && exists $scalar{$t};
     # an array of function pointers, ret (*[n]) (params): the init arrays'
     # void (*[]) (int, char **, char **)
     if ($t =~ /^(.*?)\s*\(\*\s*\[(\d*)\]\)\s*\((.*)\)$/) {
@@ -366,6 +368,10 @@ reserve_target($target) if $target ne 'riscv64';
 $scalar{'unsigned long'} = 'u32' if $target eq 'arm';
 # and its va_list is the AAPCS's struct __va_list (a pointer), ttpc's va_list
 @scalar{'__va_list', 'struct __va_list'} = ('va_list', 'va_list') if $target eq 'arm';
+# and x86_64's is the SysV ABI's struct __va_list_tag[1], a parameter of it
+# its address: ttpc's va_list, which is that struct on x86_64 and goes as
+# its address (gen/patches/abix64.pl)
+@scalar{'struct __va_list_tag[1]', 'struct __va_list_tag *'} = ('va_list', 'va_list') if $target eq 'x86_64';
 
 my %enumof;                 # each enum constant's enum, as a tag
 my $lastanon;               # the last anonymous record or enum at the top of a unit

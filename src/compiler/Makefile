@@ -418,8 +418,9 @@ x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
 # The calls by each target's C ABI, against gcc (progs/abi/run.sh): gcc's
 # functions of many shapes (by s2ff) and C translated by c2ff, built by
 # ttpc into one program, call each other; every check must say ok: arm
-# (the AAPCS, gen/patches/abi.pl) and aarch64 (AAPCS64, abia64.pl).
-ABI_TARGETS := arm aarch64
+# (the AAPCS, gen/patches/abi.pl), aarch64 (AAPCS64, abia64.pl) and
+# x86_64 (the SysV ABI, abix64.pl; natively, without qemu).
+ABI_TARGETS := arm aarch64 x86_64
 abi: $(BOOT)/stage2 $(SHARED)
 	@for t in $(ABI_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/abi/run.sh $$t $(P)/abi-$$t > $(P)/abi-$$t.log 2>&1 || { cat $(P)/abi-$$t.log; exit 1; }; tail -n 1 $(P)/abi-$$t.log; done
 
