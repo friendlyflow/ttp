@@ -420,7 +420,7 @@ sub text_of { my (@n) = @_; my $s = join '', map { c($_) } @n; utf8::encode($s) 
 
 # The items of a global's array, as numbers: a text global's bytes.
 # A global's items, after its type
-sub items_of { my ($n) = @_; my $v = $var{$n}; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); @l[$i .. $#l] }
+sub items_of { my ($n) = @_; my $v = $var{$n}; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); map { $_->{content} eq 'items' ? kids($_) : $_ } @l[$i .. $#l] }
 sub global_items { my ($n) = @_; my $v = $var{$n} or return; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); map { $_->{content} =~ /^items$/ ? kids($_) : $_ } @l[$i .. $#l] }
 
 sub operand {
