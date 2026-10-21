@@ -24,7 +24,8 @@
 # read a global's items so; tscan reserves no temporary for a type (a
 # definition's type run, a cast's, sizeof's, va_arg's) and one for a typed
 # literal's address; decl reads a variable-length array from its array
-# node; fail's items are expressions. Run on ttpc.ff.
+# node; fail's items are expressions; open, group and tscan look through
+# a node's layers (flatkids). Run on ttpc.ff.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 my @top = tree();
@@ -553,13 +554,30 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     li 0 a0
     leave1
 "), fncode('pairv', "
-    # the value of the two items at a0 (a cast or a suffix and its operand),
-    # worked out while compiling (as a cast's node: pair_slot says where)
+    # the value of the item at a0 (a cast and its operand, a global's),
+    # worked out while compiling (as the cast's node: pair_slot and
+    # pair_end say where it is); a1 after it
+    enter2
+    mv a0 s4
+    la gv_end t0
+    ld 0 t0 a1
+    call item1
+    mv a0 s5
     la pair_slot t0
-    sd 0 a0 t0
-    ld 0 a0 a0
+    sd 0 s4 t0
+    la pair_end t0
+    sd 0 s5 t0
+    ld 0 s4 a0
     la pairconst a1
-    j ctrun
+    call ctrun
+    # (the lookups made while compiling it, in the host's scope, are out of
+    # date now: lookcache's generation moves on, as for a page)
+    la lookcache t0
+    ld 104 t0 t1
+    addi 1 t1 t1
+    sd 104 t1 t0
+    mv s5 a1
+    leave2
 "), fncode('pairconst', "
     la pairbody a1
     j frame
@@ -571,7 +589,8 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     ld CC_cur t0 s5
     ld CC_end t0 s6
     sd CC_cur s4 t0
-    addi 16 s4 t1
+    la pair_end t1
+    ld 0 t1 t1
     sd CC_end t1 t0
     ld 0 s4 t1
     sd CC_self t1 t0
@@ -605,25 +624,51 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     call parse_num
     beqz K9 a1
     leave2
-    # (a struct's name: no variable is named as a type; vfind would see the
-    # locals declared further, as tscan asks before them)
+    # (a struct's name, among the definitions read so far: no variable is
+    # named as a type; vfind would see the locals declared further, as tscan
+    # asks before them, and cfind would read a library's name)
+    # (a leaf's answer is kept in its hash, which compiling does not read:
+    # litk's address first, then the answer)
     K5:
+    ld 0 s4 t0
+    la litk t1
+    bne rel:K50 t1 t0
+    ld 8 s4 a0
+    leave2
+    K50:
+    ld NODE_content s4 t0
+    lbu NODE_content_len s4 t1
+    beqz KL9 t1
+    lbu 0 t0 t1
+    addi -48 t1 t1
+    li 10 t2
+    bltu rel:KL9 t2 t1
     ld NODE_content s4 a0
     lbu NODE_content_len s4 a1
-    mv s4 a2
-    call cfind
-    beqz K9 a0
+    call find_label
+    bnez K6 a0
+    mv s4 a0
+    call libtype
+    beqz KL9 a0
+    K6:
     mv a0 s5
     call defkw
     li KW_union t0
     beq rel:K7 t0 a0
     li KW_struct t0
-    bne rel:K9 t0 a0
+    bne rel:KL9 t0 a0
     mv s5 a0
     call places
-    leave2
+    j KS
     K7:
     li -2 a0
+    j KS
+    KL9:
+    li -1 a0
+    KS:
+    la litk t1
+    sd 0 t1 s4
+    sd 8 a0 s4
     leave2
     K9:
     li -1 a0
@@ -1026,6 +1071,49 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     mv s5 a0
     call setty
     leave5
+"), fncode('tskip', "
+    # a0 after the type run at a0 (up to a1), -1 if none: a type word or an
+    # array node, then * pointer leaves; made no type of (tscan's, quick)
+    enter2
+    mv a0 s4
+    mv a1 s5
+    bgeu rel:Z8 s5 s4
+    ld 0 s4 a0
+    lbu NODE_children_len a0 t0
+    bnez Z3 t0
+    la cc_tynames a1
+    call lookup
+    bgez Z2 a0
+    ld 0 s4 t0
+    ld NODE_content t0 a0
+    lbu NODE_content_len t0 a1
+    call find_label
+    beqz Z8 a0
+    call isdef
+    beqz Z8 a0
+    j Z2
+    Z3:
+    call kwof
+    li KW_array t0
+    bne rel:Z8 t0 a0
+    Z2:
+    addi 8 s4 s4
+    Z4:
+    bgeu rel:Z9 s5 s4
+    ld 0 s4 a0
+    lbu NODE_children_len a0 t0
+    bnez Z9 t0
+    call kwof
+    li KW_content t0
+    bne rel:Z9 t0 a0
+    addi 8 s4 s4
+    j Z4
+    Z9:
+    mv s4 a0
+    leave2
+    Z8:
+    li -1 a0
+    leave2
 "), fncode('tfrom', "
     # where the values among the children a1 ... a2 of the node a0 begin and
     # end (a0, a1): after a definition's type run; none in a cast or an
@@ -1055,15 +1143,14 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     mv s5 a0
     mv s6 a1
     call tlskip
-    call typerun
+    call tskip
     bltz F0 a0
-    mv a1 a0
     mv s6 a1
     leave3
     F2:
     mv s5 a0
     mv s6 a1
-    call typerun
+    call tskip
     bltz F0 a0
     mv s6 a0
     mv s6 a1
@@ -1087,7 +1174,18 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
 # --- the end of a global's items, for a postfix after the last -------------
 {
     my $op = fnd('out_path');
-    add_after($op, FF::read_txt("gv_end:\n  dword\n    0\npair_slot:\n  dword\n    0\n", 'words'));
+    add_after($op, FF::read_txt("gv_end:\n  dword\n    0\npair_slot:\n  dword\n    0\npair_end:\n  dword\n    0\nflat_top:\n  dword\n    flatbuf\n", 'words'));
+    add_after(fnd('ptrs'), FF::read_txt("flatbuf:\n  reserve\n    16777216\n", 'words'));
+    # (a cast's value in a global's items is worked out while compiling, one
+    # entry of cc_ct each: room for more of them)
+    my $ct = fnd('cc_ct');
+    $ct->{children}[0]{children}[0]{content} eq '131072' or die "words: cc_ct\n";
+    $ct->{children}[0]{children}[0]{content} = '1048576';
+    # (and room for more labels: glibc's programs come near 65536, which the
+    # words' code passes)
+    my $gl = fnd('glabels');
+    $gl->{children}[0]{children}[0]{content} eq '524288' or die "words: glabels\n";
+    $gl->{children}[0]{children}[0]{content} = '4194304';
     my $gi = fnd('ginit');
     my $n = 0;
     for my $l (kids($gi), map { kids($_) } grep { !L($_) && $_->{content} =~ /:$/ } @{ kids($gi) }) {
@@ -1285,6 +1383,8 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     bltz L8 a0
     bne rel:L8 s7 a1
     mv a0 s6
+    call post2
+    bnez UO a0
     call peek
     beqz L8 a0
     mv a0 a1
@@ -1456,7 +1556,7 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     mv s5 a0
     call prefixw
     li 4 t0
-    bge rel:LC t0 a0
+    bge rel:LS t0 a0
 ");
     # x & address: the address of x (its item ends after & address)
     after($gk, "enter5\nmv a0 s4\nmv a1 s7\nld 0 s4 s5", "
@@ -1491,6 +1591,16 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     ld 0 s4 s5
     lbu NODE_children_len s5 t0
     bnez LV t0
+    # (a leaf with & address after it is no text)
+    addi 8 s4 t1
+    la gv_end t0
+    ld 0 t0 t0
+    bgeu rel:LT1 t0 t1
+    ld 0 t1 a0
+    call prefixw
+    li 2 t0
+    beq rel:LV t0 a0
+    LT1:
     mv s8 a0
     call tbase
     li TY_CHAR t0
@@ -1505,6 +1615,11 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     LC:
     mv s4 a0
     call pairv
+    j L9
+    # a suffix and its number: the number (the field's type cuts it)
+    LS:
+    ld 8 s4 a0
+    call constval
     addi 16 s4 a1
     j L9
 ");
@@ -1583,16 +1698,24 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
 ");
 }
 
+# --- jit: a global's cast (pairconst) as a constant (ctconst): the page's
+# functions are not placed for it; placed for the host, the host's register
+# names would be reserved in them (ch on x86_64, s9 on riscv64) -------------
+{
+    my $j = fnd('jit');
+    after(kids(lab($j, 'L1')), "la ctconst t0\nbeq rel:L5 t0 s5", "la pairconst t0\nbeq rel:L5 t0 s5");
+}
+
 # --- tscan: no temporary for a type; one for a typed literal's address -------
 {
     my $s = fnd('tscan');
     my $sk = kids($s);
     repl($sk, "mv s4 a0\ncall kwof\nli KW_array t0\nbne rel:L20 t0 a0", "mv s4 a0\ncall kwof\nli KW_array t0\nbne rel:L20 t0 a0\nj L9");
     @{ kids(lab($s, 'L2')) } = code("
-    ld NODE_children s4 s6
-    lbu NODE_children_len s4 s7
-    slli 3 s7 s7
-    add s6 s7 s7
+    mv s4 a0
+    call flatkids
+    mv a0 s6
+    mv a1 s7
     mv s4 a0
     mv s6 a1
     mv s7 a2
@@ -1702,6 +1825,103 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     AB:
     mv s4 a0
     call bad
+");
+}
+
+# --- layers (0: 1: ..., the overflow of a node past 255) in C's runs: the
+# children through them (flatkids), for open, group and tscan --------------
+{
+    add_after(fnd('open'), fncode('flatkids', "
+    # the children of the node a0 through its layers: a0 the first, a1 the
+    # end; copied to flatbuf where it has a layer
+    enter5
+    mv a0 s4
+    ld NODE_children s4 s5
+    lbu NODE_children_len s4 t0
+    slli 3 t0 t0
+    add t0 s5 s6
+    mv s5 s7
+    K1:
+    bgeu rel:K8 s6 s7
+    ld 0 s7 a0
+    call is_layer
+    bnez K2 a0
+    addi 8 s7 s7
+    j K1
+    K8:
+    mv s5 a0
+    mv s6 a1
+    leave5
+    # (copied once: the node's hash, which compiling does not read, keeps
+    # where, flatbuf's address first)
+    K2:
+    ld 0 s4 t0
+    la flatbuf t1
+    bne rel:K3 t1 t0
+    ld 16 s4 a0
+    ld 24 s4 a1
+    leave5
+    K3:
+    la flat_top t0
+    ld 0 t0 s7
+    mv s4 a0
+    call flatcopy
+    la flat_top t0
+    ld 0 t0 a1
+    la flatbuf t1
+    sd 0 t1 s4
+    sd 16 s7 s4
+    sd 24 a1 s4
+    mv s7 a0
+    leave5
+"), fncode('flatcopy', "
+    # the children of the node a0, through its layers, after flat_top
+    enter3
+    mv a0 s4
+    ld NODE_children s4 s5
+    lbu NODE_children_len s4 t0
+    slli 3 t0 t0
+    add t0 s5 s6
+    C1:
+    bgeu rel:C9 s6 s5
+    ld 0 s5 a0
+    call is_layer
+    beqz C2 a0
+    ld 0 s5 a0
+    call flatcopy
+    j C3
+    C2:
+    la flat_top t0
+    ld 0 t0 t1
+    ld 0 s5 t2
+    sd 0 t2 t1
+    addi 8 t1 t1
+    sd 0 t1 t0
+    C3:
+    addi 8 s5 s5
+    j C1
+    C9:
+    leave3
+"));
+    my $o = fnd('open');
+    @{ kids(lab($o, 'L1')) } = code("
+    mv s4 a0
+    call flatkids
+    la ccs t0
+    ld CC_cur t0 t1
+    ld CC_end t0 t2
+    sd CC_cur a0 t0
+    sd CC_end a1 t0
+    mv t1 a0
+    mv t2 a1
+    leave1
+");
+    @{ kids(fnd('group')) } = code("
+    addi -16 sp sp
+    sd 0 ra sp
+    call flatkids
+    ld 0 sp ra
+    addi 16 sp sp
 ");
 }
 
