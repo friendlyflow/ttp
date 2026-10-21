@@ -27,7 +27,7 @@
 # node; fail's items are expressions; open, group and tscan look through
 # a node's layers (flatkids); generic's association names are type runs in
 # one name (char * pointer:, gentype); a section's bounds are an array node
-# (secentry). Run on ttpc.ff (ports' since
+# (secentry); va_arg's operand may have a * pointer after it (vaop). Run on ttpc.ff (ports' since
 # its merge), with gen/patches/wordsdefs.pl on ttpc.defs.ff.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
@@ -2076,6 +2076,68 @@ sub add_after { my ($at, @nodes) = @_; my $p = kids(parent($at)); my ($i) = grep
     sd NODE_content s4 t0
     mv s9 a0
     leave8
+");
+}
+# --- vaarg: its operand and the * pointer after it (C's va_arg (*ap, T)) as
+# one node, * pointer / ap, which compiles as before (vaop) ------------------
+{
+    add_after(fnd('ptrs'), FF::read_txt("va_node:\n  reserve\n    64\n", 'words'));
+    my $v = fnd('vaarg');
+    add_after($v, fncode('vaop', "
+    # va_arg's operand among the children a0 ... a1: the first, or the first
+    # and a * pointer after it as one node (va_node, * pointer / ap, no
+    # hash); a1 where the type begins after it
+    enter2
+    mv a0 s4
+    mv a1 s5
+    addi 8 s4 t1
+    bgeu rel:V1 s5 t1
+    ld 0 t1 a0
+    lbu NODE_children_len a0 t0
+    bnez V1 t0
+    call kwof
+    li KW_content t0
+    bne rel:V1 t0 a0
+    la va_node a0
+    sd 0 zero a0
+    li 1 t0
+    sb NODE_children_len t0 a0
+    sd NODE_children s4 a0
+    li 9 t0
+    sb NODE_content_len t0 a0
+    la gen_words t0
+    addi 9 t0 t0
+    sd NODE_content t0 a0
+    addi 16 s4 a1
+    leave2
+    V1:
+    ld 0 s4 a0
+    addi 8 s4 a1
+    leave2
+"));
+    repl(kids(lab($v, 'L1')), "
+    ld NODE_children s4 s5
+    ld 8 s5 a0
+    slli 3 t0 t0
+    add t0 s5 a1
+    addi 8 s5 a0
+    call typerun
+    bltz L8 a0
+    mv a0 s6
+    ld 0 s5 s5
+", "
+    ld NODE_children s4 s5
+    slli 3 t0 t0
+    add t0 s5 s6
+    mv s5 a0
+    mv s6 a1
+    call vaop
+    mv a0 s5
+    mv a1 a0
+    mv s6 a1
+    call typerun
+    bltz L8 a0
+    mv a0 s6
 ");
 }
 
