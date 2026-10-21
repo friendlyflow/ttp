@@ -198,8 +198,18 @@ sub regroup {
     return $n if @k <= 255;
     unless ($items) { $n->{children} = [layers(@k)]; return $n }
     my @v = map { $_->{content} eq 'items' && !leaf($_) ? kids($_) : $_ } @k[$head .. $#k];
-    my @g;
-    push @g, node('items', splice @v, 0, 255) while @v;
+    # (an item whole in one group: a cast or a suffix with its operand, a
+    # compound literal's head with its items)
+    my (@g, @cur);
+    for (my $i = 0; $i < @v;) {
+        my $e = item_end(\@v, $i, $t, 1);
+        $e = $i + 1 if $e <= $i;
+        die "words: an item of " . ($e - $i) . " nodes (max 255)\n" if $e - $i > 255;
+        if (@cur + $e - $i > 255) { push @g, node('items', @cur); @cur = () }
+        push @cur, @v[$i .. $e - 1];
+        $i = $e;
+    }
+    push @g, node('items', @cur) if @cur;
     $n->{children} = [@k[0 .. $head - 1], @g];
     $n;
 }
@@ -546,7 +556,9 @@ sub oldvals {
         if ($path && leaf($n) && !is_post($n) || leaf($n) && exists $opix{ $n->{content} } || is($n, 'else') || $n->{content} eq 'else if') {
             push @out, oldnode($t, $n);
             $i++;
-            push(@out, node('content', pop @out)), $i++ while $path && is($l->[$i], '* pointer');
+            # (after it, as an index or a call's argument: * pointer and & address
+            # of the leaf before)
+            push(@out, node(is($l->[$i], '* pointer') ? 'content' : 'address', pop @out)), $i++ while $path && is_post($l->[$i]);
             next;
         }
         my ($v, $j) = oldunit($t, $l, $i);
@@ -592,7 +604,25 @@ sub olddef {
     my $i = marks($k);
     return oldvals($t, $k) unless $i < @$k && is_typeword($t, $k->[$i]) && !(leaf($k->[0]) && $k->[0]{content} =~ /^(?:struct|union|enum)$/);
     my ($r, $j) = oldrun($t, $k, $i);
-    (oldvals($t, [@$k[0 .. $i - 1]]), @$r, oldvals($t, [@$k[$j .. $#$k]]));
+    # (an aggregate's items: a : of its own one of an aggregate in it)
+    my $agg = $r->[0]{content} eq 'array' || @$r == 1 && $t->{rec}{ $r->[0]{content} };
+    (oldvals($t, [@$k[0 .. $i - 1]]), @$r, $agg ? olditems($t, [@$k[$j .. $#$k]]) : oldvals($t, [@$k[$j .. $#$k]]));
+}
+
+# a declaration's items now: a : (or items) that is an item of its own is
+# the items of an aggregate in it (C's braces), its own items in turn
+sub olditems {
+    my ($t, $l) = @_;
+    my @out;
+    for (my $i = 0; $i < @$l;) {
+        my $e = item_end($l, $i, $t, 1);
+        $e = $i + 1 if $e <= $i;
+        my $n = $l->[$i];
+        if ($e == $i + 1 && !leaf($n) && ($n->{content} eq ':' && !grep({ is($_, '.') } kids($n)) || $n->{content} eq 'items')) { push @out, node($n->{content}, olditems($t, [kids($n)])) }
+        else { push @out, oldvals($t, [@$l[$i .. $e - 1]]) }
+        $i = $e;
+    }
+    @out;
 }
 
 1;
