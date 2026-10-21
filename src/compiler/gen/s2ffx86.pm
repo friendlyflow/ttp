@@ -458,6 +458,7 @@ sub read_dump {
 
 # ---- the source walk -----------------------------------------------------------
 my (@made, $n, $pos, @fns, $fn, $block, $other, @pending, %datadef, $ends, %got, %tls, $align, $maxalign, @prefix, %macro, @sections);
+my (%rodata, $roblob, %ro, @carry, %roset);    # read-only data: a label's bytes, the labels a function names
 sub take {
     my $m = $made[$n++] or fail "GNU as made fewer instructions than the source has";
     fail sprintf("GNU's next instruction is at 0x%x, the source's at 0x%x", $m->{addr}, $pos) unless $m->{addr} == $pos;
@@ -467,6 +468,8 @@ sub take {
 sub into { ($block // $fn)->{children} }
 # the end of a function: the words its GOT and TLS operands read
 sub finish {
+    push @carry, [$fn, [sort keys %ro]] if $fn && %ro;
+    %ro = ();
     return unless $fn && (%tls || %got);
     push @{ $fn->{children} }, node('align', node(8)),
         (map { node(".Ltls $_:", node('dword', node($_))) } sort keys %tls),
@@ -507,13 +510,16 @@ sub run {
     $where = $src;
     @made = read_dump($dump);
     ($n, $pos, $ends, $maxalign, $fn, $block, $other, $align) = (0, 0, 1);
-    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix) = ();
+    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset) = ();
+    undef $roblob;
     open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
     my ($file, $line) = ('', 0);
     my @src;
     while (my $l = <$s>) {
         chomp $l;
         if ($l =~ /^# (\d+) "([^"]+)"/) { ($line, $file) = ($1 - 1, $2 =~ s{^(\.\./)+}{}r); next }
+        # (gcc's marks around an asm statement: # 0 "" 2, #APP, #NO_APP)
+        next if $l =~ /^\s*#/;
         $line++;
         $l =~ s/\s*#.*$// unless $l =~ /"/;
         push @src, [$l, $file, $line];
@@ -521,6 +527,13 @@ sub run {
     close $s;
     walk_lines(\@src, 0);
     finish();
+    # each function carries the read-only data it names, after its code
+    for my $c (@carry) {
+        my ($f, $labels) = @$c;
+        rodata_set($_) for @$labels;
+        my @l = grep { $rodata{$_} } @$labels or next;
+        push @{ $f->{children} }, map { (node('align', node(16)), node("$_:", @{ $rodata{$_} })) } @l;
+    }
     fail "a prefix with no instruction after it: @prefix" if @prefix;
     # what is left is the padding GNU as put at the end of the section
     pop @made while @made > $n && $made[-1]{asm} =~ /^((data16|cs)\s+)*(nop\w*|xchg\s+%ax,%ax)\b/;
@@ -618,8 +631,34 @@ sub section {
     if ($sec =~ /^\.text(\.|$)/) { $other = undef; return }
     $other = $sec;
     @pending = ();
+    undef $roblob;
 }
 
+# the next bytes of read-only data: of the labels just before them (one
+# list for all of them), or after the last ones
+sub rodata_add {
+    my ($d) = @_;
+    if (@pending) { $roblob = []; $rodata{$_} = $roblob for @pending; @pending = () }
+    fail "read-only bytes with no label" unless $roblob;
+    push @$roblob, $d;
+}
+# X of .set X, Y+n: Y's bytes from n on (n at the start of one of them)
+sub rodata_set {
+    my ($x) = @_;
+    return if $rodata{$x} || !$roset{$x};
+    my ($y, $off) = @{ $roset{$x} };
+    rodata_set($y);
+    my $b = $rodata{$y} or return;
+    my %sz = (byte => 1, half => 2, word => 4, dword => 8);
+    my $i = 0;
+    while ($off > 0) {
+        my $d = $b->[$i++] or fail "$x: past the bytes of $y";
+        my $k = $sz{ $d->{content} } or fail "$x: $y+$roset{$x}[1] inside its $d->{content}";
+        $off -= $k;
+    }
+    fail "$x: $y+$roset{$x}[1] inside a word of it" if $off < 0;
+    $rodata{$x} = [@$b[$i .. $#$b]];
+}
 sub walk_stmt {
     my ($st, $file, $line) = @_;
     # sections: code (.text, .text.x) or another
@@ -627,9 +666,33 @@ sub walk_stmt {
     if ($st =~ /^\.section\s+"?([^",\s]+)"?/) { push @sections, $other; section($1); return }
     if ($st eq '.previous') { my $p = pop @sections; push @sections, $other; $other = $p; return }
     if (defined $other) {
-        return if $st =~ /^\.(globl|global|weak|type|size|hidden|protected|align|p2align|balign|cfi_\w+)\b/;
-        if ($st =~ /^([.\w]+):$/) { push @pending, $1; return }
+        return if $st =~ /^\.(globl|global|weak|type|size|hidden|protected|align|p2align|balign|cfi_\w+|ident)\b/;
+        if ($st =~ /^([.\w]+):$/) { push @pending, $1; undef $roblob; return }
         if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)) if $datadef{$2}; return }
+        # read-only data (gcc's constants, a string): its label's bytes, as
+        # data each function that names it carries (its labels are its own)
+        if ($other =~ /^\.rodata/) {
+            # (.set X, Y+n: X's bytes are Y's from n on, gcc's constants shared)
+            if ($st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)\s*(?:\+\s*(\d+))?$/) { $roset{$1} = [$2, $3 // 0]; return }
+            if ($st =~ /^\.(string|asciz|ascii)\s+"((?:[^"\\]|\\.)*)"$/) {
+                my ($k, $t) = ($1, $2);
+                my %e = (n => "\n", t => "\t", r => "\r", f => "\f", b => "\b", '"' => '"', '\\' => '\\');
+                $t =~ s/\\(?:([0-7]{1,3})|x([0-9a-fA-F]{1,2})|(.))/defined $1 ? chr oct $1 : defined $2 ? chr hex $2 : $e{$3} \/\/ fail "an escape \\$3"/ge;
+                $t .= "\0" unless $k eq 'ascii';
+                rodata_add(node('ascii', node($t)));
+                return;
+            }
+            if ($st =~ /^\.(byte|value|short|2byte|word|long|int|4byte|quad|8byte|zero|skip)\s+(-?(?:0x[0-9a-fA-F]+|\d+))$/) {
+                my ($k, $v) = ($1, $2);
+                $v = $v =~ /^(-?)0x(.*)$/i ? ($1 ? -hex $2 : hex $2) : $v;
+                return rodata_add(node('reserve', node($v))) if $k =~ /^(zero|skip)$/;
+                my ($dir, $bits) = @{ { byte => ['byte', 8], value => ['half', 16], short => ['half', 16], '2byte' => ['half', 16], word => ['half', 16],
+                    long => ['word', 32], int => ['word', 32], '4byte' => ['word', 32], quad => ['dword', 64], '8byte' => ['dword', 64] }->{$k} };
+                $v += 2 ** $bits if $v < 0;
+                rodata_add(node($dir, node($v)));
+                return;
+            }
+        }
         if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
             my ($first, @more) = @pending;
             $datadef{$_} = 1 for @pending;
@@ -694,6 +757,7 @@ sub walk_stmt {
         if (/^([.\w]+)\@GOTPCREL\(%rip\)$/i) { $got{$1} = 1; $_ = ".Lgot\x01$1(%rip)" }
         elsif (/^([.\w]+)\@GOTTPOFF\(%rip\)$/i) { $tls{$1} = 1; $_ = ".Ltls\x01$1(%rip)" }
         elsif (/\@/) { fail "a relocation with no ff form: $_" }
+        $ro{$1} = 1 if /^([.\w]+)(?:[-+]\d+)?\(%rip\)$/ || /^\$(\.L\w+)$/;
     }
     my $m = take();
     my @pre = @prefix;

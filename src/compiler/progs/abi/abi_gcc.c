@@ -38,7 +38,10 @@ int g_r_s20 (void) { s20 r = cb_r_s20 (10); return r.a + r.b + r.c + r.d + r.e; 
 double g_r_hd2 (void) { hd2 r = cb_r_hd2 (2.5); return r.x + 2 * r.y; }
 long long g_var (void) { return cb_var (3, 1, 0x100000000LL, 2, 0x200000000LL, 3, 3LL); }
 long long g_ptr (long long (*f) (int, long long, int, long long, long long)) { return f (1, 2, 3, 4, 5); }
-#ifdef __aarch64__
+#if defined __x86_64__
+int g_write (const char *s, int n)
+{ long r; __asm__ volatile ("syscall" : "=a" (r) : "0" (1L), "D" (1L), "S" (s), "d" ((long) n) : "rcx", "r11", "memory"); return r; }
+#elif defined __aarch64__
 int g_write (const char *s, int n)
 { register long x0 __asm__ ("x0") = 1; register const char *x1 __asm__ ("x1") = s;
   register long x2 __asm__ ("x2") = n; register long x8 __asm__ ("x8") = 64;
@@ -49,7 +52,7 @@ int g_write (const char *s, int n)
   register int r2 __asm__ ("r2") = n; register int r7 __asm__ ("r7") = 4;
   __asm__ volatile ("svc 0" : "+r" (r0) : "r" (r1), "r" (r2), "r" (r7) : "memory"); return r0; }
 #endif
-#ifdef __aarch64__
+#if defined __aarch64__ || defined __x86_64__
 long f_i10 (int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
 { return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j; }
 double f_mixn (int a, double b, int c, double d, int e, double f, int g, double h, int i, double j, int k, double l,
@@ -92,4 +95,24 @@ long g_r_s16 (void) { s16 r = cb_r_s16 (100); return r.a + 2 * r.b; }
 long double g_ld (void) { return cb_ld (1, 3.0L, 2.5, 7.0L); }
 long double g_varld (void) { return cb_varld (3, 1.0, 1.0L, 2.0, 2.0L, 3.0, 3.0L); }
 long long g_vard (void) { return cb_vard (10, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5); }
+#endif
+#ifdef __x86_64__
+long f_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g)
+{ return a.l + 2 * b.l + 3 * c.l + 4 * d.l + 5 * e.l + 6 * f.l + 7 * g.l + (long) (2 * (a.d + b.d + c.d + d.d + e.d + f.d + g.d)); }
+double f_ifl (ifl a, fid b) { return a.i + 2 * a.f + 3 * b.f + 4 * b.i + 8 * b.d; }
+dl r_dl (double d, long l) { dl r = { d, l }; return r; }
+fid r_fid (float f, int i, double d) { fid r = { f, i, d }; return r; }
+/* n pairs of (s16, s24) */
+long f_vs (int n, ...)
+{ va_list ap; long s = 0; va_start (ap, n);
+  for (int i = 0; i < n; i++) { s16 x = va_arg (ap, s16); s24 y = va_arg (ap, s24); s += x.a + 2 * x.b + 3 * y.a + 4 * y.b + 5 * y.c; }
+  va_end (ap); return s; }
+long g_dl (void)
+{ dl a = { 1.5, 1 }, b = { 2.5, 2 }, c = { 3.5, 3 }, d = { 4.5, 4 }, e = { 5.5, 5 }, f = { 6.5, 6 }, g = { 7.5, 7 };
+  return cb_dl (a, b, c, d, e, f, g); }
+double g_r_dl (void) { dl r = cb_r_dl (2.5, 7); return r.d + r.l; }
+double g_r_fid (void) { fid r = cb_r_fid (1.5f, 3, 4.25); return r.f + r.i + r.d; }
+long g_vs (void)
+{ s16 x1 = { 1, 2 }, x2 = { 6, 7 }, x3 = { 11, 12 }; s24 y1 = { 3, 4, 5 }, y2 = { 8, 9, 10 }, y3 = { 13, 14, 15 };
+  return cb_vs (3, x1, y1, x2, y2, x3, y3); }
 #endif

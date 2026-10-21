@@ -46,11 +46,13 @@ double g_r_hd2 (void);
 long long g_var (void);
 long long g_ptr (long long (*f) (int, long long, int, long long, long long));
 int g_write (const char *s, int n);
-#ifdef __aarch64__
-/* AAPCS64's own shapes: the stack's 8-byte slots past x7 and v7, structs of
-   16 bytes in two registers or (past x7) on the stack, larger ones by the
-   address of a copy, hfas of four, long doubles in q registers, va_list
-   passed on between gcc's code and ttpc's */
+#if defined __aarch64__ || defined __x86_64__
+/* the shapes of the 64-bit ABIs (AAPCS64, SysV x86_64): the stack's 8-byte
+   slots past the registers, structs of 16 bytes in two registers or (past
+   them) on the stack, larger ones (by the address of a copy on aarch64, by
+   their bytes on the stack on x86_64), hfas of four, long doubles in q or
+   xmm registers (binary128), va_list passed on between gcc's code and
+   ttpc's */
 #include <stdarg.h>
 typedef struct { long a, b; } s16;
 typedef struct { long a, b, c; } s24;
@@ -100,4 +102,25 @@ long g_r_s16 (void);
 long double g_ld (void);
 long double g_varld (void);
 long long g_vard (void);
+#endif
+#ifdef __x86_64__
+/* the SysV ABI's own shapes: a struct's eightbytes in a general and an xmm
+   register, an int and a float in one eightbyte (a general one), structs
+   past rdi..r9 on the stack, va_arg of structs in registers and in memory */
+typedef struct { double d; long l; } dl;
+typedef struct { int i; float f; } ifl;
+typedef struct { float f; int i; double d; } fid;
+long f_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g);
+double f_ifl (ifl a, fid b);
+dl r_dl (double d, long l);
+fid r_fid (float f, int i, double d);
+long f_vs (int n, ...);
+long cb_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g);
+dl cb_r_dl (double d, long l);
+fid cb_r_fid (float f, int i, double d);
+long cb_vs (int n, ...);
+long g_dl (void);
+double g_r_dl (void);
+double g_r_fid (void);
+long g_vs (void);
 #endif
