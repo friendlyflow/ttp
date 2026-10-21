@@ -39,6 +39,7 @@ use strict;
 use warnings;
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
+sub layers { require FF; FF::layers(@_) }
 sub leaf { !@{ $_[0]{children} } }
 sub kids { @{ $_[0]{children} } }
 sub is { my ($n, $w) = @_; $n && leaf($n) && $n->{content} eq $w }
@@ -176,8 +177,9 @@ sub newwords {
     typenames($t, @n);
     map { regroup($t, $_, '') } map { newnode($t, $_, 'page') } @n;
 }
-# A node past 255 children now (a cast and its value were one node): a
-# declaration's items, a : of items in them, in items groups again
+# A node past 255 children now (a cast and its value were one node, a
+# literal's zeros are written out): a declaration's items, a : of items in
+# them, in items groups again; any other in layers (0: 1: ..., FF.pm)
 sub regroup {
     my ($t, $n, $ctx) = @_;
     my @k = kids($n);
@@ -191,7 +193,7 @@ sub regroup {
     }
     $n->{children} = [map { regroup($t, $_, $items && ($_->{content} eq ':' || $_->{content} eq 'items') ? 'items' : '') } @k];
     return $n if @k <= 255;
-    die "words: $n->{content} has " . @k . " children now (max 255)\n" unless $items;
+    unless ($items) { $n->{children} = [layers(@k)]; return $n }
     my @v = map { $_->{content} eq 'items' && !leaf($_) ? kids($_) : $_ } @k[$head .. $#k];
     my @g;
     push @g, node('items', splice @v, 0, 255) while @v;
@@ -386,8 +388,8 @@ sub new_place {
     my $agg = @$run == 1 && ($run->[0]{content} eq 'array' && !leaf($run->[0]) || leaf($run->[0]) && $t->{rec}{ $run->[0]{content} });
     if ($agg) {
         return new_lit($t, $run, [kids($it->[0])], ($depth // 0) + 1) if $it && @$it == 1 && $it->[0]{content} eq ':' && !leaf($it->[0]);
-        # (a zero one: an empty :, as C's {})
-        return node(':') unless $it;
+        # (a zero one: its zeros written out, the user's)
+        return new_lit($t, $run, [], ($depth // 0) + 1) unless $it;
     }
     return node(0) unless $it;
     newlist($t, $it, 'fn');

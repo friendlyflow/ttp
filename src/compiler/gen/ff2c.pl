@@ -45,6 +45,10 @@ my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt
     require Words;
     my $t = {};
     { open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "ff2c: shared.ff: $!\n"; local $/; Words::typenames($t, FF::read_ff(<$h>)) }
+    # (through the layers of a node past 255, 0: 1: ...: one list again)
+    my $flat;
+    $flat = sub { my ($n) = @_; $n->{children} = [map { FF::is_layer($_) ? @{ $flat->($_)->{children} } : $flat->($_) } @{ $n->{children} }]; $n };
+    $flat->($_) for @top;
     @top = Words::oldwords($t, @top);
     my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 u8 u16 u32 u64);
     my $pad;
