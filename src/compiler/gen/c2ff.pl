@@ -277,11 +277,12 @@ sub qt { my ($n) = @_; my $t = $n->{type} or die "c2ff: no type\n"; $t->{desugar
 
 # ---- names ------------------------------------------------------------------
 # ff reserves its words, type names and the registers of riscv64 (its
-# vector registers v0 ... v31 too: libm's v1); a C name
+# vector registers v0 ... v31 too: libm's v1), and address and content,
+# the words of before that the tree is made in (Words.pm); a C name
 # that is one gets a ' after it (type -> type'), which no C name has.
 
 my %reserved = map { $_ => 1 } qw(
-    if else while for return break continue comment syscall U L UL LL ULL
+    if else while for return break continue comment address content syscall U L UL LL ULL
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
