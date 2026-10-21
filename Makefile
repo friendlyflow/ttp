@@ -140,9 +140,14 @@ pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKL
 	w=$$(awk '{ w += $$1 } END { print w + 0 }' $(CHECKLOG)/$(1).slots 2> /dev/null || echo 0); \
 	echo "$$r $(1) $$(( $$(date +%s) - s )) s ($$w s in slot queues)$$(test $$r = PASS || echo " log $(CHECKLOG)/$(1).log")" | tee $(CHECKLOG)/$(1).result
 
+# One ports-check at a time on this machine (lanes share the 3 slots: three
+# checks at once took 2 hours each instead of 15 minutes); the time it prints
+# includes the wait for the lock.
+PCLOCK ?= $(HOME)/.cache/ttp/ports-check.lock
 ports-check:
 	@rm -rf $(CHECKLOG) && mkdir -p $(CHECKLOG)
-	@s=$$(date +%s); $(MAKE) --no-print-directory -j$(PCJOBS) $(PC_STEPS:%=pc-%); \
+	@flock -n $(PCLOCK) true || echo "ports-check: another ports-check runs (lock $(PCLOCK)), waiting for it"
+	@s=$$(date +%s); flock $(PCLOCK) $(MAKE) --no-print-directory -j$(PCJOBS) $(PC_STEPS:%=pc-%); \
 	echo "ports-check: $$(( $$(date +%s) - s )) s, logs in $(CHECKLOG)"; \
 	ok=1; for t in $(PC_STEPS); do cat $(CHECKLOG)/$$t.result 2> /dev/null || echo "SKIP $$t"; grep -qs '^PASS' $(CHECKLOG)/$$t.result || ok=; done; \
 	test -n "$$ok"
