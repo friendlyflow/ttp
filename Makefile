@@ -55,7 +55,7 @@ compiler-test: compiler
 # run the C programs; the seeds of the other hosts agree with ttpc.s; ttp's
 # own tools in ff (src/compiler/tools) agree with their Perl versions.
 compiler-check: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest ctime cws targets seeds abi tools-check
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest ctime cws targets seeds abi tools-check copies-check
 
 # ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
 # stage2: they must be the same. So too from the seed of each other host
