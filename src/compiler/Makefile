@@ -46,7 +46,7 @@ SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
-TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
+TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(wildcard tools/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
 	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff language.ff
 P := $(BUILD)/progs
@@ -554,6 +554,65 @@ seeds: $(if $(CAN_RISCV),$(RUNNABLE:%=seed-%))
 bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=chello-%)
 	@echo "bootstraps: $(strip $(if $(CAN_RISCV),riscv64) $(RUNNABLE))$(if $(filter-out $(RUNNABLE),$(HOSTS)),; not here (no qemu): $(filter-out $(RUNNABLE),$(HOSTS)))"
 
+# ttp's own tools, in ff's C layer instead of Perl (tools/*.ff, compiled by
+# stage2): the runtime (tools/rt.ff: raw Linux system calls, no libc, an
+# allocator, buffered output), sha256 (tools/sha256.ff) and the ff tree
+# (tools/fftree.ff: FF.pm's .ff and .ff.txt reader and writer, the Merkle
+# hash) are library pages; each tool is a program with them: fftext as
+# gen/fftext.pl, sha256sum as coreutils'. $(TL)/<target>/<tool> is one for
+# that target, TOOLT the target this machine runs natively (riscv64 under
+# qemu on another). The Perl versions stay, a second implementation:
+# tools-check runs sha256sum on NIST's vectors (and Digest::SHA on more),
+# and fftext and fftext.pl both ways on every tree, for each target here.
+TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff
+TL := $(BUILD)/tools
+RUN_riscv64 := $(QEMU)
+TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
+TOOLTARGETS := $(if $(CAN_RISCV),riscv64) $(RUNNABLE)
+SHAV := $(TL)/vectors
+SHAVFILES := abc empty m448 m896 million $(foreach n,0 1 55 56 63 64 65 119 120 127 128 1000 65536 65537,r$(n))
+
+define tooltarget
+$(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
+	chmod +x $$@
+
+tools-check-$(1): $(TL)/$(1)/sha256sum $(TL)/$(1)/fftext $(SHAV)/want
+	cd $(SHAV) && $(RUN_$(1)) $(abspath $(TL))/$(1)/sha256sum $(SHAVFILES) > ../$(1).sha
+	cmp $(TL)/$(1).sha $(SHAV)/want
+	@echo "tools-check-$(1): sha256 agrees with NIST's vectors and Digest::SHA"
+	@for t in $(TREES); do \
+	    perl gen/fftext.pl txt $$$$t > $(TL)/$(1).pl.txt && \
+	    $(RUN_$(1)) $(TL)/$(1)/fftext txt $$$$t | cmp - $(TL)/$(1).pl.txt && \
+	    $(RUN_$(1)) $(TL)/$(1)/fftext ff $(TL)/$(1).pl.txt | cmp - $$$$t || { echo "tools-check-$(1): fftext: $$$$t"; exit 1; }; \
+	done
+	@echo "tools-check-$(1): fftext and fftext.pl agree on $(words $(TREES)) trees, both ways"
+endef
+$(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
+
+# NIST's vectors (FIPS 180-2, appendix B: abc, 448 and 896 bits, a million
+# a), the empty message and random ones about the block's edges: what
+# Digest::SHA makes of them, after it agrees with NIST.
+$(SHAV)/want:
+	@mkdir -p $(SHAV)
+	cd $(SHAV) && printf abc > abc && printf '' > empty && \
+	    printf abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq > m448 && \
+	    printf abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu > m896 && \
+	    perl -e 'print "a" x 1000000' > million && \
+	    perl -e 'srand 1; for (@ARGV) { open my $$f, ">:raw", "r$$_" or die; print $$f join "", map { chr int rand 256 } 1 .. $$_ }' 0 1 55 56 63 64 65 119 120 127 128 1000 65536 65537
+	cd $(SHAV) && perl -MDigest::SHA=sha256_hex -e 'for (@ARGV) { open my $$f, "<:raw", $$_ or die; local $$/; print sha256_hex(<$$f> // ""), "  $$_\n" }' $(SHAVFILES) > want.tmp
+	printf '%s\n' ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad \
+	    e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 \
+	    248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1 \
+	    cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1 \
+	    cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0 > $(SHAV)/nist.want
+	head -n 5 $(SHAV)/want.tmp | cut -d' ' -f1 | cmp - $(SHAV)/nist.want
+	mv $(SHAV)/want.tmp $@
+
+tools: $(TL)/$(TOOLT)/fftext $(TL)/$(TOOLT)/sha256sum
+tools-check: $(TOOLTARGETS:%=tools-check-%)
+
 # Make shared.ff again from mkff.pl, shared.ff.txt, isa/ and macros/, after
 # changing any of them. The whole trees keep the shared pages they have.
 refresh:
@@ -576,4 +635,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean licenses abi
+.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean licenses abi tools tools-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))
