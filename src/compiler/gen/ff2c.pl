@@ -38,6 +38,31 @@ if (@ARGV && $ARGV[0] eq '--pages') { shift @ARGV; $only{$_} = 1 for split /,/, 
 my ($in, $out, $namesout) = @ARGV;
 die "usage: ff2c.pl [--pages page,...] tree.ff.txt out.c names.txt\n" unless defined $namesout;
 my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt(<$h>, $in) };
+# The C words now (Words.pm): read in the words of before, which the rest of
+# ff2c knows; a : field of a scalar type (C's unnamed bitfield) is padding n:
+# again
+{
+    require Words;
+    my $t = {};
+    { open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "ff2c: shared.ff: $!\n"; local $/; Words::typenames($t, FF::read_ff(<$h>)) }
+    # (through the layers of a node past 255, 0: 1: ...: one list again)
+    my $flat;
+    $flat = sub { my ($n) = @_; $n->{children} = [map { FF::is_layer($_) ? @{ $flat->($_)->{children} } : $flat->($_) } @{ $n->{children} }]; $n };
+    $flat->($_) for @top;
+    @top = Words::oldwords($t, @top);
+    my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 u8 u16 u32 u64);
+    my $pad;
+    $pad = sub {
+        my ($n) = @_;
+        my $k = $n->{children};
+        if (@$k && !@{ $k->[0]{children} } && $k->[0]{content} =~ /^(?:struct|union)$/) {
+            my $i = 0;
+            for (@$k[1 .. $#$k]) { $_->{content} = 'padding ' . ++$i . ':' if $_->{content} eq ':' && @{ $_->{children} } && $scalar{ $_->{children}[0]{content} } }
+        }
+        $pad->($_) for @$k;
+    };
+    $pad->($_) for @top;
+}
 
 sub kids { @{ $_[0]{children} } }
 sub leaf { !@{ $_[0]{children} } }
@@ -114,6 +139,14 @@ for my $page (@top) {
             next;
         }
         if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1, glibc => $glibc }; next }
+        # a global of a named section; its bounds __start_ and __stop_ of
+        # the name are arrays of its type, as C declares them
+        if ($w eq 'section') {
+            my $sec = c($k[1]);
+            $var{$name} = { node => $d, from => 2, glibc => $glibc, section => $sec };
+            for my $b ("__start_$sec", "__stop_$sec") { next if $var{$b}; $var{$b} = { bound => $name }; push @order, $b }
+            next;
+        }
         if (is_function($d)) { $fn{$name} = { kind => 'c', node => $d, from => 0 }; $glibcpage{$name} = 1 if $glibc }
         else { $var{$name} = { node => $d, from => 0, glibc => $glibc } }
     }
@@ -234,6 +267,7 @@ sub gtype {
     my ($n) = @_;
     return gtype($fn{$n}{target}) if $fn{$n} && $fn{$n}{kind} eq 'alias' && !$fn{ $fn{$n}{target} };
     my $v = $var{$n} or return undef;
+    return $v->{type} //= [arr => gtype($v->{bound}), { content => '0', children => [] }] if $v->{bound};
     my @l = kids($v->{node});
     my $i = $v->{from};
     $v->{type} //= ptype(\@l, \$i);
@@ -386,7 +420,7 @@ sub text_of { my (@n) = @_; my $s = join '', map { c($_) } @n; utf8::encode($s) 
 
 # The items of a global's array, as numbers: a text global's bytes.
 # A global's items, after its type
-sub items_of { my ($n) = @_; my $v = $var{$n}; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); @l[$i .. $#l] }
+sub items_of { my ($n) = @_; my $v = $var{$n}; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); map { $_->{content} eq 'items' ? kids($_) : $_ } @l[$i .. $#l] }
 sub global_items { my ($n) = @_; my $v = $var{$n} or return; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); map { $_->{content} =~ /^items$/ ? kids($_) : $_ } @l[$i .. $#l] }
 
 sub operand {
@@ -480,6 +514,25 @@ sub operand {
         my ($s, $t) = expr([@k]);
         my $to = $t && $t->[0] eq 'ptr' ? $t->[1] : $t && $t->[0] eq 'arr' ? $t->[1] : undef;
         return ("(*$s)", $to);
+    }
+    # C11's _Generic: an association's name is its type, address as often as
+    # it says and then one type name
+    if ($w eq 'generic') {
+        my ($x, @as) = @k;
+        my ($xs) = expr([$x]);
+        my (@parts, $rt);
+        for my $as (@as) {
+            (my $name = c($as)) =~ s/:$//;
+            my ($v, $vt) = expr([kids($as)]);
+            $rt //= $vt;
+            if ($name eq 'default') { push @parts, "default: $v"; next }
+            my @w;
+            push @w, { content => 'address', children => [] } while $name =~ s/^address (?=.)//;
+            push @w, { content => $name, children => [] };
+            my $i = 0;
+            push @parts, ctype(ptype(\@w, \$i)) . ": $v";
+        }
+        return ("_Generic($xs, " . join(', ', @parts) . ")", $rt);
     }
     if ($w eq 'cast:') {
         my $i = 0;
@@ -841,7 +894,8 @@ for my $v (grep { $var{$_} && $var{$_}{glibc} && !$var{$_}{weak} && $_ !~ /^(?:w
     my @items = items_of($v);
     my $init = !@items ? '' : ($t->[0] eq 'arr' || $t->[0] eq 'rec') ? ' = ' . init_list($t, \@items) : ' = ' . expr_item([map { c($_) eq 'items' ? kids($_) : $_ } @items]);
     local $cur_fn = $v;
-    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$init;"; 1 };
+    my $sec = $var{$v}{section} ? " __attribute__((section(\"$var{$v}{section}\")))" : '';
+    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$sec$init;"; 1 };
     warn $@ unless $ok;
     # (where glibc has it: a unit's own static in that unit, a function's static in that function)
     my $hint = $v =~ /^\S+ (\S+\/\S+)$/ ? "unit $1" : $v =~ /^(\S+) \S+$/ && $fn{$1} ? 'in ' . orig($1) : '-';

@@ -41,7 +41,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -250,8 +250,8 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # the program, ctasm does so by calling asm of its page, ctmix with asm
 # and C mixed in one compile-time function, cct keeps only the branch its
 # condition takes (a lambda with if, else and emit), cnowfail fails to
-# compile with its message, and so do creserved, which names a variable
-# content, cmisplaced, with compile time on a while, cuntyped, a global declaration
+# compile with its message, and so do creserved, which declares a variable
+# named * pointer, cmisplaced, with compile time on a while, cuntyped, a global declaration
 # without a type, citems, several items on a long, cchartext, text in a
 # char, ctypeout, type outside compile time, and cbelow, a local used
 # above its declaration.
@@ -264,7 +264,7 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
 	grep -q "compile time: no" $(P)/cnowfail.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
-	grep -q "a reserved word: content" $(P)/creserved.err
+	grep -q "a reserved word: \* pointer" $(P)/creserved.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
 	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cuntyped.ff $(P)/cuntyped.celf 2> $(P)/cuntyped.err
@@ -272,7 +272,7 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/citems.ff $(P)/citems.celf 2> $(P)/citems.err
 	grep -q "several items need array: n$$" $(P)/citems.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cchartext.ff $(P)/cchartext.celf 2> $(P)/cchartext.err
-	grep -q "text needs address char: oops$$" $(P)/cchartext.err
+	grep -q "text needs char \* pointer: oops$$" $(P)/cchartext.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/ctypeout.ff $(P)/ctypeout.celf 2> $(P)/ctypeout.err
 	grep -q "type goes only in compile time: type$$" $(P)/ctypeout.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cbelow.ff $(P)/cbelow.celf 2> $(P)/cbelow.err
@@ -313,7 +313,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # C tests of one target only, beside the portable ones
@@ -392,9 +392,9 @@ x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
 
 # The calls by each target's C ABI, against gcc (progs/abi/run.sh): gcc's
 # functions of many shapes (by s2ff) and C translated by c2ff, built by
-# ttpc into one program, call each other; every check must say ok. So far
-# arm (the AAPCS, gen/patches/abi.pl).
-ABI_TARGETS := arm
+# ttpc into one program, call each other; every check must say ok: arm
+# (the AAPCS, gen/patches/abi.pl) and aarch64 (AAPCS64, abia64.pl).
+ABI_TARGETS := arm aarch64
 abi: $(BOOT)/stage2 $(SHARED)
 	@for t in $(ABI_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/abi/run.sh $$t $(P)/abi-$$t > $(P)/abi-$$t.log 2>&1 || { cat $(P)/abi-$$t.log; exit 1; }; tail -n 1 $(P)/abi-$$t.log; done
 

@@ -107,30 +107,32 @@ syscall:
   number
   arguments
 comment
-  address of: C, the address of a variable (C's &x). As a type, address and then a type, siblings, is a pointer to it, a word of the target; address alone points to nothing. address with a type and a value as its children converts the value.
-address:
+  & address of: C, the address of the variable before it (C's &x): x, then & address, siblings, as x ++. Of a : holding a typed literal (a suffix or a cast to one scalar word, and its value) the address of a temporary holding it.
+& address:
   of
 comment
   weak: C, first under a name, before its type: a global that may stay undefined (C's #pragma weak, a weak symbol nothing defines); its address is 0. weak / function / type is a function, called through 0.
 weak:
 comment
-  cast: type value: C's cast, the value converted to the type: cast: / address / char / p is (char *) p. Under address / char a leaf is text, whatever it reads as: address / char / 3 is "3".
-cast::
+  cast type: C's cast, the value after it converted to the type cast holds: (cast / char / * pointer), then p, is (char *) p; every conversion is one.
+  A leaf after a cast to char * pointer (or u8, i8) is text, whatever it reads as: (cast / char / * pointer), then 3, is "3".
+cast:
   type
-  value
 comment
   items values: C, a group of a declaration's items, at most 255 of them: the items of a list longer than a node holds come in groups, in a row.
 items:
   values
 comment
-  .: C, a leaf among a node's children: the node before it (cut there) is a value, after it come fields and indexes as after a variable; C's ((point *) p)->y is address / point / p / . / y.
+  .: C, a leaf among a node's children: the node before it (cut there) is a value, after it come fields and indexes as after a variable; C's ((point *) p)->y is : / (cast / point / * pointer) / p / . / y.
 .:
 comment
-  content address: C, what the address holds (C's *p), read, or written on the left of =.
-content:
+  * pointer address: C, what the address before it holds (C's *p): p, then * pointer, siblings, as p ++; read, or written on the left of =.
+  In a type run, after the type it points to: char / * pointer is char *, a word of the target; void / * pointer points to nothing.
+* pointer:
   address
 comment
-  array element count: C, a type, siblings: count elements of the type element; the items of a declaration come after count.
+  array element count: C, a type: count elements of the type element, a type run, both array's children (no count: C's [], no elements of its own).
+  As a value, the count's items after it, siblings, are a compound literal (C's (char *[]){ "sh", 0 } is (array / char / * pointer / 2), then sh, then 0).
 array:
   element
   count
@@ -207,20 +209,20 @@ comment
 ifunc hwcap:
   long
   stack:
-    address
     long
+    * pointer
   p:
-    address
     long
+    * pointer
     stack
     +
-    content
-      stack
+    stack
+    * pointer
     +
     2
   while
-    content
-      p
+    p
+    * pointer
     !=
     0
     p
@@ -230,22 +232,23 @@ ifunc hwcap:
   +=
   1
   while
-    content
-      p
+    p
+    * pointer
     !=
     0
     if
-      content
-        p
+      p
+      * pointer
       ==
       16
       return
-        long
-          content
-            :
-              p
-              +
-              1
+        cast
+          long
+        :
+          p
+          +
+          1
+        * pointer
     p
     +=
     2
@@ -260,8 +263,8 @@ comment
   alloca n: C, n bytes (16-aligned) for the function that calls it until it returns: C's alloca, and what a variable-length array takes.
   From a stack of 8 MiB mapped when first used; ttpc keeps alloca top on entry to such a function and puts it back when it returns.
 alloca:
-  address
   void
+  * pointer
   n:
     long
   if
@@ -271,18 +274,18 @@ alloca:
       0
     alloca top
     =
-    cast:
+    cast
       long
-      syscall
-        SYS_mmap
-        0
-        8388608
-        3
-        34
-        :
-          -
-          1
-        0
+    syscall
+      SYS_mmap
+      0
+      8388608
+      3
+      34
+      :
+        -
+        1
+      0
   p:
     long
     alloca top
@@ -298,10 +301,10 @@ alloca:
       -
       16
   return
-    cast:
-      address
+    cast
       void
-      p
+      * pointer
+    p
 comment
   number value: compile time, emit makes value a number in the program.
 number:
@@ -349,7 +352,7 @@ compile:
   w
 comment
   char value: C, a byte, signed or unsigned as the target says (signed on x86_64, unsigned on riscv64, aarch64 and arm: its cc_char); called with a value, converts it.
-  Text is address char with a leaf that names nothing: its bytes and a NUL, the value their address.
+  Text is a leaf under char / * pointer (a declaration's item, or after a cast to it): its bytes and a NUL, the value their address.
 char:
   value
 comment
@@ -409,29 +412,17 @@ comment
 long double:
   value
 comment
-  complex float: C's complex type of float parts, 8 bytes: its real part, then its imaginary part, each a float; real / z and imag / z are its parts.
+  complex float value: C, a complex number of two float parts, 8 bytes: its real part, then its imaginary part; real / z and imag / z are its parts.
 complex float:
-  struct
-  real part:
-    float
-  imag part:
-    float
+  value
 comment
-  complex double: C's complex type of double parts, 16 bytes: its real part, then its imaginary part, each a double; real / z and imag / z are its parts.
+  complex double value: C, a complex number of two double parts, 16 bytes: its real part, then its imaginary part; real / z and imag / z are its parts.
 complex double:
-  struct
-  real part:
-    double
-  imag part:
-    double
+  value
 comment
-  complex long double: C's complex type of long double parts, 32 bytes: its real part, then its imaginary part, each a long double; real / z and imag / z are its parts.
+  complex long double value: C, a complex number of two long double parts, 32 (16 where long double is double) bytes: its real part, then its imaginary part; real / z and imag / z are its parts.
 complex long double:
-  struct
-  real part:
-    long double
-  imag part:
-    long double
+  value
 comment
   real z: C, the real part of z, a complex value (C's __real__ z); also on the left of =.
 real:
@@ -440,6 +431,31 @@ comment
   imag z: C, the imaginary part of z, a complex value (C's __imag__ z); also on the left of =.
 imag:
   z
+0:
+  comment
+    U number, L, UL, LL, ULL: C's suffixes, the number after each of the type C gives it on the target: U unsigned int (C's 7U is U, then 7), L long, UL unsigned long, LL long long, ULL unsigned long long.
+    (a layer: the shared page holds more than a node's 255)
+  U:
+    number
+  L:
+    number
+  UL:
+    number
+  LL:
+    number
+  ULL:
+    number
+comment
+  generic x associations: C, the value of the association of x's type (C11's _Generic): each association is a node named by a type and a colon (char * pointer:, long:), holding its value; default: holds the value for any other type.
+  x is not evaluated; an array is the address of its element, a function its address.
+generic:
+  x
+  associations
+comment
+  section name: C, first under a global's name, before its type: the global is in the section name, with its other globals together, in their order;
+  __start_name and __stop_name are where the section starts and ends (as ld has them), its globals' texts after it.
+section:
+  name
 comment
   void: C, no value, the type of a function that returns none.
 void:
@@ -713,6 +729,7 @@ comment
   else
     fail
       target
-      address
+      cast
         char
-        is not a target
+        * pointer
+      is not a target

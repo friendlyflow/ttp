@@ -47,6 +47,11 @@ CTARGET_arm := armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16
 CTARGET := $(or $(CTARGET_$(GTARGET)),$(GTARGET)-linux-gnu)
 BUILD ?= $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
+# a make that calls itself without end stops here (MAKELEVEL counts the
+# makes above this one; glibc's own, deeper, never read this file)
+ifneq ($(filter-out 0 1 2 3 4 5 6 7 8,$(or $(MAKELEVEL),0)),)
+$(error make nested $(MAKELEVEL) deep: does a rule call make without end?)
+endif
 # glibc builds at most 4 at once: with the slots, nproc (12) per build froze
 # the machine once (2026-10-20); the cgroup caps in slot.sh bound the rest
 JOBS ?= 4
@@ -415,7 +420,7 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
 	cp license.ff.txt $$(FF)/$(1).ff.txt
 	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
@@ -545,7 +550,7 @@ $(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
 	rm -rf $(FF)/$*
 	$(RUN) -t 120 perl ../compiler/gen/ffsplit.pl $(FF)/$*.ff.txt $(FF)/$*
 
-$(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl
+$(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm
 	mkdir -p $(FF)
 	$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
@@ -581,7 +586,7 @@ $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 # written back as C from its ff (ff2c.pl, which reads ff as ttpc does), have
 # the AST of glibc's own, each against its .i's (roundtrip.pl). The
 # addresses of asm functions, which have no C type in ff, are let through.
-$(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl
+$(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl ../compiler/gen/Words.pm
 	$(RUN) -t 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
 
 $(FF)/%.rt.json: $(FF)/%.rt.c
@@ -692,8 +697,14 @@ SLOT := $(RUN)
 ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
 # (worked out once, where a target needs it)
 ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
-ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
+# (and long double's soft-fp, as the ldouble milestone has it: libgcc's on
+# a gcc build, glibc's own code, which ttpc's long double calls)
+ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES))) $(SOFTFP:%=soft-fp/%)
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
+# crt1.o's parts, crti.o and crtn.o, which a program links before libc.a:
+# their definitions are the ones of a name libc.a defines too
+# (_dl_relocate_static_pie, static-reloc's, not static PIE's)
+ALL_CRT = $(shell perl allobjs.pl $(OBJ) crt | cut -d' ' -f2)
 
 CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	-fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
@@ -738,27 +749,165 @@ all-asm:
 # All of glibc in ff (glibc.ff, and the folder glibc/ a program includes):
 # c2ff's of every C object, from every name the objects define (nm) and
 # what the asm objects name from elsewhere, then s2ff's of every asm
-# object, then the builtins and libatomic's functions, as a milestone's.
-# The roots are in $(FF)/glibc.roots, one per line.
-ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start)
-WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start)
+# object, then the builtins and libatomic's functions, as a milestone's
+# (its license at its root, each page's files' headers). The roots are in
+# $(FF)/glibc.roots, one per line, the units in $(FF)/glibc.units, crt's
+# first (ALL_CRT: a name two units define is the first's). What c2ff cannot
+# translate yet is left out (--keep-going): its reasons are in
+# $(FF)/glibc.c2ff.err, "c2ff: left out: name: why".
+# (the asm page, with its headers more than 255 items, in layers: LAYERS)
+LAYERS := perl -I../compiler/gen -MFF=node,layers,read_txt,write_txt -0777 -ne \
+	'print write_txt(map { node($$_->{content}, layers(@{ $$_->{children} })) } read_txt($$_, $$ARGV))'
+ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
+# libgcc_eh's unwinder, which a static program has from gcc (glibc's
+# __pthread_unwind, backtrace): not in ff yet, its names weak (address 0),
+# as for a program that never unwinds
+UNWIND_glibc := _Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP
+WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
 $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
-	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; } | sort -u > $@
+	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
+	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
+	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl
-	$(SLOT) -t 3600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
-	    $(foreach o,$(ALL_C),$(I)/$(o).json=$(I)/$(o).i) -- $$(cat $(FF)/glibc.roots) > $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
+$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+	cp license.ff.txt $(FF)/glibc.ff.txt
+	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
+	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
-	echo 'glibc asm:' >> $(FF)/glibc.ff.txt
+	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
+	perl ../compiler/gen/s2ff.pl --header $(ALL_ASM:%=$(I)/%.s) | sed 's/^/  /' >> $(FF)/glibc.asm.page.txt
 	for a in $(ALL_ASM); do \
 	    $(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $(I)/$$a.s $(I)/$$a.dump > $(FF)/glibc.asm.txt || exit 1; \
-	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.ff.txt; \
+	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
+	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
 	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) atomics.ff.txt >> $(FF)/glibc.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@
 
 # the list of a kind of object, for a look at it: make print-ALL_ASM
 print-%:
 	@echo $($*)
+
+# ---- glibc's own tests -----------------------------------------------------------
+# The tests of an area of glibc (AREA: one of its directories, string,
+# stdlib, ...), its programs tst-*, built two ways and run, as a
+# milestone's program is: what glibc's build makes of each, linked
+# statically with gcc against libc.a and libsupport (glibc's library for its
+# tests), and through c2ff, the test's C and libsupport's in ff, with ttpc
+# against all of glibc in ff (the folder glibc, above). Each runs with V and
+# without (CPUS); a test is equal where every run exits with the same status
+# and prints the same, on stdout and stderr. The table, TBUILD/AREA.table:
+# a line of counts, then each test, equal (and glibc's word for its
+# status: PASS, UNSUPPORTED, FAIL), differ (how) or not yet (the step and
+# why).
+#
+#   make tests-ref AREA=string
+#
+# glibc's build makes the tests: make check of the area with
+# run-built-tests=no compiles and links them and runs none (its own checks
+# of the headers fail without a run, and are not ours). make check writes
+# into its build, so the tests have a glibc-ref of their own, TBUILD
+# (BUILD/tests, some 1 GB, minutes; BUILD's obj may be another build's),
+# whose libsupport (libsupport_nonshared.a) they take too. The area's log,
+# TOBJ/AREA.log, has each test's link command, and so its objects
+# (tests.pl mk, TBUILD/AREA.mk); the .i of each, and of libsupport's
+# objects (build.log), is its command again with -E (mki.pl --log), its
+# c2ff pass as for all of glibc. Each test's steps (gcc's link, c2ff,
+# ttpc, the runs) go on where one fails, and its result says which did:
+# TFF/test.result, the steps' logs next to it.
+TESTS_PATTERN ?= tst-*
+TBUILD := $(BUILD)/tests
+TOBJ := $(TBUILD)/obj
+TI := $(TBUILD)/i
+TFF := $(TBUILD)/ff/$(AREA)
+TLOGS := --log $(TOBJ)/build.log --log $(TOBJ)/$(AREA).log
+
+# The inner make builds glibc alone, with AREA empty: AREA would come down
+# in MAKEFLAGS, and with it the -include below, whose .mk needs a libc.a of
+# TBUILD's own tests, one folder deeper, and so on without end (on
+# 2026-10-20 that froze the machine). A tests build within a tests build,
+# or a make nested past MAKELEVEL 8, stops (the guards below).
+$(TOBJ)/libc.a:
+	$(RUN) -t 3600 $(MAKE) --no-print-directory BUILD=$(TBUILD) AREA= glibc-ref
+
+$(TOBJ)/$(AREA).log: | $(TOBJ)/libc.a
+	-$(RUN) -t 3600 $(MAKE) -C $(TOBJ) -k -j$(JOBS) subdirs=$(AREA) check run-built-tests=no > $@.tmp 2>&1
+	mv $@.tmp $@
+
+$(TBUILD)/$(AREA).mk: $(TOBJ)/$(AREA).log tests.pl
+	perl tests.pl mk $(TOBJ) $(AREA) '$(TESTS_PATTERN)' > $@.tmp
+	mv $@.tmp $@
+
+ifneq ($(AREA),)
+ifneq ($(filter %/tests,$(BUILD)),)
+$(error AREA=$(AREA) in a tests build ($(BUILD)): its tests would be one folder deeper, without end)
+endif
+-include $(TBUILD)/$(AREA).mk
+endif
+
+.PRECIOUS: $(TI)/%.i $(TI)/%.c2ff $(TFF)/%-prog.ff $(TFF)/%.ref $(TFF)/%-prog
+
+$(TI)/%.i: mki.pl | $(TOBJ)/$(AREA).log
+	$(RUN) -t 120 perl mki.pl $(TLOGS) $(TOBJ) $(GLIBC_SRC) $*.o > /dev/null
+
+$(TI)/%.c2ff: $(TI)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
+	@$(if $(CLANGFIX),$(CLANGFIX) $< > $(TI)/$*.clang.i;) \
+	sh unit.sh $(GTARGET) $< $(TI)/$*.json $(if $(CLANGFIX),$(TI)/$*.clang.i,$<) $(CLANG_AST)
+	@touch $@
+
+# libsupport's passes, once for all tests (one that fails is the c2ff step's
+# reason of each test that needs it)
+$(TI)/support.ready: $(TBUILD)/$(AREA).mk
+	-@$(MAKE) --no-print-directory -k $(SUPPORT:%=$(TI)/%.c2ff)
+	@touch $@
+
+# gcc's: glibc's objects of the test, glibc's startup, libsupport, and the
+# libraries of glibc it is linked with as static ones (BUILD's: the glibc
+# in ff is made of them). A name of libc's that the test defines too
+# (tst-strerror-fail's malloc) is the test's, as in glibc's own run of it,
+# where it interposes (the linker takes the first definition).
+$(TFF)/%.ref: $(OBJ)/libc.a $(TBUILD)/$(AREA).mk
+	mkdir -p $(TFF)
+	$(RUN) -t 120 $(GLIBC_CC) -static -nostdlib -Wl,--allow-multiple-definition -o $@ $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
+	    $(TFILES_$*:%=$(TOBJ)/%) $(TOBJ)/support/libsupport_nonshared.a \
+	    -Wl,--start-group $(TLIBS_$*:%=$(OBJ)/%.a) $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
+
+# ttpc's: c2ff of the test's objects and libsupport's, from main, the
+# program including glibc in ff (TFF/glibc, a link to FF/glibc), whose
+# index says which of the program's weak names glibc defines
+.SECONDEXPANSION:
+$(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).c2ff) $(TI)/support.ready $(FF)/glibc/index.ff ../compiler/gen/c2ff.pl
+	mkdir -p $(TFF)
+	ln -sfn $(abspath $(FF))/glibc $(TFF)/glibc
+	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program glibc --index $(FF)/glibc/index.ff $(if $(GLIBC_START),,--start) \
+	    $(foreach o,$(TOBJS_$*) $(SUPPORT),$(TI)/$(o).json=$(TI)/$(o).i) -- main > $(TFF)/$*-prog.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(TFF)/$*-prog.ff.txt > $@
+
+$(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC)
+	$(RUN) -t 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
+
+# a test's result: its steps, each to its log, the first that fails the
+# result's reason; then the runs (tests.pl run), stdin the test's .input
+# where glibc's source has one
+TSTEP = $(MAKE) --no-print-directory $(TFF)/$*$(1) > $(TFF)/$*.$(2).log 2>&1 || \
+	{ echo "not yet: $(3): $$(perl tests.pl why $(TFF)/$*.$(2).log)" > $@; exit 0; }
+$(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) tests.pl
+	@mkdir -p $(TFF)
+	@if test -n "$(filter $*,$(TBROKEN))"; then echo "not yet: glibc's build did not make it (TOBJ/$(AREA).log)" > $@; exit 0; fi; \
+	$(call TSTEP,.ref,ref,gcc's link); \
+	$(call TSTEP,-prog.ff,c2ff,c2ff); \
+	$(call TSTEP,-prog,ttpc,ttpc); \
+	in=$(GLIBC_SRC)/$(AREA)/$*.input; test -e $$in || in=/dev/null; \
+	perl tests.pl run $(TFF) $* $$in $(RUN) -t 600 -- qemu-$(GTARGET) $(CPUS) > $@
+
+# (the .mk first: where glibc's tests build failed, it stops here, before
+# a make of each test would try that build again)
+tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
+	@test -n "$(AREA)" || { echo "tests-ref: which area? make tests-ref AREA=string"; exit 1; }
+	@test -s $(TBUILD)/$(AREA).mk || { echo "tests-ref: no $(TBUILD)/$(AREA).mk"; exit 1; }
+	@$(MAKE) --no-print-directory $(TESTS:%=$(TFF)/%.result)
+	@perl tests.pl table $(AREA) $(GTARGET) $(TFF) $(TESTS) > $(TBUILD)/$(AREA).table
+	@cat $(TBUILD)/$(AREA).table
+.PHONY: tests-ref

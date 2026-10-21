@@ -108,7 +108,7 @@ my $dump = $files[1];
 # ---- ttpc's aarch64 instructions: fixed fields and operand slices -----------
 my @defs;
 my %inverse;    # a def's operand of a computed field: the operand from the field
-my %computed = (shr16 => sub { 16 - $_[0] });
+my %computed = (shr16 => sub { 16 - $_[0] }, shr128 => sub { 128 - $_[0] });
 {
     my $section = do "$FindBin::Bin/../isa/aarch64.pl";
     die "s2ff: isa/aarch64.pl: $@" if $@;
@@ -237,7 +237,7 @@ push @made, grep { $_->{sec} ne '.text' } @all;
 my (%line, %alias, @fns, @data, %rodata, %weakref);
 {
     open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
-    my ($file, $ln, $other, @pending, %datadef, %count) = ('', 0);
+    my ($file, $ln, $other, @pending, @blob, %datadef, %count) = ('', 0);
     my $inmacro = 0;
     while (my $l = <$s>) {
         chomp $l;
@@ -248,6 +248,8 @@ my (%line, %alias, @fns, @data, %rodata, %weakref);
         for my $st (split /;/, $l) {
             $st =~ s/^\s+|\s+$//g;
             next if $st eq '';
+            # (gcc's build attributes and .ident of the object: no bytes of its code)
+            next if $st =~ /^\.(?:aeabi_subsection|aeabi_attribute|ident)\b/;
             $inmacro = 1 if $st =~ /^\.macro\b/;
             if ($inmacro) { $inmacro = 0 if $st =~ /^\.endm\b/; next }
             if ($st =~ /^\.(data|bss|section\s+([^,\s]+)(,.*)?)$/ || $st =~ /^\.(previous)$/) {
@@ -255,14 +257,14 @@ my (%line, %alias, @fns, @data, %rodata, %weakref);
                 $sec = '.text' if $sec eq '.previous';
                 if ($code{$sec}) { $other = undef; next }
                 $other = $sec;
-                @pending = ();
+                @pending = @blob = ();
                 warn "s2ff: $where: $sec left out\n" if $sec =~ /^\.(pre)?init_array$|^\.fini_array$/;
                 next;
             }
             if ($st eq '.text') { $other = undef; next }
             if (defined $other) {
                 next if $st =~ /^\.(globl|global|weak|type|size|hidden|align|p2align|balign)\b/;
-                if ($st =~ /^([.\w]+):$/) { push @pending, $1; next }
+                if ($st =~ /^([.\w]+):$/) { push @pending, $1; @blob = (); next }
                 if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @data, node("$1:", node('alias'), node($2)) if $datadef{$2}; next }
                 next if $other =~ /^\.(pre)?init_array$|^\.fini_array$/ && $st =~ /^\.(dc\.a|xword|quad)\s+[.\w]+$/;
                 # read-only text (__arm_za_disable's message): its label's
@@ -274,6 +276,21 @@ my (%line, %alias, @fns, @data, %rodata, %weakref);
                     $t .= "\0" unless $k eq 'ascii';
                     $rodata{$_} = [node('ascii', node($t))] for @pending;
                     @pending = ();
+                    next;
+                }
+                # read-only numbers (a constant struct gcc copies from): its
+                # label's words, as data the function that names it carries
+                if ($other =~ /^\.rodata/ && $st =~ /^\.(byte|hword|short|word|long|xword|quad|dword|zero)\s+(-?(?:0x[0-9a-fA-F]+|\d+))$/
+                    && (@blob || @pending)) {
+                    my ($k, $v) = ($1, $2);
+                    $v = $v =~ /^(-?)0x(.*)$/i ? ($1 ? -hex $2 : hex $2) : $v;
+                    if (@pending) { @blob = @pending; @pending = (); my $list = []; $rodata{$_} = $list for @blob }
+                    my %d = (byte => ['byte', 8], hword => ['half', 16], short => ['half', 16], word => ['word', 32], long => ['word', 32],
+                        xword => ['dword', 64], quad => ['dword', 64], dword => ['dword', 64]);
+                    if ($k eq 'zero') { push @{ $rodata{$blob[0]} }, node('reserve', node($v)); next }
+                    my ($dir, $bits) = @{ $d{$k} };
+                    $v += 2 ** $bits if $v < 0;
+                    push @{ $rodata{$blob[0]} }, node($dir, node($v));
                     next;
                 }
                 # (a zero word is one too: start.S's __data_start, .long 0)
@@ -311,7 +328,7 @@ my %at;         # "section address" -> its labels
 for my $sec (keys %code) { for my $a (keys %{ $sym{$sec} || {} }) { $at{"$sec $a"} = [grep { !exists $alias{$_} } @{ $sym{$sec}{$a} }] } }
 my %labelat;    # an address a branch may name
 for my $k (keys %at) { my ($l) = sort { ($a =~ /^\.L/) <=> ($b =~ /^\.L/) } @{ $at{$k} }; $labelat{$k} = $l if defined $l }
-my ($fn, $block, $ends, %got, %ro, %rodone, %weakb);
+my ($fn, $block, $ends, %got, %ro, %weakb);
 my @weakgot;    # GOT words of a weak name nothing here defines: C globals
 sub finish {
     push @{ $fn->{children} }, map { node(".Lweak $_:", node('brk', node(0))) } sort keys %weakb if $fn;
@@ -319,10 +336,10 @@ sub finish {
     return unless $fn && (%got || %ro);
     # (a word of the function holds a name's address; a weak name nothing
     # defines (crti's __gmon_start__) is 0, as ttpc's C has it, so its word
-    # is a C global: address / void / address / name)
+    # is a C global: void / * pointer / name / & address)
     my @weak = grep { $weakref{$_} && ($sect{$_} // '') eq '*UND*' } keys %got;
     delete @got{@weak};
-    push @weakgot, map { node(".Lgot $_:", node('address'), node('void'), node('address', node($_))) } sort @weak;
+    push @weakgot, map { node(".Lgot $_:", node('void'), node('* pointer'), node($_), node('& address')) } sort @weak;
     push @{ $fn->{children} }, node('align', node(8)), map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got if %got;
     # (text ends where it ends: what follows the function starts on 8 again)
     push @{ $fn->{children} }, (map { node(ffname($_) . ':', @{ $rodata{$_} }) } sort keys %ro), node('align', node(8)) if %ro;
@@ -338,7 +355,8 @@ sub symof {
     defined $l or fail "no label at $sec+$off";
     if ($sec ne '.text') {
         $rodata{$l} or fail "$l in $sec: no bytes for it";
-        $ro{$l} = 1 unless $rodone{$l}++;
+        # (each function that names it carries it: its labels are its own)
+        $ro{$l} = 1;
     }
     ffname($l);
 }
