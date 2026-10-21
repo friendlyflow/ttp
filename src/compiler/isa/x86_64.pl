@@ -646,6 +646,14 @@ for my $o (["and", 0x54], ["andn", 0x55], ["or", 0x56], ["xor", 0x57]) {
 }
 sse("movaps", [], 0, 0x28, "x", "x", undef, 1);
 sse("movapd", [0x66], 0, 0x28, "x", "x", undef, 1);
+# the 16 bytes of an xmm register to and from memory: a long double
+# (binary128) of the SysV ABI's calls (gen/patches/abix64.pl), the
+# registers a variadic function keeps
+sse("movdqu", [0xf3], 0, 0x6f, "x", "x");
+for my $m (qw(m x)) {
+    form("movdqu.${m}r", ["rs:x", mp($m)], pf($m) . " movdqu <rs>, " . mg($m),
+        modrm_body([0xf3], 0, [0x0f, 0x7f], "rs", $m));
+}
 for my $s (["d", 0, "l"], ["q", 1, "q"]) {
     my ($sfx, $w, $k) = @$s;
     form("mov$sfx.tox", ["rs:$k", "xd:x"], "{rex} mov$sfx <rs>, <xd>",

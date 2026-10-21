@@ -20,6 +20,7 @@
 #                 x0 x8 x32   disp(base,index,scale)
 #                 p           label(%rip)
 #                 a32         an absolute disp32 (%fs:0x10, with fs first)
+#                 n32         disp32(,index,scale), no base (lea, mov)
 #
 #   movq.m8 / 8 / rdi / rax          48 8b 47 08
 #   movl.n / esi / eax               89 f0
@@ -95,6 +96,9 @@ my %MEM = (
     x32 => { p => [qw(disp:d32 base:base index:index scale:scale)], g => "<disp>(<base>,<index>,<scale>)", mod => 2, sib => 2, d => 4 },
     p   => { p => [qw(target:label)],      g => "<target>(%rip)", rip => 1 },
     a32 => { p => [qw(disp:d32)],          g => "<disp>",         abs => 1 },
+    # no base: disp32(,index,scale), SIB base 101 with mod 00 (lea's and
+    # mov's only: legacy's nobase)
+    n32 => { p => [qw(disp:d32 index:index scale:scale)], g => "<disp>(,<index>,<scale>)", mod => 0, sib => 3, d => 4 },
 );
 my @MEMS = qw(m0 m8 m32 s0 s8 s32 x0 x8 x32 p a32);
 
@@ -111,6 +115,7 @@ sub gmem {
     }
     return (C($mr, 0, $reg, 4), C($sb, 1, 4, 5), C("word", "disp")) if $d->{abs};
     my @b;
+    return (C($mr, 0, $reg, 4), C($sb, "scale", "index", 5), C("word", "disp")) if $d->{sib} == 3;
     if ($d->{sib} == 0)    { push @b, C($mr, $d->{mod}, $reg, "base") }
     elsif ($d->{sib} == 1) { push @b, C($mr, $d->{mod}, $reg, 4), C($sb, 1, 4, "base") }
     else                   { push @b, C($mr, $d->{mod}, $reg, 4), C($sb, "scale", "index", "base") }
@@ -123,6 +128,7 @@ sub grex {
     my ($w, $reg, $m) = @_;
     my $d = $MEM{$m};
     return C("rex", $w, $reg, 0, 0) if $d->{rip} || $d->{abs};
+    return C("rex", $w, $reg, "index", 0) if $d->{sib} == 3;
     return C("rex", $w, $reg, $d->{sib} == 2 ? "index" : 0, "base");
 }
 
@@ -194,7 +200,7 @@ sub legacy {
             gform($name, \@p, $g, @b, @imm);
         }
         next if defined $o{mem} && !$o{mem};
-        for my $m (@MEMS) {
+        for my $m (@MEMS, $o{nobase} ? "n32" : ()) {
             my $d = $MEM{$m};
             # (a REX form of a memory operand with no register, of no W:
             # GNU as gives it no REX)
@@ -256,8 +262,8 @@ for my $s (qw(w l q)) {
 $isa->group("gnu move");
 for my $s (qw(b w l q)) {
     my $z = $SZ{$s};
-    legacy(nm => "mov$s", s => $s, op => [0x88 + $z->{lo}], kind => "MR");
-    legacy(nm => "mov$s", s => $s, op => [0x8a + $z->{lo}], kind => "RM", regonly => 0);
+    legacy(nm => "mov$s", s => $s, op => [0x88 + $z->{lo}], kind => "MR", nobase => 1);
+    legacy(nm => "mov$s", s => $s, op => [0x8a + $z->{lo}], kind => "RM", regonly => 0, nobase => 1);
     legacy(nm => "mov$s", s => $s, op => [0xc6 + $z->{lo}], kind => "MI", digit => 0, ik => $z->{ik}, isz => $z->{isz}, osfx => "i", regonly => $s eq "q");
     legacy(nm => "test$s", s => $s, op => [0x84 + $z->{lo}], kind => "MR");
     legacy(nm => "test$s", s => $s, op => [0xf6 + $z->{lo}], kind => "MI", digit => 0, ik => $z->{ik}, isz => $z->{isz}, osfx => "i");
@@ -270,7 +276,7 @@ for my $s (qw(b w l)) {
         gbytes(@{ $z->{pre} }), C("opreg", hex2($z->{lo} ? 0xb8 : 0xb0), "rd"), gimm($z->{isz}));
 }
 for my $s (qw(l q)) {
-    legacy(nm => "lea$s", s => $s, op => [0x8d], kind => "RM", regonly => 0);
+    legacy(nm => "lea$s", s => $s, op => [0x8d], kind => "RM", regonly => 0, nobase => 1);
 }
 for my $x (["movzbw", "b", "w", 0x0f, 0xb6], ["movzbl", "b", "l", 0x0f, 0xb6], ["movzbq", "b", "q", 0x0f, 0xb6],
            ["movzwl", "w", "l", 0x0f, 0xb7], ["movzwq", "w", "q", 0x0f, 0xb7],
@@ -395,6 +401,48 @@ legacy(nm => "cvtss2siq", s => "q", pre => [0xf3], op => [0x0f, 0x2d], kind => "
 # movq: m64 <-> xmm (F3 0F 7E load, 66 0F D6 store)
 legacy(nm => "movq", s => "l", pre => [0xf3], op => [0x0f, 0x7e], kind => "RM", rk => "x", mk => "x", regonly => 0, osfx => "tox");
 legacy(nm => "movq", s => "l", pre => [0x66], op => [0x0f, 0xd6], kind => "MR", rk => "x", mk => "x", regonly => 0, osfx => "fromx");
+# floating point, scalar and packed (gcc's code, libm's and libmvec's asm):
+# xmm <- xmm/m (RM) by [name, prefix, opcode]; the stores of the moves
+for my $t (["addsd", 0xf2, 0x58], ["addss", 0xf3, 0x58], ["addpd", 0x66, 0x58], ["addps", undef, 0x58],
+           ["subsd", 0xf2, 0x5c], ["subss", 0xf3, 0x5c], ["subpd", 0x66, 0x5c], ["subps", undef, 0x5c],
+           ["mulsd", 0xf2, 0x59], ["mulss", 0xf3, 0x59], ["mulpd", 0x66, 0x59], ["mulps", undef, 0x59],
+           ["divsd", 0xf2, 0x5e], ["divss", 0xf3, 0x5e], ["divpd", 0x66, 0x5e], ["divps", undef, 0x5e],
+           ["sqrtsd", 0xf2, 0x51], ["sqrtss", 0xf3, 0x51], ["sqrtpd", 0x66, 0x51], ["sqrtps", undef, 0x51],
+           ["minsd", 0xf2, 0x5d], ["minss", 0xf3, 0x5d], ["minpd", 0x66, 0x5d], ["minps", undef, 0x5d],
+           ["maxsd", 0xf2, 0x5f], ["maxss", 0xf3, 0x5f], ["maxpd", 0x66, 0x5f], ["maxps", undef, 0x5f],
+           ["andpd", 0x66, 0x54], ["andps", undef, 0x54], ["andnpd", 0x66, 0x55], ["andnps", undef, 0x55],
+           ["orpd", 0x66, 0x56], ["orps", undef, 0x56], ["xorpd", 0x66, 0x57], ["xorps", undef, 0x57],
+           ["movsd", 0xf2, 0x10], ["movss", 0xf3, 0x10], ["movapd", 0x66, 0x28], ["movupd", 0x66, 0x10],
+           ["cvtss2sd", 0xf3, 0x5a], ["cvtsd2ss", 0xf2, 0x5a], ["cvtps2pd", undef, 0x5a], ["cvtpd2ps", 0x66, 0x5a],
+           ["ucomisd", 0x66, 0x2e], ["ucomiss", undef, 0x2e], ["comisd", 0x66, 0x2f], ["comiss", undef, 0x2f],
+           ["unpcklpd", 0x66, 0x14], ["unpcklps", undef, 0x14], ["unpckhpd", 0x66, 0x15], ["unpckhps", undef, 0x15],
+           ["punpcklqdq", 0x66, 0x6c], ["punpckhqdq", 0x66, 0x6d], ["paddd", 0x66, 0xfe], ["paddq", 0x66, 0xd4],
+           ["psubd", 0x66, 0xfa], ["psubq", 0x66, 0xfb]) {
+    my ($nm, $p, $op) = @$t;
+    legacy(nm => $nm, s => "l", pre => [defined $p ? $p : ()], op => [0x0f, $op], kind => "RM", rk => "x", mk => "x");
+}
+for my $t (["movsd", 0xf2, 0x11], ["movss", 0xf3, 0x11], ["movapd", 0x66, 0x29], ["movupd", 0x66, 0x11]) {
+    my ($nm, $p, $op) = @$t;
+    legacy(nm => $nm, s => "l", pre => [$p], op => [0x0f, $op], kind => "MR", rk => "x", mk => "x", regonly => 0);
+}
+# movhlps, movlhps: halves between registers (their memory forms are movlps, movhps)
+for my $t (["movhlps", 0x12], ["movlhps", 0x16]) {
+    legacy(nm => $t->[0], s => "l", op => [0x0f, $t->[1]], kind => "RM", rk => "x", mk => "x", mem => 0);
+}
+# with an immediate: the shuffles, the compares by a predicate
+for my $t (["shufps", undef, 0xc6], ["shufpd", 0x66, 0xc6], ["cmpsd", 0xf2, 0xc2], ["cmpss", 0xf3, 0xc2],
+           ["cmppd", 0x66, 0xc2], ["cmpps", undef, 0xc2]) {
+    my ($nm, $p, $op) = @$t;
+    legacy(nm => $nm, s => "l", pre => [defined $p ? $p : ()], op => [0x0f, $op], kind => "RMI", rk => "x", mk => "x", ik => "u8", isz => 1, osfx => "i", rsfx => "i");
+}
+# between the integer registers (or memory) and floating point
+for my $t (["sd", 0xf2], ["ss", 0xf3]) {
+    my ($p, $pb) = @$t;
+    legacy(nm => "cvtsi2${p}l", s => "l", pre => [$pb], op => [0x0f, 0x2a], kind => "RM", rk => "x", mk => "l");
+    legacy(nm => "cvtsi2${p}q", s => "q", pre => [$pb], op => [0x0f, 0x2a], kind => "RM", rk => "x", mk => "q");
+    legacy(nm => "cvtt${p}2sil", s => "l", pre => [$pb], op => [0x0f, 0x2c], kind => "RM", rk => "l", mk => "x", gnu => "cvtt${p}2si");
+    legacy(nm => "cvtt${p}2siq", s => "q", pre => [$pb], op => [0x0f, 0x2c], kind => "RM", rk => "q", mk => "x", gnu => "cvtt${p}2si");
+}
 
 # ---------------------------------------------------------------------------
 # VEX: AVX and AVX2 (and BMI's integer forms, the masks' moves and tests).
