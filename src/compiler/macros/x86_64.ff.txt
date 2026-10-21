@@ -120,37 +120,130 @@ elf:
     dword
       0x1000
   comment
-    elf_header_tls, program_headers and tls_header lay out riscv64's frame with its TLS image (macros/riscv64.ff.txt). Here they are for a riscv64 program's compile time, which runs on this host: elf_header_tls is elf_header, the other two lay out nothing.
-    On x86_64 a thread local is still a global (cc_tls 0), and its frame has no PT_TLS.
+    __tls_start and __tls_end are the linker's bounds of the TLS image, the thread locals of a C program, which the C layer lays out between them (and so places them as labels); a program with none has them at elf_base, the image empty.
+    __tls_end is at the image's alignment, 64 (cc_tlsend), so that the image ends at the thread pointer.
+    tls_size is the image's size; tprel a thread local's offset from fs: its offset from __tls_end, below 0.
+    (TLS variant II: fs points at the thread's TCB, its struct pthread, the image just below it, as glibc's static TLS lays it out.)
+  __tls_start:
+    addi
+      0x10000
+      zero
+      a0
+  __tls_end:
+    addi
+      0x10000
+      zero
+      a0
+  tls_size:
+    sub
+      __tls_start
+      __tls_end
+      a0
+  tprel:
+    sym
+    sub
+      __tls_end
+      sym
+      a0
+  comment
+    elf_header_tls: elf_header whose program headers are at phdrs (program_headers lays them out there), two: the load and the TLS image (PT_TLS, which glibc's static startup reads).
+    The 120 bytes of the header are elf_header's, so the program follows at the same place; its one program header there is no longer read.
   elf_header_tls:
     entry
     file_end
     mem_end
     phdrs
-    elf_header
+    dword
+      0x00010102464c457f
+    dword
+      0
+    half
+      2
+    half
+      62
+    word
+      1
+    dword
       entry
+    dword
+      from_base
+        phdrs
+    dword
+      0
+    word
+      0
+    half
+      64
+    half
+      56
+    half
+      2
+    half
+      64
+    half
+      0
+    half
+      0
+    program_headers
       file_end
       mem_end
   program_headers:
     file_end
     mem_end
-    align
+    word
       1
+    word
+      7
+    dword
+      0
+    dword
+      elf_base
+    dword
+      elf_base
+    dword
+      from_base
+        file_end
+    dword
+      from_base
+        mem_end
+    dword
+      0x1000
   tls_header:
-    align
-      1
+    word
+      7
+    word
+      4
+    dword
+      from_base
+        __tls_start
+    dword
+      __tls_start
+    dword
+      __tls_start
+    dword
+      tls_size
+    dword
+      tls_size
+    dword
+      64
   comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
   frame:
     origin
       elf_base
-    elf_header
+    elf_header_tls
       _start
       file_end
       mem_end
+      phdrs
     program
     align
       8
+    phdrs:
+    program_headers
+      file_end
+      mem_end
+    tls_header
     file_end:
     bss
     mem_end:
@@ -289,14 +382,76 @@ c:
       zero
       a0
   comment
-    cc_tls: 1 where a thread local is in the TLS image, at its offset from the thread pointer (not yet on x86_64: a thread local is laid out as a global); 0 where it is laid out as a global.
+    cc_tls: 1 where a thread local is in the TLS image, at its offset from the thread pointer (x86_64's: fs, set by glibc's startup (__libc_setup_tls, arch_prctl) or by a C _start of the program's own); 0 where it is laid out as a global.
   cc_tls:
     addi
-      0
+      1
       zero
       a0
   comment
+    cc_tlsend: 1 where a thread local's offset is from the end of the image, __tls_end, at the image's alignment (TLS variant II, x86_64's: the image is just below the thread pointer, which points at the TCB); 0 where it is from __tls_start (variant I).
+  cc_tlsend:
+    addi
+      1
+      zero
+      a0
+  comment
+    cc_addtls: V += the thread pointer, fs: its TCB's first word, which points at itself (addq %fs:0, %rax: 64 48 03 04 25, disp32 0). The image ends there (TLS variant II), its thread locals below it.
+    cc_settls: the thread's TCB is V, __tls_end (a C _start of the program's own): its first word and its self (struct pthread's header.tcb and header.self, at 0 and 16) are V,
+    and arch_prctl (ARCH_SET_FS, V) sets fs; the 4 KiB after the image are its struct pthread. It keeps every register (rax, rdi, rsi, rcx, r11 on the stack).
     cc_irel: the type of an IRELATIVE relocation, R_X86_64_IRELATIVE.
+  cc_addtls:
+    byte
+      0x64
+    byte
+      0x48
+    byte
+      0x03
+    byte
+      0x04
+    byte
+      0x25
+    word
+      0
+  cc_settls:
+    pushq
+      rax
+    pushq
+      rdi
+    pushq
+      rsi
+    pushq
+      rcx
+    pushq
+      r11
+    movq.mr
+      rax
+      0
+      rax
+    movq.mr
+      rax
+      16
+      rax
+    movq
+      rax
+      rsi
+    movq.i
+      0x1002
+      rdi
+    movq.i
+      158
+      rax
+    syscall
+    popq
+      r11
+    popq
+      rcx
+    popq
+      rsi
+    popq
+      rdi
+    popq
+      rax
   cc_irel:
     addi
       37

@@ -19,6 +19,7 @@
 #   point / 1                       point, 1, 0             (point){1}
 #   array / T / 3 / a / b           (array / T / 3), a, b, 0  (T[3]){a, b}
 #   padding 1: / u32 / 4            : / u32 / 4             unsigned : 4
+#   address / fs / pthread          pthread / fs / * pointer  struct pthread __seg_fs *
 #
 # Siblings in a row (a, b) are what before was one node. cast and the
 # suffixes U L UL LL ULL are prefixes, their operand the next sibling;
@@ -217,7 +218,7 @@ sub regroup {
 sub oldrun_new {
     my ($t, $l, $i) = @_;
     $i++;
-    $i++ while $i < @$l && is($l->[$i], '* pointer');
+    $i++ while $i < @$l && (is($l->[$i], '* pointer') || is($l->[$i], 'fs'));
     (undef, $i);
 }
 
@@ -231,6 +232,12 @@ sub newrun {
         return ([@$in, node('* pointer')], $j) if $in;
         $Words::warn->($l->[$i + 1]{content}) if $Words::warn && $i + 1 < @$l && leaf($l->[$i + 1]) && $l->[$i + 1]{content} =~ /^[A-Za-z_]/;
         return ([node('void'), node('* pointer')], $i + 1);
+    }
+    # (fs / T before, T / fs now: x86_64's __seg_fs, after the type it
+    # qualifies, before the * pointer that points at it)
+    if ($w eq 'fs') {
+        my ($in, $j) = newrun($t, $l, $i + 1) or return;
+        return ([@$in, node('fs')], $j);
     }
     if ($w eq 'array') {
         my ($in, $j) = newrun($t, $l, $i + 1) or return;
@@ -438,7 +445,7 @@ sub oldrun {
         @r = (node($n->{content}));
     } else { return }
     $i++;
-    while ($i < @$l && is($l->[$i], '* pointer')) { unshift @r, node('address'); $i++ }
+    while ($i < @$l && (is($l->[$i], '* pointer') || is($l->[$i], 'fs'))) { unshift @r, node(is($l->[$i], 'fs') ? 'fs' : 'address'); $i++ }
     (\@r, $i);
 }
 sub oldnode1 { my ($t, $n) = @_; my @r = oldnode($t, $n); @r == 1 ? $r[0] : die "words: one node became several: $n->{content}\n" }

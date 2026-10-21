@@ -142,7 +142,10 @@ CPUS_riscv64 := rv64 rv64,v=false
 # (cortex-a57), and SVE at 512 and 256 bits (a64fx, neoverse-v1), whose
 # ifuncs pick glibc's other string asm (memcpy_a64fx, memcpy_sve ...)
 CPUS_aarch64 := max max,sve=off cortex-a57 a64fx neoverse-v1
-CPUS_x86_64 := max
+# x86_64: AVX2 (max), SSE4.2 and no AVX (Nehalem), SSE2 alone (qemu64),
+# whose ifuncs pick glibc's avx2, sse4_2 and sse2 asm (qemu's TCG has no
+# AVX-512: the evex asm is checked by asm-check alone)
+CPUS_x86_64 := max Nehalem qemu64
 CPUS_arm := max
 CPUS := $(CPUS_$(GTARGET))
 PROGFLAGS_x86_64 := -mlong-double-128
@@ -304,7 +307,7 @@ MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 # are zero (c2ff --zero), their other names aliases (s2ff). Another target
 # has no startup in ff yet: its programs have a _start of their own (c2ff
 # --start).
-GLIBC_START := $(filter riscv64 aarch64,$(GTARGET))
+GLIBC_START := $(filter riscv64 aarch64 x86_64,$(GTARGET))
 OBJS_start := csu/static-reloc csu/init csu/check_fds elf/dl-early_allocate nptl/nptl_deallocate_tsd nptl/nptl_nthreads \
 	elf/dl-tls_init_tp stdlib/setenv elf/dl-execstack-tunable nptl/pthread_keys
 ASMS_start := csu/start elf/dl-rseq-symbols
@@ -324,8 +327,11 @@ with_start = $(call uniq,$($(1)_$(2)) $(if $(GLIBC_START),$($(1)_stdio) $($(1)_s
 # from libgcc). c2ff translates what the roots reach of them.
 # (each C object's AST is c2ff's pass of it, all-units', not its JSON)
 UNITDEP_aarch64 := c2ff
+UNITDEP_x86_64 := c2ff
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
 LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
+# (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
+LINKED_x86_64 := string
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -337,7 +343,11 @@ endif
 # (elf/dl-debug-symbols.S only reserves _r_debug_extended, c2ff --zero's,
 # with _r_debug an alias of it: left out, as on riscv64)
 ASMS_skip := elf/dl-debug-symbols
-objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
+# (x86_64: strcspn's and strspn's SSE4.2 C, of gcc's intrinsics (__m128i,
+# _mm_cmpistri), which clang cannot read from gcc's headers and c2ff has
+# no vector types for yet: left out, their resolvers' other choices taken)
+OBJS_skip_x86_64 := string/strcspn-sse4 string/strspn-sse4
+objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip) $(OBJS_skip_$(GTARGET)),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
 
 .PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
@@ -394,12 +404,13 @@ codesec = $(if $(filter x86_64,$(GTARGET)),$$($(XPRE)objdump -h $(1) | awk '$$2 
 # .i itself by the offsets in clang's AST). x86_64: gcc's %v in an asm
 # template (v under AVX, nothing here: glibc is not built for AVX) and the
 # mode __libgcc_cmp_return__ (8 bytes there, as gcc says: DI); the f128 or
-# F128 suffix of a _Float128 literal, which clang lacks (L: binary128 here
+# F128 suffix of a _Float128 literal (after a digit, or a digit and a
+# point: u.f128 is a field), which clang lacks (L: binary128 here
 # too); and gcc's _FloatN as associations of a _Generic, besides float,
 # double and long double, which for clang are those again (clang-prelude.h):
 # other types there, which no float matches.
 CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mode (__DI__               )/g' \
-	-e 's/\([0-9.]\)[fF]128\b/\1L   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
+	-e 's/\([0-9]\.\?\)[fF]128\b/\1L   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
 	-e 's/_Float32x:/_Bool    :/g' -e 's/_Float64x:/unsigned :/g'
 CLANGFIX := $(CLANGFIX_$(GTARGET))
 
@@ -429,7 +440,7 @@ $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)
 	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).ff.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
-	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
+	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64 x86_64,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
 	done
 	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
@@ -449,20 +460,13 @@ ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
 # (x86_64: every asm object of glibc but those s2ff makes no ff of yet,
 # by reason: libmvec's (mathvec/: SSE and AVX's packed floats, mulpd
 # vfmadd213pd vinsertf128 ..., have no forms yet, and most have tables in
-# .rodata); bytes in another section than the code's (constants in
-# .rodata, a jump table of label differences, .int .L1 - .L2, a string);
-# crti and crtn (.init and .fini); start.S (c2ff --start's, as above);
-# jrcxz (a rel8 jump with no form yet); lea of an index with no base
-# (leaq (, %rdx, 4)); a symbol plus an offset (sym+352(%rip)))
+# .rodata); libm's long double constants (.byte lists, .double, a label
+# and its data on one line); ____longjmp_chk (a string in another section,
+# and padding past an alignment); crti and crtn (.init and .fini, not
+# .text: s2ff --then makes their ff, the milestones run it))
 ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM)) \
 	math/e_exp2l math/e_exp10l math/e_expl math/s_expm1l math/e_scalbl math/e_log10l math/e_log2l math/e_logl \
-	math/e_powl math/s_log1pl string/strcasecmp_l-avx2 string/strcasecmp_l-avx2-rtm string/strcasecmp_l-sse2 \
-	string/strcasecmp_l-sse4_2 string/strncase_l-avx2 string/strncase_l-avx2-rtm string/strncase_l-sse2 \
-	string/strncase_l-sse4_2 string/strcasecmp_l-evex string/strncase_l-evex debug/____longjmp_chk \
-	string/strcmp-sse2 string/strcmp-sse4_2 string/strncmp-sse2 string/strncmp-sse4_2 string/stpcpy-sse2-unaligned \
-	string/stpncpy-sse2-unaligned string/strcat-sse2-unaligned string/strcpy-sse2-unaligned \
-	string/strncat-sse2-unaligned string/strncpy-sse2-unaligned \
-	csu/crti csu/crtn csu/start stdlib/add_n stdlib/sub_n wcsmbs/wcsncmp-avx2 wcsmbs/wcsncmp-avx2-rtm elf/dl-trampoline
+	math/e_powl math/s_log1pl debug/____longjmp_chk csu/crti csu/crtn
 ASMCHECK_x86_64 = $(filter-out $(ASMSKIP_x86_64),$(ALL_ASM))
 ASMCHECK ?= $(or $(ASMCHECK_$(GTARGET)),$(ASMS_stdio))
 # (made by a make of its own: aarch64's list is all of glibc's asm, which

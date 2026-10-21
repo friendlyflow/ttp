@@ -129,11 +129,18 @@ sub ctype {
     local $ctype_depth = $ctype_depth + 1;
     die "c2ff: a type that does not end: $t\n" if $ctype_depth > 100;
     $t = trim($t);
+    # (x86_64's __seg_fs, clang's address space 257: the user's fs, a type
+    # word after the type it qualifies, here a prefix as address is: fs / T)
+    $t =~ s/__attribute__\s*\(\(address_space\(257\)\)\)/ __seg_fs /g;
     # an attribute (noreturn, ...) says nothing of the type's layout
     $t =~ s/\s*__attribute__\s*(\(\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\))?//g;
     $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
     $t = trim($t);
     $t =~ s/\s+/ /g;
+    # (T *__seg_fs: the pointer in fs; __seg_fs T: T in fs, after the
+    # pointers below, which bind first: __seg_fs struct p * is (__seg_fs
+    # struct p) *)
+    return ('fs', ctype($1)) if $t =~ /^(.*\S)\s*\b__seg_fs$/;
     # (x86_64's va_list, before the arrays and pointers: %scalar has it)
     return $scalar{$t} if $t =~ /^struct __va_list_tag\b/ && exists $scalar{$t};
     # an array of function pointers, ret (*[n]) (params): the init arrays'
@@ -159,6 +166,8 @@ sub ctype {
         my ($r, $p) = split_fn($base);
         return defined $r ? ('address', fntype($r, $p)) : ('address', ctype($base));
     }
+    return ('fs', ctype($1)) if $t =~ /^__seg_fs\s+(.*)$/;
+    return ('fs', ctype("$1 $2")) if $t =~ /^(.*?)\s*\b__seg_fs\b\s*(.*)$/;
     return $scalar{$t} if exists $scalar{$t};
     return ctype($owntd{$cur_unit}{$t}) if $cur_unit && $owntd{$cur_unit} && exists $owntd{$cur_unit}{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};

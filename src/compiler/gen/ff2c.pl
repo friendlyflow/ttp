@@ -168,11 +168,12 @@ sub is_function {
 
 # ---- types ------------------------------------------------------------------
 # A type is [scalar => 'int'], [ptr => T or undef (void)], [arr => T, count
-# node], [rec => name], [enum => name], [fn => name].
+# node], [rec => name], [enum => name], [fn => name], [fs => T] (x86_64's
+# __seg_fs: T in fs).
 
 sub is_typeword {
     my ($w) = @_;
-    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $rec{$w} || $enum{$w} || $fntype{$w};
+    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $w eq 'fs' || $rec{$w} || $enum{$w} || $fntype{$w};
 }
 
 # The type run at $$i of a list of nodes.
@@ -190,6 +191,7 @@ sub ptype {
         return [ptr => undef] if $$i >= @$l || !leaf($l->[$$i]) || !is_typeword(c($l->[$$i]));
         return [ptr => ptype($l, $i)];
     }
+    return [fs => ptype($l, $i)] if $w eq 'fs';
     if ($w eq 'array') {
         my $t = ptype($l, $i);
         my $count = $l->[$$i++] // fail('an array without its count');
@@ -215,6 +217,9 @@ sub cdecl {
         $inner = "($inner)" if $to->[0] eq 'arr';
         return cdecl($to, $inner);
     }
+    # (C's qualifier after the type it qualifies: struct p __seg_fs *x,
+    # struct p *__seg_fs *x)
+    return cdecl($t->[1], "__seg_fs $name" =~ s/\s+$//r, $count) if $k eq 'fs';
     if ($k eq 'arr') {
         my $n = $count // count_text($t->[2]);
         return cdecl($t->[1], "$name\[$n\]");
@@ -387,7 +392,9 @@ sub binary {
     }
     ($s, $t);
 }
-sub is_ptr { my ($t) = @_; $t && ($t->[0] eq 'ptr' || $t->[0] eq 'arr') }
+sub is_ptr { my ($t) = @_; $t = nofs($t); $t && ($t->[0] eq 'ptr' || $t->[0] eq 'arr') }
+# a type without its fs (x86_64's __seg_fs: the same type in fs)
+sub nofs { my ($t) = @_; $t = $t->[1] while $t && $t->[0] eq 'fs'; $t }
 sub unary {
     my ($l, $pos) = @_;
     my $n = $l->[$$pos] // fail('an operand missing');
@@ -606,7 +613,9 @@ sub path {
     my @l = @$l;
     while (@l) {
         my $n = $l[0];
-        my $rt = $t && $t->[0] eq 'rec' ? $t->[1] : $t && $t->[0] eq 'ptr' && $t->[1] && $t->[1][0] eq 'rec' ? $t->[1][1] : undef;
+        $t = nofs($t);
+        my $pt = $t && $t->[0] eq 'ptr' ? nofs($t->[1]) : undef;
+        my $rt = $t && $t->[0] eq 'rec' ? $t->[1] : $pt && $pt->[0] eq 'rec' ? $pt->[1] : undef;
         if (defined $rt && leaf($n) && (my $ft = field($rt, c($n)))) {
             $s = "($s" . ($t->[0] eq 'ptr' ? '->' : '.') . cid_local(c($n)) . ")";
             $t = $ft;

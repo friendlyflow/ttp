@@ -449,6 +449,8 @@ for (@conds) {
 }
 form("jmp", ["target:label"], "{disp32} jmp <target>", bytes(0xe9), C("word", C("rel32", "target")));
 form("jmp.8", ["target:label8"], "{disp8} jmp <target>", bytes(0xeb), C("simm8", C("rel8", "target")));
+# (jrcxz: to target if rcx is 0, rel8 alone: glibc's add_n and sub_n)
+form("jrcxz.8", ["target:label8"], "jrcxz <target>", bytes(0xe3), C("simm8", C("rel8", "target")));
 form("call", ["target:label"], "call <target>", bytes(0xe8), C("word", C("rel32", "target")));
 for my $j (["call", 2], ["jmp", 4]) {
     my ($op, $digit) = @$j;
