@@ -146,7 +146,8 @@ CPUS_aarch64 := max max,sve=off cortex-a57 a64fx neoverse-v1
 # whose ifuncs pick glibc's avx2, sse4_2 and sse2 asm (qemu's TCG has no
 # AVX-512: the evex asm is checked by asm-check alone)
 CPUS_x86_64 := max Nehalem qemu64
-CPUS_arm := max
+# arm: armv7-a with NEON and VFPv4 at their newest (max) and a Cortex-A15
+CPUS_arm := max cortex-a15
 CPUS := $(CPUS_$(GTARGET))
 PROGFLAGS_x86_64 := -mlong-double-128
 PROGFLAGS := $(PROGFLAGS_$(GTARGET))
@@ -192,7 +193,8 @@ SOFTFP := addtf3 subtf3 multf3 divtf3 eqtf2 getf2 letf2 negtf2 floatditf floatun
 	extendsftf2 extenddftf2 trunctfsf2 trunctfdf2
 # x86_64's soft-fp raises its exceptions through a function of libm's
 OBJS_ldouble_x86_64 := math/sfp-exceptions
-OBJS_ldouble := $(SOFTFP:%=soft-fp/%) $(OBJS_ldouble_$(GTARGET))
+# (arm's long double is double, by its EABI: no soft-fp)
+OBJS_ldouble := $(if $(filter arm,$(GTARGET)),,$(SOFTFP:%=soft-fp/%)) $(OBJS_ldouble_$(GTARGET))
 ASMS_ldouble :=
 ROOTS_ldouble := __addtf3 __subtf3 __multf3 __divtf3 __eqtf2 __netf2 __getf2 __gttf2 __letf2 __lttf2 __negtf2 \
 	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2
@@ -312,9 +314,9 @@ MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 # are zero (c2ff --zero), their other names aliases (s2ff). Another target
 # has no startup in ff yet: its programs have a _start of their own (c2ff
 # --start).
-GLIBC_START := $(filter riscv64 aarch64 x86_64,$(GTARGET))
-# (on x86_64 for its milestones of LINKED_x86_64, all of them now)
-startms = $(if $(GLIBC_START),$(if $(filter x86_64,$(GTARGET)),$(filter $(1),$(LINKED_x86_64)),1))
+GLIBC_START := $(filter riscv64 aarch64 x86_64 arm,$(GTARGET))
+# (on x86_64 and arm for their milestones of LINKED_x86_64 and LINKED_arm)
+startms = $(if $(GLIBC_START),$(if $(filter x86_64 arm,$(GTARGET)),$(filter $(1),$(LINKED_$(GTARGET))),1))
 OBJS_start := csu/static-reloc csu/init csu/check_fds elf/dl-early_allocate nptl/nptl_deallocate_tsd nptl/nptl_nthreads \
 	elf/dl-tls_init_tp stdlib/setenv elf/dl-execstack-tunable nptl/pthread_keys
 ASMS_start := csu/start elf/dl-rseq-symbols
@@ -335,10 +337,13 @@ with_start = $(call uniq,$($(1)_$(2)) $(if $(call startms,$(2)),$($(1)_stdio) $(
 # (each C object's AST is c2ff's pass of it, all-units', not its JSON)
 UNITDEP_aarch64 := c2ff
 UNITDEP_x86_64 := c2ff
+UNITDEP_arm := c2ff
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
 LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
 LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc
+# (arm the same way: start.S, crti.S and crtn.S through s2ff-arm, as aarch64's)
+LINKED_arm := string
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -451,7 +456,7 @@ $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)
 	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
-	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64 x86_64,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
+	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).asm.page.txt; \
 	done
 	$$(if $$(ASMS_all_$(1)),$$(LAYERS) $$(FF)/$(1).asm.page.txt >> $$(FF)/$(1).ff.txt)
@@ -682,10 +687,12 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 CHECK_MS_riscv64 := $(MILESTONES)
 CHECK_MS_aarch64 := $(LINKED_aarch64)
 CHECK_MS_x86_64 := $(LINKED_x86_64)
+CHECK_MS_arm := $(LINKED_arm)
 CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
 ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
 ALLCHECKS_aarch64 := $(LINKED_aarch64:%=%-check) $(LINKED_aarch64:%=%-roundtrip)
 ALLCHECKS_x86_64 := $(LINKED_x86_64:%=%-check) $(LINKED_x86_64:%=%-roundtrip)
+ALLCHECKS_arm := $(LINKED_arm:%=%-check) $(LINKED_arm:%=%-roundtrip)
 ALLCHECKS := $(or $(ALLCHECKS_$(GTARGET)),ldouble-check) generic-check generic-roundtrip
 CHECK_OBJS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
 CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))

@@ -10,6 +10,11 @@
 #   perl s2ff-arm.pl [--page name] file.s file.dump > out.ff.txt
 #   perl s2ff-arm.pl --items file.s file.dump    its functions alone
 #   perl s2ff-arm.pl --size file.s file.dump     the bytes of its .text
+#   perl s2ff-arm.pl crti.s crti.dump --then crtn.s crtn.dump
+#                        crti's _init and _fini (.init, .fini) ended by
+#                        crtn's .init and .fini, as the linker joins them
+#   --zero name          the objects c2ff --zero makes (else a zero object's
+#                        aliases, which then name nothing, are left out)
 #
 # file.dump is objdump -d -r -t of what GNU as made of file.s: its symbols,
 # its instructions and data, and the relocations GNU as left. It is read
@@ -35,6 +40,9 @@
 #   other sections  a zeroed object is c2ff --zero's global (its labels
 #                   aliases of its first), as in s2ff.pl; words, strings and
 #                   bytes an asm function of data
+#   .weak X         X undefined here (crti's __gmon_start__): X: / weak /
+#                   function / void, address 0; a branch to it goes to a
+#                   trap the function carries (.Lweak X: / udf 0)
 #
 # A host tool (core Perl only), not part of ttpc.
 use strict;
@@ -45,15 +53,17 @@ use FF qw(node write_txt);
 use armdec;
 
 my $page = 'glibc asm';
-my (@files, $size, $items);
+my (@files, $size, $items, @then, %zeroed);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
+    if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
+    if ($a eq '--zero') { $zeroed{ shift @ARGV } = 1; next }
     if ($a eq '--size') { $size = 1; next }
     if ($a eq '--items') { $items = 1; next }
     push @files, $a;
 }
-die "usage: s2ff-arm.pl [--page name | --items | --size] file.s file.dump\n" unless @files == 2;
+die "usage: s2ff-arm.pl [--page name | --items | --size] [--zero name] file.s file.dump [--then crtn.s crtn.dump]\n" unless @files == 2;
 my ($src, $dump) = @files;
 my $where = $dump;
 sub fail { die "s2ff-arm: $where: @_\n" }
@@ -62,6 +72,18 @@ sub fail { die "s2ff-arm: $where: @_\n" }
 my (%sym, %symsec);     # name -> address, section (from the symbol table)
 my (%secsyms, %secend);  # section -> [[address, name], ...] (functions and labels); its end
 my (@secs, %sec);       # sections of code in order; name -> { lines => [...] }
+my (%undef);             # names the symbol table has undefined
+# (crtn's, --then: its sections' instructions after crti's, from its end on)
+sub readdump {
+my ($dump, $then) = @_;
+my %base;
+if ($then) {
+    for my $s (@secs) {
+        my $e = $secend{$s} // 0;
+        for my $i (@{ $sec{$s}{lines} }) { my $n = $i->{addr} + ($i->{hex} =~ / / ? 4 : length($i->{hex}) / 2); $e = $n if $n > $e }
+        $base{$s} = $e;
+    }
+}
 my $cur;
 my $last;
 open my $d, '<', $dump or die "s2ff-arm: cannot open $dump: $!\n";
@@ -72,6 +94,9 @@ while (my $l = <$d>) {
     if ($insyms) {
         if ($l =~ /^([0-9a-f]{8}) (.{7}) (\S+)\t([0-9a-f]+) (.*)$/) {
             my ($addr, $flags, $s, $size, $name) = (hex $1, $2, $3, hex $4, $5);
+            next if $then;
+            $name =~ s/^\.(hidden|protected|internal) //;
+            $undef{$name} = 1 if $s eq '*UND*';
             # (a section's end, past its last symbol's bytes: objdump shows zeros as ...)
             $secend{$s} = $addr + $size if !defined $secend{$s} || $addr + $size > $secend{$s};
             # (not a mapping symbol, a section's, one from elsewhere or a number)
@@ -87,6 +112,7 @@ while (my $l = <$d>) {
     }
     if ($l =~ /^Disassembly of section (\S+):$/) {
         $cur = $1;
+        fail "$dump: $cur, which the file before it has not" if $then && !$sec{$cur};
         push @secs, $cur unless $sec{$cur};
         $sec{$cur} //= { lines => [] };
         next;
@@ -94,25 +120,31 @@ while (my $l = <$d>) {
     next unless defined $cur;
     if ($l =~ /^\s*([0-9a-f]+):\t([0-9a-f]{2,8}(?: [0-9a-f]{4})?)\s*\t(\S+)\s*(.*)$/) {
         my ($addr, $hex, $op, $args) = (hex $1, $2, $3, $4);
+        $addr += $base{$cur} // 0;
         $last = { addr => $addr, hex => $hex, op => $op, args => $args, relocs => [] };
         push @{ $sec{$cur}{lines} }, $last;
         next;
     }
     if ($l =~ /^\s+([0-9a-f]+): (R_ARM_\w+)\t(.+)$/) {
         my ($addr, $type, $target) = (hex $1, $2, $3);
+        $addr += $base{$cur} // 0;
         fail "a relocation $type at $1 after no instruction" unless $last && $last->{addr} <= $addr;
         push @{ $last->{relocs} }, { addr => $addr, type => $type, target => $target };
         next;
     }
 }
 close $d;
+}
+readdump($dump);
+readdump($then[1], 1) if @then;
+$secend{$_} = undef for @then ? @secs : ();
 
 # ---- the source: aliases, other sections' data, where it came from ---------
 # A section of data is a block, an asm function of data named by its first
 # label (a local one, .L..., by this file and it); each other label in it
 # is its place there (%dlab: the block, the offset), which a relocation of
 # the code reaches as the block plus the offset.
-my (@aliases, @data, $file, $line, %dlab, %got);
+my (@aliases, @data, $file, $line, %dlab, %got, %weakref);
 (my $base = $src) =~ s{.*/}{}; $base =~ s/\.s$//;
 # the offset of a symbol's word in the file's GOT
 sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("$base got"), node("$base got $t"), node('a0')) }
@@ -176,6 +208,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
                 $other = $sn =~ /^\.(text|init|fini)$/ || $sn =~ /^\.note/ ? undef : $sn;
                 next;
             }
+            $weakref{$1} = 1 if $st =~ /^\.weak\s+([.\w]+)$/;
             next unless defined $other;
             next if $st =~ /^\.(globl|global|weak|type|size|hidden)\b/;
             if ($st =~ /^\.(p2align|align|balign)\s+(\d+)/) {
@@ -189,7 +222,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
                 my @ls = grep { $_->[0] !~ /^\.L/ } @{ $blk->{labels} };
                 if (@ls) {
                     my ($first, @more) = map { $_->[0] } @ls;
-                    push @aliases, map { node("$_:", node('alias'), node($first)) } @more;
+                    push @aliases, map { node("$_:", node('alias'), node($first)) } @more if !%zeroed || $zeroed{$first};
                     warn "s2ff-arm: $where: $first is zero, c2ff --zero $first makes it\n";
                     undef $blk;
                     next;
@@ -212,7 +245,7 @@ sub leaf { my ($v) = @_; $v =~ /^(0x[0-9a-f]+|-?\d+)$/i ? node($v =~ /^0x/i ? he
 
 # ---- the sections of code ----------------------------------------------------
 my $dec = armdec->new;
-my (@fns, $bytes);
+my (@fns, $bytes, %weakb);
 my %RELB = map { $_ => 1 } qw(R_ARM_CALL R_ARM_JUMP24 R_ARM_THM_CALL R_ARM_THM_JUMP24 R_ARM_PLT32);
 for my $s (@secs) {
     my @lines = @{ $sec{$s}{lines} };
@@ -266,7 +299,8 @@ for my $s (@secs) {
             my ($k) = grep { $def->{params}[$_] =~ /^u?imm$/ } 0 .. $#{ $def->{params} };
             my $to = $at + ($mode eq 'a' ? 8 : 4) + $ops->[$k];
             my $label;
-            if ($rel && $RELB{ $rel->{type} }) { $label = $rel->{target} }
+            if ($rel && $RELB{ $rel->{type} } && $weakref{ $rel->{target} } && $undef{ $rel->{target} }) { $label = ".Lweak $rel->{target}"; $weakb{ $rel->{target} } = 1 }
+            elsif ($rel && $RELB{ $rel->{type} }) { $label = $rel->{target} }
             elsif ($rel) { fail "a branch with $rel->{type}" }
             else { $label = $lname->($to); $target{$to} = 1 }
             $ops[$k] = node($mode eq 'a' ? 'arel' : 'trel', node($label));
@@ -298,6 +332,8 @@ for my $s (@secs) {
         push @{ $into->{children} }, $n;
     }
     push @aliases, map { node("$_:", node('alias'), node($first)) } @{ $names{ $lines[0]{addr} } }[1 .. $#{ $names{ $lines[0]{addr} } }];
+    push @{ $fn->{children} }, map { node(".Lweak $_:", node('udf', node(0))) } sort keys %weakb;
+    %weakb = ();
     push @fns, $fn;
 }
 
@@ -343,6 +379,8 @@ if (%got) {
     push @data, node("$base got:", node('asm'), node('align', node(4)));
     push @data, map { node("$base got $_:", node('asm'), $got{$_}) } sort keys %got;
 }
+# a weak name the file declares and does not define (crti's __gmon_start__)
+push @fns, map { node("$_:", node('weak'), node('function'), node('void')) } sort grep { $undef{$_} } keys %weakref;
 # each alias once, and none of a name that is a label of the code already
 my %seen;
 my %entry;

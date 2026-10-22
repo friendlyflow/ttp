@@ -1,0 +1,28 @@
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
+  comment
+    builtins-arm.ff.txt: the builtins of gcc for arm that glibc uses, after builtins.ff.txt on its page (GTARGET=arm). __builtin_thread_pointer: the thread pointer, TPIDRURO (mrc p15, 0, r0, c13, c0, 3, as gcc makes it for armv7-a: glibc's THREAD_SELF is below it).
+  __builtin_thread_pointer:
+    asm
+    mrc
+      3
+      0
+      13
+      r0
+      0
+      15
+    ret
+  comment
+    gcc's __builtin_trap, which it makes udf #0 (0xe7f000f0) on arm; __atomic_thread_fence, which it makes dmb ish.
+  __builtin_trap:
+    asm
+    udf
+      0
+  __atomic_thread_fence:
+    asm
+    dmb
+      11
+    ret
