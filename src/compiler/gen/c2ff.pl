@@ -1581,6 +1581,7 @@ sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n
 sub syscall_idiom {
     my ($cs) = @_;
     return syscall_idiom_x86($cs) if $target eq 'x86_64';
+    return syscall_idiom_arm($cs) if $target eq 'arm';
     my @st = kids($cs);
     my ($inner) = grep { $_->{kind} eq 'CompoundStmt' } @st;
     return () unless $inner && grep { $_->{kind} eq 'GCCAsmStmt' } kids($inner);
@@ -1608,6 +1609,53 @@ sub syscall_idiom {
         push @args, item(expr($e));
     }
     node('syscall', item(expr($reg{a7})), @args);
+}
+# a register variable's register (clang's AST has no label of an
+# AsmLabelAttr: from the .i, asm ("r0") where the attribute begins)
+sub asm_label {
+    my ($a) = @_;
+    return $a->{label} if defined $a->{label};
+    my $b = $a->{range}{begin}{offset} // $a->{range}{begin}{expansionLoc}{offset};
+    return undef unless defined $b && $cur_unit;
+    substr($cur_unit->{text}, $b, 80) =~ /^(?:__asm__|__asm|asm)\s*\(\s*"(\w+)"/ ? $1 : undef;
+}
+# arm's (sysdeps/unix/sysv/linux/arm/sysdep.h): register variables r0 (or
+# a1), a2 a3 a4 v1 v2 v3 (r1 ... r6) the arguments, r7 the number, each set
+# by its declaration or by an assignment after it (from the _aNtmp before
+# them), the asm swi 0x0 with the output "=r" r0, the result that output.
+sub syscall_idiom_arm {
+    my ($cs) = @_;
+    my @st = kids($cs);
+    my ($asm) = grep { $_->{kind} eq 'GCCAsmStmt' } @st;
+    return () unless $asm;
+    my ($template, $oc, $ic, $ops) = asm_parts($asm);
+    return () unless $template =~ /^\s*swi\s+0x0\b/ && @$oc == 1 && $oc->[0] eq '=r';
+    my %argno = (r0 => 0, a1 => 0, r1 => 1, a2 => 1, r2 => 2, a3 => 2, r3 => 3, a4 => 3, r4 => 4, v1 => 4, r5 => 5, v2 => 5, r6 => 6, v3 => 6);
+    my (%regof, %reg, %local);
+    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st) {
+        for my $v (kids($s)) {
+            my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
+            my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+            if ($lab) { my $r = asm_label($lab) // next; $regof{ $v->{name} } = $r; $reg{$r} = $init if $init }
+            elsif ($init && defined $v->{name}) { $local{ $v->{name} } = $init }
+        }
+    }
+    for my $s (grep { $_->{kind} eq 'BinaryOperator' && $_->{opcode} eq '=' } @st) {
+        my ($l, $r) = kids($s);
+        $l = strip($l);
+        next unless $l->{kind} eq 'DeclRefExpr' && defined $regof{ $l->{referencedDecl}{name} };
+        $reg{ $regof{ $l->{referencedDecl}{name} } } = $r;
+    }
+    defined $reg{r7} or stop('a syscall without its number', $asm);
+    my @args;
+    my %byno = map { ($argno{$_} => $reg{$_}) } grep { defined $argno{$_} } keys %reg;
+    for my $i (0 .. 6) {
+        my $e = $byno{$i} or last;
+        my $s = strip($e);
+        $e = $local{ $s->{referencedDecl}{name} } if $s->{kind} eq 'DeclRefExpr' && $local{ $s->{referencedDecl}{name} };
+        push @args, item(expr($e));
+    }
+    node('syscall', item(expr($reg{r7})), @args);
 }
 # x86_64's: register variables rdi rsi rdx r10 r8 r9 = the arguments (from
 # the __argN before them), the asm syscall with the number its input in the

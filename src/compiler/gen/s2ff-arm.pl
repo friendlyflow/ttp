@@ -219,6 +219,10 @@ for my $s (@secs) {
     next unless @lines;
     my %names;          # address -> names of symbols there
     push @{ $names{ $_->[0] } }, $_->[1] for sort { $a->[0] <=> $b->[0] || $a->[1] cmp $b->[1] } @{ $secsyms{$s} // [] };
+    # (a section that starts before its first symbol, with instructions of
+    # its own, sigrestorer.S's nop for the unwinder, strcmp.S's tail: a
+    # local name of it)
+    $names{ $lines[0]{addr} } //= ["$base $s"];
     my $lname = sub { my ($a) = @_; $names{$a} ? $names{$a}[0] : sprintf('.L %x', $a) };
     my (%target);     # addresses branches go to
     my @out;                # [address, node] in order
@@ -280,7 +284,7 @@ for my $s (@secs) {
     }
     $zeros->($secend{$s}) if defined $secend{$s};
     # the blocks: a label at each entry and each address a branch goes to
-    my ($first) = $names{ $lines[0]{addr} } ? $names{ $lines[0]{addr} }[0] : fail "no symbol at the start of $s";
+    my ($first) = @{ $names{ $lines[0]{addr} } };
     my $fn = node("$first:", node('asm'), node('comment', node('glibc-2.44 ' . ($file // $src) . " ($s)")));
     my $into = $fn;
     for my $o (@out) {
