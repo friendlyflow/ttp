@@ -544,11 +544,13 @@ for my $u (@units) {
             next;
         }
         my $name = $d->{name} // next;
-        # a function C names by another asm name (__REDIRECT: XSI's strerror_r
-        # is __xpg_strerror_r, C23's strtol __isoc23_strtol): the unit's calls
-        # are of that name, as gcc's are (not glibc's hidden __GI_ names: the
-        # function's own)
-        if ($d->{kind} eq 'FunctionDecl' && defined $d->{mangledName} && $d->{mangledName} ne $name && $d->{mangledName} !~ /^__GI_/
+        # a program's function C names by another asm name (__REDIRECT: XSI's
+        # strerror_r is __xpg_strerror_r, C23's strtol __isoc23_strtol): the
+        # unit's calls are of that name, as gcc's are (not glibc's hidden __GI_
+        # names: the function's own). Not in glibc itself, whose redirects
+        # (stpcpy to __stpcpy) name aliases of the same function, and whose C
+        # the round trip holds the ff to.
+        if (defined $program && $d->{kind} eq 'FunctionDecl' && defined $d->{mangledName} && $d->{mangledName} ne $name && $d->{mangledName} !~ /^__GI_/
             && grep { $_->{kind} eq 'AsmLabelAttr' } @{ $d->{inner} || [] }) {
             $own{$u}{$name} = $d->{mangledName};
         }
