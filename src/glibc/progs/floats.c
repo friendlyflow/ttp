@@ -9,9 +9,23 @@
    rounding, the large and the small, infinity and NaN, and the same with L
    for long double, computed at run time (soft-fp in ff, as libgcc's in gcc's
    build). Both builds must print the rest of floats.expect and exit with its
-   status, the sum of what printf returned. No headers, as in stdio.c. */
+   status, the sum of what printf returned. No headers, as in stdio.c.
+   On x86_64 glibc's printf takes a long double as the x87's and the
+   program's is binary128 (-mlong-double-128): there each long double goes
+   through strfromf128, glibc's printf_fp of binary128, and printf prints
+   its text with the same width, so the output and the sum are the same. */
 
 int printf (const char *, ...);
+#ifdef __x86_64__
+int strfromf128 (char *, unsigned long, const char *, long double);
+static char b[4][64];
+static char *
+ld (int i, const char *f, long double x)
+{
+  strfromf128 (b[i], sizeof b[i], f, x);
+  return b[i];
+}
+#endif
 
 union bits { unsigned long u; double d; };
 
@@ -35,9 +49,16 @@ main (void)
   t += printf ("%f %F %e %g %f %5.1f|\n", big * big, -big * big, big * big, -big * big, nan.d, mnan.d);
   t += printf ("%f\n", 1e20);
   t += printf ("%g %e %.17g\n", sub.d, 1.7976931348623157e308, 0.1);
+#ifdef __x86_64__
+  t += printf ("%s %s %s %s\n", ld (0, "%f", l / 7), ld (1, "%e", l / 7), ld (2, "%g", l / 7), ld (3, "%a", l / 7));
+  t += printf ("%s %s\n", ld (0, "%.30f", l / 7), ld (1, "%.25e", ltiny * ltiny));
+  t += printf ("%s %s %s %s\n", ld (0, "%g", (long double) big * big), ld (1, "%g", l * 1e10), ld (2, "%G", -l / 1e30), ld (3, "%e", (long double) 0));
+  t += printf ("[%15s] [%-15s] [+%s]\n", ld (0, "%.4f", l * 1000 / 7), ld (1, "%.3e", l), ld (2, "%.0f", l / 2));
+#else
   t += printf ("%Lf %Le %Lg %La\n", l / 7, l / 7, l / 7, l / 7);
   t += printf ("%.30Lf %.25Le\n", l / 7, ltiny * ltiny);
   t += printf ("%Lg %Lg %LG %Le\n", (long double) big * big, l * 1e10, -l / 1e30, (long double) 0);
   t += printf ("[%15.4Lf] [%-15.3Le] [%+.0Lf]\n", l * 1000 / 7, l, l / 2);
+#endif
   return t & 255;
 }
