@@ -138,6 +138,13 @@ for my $page (@top) {
             else { $var{$name} = { node => $d, from => 1, weak => 1 } }
             next;
         }
+        # a constructor or destructor (and its priority): C's attribute
+        if ($w eq 'constructor' || $w eq 'destructor') {
+            my @p = kids($k[0]);
+            $fn{$name} = { kind => 'c', node => $d, from => 1, ctor => $w . (@p ? '(' . c($p[0]) . ')' : '') };
+            $glibcpage{$name} = 1 if $glibc;
+            next;
+        }
         if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1, glibc => $glibc }; next }
         # a global of a named section; its bounds __start_ and __stop_ of
         # the name are arrays of its type, as C declares them
@@ -880,7 +887,7 @@ sub proto {
     cdecl($s->{ret}, cid($name) . "($ps)");
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} ne 'alias' && !clang_builtin($_) } @order) {
-    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ';';
+    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ';';
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} eq 'alias' } @order) {
     my $t = $fn{$f}{target};
