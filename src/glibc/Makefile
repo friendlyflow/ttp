@@ -343,10 +343,6 @@ endif
 # (elf/dl-debug-symbols.S only reserves _r_debug_extended, c2ff --zero's,
 # with _r_debug an alias of it: left out, as on riscv64)
 ASMS_skip := elf/dl-debug-symbols
-# (x86_64: strcspn's and strspn's SSE4.2 C, of gcc's intrinsics (__m128i,
-# _mm_cmpistri), which clang cannot read from gcc's headers and c2ff has
-# no vector types for yet: left out, their resolvers' other choices taken)
-OBJS_skip_x86_64 := string/strcspn-sse4 string/strspn-sse4
 objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip) $(OBJS_skip_$(GTARGET)),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
 
 .PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
@@ -413,18 +409,26 @@ CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mod
 	-e 's/\([0-9]\.\?\)[fF]128\b/\1L   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
 	-e 's/_Float32x:/_Bool    :/g' -e 's/_Float64x:/unsigned :/g'
 CLANGFIX := $(CLANGFIX_$(GTARGET))
+# (x86_64's units of gcc's SSE4.2 intrinsics, <nmmintrin.h>: clang reads
+# them with -msse4.2, gcc's inline functions they do not reach left out of
+# its copy, clangvec.pl)
+CLANGVEC_x86_64 := string/strcspn-sse4 string/strspn-sse4
+CLANGVEC := $(CLANGVEC_$(GTARGET))
+vecfix = $(if $(filter $(1),$(CLANGVEC)),| perl clangvec.pl)
+vecflag = $(if $(filter $(1),$(CLANGVEC)),-msse4.2)
 
 $(I)/%.json: $(I)/%.i clang-prelude.h
-	$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i)
+	$(if $(CLANGFIX),$(CLANGFIX) $< $(call vecfix,$*) > $(I)/$*.clang.i)
 	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
-	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
+	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(call vecflag,$*) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
 # its asm parts name from elsewhere: setjmp's tail __sigjmp_save), then
 # s2ff's of its asm parts, then the builtins written by hand and libatomic's
 # functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
 # atomics.ff.txt). The asm parts share one page, glibc asm: the trees a
-# program reads have 255 pages in all (c2ff makes a page per directory).
+# program reads have 255 pages in all (c2ff makes a page per directory);
+# past 255 items it is in layers (LAYERS, below: x86_64's string has 283).
 # The tree's license (license.ff.txt) is at its root, and each page first
 # has the license of each file it is made of, its header (c2ff, s2ff
 # --header; ../compiler/gen/Header.pm).
@@ -436,13 +440,14 @@ $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)
 	cp license.ff.txt $$(FF)/$(1).ff.txt
 	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
 	    -- $$(ROOTS_$(1)) $$(if $$(GLIBC_START),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
-	$$(if $$(ASMS_all_$(1)),echo 'glibc asm:' >> $$(FF)/$(1).ff.txt)
-	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).ff.txt)
+	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
+	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
 	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64 x86_64,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
-	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).ff.txt; \
+	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).asm.page.txt; \
 	done
+	$$(if $$(ASMS_all_$(1)),$$(LAYERS) $$(FF)/$(1).asm.page.txt >> $$(FF)/$(1).ff.txt)
 	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) atomics.ff.txt >> $$(FF)/$(1).ff.txt
 	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
 endef
@@ -593,8 +598,10 @@ $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl ../compiler/gen/Words.pm
 	$(RUN) -t 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
 
+# (x86_64's with SSE4.2: the builtins of gcc's intrinsics that strcspn-sse4's C calls)
+RTFLAGS_x86_64 := -msse4.2
 $(FF)/%.rt.json: $(FF)/%.rt.c
-	$(RUN) -t 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
+	$(RUN) -t 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
 
 define roundtrip
@@ -656,7 +663,7 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 # make -jN all-checks: what the ports branch is checked with on GTARGET, the
 # checks that do not need each other at once, each heavy step in a slot of
 # its own (RUN). On riscv64 and aarch64 each milestone's check and round
-# trip (aarch64's milestones: LINKED), on x86_64 ldouble's check; on each,
+# trip (aarch64's and x86_64's milestones: LINKED), on x86_64 also ldouble's check; on each,
 # the generic program's check and round trip. What they all read is made
 # first, once (units-ready): the ASTs and asm parts of the milestones'
 # objects, the asm check, and c2ff's pass of each unit, which each
@@ -667,9 +674,11 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 # comes after the asm parts it reads.)
 CHECK_MS_riscv64 := $(MILESTONES)
 CHECK_MS_aarch64 := $(LINKED_aarch64)
+CHECK_MS_x86_64 := $(LINKED_x86_64) ldouble
 CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
 ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
 ALLCHECKS_aarch64 := $(LINKED_aarch64:%=%-check) $(LINKED_aarch64:%=%-roundtrip)
+ALLCHECKS_x86_64 := $(LINKED_x86_64:%=%-check) $(LINKED_x86_64:%=%-roundtrip) ldouble-check
 ALLCHECKS := $(or $(ALLCHECKS_$(GTARGET)),ldouble-check) generic-check generic-roundtrip
 CHECK_OBJS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
 CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
@@ -714,8 +723,8 @@ CLANG_AST = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	-fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 
 $(I)/%.c2ff: $(I)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
-	@$(if $(CLANGFIX),$(CLANGFIX) $< > $(I)/$*.clang.i;) \
-	sh unit.sh $(GTARGET) $< $(I)/$*.json $(if $(CLANGFIX),$(I)/$*.clang.i,$<) $(CLANG_AST)
+	@$(if $(CLANGFIX),$(CLANGFIX) $< $(call vecfix,$*) > $(I)/$*.clang.i;) \
+	sh unit.sh $(GTARGET) $< $(I)/$*.json $(if $(CLANGFIX),$(I)/$*.clang.i,$<) $(CLANG_AST) $(call vecflag,$*)
 	@touch $@
 
 all-units: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)

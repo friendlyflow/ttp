@@ -279,7 +279,8 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # named * pointer, cmisplaced, with compile time on a while, cuntyped, a global declaration
 # without a type, citems, several items on a long, cchartext, text in a
 # char, ctypeout, type outside compile time, and cbelow, a local used
-# above its declaration.
+# above its declaration; cvecx64, x86_64's vector test, stops riscv64's
+# ttpc (vectors are x86_64's alone).
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
 	grep -qx "asm at compile time" $(P)/ctasm.lst
@@ -292,6 +293,8 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -q "a reserved word: \* pointer" $(P)/creserved.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
 	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
+	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cvecx64.ff $(P)/cvecx64.celf 2> $(P)/cvecx64.err
+	grep -q "vector, of the SysV ABI of x86_64, on another target: vector$$" $(P)/cvecx64.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cuntyped.ff $(P)/cuntyped.celf 2> $(P)/cuntyped.err
 	grep -q "needs a type: n$$" $(P)/cuntyped.err
 	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/citems.ff $(P)/citems.celf 2> $(P)/citems.err
@@ -343,7 +346,7 @@ CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse c
 CSKIP_arm := cgnu
 # C tests of one target only, beside the portable ones
 CONLY_aarch64 := ctlsa64
-CONLY_x86_64 := ctlsx64 cfsx64
+CONLY_x86_64 := ctlsx64 cfsx64 cvecx64
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per
 # page), which it reads lazily: never.ff, which it must not read, is no tree.

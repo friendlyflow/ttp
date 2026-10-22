@@ -126,6 +126,11 @@ ff, the language ttpc compiles
       array T n: n elements of T, the array node holding the element's type run and the count: (array / int / 3) is C's int [3]; n a number or a constant; no count is C's T [], no elements of its own
       the array node's * pointer after it is a pointer to the array: (array / int / 4) / * pointer is C's int (*)[4]; (array / char / * pointer / 5) is C's char *[5]; arrays of arrays nest, (array / (array / int / 4) / 3) is C's int [3][4]
       in a function n may be any value, worked out at run time (C's variable-length array): its n elements are on the stack until the function returns; alloca n (C on the shared page) likewise gives n bytes there
+      vector T n: a vector (gcc's vector_size, x86_64's SSE: 16 bytes), the vector node holding the element's type run and the count of elements, as array; another target stops at it
+      (vector / char / 16) is C's char __attribute__ ((vector_size (16))), gcc's __v16qi; (vector / long long / 2) is __m128i
+      a vector is a value in memory, as a struct: = copies it, a parameter or a result of one goes in one xmm register (the SysV ABI's, as a long double), its alignment its size
+      | ^ & == != of two vectors of one type are element by element (== gives an element all ones where they are equal, else 0; != the other way; the elements 1, 2 or 4 bytes); a cast to another vector type keeps the bits
+      the vector node as a value, its count's items after it, is a vector literal, as an array's temporary: (vector / char / 16), then 16 items, is C's (__v16qi){ ... }
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
@@ -528,7 +533,7 @@ ff, the language ttpc compiles
           ret
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
-      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, struct, enum, function, sizeof, alignof, union
+      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, vector, struct, enum, function, sizeof, alignof, union
       and: ..., va_start, va_arg, va_end, va_copy, thread local, alias, ifunc, asm, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error

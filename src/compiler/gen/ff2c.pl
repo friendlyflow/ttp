@@ -169,11 +169,11 @@ sub is_function {
 # ---- types ------------------------------------------------------------------
 # A type is [scalar => 'int'], [ptr => T or undef (void)], [arr => T, count
 # node], [rec => name], [enum => name], [fn => name], [fs => T] (x86_64's
-# __seg_fs: T in fs).
+# __seg_fs: T in fs), [vec => T, count node] (a vector, gcc's vector_size).
 
 sub is_typeword {
     my ($w) = @_;
-    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $w eq 'fs' || $rec{$w} || $enum{$w} || $fntype{$w};
+    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $w eq 'vector' || $w eq 'fs' || $rec{$w} || $enum{$w} || $fntype{$w};
 }
 
 # The type run at $$i of a list of nodes.
@@ -196,6 +196,11 @@ sub ptype {
         my $t = ptype($l, $i);
         my $count = $l->[$$i++] // fail('an array without its count');
         return [arr => $t, $count];
+    }
+    if ($w eq 'vector') {
+        my $t = ptype($l, $i);
+        my $count = $l->[$$i++] // fail('a vector without its count');
+        return [vec => $t, $count];
     }
     fail("not a type: $w", $n);
 }
@@ -223,6 +228,11 @@ sub cdecl {
     if ($k eq 'arr') {
         my $n = $count // count_text($t->[2]);
         return cdecl($t->[1], "$name\[$n\]");
+    }
+    # (a vector as clang spells it: __attribute__((__vector_size__(16 * sizeof(char)))) char)
+    if ($k eq 'vec') {
+        my $e = ctype($t->[1]);
+        return "__attribute__((__vector_size__(" . count_text($t->[2]) . " * sizeof($e)))) $e $name" =~ s/\s+$//r;
     }
     die;
 }
@@ -557,8 +567,8 @@ sub operand {
         return (($w eq 'sizeof' ? 'sizeof' : '_Alignof') . '(' . ctype($t) . ')', [scalar => 'u64']);
     }
     # an array compound literal: array / its element's type / its count / items
-    if ($w eq 'array') {
-        my @l = ({ content => 'array', children => [] }, @k);
+    if ($w eq 'array' || $w eq 'vector') {
+        my @l = ({ content => $w, children => [] }, @k);
         my $i = 0;
         my $t = ptype(\@l, \$i);
         return ('((' . ctype($t) . ')' . init_list($t, [@l[$i .. $#l]]) . ')', $t);
@@ -590,6 +600,12 @@ sub operand {
         return ("((" . ctype($t) . ")" . init_list($t, [@k]) . ")", $t);
     }
     # a call
+    # (x86_64's pcmpistri of an immediate, c2ff's of gcc's _mm_cmpistri,
+    # _mm_cmpistrc, _mm_cmpistrz: those again, the immediate last)
+    if ($w =~ /^__builtin_ia32_pcmpistr(i|ic|iz)128 (0x[0-9a-f]+)$/) {
+        my $f = '_mm_cmpistr' . { i => 'i', ic => 'c', iz => 'z' }->{$1};
+        return ("$f(" . join(', ', (map { expr_item($_) } items(@k)), $2) . ')', [scalar => 'int']);
+    }
     if (!local_type($w) && !gtype($w) && (sig($w) || $w =~ /^__builtin_/)) {
         my $s = sig($w);
         return (callee($w) . '(' . join(', ', map { expr_item($_) } items(@k)) . ')', $s ? $s->{ret} : undef);
@@ -653,7 +669,7 @@ sub init_list {
             push @parts, '{' . join(', ', map { init_item($fl[$k]{type}[1], $_) } @items[$k .. $#items]) . '}';
             last;
         }
-        my $et = $t->[0] eq 'arr' ? $t->[1] : $fl[$k] ? $fl[$k]{type} : undef;
+        my $et = $t->[0] =~ /^(?:arr|vec)$/ ? $t->[1] : $fl[$k] ? $fl[$k]{type} : undef;
         push @parts, init_item($et, $items[$k]);
     }
     # a union set through a member not its first: ttpc sets by place, zeros first
@@ -814,6 +830,8 @@ push @c, '/* made by ff2c.pl from ' . ($in =~ s{.*/}{}r) . ' */';
 push @c, map { ("/* ff2c: the header of $_->[0] */", Header::header_text(@{ $_->[1] })) } @headers;
 push @c, '/* ff2c: the end of the headers */' if @headers;
 push @c, 'long __ff_syscall(long, ...);', 'extern void *tp;';
+# (gcc's SSE4.2 compares of an immediate, <smmintrin.h>'s, whose calls c2ff makes builtins)
+push @c, map { "int _mm_cmpistr$_(__attribute__((__vector_size__(2 * sizeof(long long)))) long long, __attribute__((__vector_size__(2 * sizeof(long long)))) long long, const int);" } qw(i c z);
 # the records first as names, so that each may point at any
 push @c, map { "$rec{$_}{kind} " . cid($_) . ';' } grep { $rec{$_} } @order;
 # the enums: a constant's value where it has one
@@ -953,6 +971,8 @@ open my $h, '>', $out or die "ff2c: $out: $!\n";
 print $h join("\n", @c), "\n";
 close $h;
 push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { $var{$_} || $fn{$_} } @order;
+# (and the enum constants c2ff named with their unit: C's name for them)
+push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { /^\S+ \S+\/\S+$/ } sort keys %econst;
 push @names, map { join("\t", 'asm', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'asm' } @order;
 # (and the aliases of asm functions, which C calls as they are: aarch64's
 # stpcpy of __stpcpy)

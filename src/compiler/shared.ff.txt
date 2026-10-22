@@ -137,6 +137,13 @@ array:
   element
   count
 comment
+  vector element count: C, a type of x86_64 (gcc's vector_size): count elements of the type element, as array's children, 16 bytes (vector / char / 16 is __v16qi, vector / long long / 2 __m128i).
+  A vector is in memory as a struct; by the SysV ABI it goes in one xmm register.
+  | ^ & == != of two vectors of one type work element by element (== gives all ones where equal); a cast between vector types keeps the bits; as a value, the count's items after it are a vector literal (C's (__v16qi){ ... }).
+vector:
+  element
+  count
+comment
   struct fields: C, a type laid out as C does, its fields name: and a type.
 struct:
   fields
