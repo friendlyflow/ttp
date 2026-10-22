@@ -46,7 +46,7 @@ SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
-TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(wildcard tools/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
+TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(wildcard tools/*.ff) $(wildcard isa/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
 	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff language.ff
 P := $(BUILD)/progs
@@ -604,24 +604,34 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # hash), the C words of before (tools/words.ff: Words.pm's oldwords) and
 # the host trees (tools/mk.ff: a map of names, FF.pm's frozen, kids and
 # holder) are library pages; each tool is a program with them: fftext as
-# gen/fftext.pl, sha256sum as coreutils', unlicense, trim, frozen, mkhost
-# and mkwhole as gen/unlicense.pl, trim.pl, frozen.pl, mkhost.pl and
-# mkwhole.pl. $(TL)/<target>/<tool> is one for
+# gen/fftext.pl, sha256sum as coreutils', unlicense, trim, frozen, mkhost,
+# mkwhole and mkff as gen/unlicense.pl, trim.pl, frozen.pl, mkhost.pl,
+# mkwhole.pl and mkff.pl. $(TL)/<target>/<tool> is one for
 # that target, TOOLT the target this machine runs natively (riscv64 under
 # qemu on another). The Perl versions stay, a second implementation:
 # tools-check runs sha256sum on NIST's vectors (and Digest::SHA on more),
 # fftext and fftext.pl both ways on every tree, unlicense and unlicense.pl on
 # every tree (output, messages, status), trim and frozen as the bootstrap
-# uses them, mkhost and mkwhole on every tree of the host chains, for each
-# target here.
+# uses them, mkhost and mkwhole on every tree of the host chains, mkff on
+# the shared page and a tree of pages, for each target here.
 # Which link compiles each: stage2 all of them ($(TL)); ttpc3 unlicense too,
 # from tools/old/ ($(BOOT)/unlicense, $(BUILD)/<host>/unlicense), for the
 # trees of the chain after it, and a host's ttpc3 mkhost ($(BUILD)/<host>/
 # mkhost), for its stage1's ttpc. trim, frozen and mkwhole, and mkhost for
 # ttpc2 and ttpc3, make only the committed copies of the links before
 # ttpc3 (boot/), so stage2's are enough.
+# mkff (tools/mkff.ff, as gen/mkff.pl) makes the shared page: shared.ff.txt,
+# a section per target, macros/<target>.ff.txt. A target's forms are an ff
+# page (isa/<target>.ff, as isa/<target>.pl) that tools/isa.ff (gen/ISA.pm's
+# builder) makes the section's groups of; MKFFLIB are those pages. Of a
+# target not yet in ff (x86_64, aarch64, arm for now) mkff takes the section
+# of the shared page it replaces (./shared.ff) as it is, so `make refresh`
+# stays mkff.pl until all four are; tools-check runs both and compares. mkff
+# runs after stage2 exists (it builds it): the chain reads the committed
+# shared.ff and never makes it.
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole
+MKFFLIB := tools/isa.ff isa/riscv64.ff
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -633,6 +643,11 @@ define tooltarget
 $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
 	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/mkff: tools/mkff.ff $(TOOLLIB) $(MKFFLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
 tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
@@ -679,6 +694,11 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
 	    test $$$$s = $$$$f; cmp $$$$d/pl.err $$$$d/ff.err; \
 	done
 	@echo "tools-check-$(1): mkhost and mkwhole agree with mkhost.pl and mkwhole.pl on the trees of the host chains"
+	@set -e; perl gen/mkff.pl > $(TL)/$(1).shared.pl; \
+	$(RUN_$(1)) $(TL)/$(1)/mkff | cmp - $(TL)/$(1).shared.pl; \
+	perl gen/mkff.pl gen/license.ff.txt macros/riscv64.ff.txt > $(TL)/$(1).shared.pl; \
+	$(RUN_$(1)) $(TL)/$(1)/mkff gen/license.ff.txt macros/riscv64.ff.txt | cmp - $(TL)/$(1).shared.pl
+	@echo "tools-check-$(1): mkff and mkff.pl make the same shared page (riscv64's section from isa/riscv64.ff), and the same tree of pages"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
@@ -770,7 +790,8 @@ copies-check: $(CT)/unlicense $(CT)/trim $(CT)/frozen $(CT)/mkhost $(CT)/mkwhole
 	done
 
 # Make shared.ff again from mkff.pl, shared.ff.txt, isa/ and macros/, after
-# changing any of them. The whole trees keep the shared pages they have.
+# changing any of them (mkff.pl until every target's forms are in ff, see
+# MKFFLIB; then tools/mkff.ff, and mkff.pl in tools-check). The whole trees keep the shared pages they have.
 refresh:
 	perl gen/mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 	perl gen/mkgnuff.pl > $(X86GNU).tmp && mv $(X86GNU).tmp $(X86GNU)
