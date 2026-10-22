@@ -30,7 +30,8 @@
 #                   aligned has align / n first after asm (ttpc places it
 #                   there, the user's choice A), the file's first one the
 #                   section's alignment (where GNU's section starts); the
-#                   padding at the end of the section is left out
+#                   padding at the end of the section is left out; with a
+#                   fill byte (.p2align 3, 5) that byte, as bytes
 #   prefixes        rep, lock, data16, cs ...: a call of their own before
 #                   the instruction, also a segment of a memory operand
 #                   (%fs:16 is fs, then the form), and a memory operand
@@ -57,9 +58,14 @@
 #                   start.S's __data_start) is c2ff --zero's global, its
 #                   other labels aliases where --zero names it; read-only
 #                   data (.rodata, rodata.cst32 ...) is carried by each
-#                   function naming it, a jump table's .int L1 - L2 a word
-#                   of sub / L2 / L1 / a0 (the user's choice B); any other
-#                   bytes stop the translation
+#                   function naming it, from that label on to the end of
+#                   its section, as GNU laid it out (numbers, lists of
+#                   them, .double, .float, strings), a jump table's .int
+#                   L1 - L2 a word of sub / L2 / L1 / a0 (the user's
+#                   choice B); any other bytes stop the translation
+#   entries         a function that jumps into the blocks of the next one,
+#                   or the next into its (libm's __logl_finite), takes the
+#                   next in as an entry
 #
 # s2ff.pl's --size gives the bytes of the instructions, --align the
 # alignment of the first function (where ttpc places it).
@@ -492,6 +498,10 @@ my (@made, $n, $pos, @fns, $fn, $block, $other, @pending, %datadef, $ends, %got,
 # globals
 my (%MADE, %CODE, $code, %zeroed, %weak, @carried, %weakgot);
 my (%rodata, $roblob, %ro, @carry, %roset);    # read-only data: a label's bytes, the labels a function names
+# (and the runs of it: the labels of each section, in order,
+# each [its labels, its bytes, the alignment before it]; a label's run)
+my (@runs, %runof, %runidx, $roalign);
+my %into;     # a function merge_runons made an entry of another: that one
 sub take {
     my $m = $made[$n++] or fail "GNU as made fewer instructions than the source has";
     fail sprintf("GNU's next instruction is at 0x%x, the source's at 0x%x", $m->{addr}, $pos) unless $m->{addr} == $pos;
@@ -537,13 +547,39 @@ sub code_done {
     }
     for my $sec (sort keys %MADE) { fail "GNU as made code in $sec, the source has none" unless $CODE{$sec} }
 }
-# the nops GNU as put in, up to the next multiple of a (if at most max)
+# the nops GNU as put in, up to the next multiple of a (if at most max);
+# with a fill byte (.p2align 3, 5: ____longjmp_chk's), that byte, as
+# bytes, which objdump read as an instruction that may take the first
+# bytes of the next one too (05 05 05 05 4c: an add): those go before the
+# instruction after it
 sub pad {
-    my ($a, $max) = @_;
+    my ($a, $max, $fill) = @_;
     return unless $a > 1;
     $maxalign = $a if $a > ($maxalign // 1);
     my $to = ($pos + $a - 1) & ~($a - 1);
     return if defined $max && $to - $pos > $max;
+    if (defined $fill) {
+        my $part;
+        while ($pos < $to) {
+            fail "padding outside a function" unless $fn;
+            my $m = $made[$n] or fail "GNU as made no padding here";
+            fail sprintf("GNU's padding is not %d at 0x%x", $fill, $pos) unless $m->{addr} == $pos && $m->{bytes}[0] == $fill;
+            push @{ into() }, node('byte', node($fill));
+            shift @{ $m->{bytes} };
+            $m->{addr}++;
+            $pos++;
+            $part = @{ $m->{bytes} };
+            $n++ unless $part;
+        }
+        my $m = $made[$n];
+        if ($part && $n + 1 < @made) {
+            my $next = splice @made, $n + 1, 1;
+            unshift @{ $next->{bytes} }, @{ $m->{bytes} };
+            $next->{addr} = $pos;
+            $made[$n] = $next;
+        }
+        return;
+    }
     while ($pos < $to) {
         fail "padding outside a function" unless $fn;
         push @{ into() }, padnode(take());
@@ -596,7 +632,8 @@ sub run {
     %CODE = ();
     undef $code;
     ($n, $pos, $ends, $maxalign, $fn, $block, $other, $align) = (0, 0, 1);
-    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset, %weak, @carried, %weakgot) = ();
+    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset, %weak, @carried, %weakgot, @runs, %runof, %runidx, %into) = ();
+    undef $roalign;
     %zeroed = map { $_ => 1 } @{ $opt{zero} // [] };
     undef $roblob;
     code_to('.text');
@@ -628,13 +665,6 @@ sub run {
         push @fns, node("$w:", node('weak'), node('function'), node('void'));
     }
     push @fns, node(".Lgot $_:", node('void'), node('* pointer'), node($_), node('& address')) for sort keys %weakgot;
-    # each function carries the read-only data it names, after its code
-    for my $c (@carry) {
-        my ($f, $labels) = @$c;
-        rodata_set($_) for @$labels;
-        my @l = grep { $rodata{$_} } @$labels or next;
-        push @{ $f->{children} }, map { (node('align', node(16)), node("$_:", @{ $rodata{$_} })) } @l;
-    }
     fail "a prefix with no instruction after it: @prefix" if @prefix;
     # the first function starts where GNU's section does, at its alignment
     my ($first) = grep { @{ $_->{children} } && $_->{children}[0]{content} eq 'asm' } @fns;
@@ -646,8 +676,47 @@ sub run {
     return $CODE{'.text'}{pos} if $mode eq 'size';
     return $maxalign // 1 if $mode eq 'align';
     merge_runons();
+    carry_rodata();
     \@fns;
 }
+# Each function carries the read-only data it names, after its code (and
+# after the functions merge_runons made entries of it: the labels of all
+# of them, once): of a run, from the first label it names to the run's
+# end, as GNU laid it out (libm's inf_zero, which the code indexes into
+# the zero after it), at the run's alignment; a label of .set its own bytes
+sub carry_rodata {
+    my (%labels, @order);
+    for my $c (@carry) {
+        my ($f, $l) = @$c;
+        $f = $into{$f} while $into{$f};
+        push @order, $f unless $labels{$f};
+        $labels{$f}{$_} = 1 for @$l;
+    }
+    for my $f (@order) {
+        my @labels = sort keys %{ $labels{$f} };
+        rodata_set($_) for @labels;
+        my @l = grep { $rodata{$_} } @labels or next;
+        my %first;
+        for my $x (grep { defined $runof{$_} } @l) {
+            my $r = $runs[ $runof{$x} ];
+            my ($i) = grep { grep { $_ eq $x } @{ $r->[$_][0] } } 0 .. $#$r;
+            $first{ $runof{$x} } = $i if !defined $first{ $runof{$x} } || $i < $first{ $runof{$x} };
+        }
+        for my $k (sort { $a <=> $b } keys %first) {
+            my $r = $runs[$k];
+            my $al = 16;
+            for (@$r[$first{$k} .. $#$r]) { $al = $_->[2] if ($_->[2] // 0) > $al }
+            push @{ $f->{children} }, node('align', node($al));
+            for my $j ($first{$k} .. $#$r) {
+                my ($names, $bytes, $a) = @{ $r->[$j] };
+                push @{ $f->{children} }, node('align', node($a)) if $j > $first{$k} && ($a // 1) > 1;
+                push @{ $f->{children} }, (map { node("$_:") } @$names[0 .. $#$names - 1]), node("$names->[-1]:", @$bytes);
+            }
+        }
+        push @{ $f->{children} }, map { (node('align', node(16)), node("$_:", @{ $rodata{$_} })) } grep { !defined $runof{$_} } @l;
+    }
+}
+
 
 # the lines of the source, GNU's macros expanded: .macro name args / .endm
 # (\arg and \() in its lines), .rept n / .endr, .if expr / .else / .endif
@@ -736,7 +805,16 @@ sub section {
 # list for all of them), or after the last ones
 sub rodata_add {
     my ($d) = @_;
-    if (@pending) { $roblob = []; $rodata{$_} = $roblob for @pending; @pending = () }
+    if (@pending) {
+        $roblob = [];
+        $rodata{$_} = $roblob for @pending;
+        # (a section's data is one run, however often it is entered)
+        my $k = $runidx{$other} //= do { push @runs, []; $#runs };
+        push @{ $runs[$k] }, [[@pending], $roblob, $roalign];
+        $runof{$_} = $k for @pending;
+        @pending = ();
+        undef $roalign;
+    }
     fail "read-only bytes with no label" unless $roblob;
     push @$roblob, $d;
 }
@@ -771,7 +849,17 @@ sub walk_stmt {
         return;
     }
     if (defined $other) {
+        # (an alignment before a label of read-only data: kept in its run)
+        if ($other =~ /^\.?rodata/ && $st =~ /^\.(p2align|align|balign)\s+([^,]+)/) {
+            my ($d, $v) = ($1, $2);
+            my $x = num($v) // fail "$st";
+            my $a = $d eq 'p2align' ? 1 << $x : $x;
+            $roalign = $a if $a > ($roalign // 1);
+            return;
+        }
         return if $st =~ /^\.(globl|global|weak|type|size|hidden|protected|align|p2align|balign|cfi_\w+|ident)\b/;
+        # (a label and its bytes on one line: libm's one: .double 1.0)
+        if ($st =~ /^([.\w]+):\s*(\S.*)$/) { push @pending, $1; undef $roblob; return walk_stmt($2, $file, $line) }
         if ($st =~ /^([.\w]+):$/) { push @pending, $1; undef $roblob; return }
         if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)) if $datadef{$2}; return }
         # read-only data (gcc's constants, a string): its label's bytes, as
@@ -793,6 +881,19 @@ sub walk_stmt {
                 $t =~ s/\\(?:([0-7]{1,3})|x([0-9a-fA-F]{1,2})|(.))/defined $1 ? chr oct $1 : defined $2 ? chr hex $2 : $e{$3} \/\/ fail "an escape \\$3"/ge;
                 $t .= "\0" unless $k eq 'ascii';
                 rodata_add(node('ascii', node($t)));
+                return;
+            }
+            # (a double or a float: its bits, as GNU as rounds it)
+            if ($st =~ /^\.(double|float)\s+([-+]?(?:\d+\.?\d*(?:[eE][-+]?\d+)?|\.\d+(?:[eE][-+]?\d+)?))$/) {
+                my ($k, $v) = ($1, $2);
+                return rodata_add(node('dword', node(unpack('Q<', pack('d<', $v))))) if $k eq 'double';
+                return rodata_add(node('word', node(unpack('L<', pack('f<', $v)))));
+            }
+            # (a list: .byte 0, 0, 0x80 ..., each its own)
+            if ($st =~ /^\.(byte|value|short|2byte|word|long|int|4byte|quad|8byte)\s+(-?(?:0x[0-9a-fA-F]+|\d+))(?:\s*,\s*-?(?:0x[0-9a-fA-F]+|\d+))+$/) {
+                my $k = $1;
+                (my $list = $st) =~ s/^\.\w+\s+//;
+                walk_stmt(".$k $_", $file, $line) for split /\s*,\s*/, $list;
                 return;
             }
             if ($st =~ /^\.(byte|value|short|2byte|word|long|int|4byte|quad|8byte|zero|skip)\s+(-?(?:0x[0-9a-fA-F]+|\d+))$/) {
@@ -853,7 +954,7 @@ sub walk_stmt {
             my @a = split_ops($rest);
             my $x = num($a[0]) // fail "$op of $a[0]";
             my $a = $op eq '.p2align' ? 1 << $x : $x;
-            pad($a, defined $a[2] && $a[2] ne '' ? num($a[2]) : undef);
+            pad($a, defined $a[2] && $a[2] ne '' ? num($a[2]) : undef, defined $a[1] && $a[1] ne '' ? num($a[1]) : undef);
             $align = $a;     # (before a function's label: its alignment)
             return;
         }
@@ -905,11 +1006,15 @@ sub merge_runons {
         next unless defined $j;
         my $g = $fns[$j];
         my %in_g = map { $_->{content} =~ s/:$//r => 1 } grep { $_->{content} =~ /^\.L.*:$/ } @{ $g->{children} };
-        next unless grep { $in_g{$_} } $targets->($f);
+        # (or the next jumps back into this one's: libm's __logl_finite into
+        # __ieee754_logl's 2:)
+        my %in_f = map { $_->{content} =~ s/:$//r => 1 } grep { $_->{content} =~ /^\.L.*:$/ } @{ $f->{children} };
+        next unless grep({ $in_g{$_} } $targets->($f)) || grep({ $in_f{$_} } $targets->($g));
         my (undef, @rest) = grep { $_->{content} ne 'align' } @{ $g->{children} };
         my (@own, @later);
         for (@rest) { if (@later || ($_->{content} =~ /:$/ && $_ != $rest[0])) { push @later, $_ } else { push @own, $_ } }
         push @{ $f->{children} }, node($g->{content}, node('asm'), @own), @later;
+        $into{$g} = $f;
         splice @fns, $j, 1;
         $i = -1;     # (again from the first: it may jump into what g took in)
     }
