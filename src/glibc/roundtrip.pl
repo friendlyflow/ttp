@@ -169,6 +169,9 @@ sub E {
         # (an int literal of a 32-bit type, that int or its unsigned, is its
         # value: aarch64's wchar_t is unsigned, L'\n' 10 either way)
         return E($c) if $ck eq 'IntegralCast' && tcls($n) =~ /^[iu]32$/ && small_literal($c);
+        # (so is __builtin_types_compatible_p's, the int c2ff makes of it:
+        # strfrom-skeleton's info.is_binary128, an unsigned bitfield)
+        return E($c) if $ck eq 'IntegralCast' && tcls($n) =~ /^[iu]32$/ && (unparen($c)->{kind} // '') eq 'TypeTraitExpr';
         # (0 is 0 in any integer type: ?:'s arms, one a long of an asm function)
         return '(int 0 i32)' if $ck eq 'IntegralCast' && small_literal($c) && unparen($c)->{value} == 0;
         # (a call of an asm function, whose value ff has as a long, made void)

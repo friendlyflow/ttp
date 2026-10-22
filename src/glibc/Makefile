@@ -263,10 +263,12 @@ WEAKS_stdio := __init_array_start __init_array_end __preinit_array_start __prein
 
 # M4, floats: printf of double and long double (printf_fp, printf_fphex),
 # which the stdio reach has already, and the soft-fp the program calls for
-# its own long double
+# its own long double (on x86_64 also strfromf128, glibc's printf_fp of
+# binary128: progs/floats.c)
 OBJS_floats := $(OBJS_stdio)
 ASMS_floats := $(ASMS_stdio)
-ROOTS_floats := $(ROOTS_stdio) $(ROOTS_ldouble)
+ROOTS_floats_x86_64 := strfromf128
+ROOTS_floats := $(ROOTS_stdio) $(ROOTS_ldouble) $(ROOTS_floats_$(GTARGET))
 ZEROS_floats := $(ZEROS_stdio)
 WEAKS_floats := $(WEAKS_stdio)
 
@@ -308,8 +310,8 @@ MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 # has no startup in ff yet: its programs have a _start of their own (c2ff
 # --start).
 GLIBC_START := $(filter riscv64 aarch64 x86_64,$(GTARGET))
-# (on x86_64 only for its milestones of LINKED_x86_64 so far: ldouble's
-# program has a _start of its own there, its objects riscv64's list's)
+# (on x86_64 for its milestones of LINKED_x86_64, all but gnuc, which is
+# not checked there)
 startms = $(if $(GLIBC_START),$(if $(filter x86_64,$(GTARGET)),$(filter $(1),$(LINKED_x86_64)),1))
 OBJS_start := csu/static-reloc csu/init csu/check_fds elf/dl-early_allocate nptl/nptl_deallocate_tsd nptl/nptl_nthreads \
 	elf/dl-tls_init_tp stdlib/setenv elf/dl-execstack-tunable nptl/pthread_keys
@@ -334,7 +336,7 @@ UNITDEP_x86_64 := c2ff
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
 LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
-LINKED_x86_64 := string
+LINKED_x86_64 := string stdlib ldouble malloc stdio floats args
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -666,7 +668,7 @@ generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 # make -jN all-checks: what the ports branch is checked with on GTARGET, the
 # checks that do not need each other at once, each heavy step in a slot of
 # its own (RUN). On riscv64 and aarch64 each milestone's check and round
-# trip (aarch64's and x86_64's milestones: LINKED), on x86_64 also ldouble's check; on each,
+# trip (aarch64's and x86_64's milestones: LINKED); on each,
 # the generic program's check and round trip. What they all read is made
 # first, once (units-ready): the ASTs and asm parts of the milestones'
 # objects, the asm check, and c2ff's pass of each unit, which each
@@ -681,7 +683,7 @@ CHECK_MS_x86_64 := $(LINKED_x86_64)
 CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
 ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
 ALLCHECKS_aarch64 := $(LINKED_aarch64:%=%-check) $(LINKED_aarch64:%=%-roundtrip)
-ALLCHECKS_x86_64 := $(LINKED_x86_64:%=%-check) $(LINKED_x86_64:%=%-roundtrip) ldouble-check
+ALLCHECKS_x86_64 := $(LINKED_x86_64:%=%-check) $(LINKED_x86_64:%=%-roundtrip)
 ALLCHECKS := $(or $(ALLCHECKS_$(GTARGET)),ldouble-check) generic-check generic-roundtrip
 CHECK_OBJS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
 CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
