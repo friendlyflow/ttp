@@ -421,6 +421,10 @@ sub def_text {
 }
 sub own_name {
     my ($map, $name, $d, $u) = @_;
+    # (a program's static whose name its tree (--index) defines: a name of
+    # the program's own, as C keeps it apart, so that neither takes the
+    # other's; tst-strerror_l-strings' loc, strptime_l's enum constant loc)
+    return $own{$u}{$name} = "$name " . unit_name($u) if %treedefs && ($d->{storageClass} // '') eq 'static' && $treedefs{ ffname($name) };
     my $old = $map->{$name} or return $name;
     return $name if $old->[1] == $u || ($d->{storageClass} // '') ne 'static' || ($old->[0]{storageClass} // '') ne 'static';
     return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]);
@@ -488,6 +492,14 @@ for my $u (@units) {
             next;
         }
         my $name = $d->{name} // next;
+        # a function C names by another asm name (__REDIRECT: XSI's strerror_r
+        # is __xpg_strerror_r, C23's strtol __isoc23_strtol): the unit's calls
+        # are of that name, as gcc's are (not glibc's hidden __GI_ names: the
+        # function's own)
+        if ($d->{kind} eq 'FunctionDecl' && defined $d->{mangledName} && $d->{mangledName} ne $name && $d->{mangledName} !~ /^__GI_/
+            && grep { $_->{kind} eq 'AsmLabelAttr' } @{ $d->{inner} || [] }) {
+            $own{$u}{$name} = $d->{mangledName};
+        }
         # weak, or a function gcc's error attribute keeps from being called
         if (($d->{storageClass} // '') eq 'register' && (my ($l) = grep { $_->{kind} eq 'AsmLabelAttr' } @{ $d->{inner} || [] })) {
             # (clang has the register as the name it is known by in asm)
@@ -497,6 +509,9 @@ for my $u (@units) {
         $weak{$name} //= $d if $d->{kind} =~ /^(VarDecl|FunctionDecl)$/ && ($forceweak{$name} || grep { $_->{kind} =~ /^(WeakAttr|ErrorAttr)$/ } @{ $d->{inner} || [] });
         if ($d->{kind} eq 'TypedefDecl') {
             my $own = $d->{inner} && $d->{inner}[0]{ownedTagDecl};
+            # (a typedef's aligned attribute: its record's own, where it names
+            # one it defines, __pthread_unwind_buf_t; another's is not kept)
+            if ($own && $recid{ $own->{id} } && defined(my $al = align_attr($d))) { $recid{ $own->{id} }{ff_align} = max_align($recid{ $own->{id} }{ff_align}, $al) }
             if ($own && ($own->{name} // '') eq '' && (my $e = $enumid{ $own->{id} })) {
                 # a typedef of an anonymous enum: the enum takes its name
                 $enumd{"enum $name"} //= $e;
@@ -2157,6 +2172,21 @@ sub ifs {
     @r;
 }
 
+# C's aligned attribute of a declaration (its largest n; aligned without n
+# is the target's largest alignment), else undef: ff's align n, first
+sub align_attr {
+    my ($d) = @_;
+    my $n;
+    for my $a (grep { $_->{kind} eq 'AlignedAttr' } @{ $d->{inner} || [] }) {
+        my ($e) = @{ $a->{inner} || [] };
+        my $v = !$e || !%$e ? ($target eq 'arm' ? 8 : 16) : $e->{value};
+        defined $v && $v =~ /^\d+$/ or stop('an aligned attribute of no number', $d);
+        $n = $v if !defined $n || $v > $n;
+    }
+    $n;
+}
+sub max_align { my ($a, $b) = @_; !defined $a ? $b : !defined $b ? $a : $a > $b ? $a : $b }
+sub align_node { my ($n) = @_; defined $n ? node('align', node($n)) : () }
 sub decl {
     my ($v, $global, $name) = @_;
     $v->{kind} eq 'VarDecl' or stop('a declaration of ' . $v->{kind}, $v);
@@ -2189,6 +2219,8 @@ sub decl {
     # static program: no section there
     my ($sec) = $global ? grep { $_->{kind} eq 'SectionAttr' && $_->{section_name} =~ /^[A-Za-z_]\w*$/ } kids($v) : ();
     unshift @tls, node('section'), node($sec->{section_name}) if $sec;
+    # (a global's aligned attribute first; a local's is not kept)
+    unshift @tls, align_node(align_attr($v)) if $global;
     node(($name // ffname($v->{name})) . ':', @tls, map({ node($_) } @t), grouped(255 - @t - @tls, @i));
 }
 # A variable-length array's count from its text: names (its locals), numbers,
@@ -2396,7 +2428,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
             # a bitfield: its type run, then its width (one with no name, padding,
             # takes its bits under a name of its own)
             my $pad = 0;
-            unshift @types, node($tagname{$tag} . ':', node($kind), map {
+            unshift @types, node($tagname{$tag} . ':', node($kind), align_node(max_align(align_attr($d), $d->{ff_align})), map {
                 my $f = $_;
                 my @w;
                 if ($f->{isBitfield}) {
@@ -2408,7 +2440,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
                 # (an unnamed field that is not a bitfield is C11's anonymous struct
                 # or union, its fields the record's own: : as before)
                 my $name = defined $f->{name} && $f->{name} ne '' ? ffname($f->{name}) : $f->{isBitfield} ? 'padding ' . ++$pad : undef;
-                node((defined $name ? "$name:" : ':'), (map { node($_) } ctype(qt($f))), @w)
+                node((defined $name ? "$name:" : ':'), align_node(align_attr($f)), (map { node($_) } ctype(qt($f))), @w)
             } grep { $_->{kind} eq 'FieldDecl' } kids($d));
         }
     }

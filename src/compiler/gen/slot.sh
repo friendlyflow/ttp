@@ -42,9 +42,19 @@ while test $# -gt 0; do
 done
 test $# -gt 0 || { echo "usage: slot.sh [-v KB] [-t SECONDS] CMD ARG..." >&2; exit 2; }
 
+# A timed command runs in a session of its own (setsid); when it ends, at its
+# timeout or not, what is left of that session is killed. A process group is
+# not enough: glibc's test driver forks the test into a group of its own
+# (setpgid), and on 2026-10-22 such a child, reparented when timeout killed
+# its qemu, ran 18 minutes past its timeout at full CPU. (pgrep -s 0: the
+# processes of the session; $$ is the sh that waits.)
+timed='t=$1; shift; timeout "$t" "$@"; s=$?
+    for p in $(pgrep -s 0); do test "$p" = $$ || kill -9 "$p" 2> /dev/null; done
+    exit $s'
+
 run() {
     test -n "$mem" && { ulimit -v "$mem" || exit 2; }
-    if test -n "$secs"; then exec timeout "$secs" "$@"; else exec "$@"; fi
+    if test -n "$secs"; then exec setsid -w sh -c "$timed" timed "$secs" "$@"; else exec "$@"; fi
 }
 
 # the scope of a command that takes a slot: its own cap, in ttp.slice, whose
@@ -55,9 +65,12 @@ scoped() {
             systemctl --user set-property ttp.slice MemoryMax="${TTP_SLICEMAX:-18G}" MemorySwapMax=0 2> /dev/null
         fi
         test -n "$mem" && { ulimit -v "$mem" || exit 2; }
-        set -- systemd-run --user --scope --quiet --collect --slice=ttp.slice \
+        # (timed inside the scope; systemd-run would read the $ of a command
+        # as its environment variables, and $$ as $)
+        test -n "$secs" && set -- setsid -w sh -c "$timed" timed "$secs" "$@"
+        set -- systemd-run --user --scope --quiet --collect --expand-environment=no --slice=ttp.slice \
             -p MemoryMax="${TTP_SCOPEMAX:-8G}" -p MemorySwapMax=0 -- "$@"
-        if test -n "$secs"; then exec timeout "$secs" "$@"; else exec "$@"; fi
+        exec "$@"
     fi
     echo "slot.sh: no systemd user session, so no memory scope: $*" | cut -c1-200 >&2
     run "$@"

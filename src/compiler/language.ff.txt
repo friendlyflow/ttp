@@ -181,6 +181,28 @@ ff, the language ttpc compiles
           count:
             int
             24
+      align / n, first under a field's name and before its type, places the field at a multiple of n, its record as aligned at least (C's aligned attribute)
+      align / n right after struct or union aligns the record itself, its size a multiple of n; align only raises an alignment, as C's does
+      example
+        mcontext:
+          struct
+          gregs:
+            array
+              u64
+              32
+          fpregs:
+            align
+              16
+            array
+              u64
+              66
+      example
+        pthread:
+          struct
+          align
+            32
+          tid:
+            int
       an enum name is a type, an int: color:, enum, then its constants, each name:, with a value (a number or a constant, - before it) or one more than the one before, the first 0; a constant is seen where the enum is, on the page
       example
         color:
@@ -252,6 +274,7 @@ ff, the language ttpc compiles
       a page item whose items have children only as :, items, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64), else a global
+      align / n, first under a global's name (before thread local or section), places the global at a multiple of n
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
       ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled

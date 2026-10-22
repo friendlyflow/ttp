@@ -112,11 +112,15 @@ for my $page (@top) {
           push @headers, [$f, \@l];
       } }
     # (a page's definitions through its layers, 0: 1: ...)
+    my $al;
     for my $d (FF::kids($page)) {
+        undef $al;
         next if c($d) eq 'comment' || c($d) eq 'license';
         (my $name = c($d)) =~ s/:$// or fail('not a definition', $d);
         my @k = kids($d);
         my $w = @k ? c($k[0]) : '';
+        # a global's align n first (C's aligned attribute): the words after it as before
+        if ($w eq 'align' && !leaf($k[0])) { $al = c((kids($k[0]))[0]); shift @k; $w = @k ? c($k[0]) : '' }
         push @order, $name;
         if ($w eq 'struct' || $w eq 'union') { $rec{$name} = { kind => $w, node => $d }; next }
         if ($w eq 'enum') {
@@ -156,6 +160,10 @@ for my $page (@top) {
         }
         if (is_function($d)) { $fn{$name} = { kind => 'c', node => $d, from => 0 }; $glibcpage{$name} = 1 if $glibc }
         else { $var{$name} = { node => $d, from => 0, glibc => $glibc } }
+    } continue {
+        # (past its align)
+        (my $name = c($d)) =~ s/:$//;
+        if (defined $al && $var{$name} && $var{$name}{node} == $d) { $var{$name}{from}++; $var{$name}{align} = $al }
     }
 }
 
@@ -166,7 +174,7 @@ sub is_function {
     for my $k (kids($d)) {
         next if leaf($k);
         my $w = c($k);
-        next if $w eq ':' || $w eq 'address' || $w eq 'cast:' || $w eq 'items';
+        next if $w eq ':' || $w eq 'address' || $w eq 'cast:' || $w eq 'items' || $w eq 'align';
         next if (exists $scalar{$w} || $rec{$w}) && !grep { !leaf($_) } kids($k);
         return 1;
     }
@@ -246,13 +254,16 @@ sub fields {
     my $pad = 0;
     for my $f (kids($r->{node})) {
         my $w = c($f);
-        next if $w eq 'struct' || $w eq 'union' || $w eq 'comment';
+        next if $w eq 'struct' || $w eq 'union' || $w eq 'comment' || $w eq 'align';
         (my $fname = $w) =~ s/:$//;
         my @l = kids($f);
         my $i = 0;
+        # (align n first: C's aligned attribute)
+        my $al = @l && c($l[0]) eq 'align' && !leaf($l[0]) ? c((kids($l[0]))[0]) : undef;
+        $i = 1 if defined $al;
         my $t = ptype(\@l, \$i);
         my $bits = $i < @l ? c($l[$i]) : undef;
-        push @f, { name => $fname, type => $t, bits => $bits };
+        push @f, { name => $fname, type => $t, bits => $bits, align => $al };
     }
     @f;
 }
@@ -860,7 +871,7 @@ sub rec_body {
         if ($f->{name} eq '' && $f->{type}[0] eq 'rec') { "$rec{ $f->{type}[1] }{kind} " . rec_body($f->{type}[1]) . ';' }
         else {
             my $nm = $f->{name} =~ /^padding \d+$/ && defined $f->{bits} ? '' : cid_local($f->{name});
-            cdecl($f->{type}, $nm) . (defined $f->{bits} ? " : $f->{bits}" : '') . ';';
+            cdecl($f->{type}, $nm) . (defined $f->{bits} ? " : $f->{bits}" : '') . (defined $f->{align} ? " __attribute__((aligned($f->{align})))" : '') . ';';
         }
     } @fl) . ' }';
 }
@@ -868,7 +879,9 @@ sub emit_rec {
     my ($r) = @_;
     return if $rdone{$r}++;
     rec_deps($r);
-    push @c, "$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . ';';
+    # (a record's own align, after struct: C's aligned attribute after its braces)
+    my ($al) = map { c((kids($_))[0]) } grep { c($_) eq 'align' && !leaf($_) } kids($rec{$r}{node});
+    push @c, "$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . (defined $al ? " __attribute__((aligned($al)))" : '') . ';';
 }
 emit_rec($_) for grep { $rec{$_} } @order;
 # the globals
@@ -902,6 +915,7 @@ for my $v (grep { $var{$_} && $var{$_}{glibc} && !$var{$_}{weak} && $_ !~ /^(?:w
     my $init = !@items ? '' : ($t->[0] eq 'arr' || $t->[0] eq 'rec') ? ' = ' . init_list($t, \@items) : ' = ' . expr_item([map { c($_) eq 'items' ? kids($_) : $_ } @items]);
     local $cur_fn = $v;
     my $sec = $var{$v}{section} ? " __attribute__((section(\"$var{$v}{section}\")))" : '';
+    $sec .= " __attribute__((aligned($var{$v}{align})))" if defined $var{$v}{align};
     my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$sec$init;"; 1 };
     warn $@ unless $ok;
     # (where glibc has it: a unit's own static in that unit, a function's static in that function)
