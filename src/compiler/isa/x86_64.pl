@@ -449,6 +449,8 @@ for (@conds) {
 }
 form("jmp", ["target:label"], "{disp32} jmp <target>", bytes(0xe9), C("word", C("rel32", "target")));
 form("jmp.8", ["target:label8"], "{disp8} jmp <target>", bytes(0xeb), C("simm8", C("rel8", "target")));
+# (jrcxz: to target if rcx is 0, rel8 alone: glibc's add_n and sub_n)
+form("jrcxz.8", ["target:label8"], "jrcxz <target>", bytes(0xe3), C("simm8", C("rel8", "target")));
 form("call", ["target:label"], "call <target>", bytes(0xe8), C("word", C("rel32", "target")));
 for my $j (["call", 2], ["jmp", 4]) {
     my ($op, $digit) = @$j;
@@ -515,6 +517,11 @@ form("repe",  [], "repe",  bytes(0xf3));
 form("repz",  [], "repz",  bytes(0xf3));
 form("repne", [], "repne", bytes(0xf2));
 form("repnz", [], "repnz", bytes(0xf2));
+# the fs segment, before an instruction (glibc's %fs:, the thread's TCB):
+# here and not with the other segments of isa/x86_64gnu.pl, as shared.ff
+# also declares fs, the C layer's type word, which would hide a later
+# tree's form of that name
+form("fs", [], ".byte 0x64", bytes(0x64));
 
 # ---------------------------------------------------------------------------
 # atomic: xadd cmpxchg cmpxchg16b (with lock before them), the fences
@@ -644,6 +651,11 @@ for my $o (["and", 0x54], ["andn", 0x55], ["or", 0x56], ["xor", 0x57]) {
     sse("$o->[0]ps", [], 0, $o->[1], "x", "x");
     sse("$o->[0]pd", [0x66], 0, $o->[1], "x", "x");
 }
+# the integer compares of SSE2 (the C layer's == and != of vectors:
+# gen/patches/vector.pl)
+sse("pcmpeqb", [0x66], 0, 0x74, "x", "x");
+sse("pcmpeqw", [0x66], 0, 0x75, "x", "x");
+sse("pcmpeqd", [0x66], 0, 0x76, "x", "x");
 sse("movaps", [], 0, 0x28, "x", "x", undef, 1);
 sse("movapd", [0x66], 0, 0x28, "x", "x", undef, 1);
 # the 16 bytes of an xmm register to and from memory: a long double

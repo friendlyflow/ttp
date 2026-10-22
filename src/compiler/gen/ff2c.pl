@@ -183,11 +183,12 @@ sub is_function {
 
 # ---- types ------------------------------------------------------------------
 # A type is [scalar => 'int'], [ptr => T or undef (void)], [arr => T, count
-# node], [rec => name], [enum => name], [fn => name].
+# node], [rec => name], [enum => name], [fn => name], [fs => T] (x86_64's
+# __seg_fs: T in fs), [vec => T, count node] (a vector, gcc's vector_size).
 
 sub is_typeword {
     my ($w) = @_;
-    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $rec{$w} || $enum{$w} || $fntype{$w};
+    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $w eq 'vector' || $w eq 'fs' || $rec{$w} || $enum{$w} || $fntype{$w};
 }
 
 # The type run at $$i of a list of nodes.
@@ -205,10 +206,16 @@ sub ptype {
         return [ptr => undef] if $$i >= @$l || !leaf($l->[$$i]) || !is_typeword(c($l->[$$i]));
         return [ptr => ptype($l, $i)];
     }
+    return [fs => ptype($l, $i)] if $w eq 'fs';
     if ($w eq 'array') {
         my $t = ptype($l, $i);
         my $count = $l->[$$i++] // fail('an array without its count');
         return [arr => $t, $count];
+    }
+    if ($w eq 'vector') {
+        my $t = ptype($l, $i);
+        my $count = $l->[$$i++] // fail('a vector without its count');
+        return [vec => $t, $count];
     }
     fail("not a type: $w", $n);
 }
@@ -230,9 +237,17 @@ sub cdecl {
         $inner = "($inner)" if $to->[0] eq 'arr';
         return cdecl($to, $inner);
     }
+    # (C's qualifier after the type it qualifies: struct p __seg_fs *x,
+    # struct p *__seg_fs *x)
+    return cdecl($t->[1], "__seg_fs $name" =~ s/\s+$//r, $count) if $k eq 'fs';
     if ($k eq 'arr') {
         my $n = $count // count_text($t->[2]);
         return cdecl($t->[1], "$name\[$n\]");
+    }
+    # (a vector as clang spells it: __attribute__((__vector_size__(16 * sizeof(char)))) char)
+    if ($k eq 'vec') {
+        my $e = ctype($t->[1]);
+        return "__attribute__((__vector_size__(" . count_text($t->[2]) . " * sizeof($e)))) $e $name" =~ s/\s+$//r;
     }
     die;
 }
@@ -405,7 +420,9 @@ sub binary {
     }
     ($s, $t);
 }
-sub is_ptr { my ($t) = @_; $t && ($t->[0] eq 'ptr' || $t->[0] eq 'arr') }
+sub is_ptr { my ($t) = @_; $t = nofs($t); $t && ($t->[0] eq 'ptr' || $t->[0] eq 'arr') }
+# a type without its fs (x86_64's __seg_fs: the same type in fs)
+sub nofs { my ($t) = @_; $t = $t->[1] while $t && $t->[0] eq 'fs'; $t }
 sub unary {
     my ($l, $pos) = @_;
     my $n = $l->[$$pos] // fail('an operand missing');
@@ -568,8 +585,8 @@ sub operand {
         return (($w eq 'sizeof' ? 'sizeof' : '_Alignof') . '(' . ctype($t) . ')', [scalar => 'u64']);
     }
     # an array compound literal: array / its element's type / its count / items
-    if ($w eq 'array') {
-        my @l = ({ content => 'array', children => [] }, @k);
+    if ($w eq 'array' || $w eq 'vector') {
+        my @l = ({ content => $w, children => [] }, @k);
         my $i = 0;
         my $t = ptype(\@l, \$i);
         return ('((' . ctype($t) . ')' . init_list($t, [@l[$i .. $#l]]) . ')', $t);
@@ -601,6 +618,12 @@ sub operand {
         return ("((" . ctype($t) . ")" . init_list($t, [@k]) . ")", $t);
     }
     # a call
+    # (x86_64's pcmpistri of an immediate, c2ff's of gcc's _mm_cmpistri,
+    # _mm_cmpistrc, _mm_cmpistrz: those again, the immediate last)
+    if ($w =~ /^__builtin_ia32_pcmpistr(i|ic|iz)128 (0x[0-9a-f]+)$/) {
+        my $f = '_mm_cmpistr' . { i => 'i', ic => 'c', iz => 'z' }->{$1};
+        return ("$f(" . join(', ', (map { expr_item($_) } items(@k)), $2) . ')', [scalar => 'int']);
+    }
     if (!local_type($w) && !gtype($w) && (sig($w) || $w =~ /^__builtin_/)) {
         my $s = sig($w);
         return (callee($w) . '(' . join(', ', map { expr_item($_) } items(@k)) . ')', $s ? $s->{ret} : undef);
@@ -624,7 +647,9 @@ sub path {
     my @l = @$l;
     while (@l) {
         my $n = $l[0];
-        my $rt = $t && $t->[0] eq 'rec' ? $t->[1] : $t && $t->[0] eq 'ptr' && $t->[1] && $t->[1][0] eq 'rec' ? $t->[1][1] : undef;
+        $t = nofs($t);
+        my $pt = $t && $t->[0] eq 'ptr' ? nofs($t->[1]) : undef;
+        my $rt = $t && $t->[0] eq 'rec' ? $t->[1] : $pt && $pt->[0] eq 'rec' ? $pt->[1] : undef;
         if (defined $rt && leaf($n) && (my $ft = field($rt, c($n)))) {
             $s = "($s" . ($t->[0] eq 'ptr' ? '->' : '.') . cid_local(c($n)) . ")";
             $t = $ft;
@@ -662,7 +687,7 @@ sub init_list {
             push @parts, '{' . join(', ', map { init_item($fl[$k]{type}[1], $_) } @items[$k .. $#items]) . '}';
             last;
         }
-        my $et = $t->[0] eq 'arr' ? $t->[1] : $fl[$k] ? $fl[$k]{type} : undef;
+        my $et = $t->[0] =~ /^(?:arr|vec)$/ ? $t->[1] : $fl[$k] ? $fl[$k]{type} : undef;
         push @parts, init_item($et, $items[$k]);
     }
     # a union set through a member not its first: ttpc sets by place, zeros first
@@ -823,6 +848,8 @@ push @c, '/* made by ff2c.pl from ' . ($in =~ s{.*/}{}r) . ' */';
 push @c, map { ("/* ff2c: the header of $_->[0] */", Header::header_text(@{ $_->[1] })) } @headers;
 push @c, '/* ff2c: the end of the headers */' if @headers;
 push @c, 'long __ff_syscall(long, ...);', 'extern void *tp;';
+# (gcc's SSE4.2 compares of an immediate, <smmintrin.h>'s, whose calls c2ff makes builtins)
+push @c, map { "int _mm_cmpistr$_(__attribute__((__vector_size__(2 * sizeof(long long)))) long long, __attribute__((__vector_size__(2 * sizeof(long long)))) long long, const int);" } qw(i c z);
 # the records first as names, so that each may point at any
 push @c, map { "$rec{$_}{kind} " . cid($_) . ';' } grep { $rec{$_} } @order;
 # the enums: a constant's value where it has one
@@ -965,6 +992,8 @@ open my $h, '>', $out or die "ff2c: $out: $!\n";
 print $h join("\n", @c), "\n";
 close $h;
 push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { $var{$_} || $fn{$_} } @order;
+# (and the enum constants c2ff named with their unit: C's name for them)
+push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { /^\S+ \S+\/\S+$/ } sort keys %econst;
 push @names, map { join("\t", 'asm', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'asm' } @order;
 # (and the aliases of asm functions, which C calls as they are: aarch64's
 # stpcpy of __stpcpy)

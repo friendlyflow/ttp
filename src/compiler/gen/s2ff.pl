@@ -50,7 +50,8 @@ my @files;
 my $size;
 my $items;
 my $alignopt;             # --align (x86_64): the first function's alignment
-my $header;               # --header file.s ...: the license of each one's file (Header.pm)
+my $header;
+my (@zero, @then);               # --header file.s ...: the license of each one's file (Header.pm)
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -58,6 +59,9 @@ while (@ARGV) {
     if ($a eq '--items') { $items = 1; next }
     if ($a eq '--header') { $header = 1; next }
     if ($a eq '--align') { $alignopt = 1; next }
+    # (x86_64: c2ff --zero's objects; crtn's .s and dump, the end of crti's)
+    if ($a eq '--zero') { push @zero, shift @ARGV; next }
+    if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     push @files, $a;
 }
 if ($header) { print write_txt(license_nodes(@files)); exit }
@@ -71,8 +75,9 @@ sub fail { die "s2ff: $where: @_\n" }
 # are GNU's (--align: the alignment of the first function)
 if (do { open my $h, "<", $dump or die "s2ff: cannot open $dump: $!\n"; local $/; <$h> } =~ /file format elf64-x86-64/) {
     require s2ffx86;
-    if ($size || $alignopt) { print s2ffx86::run($size ? "size" : "align", $src, $dump), "\n"; exit }
-    my $out = s2ffx86::run("ff", $src, $dump);
+    my %opt = (zero => \@zero, @then ? (then => \@then) : ());
+    if ($size || $alignopt) { print s2ffx86::run($size ? "size" : "align", $src, $dump, %opt), "\n"; exit }
+    my $out = s2ffx86::run("ff", $src, $dump, %opt);
     print $items ? write_txt(@$out) : write_txt(node("$page:", license_nodes($src), @$out));
     exit;
 }

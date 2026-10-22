@@ -715,6 +715,13 @@ c:
       zero
       a0
   comment
+    cc_tlsend: 1 where a thread local's offset is from the end of the image, __tls_end (TLS variant II, x86_64's); 0 where it is from __tls_start (variant I, this target's).
+  cc_tlsend:
+    addi
+      0
+      zero
+      a0
+  comment
     cc_irel: the type of an IRELATIVE relocation, R_ARM_IRELATIVE.
   cc_irel:
     addi

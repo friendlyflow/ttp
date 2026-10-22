@@ -20,7 +20,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../../gen";
-use FF qw(node write_ff);
+use FF qw(node ttp_license write_ff);
 
 my $dir = $FindBin::Bin;
 my $top = "$FindBin::Bin/../..";
@@ -127,7 +127,7 @@ block("edge");
 push @page, node("wide_fwd:");
 push @s, "wide_fwd:";
 
-my $tree = node("",
+my $tree = node("", ttp_license(),
     node("comment", node("wide.ff: every form of the x86_64 section once, made by mkwide.pl with its GNU twin wide.s. Run, it exits at once.")),
     node("origin", node("elf_base")),
     node("elf_header", map { node($_) } qw(_start file_end mem_end)),

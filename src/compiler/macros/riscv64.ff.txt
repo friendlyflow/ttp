@@ -481,6 +481,13 @@ c:
       zero
       a0
   comment
+    cc_tlsend: 1 where a thread local's offset is from the end of the image, __tls_end (TLS variant II, x86_64's); 0 where it is from __tls_start (variant I, this target's).
+  cc_tlsend:
+    addi
+      0
+      zero
+      a0
+  comment
     cc_addtls: V += the address of the thread's TLS image, tp. cc_settls: the thread's TLS image is V (a C _start of the program's own). cc_irel: the type of an IRELATIVE relocation, R_RISCV_IRELATIVE.
   cc_addtls:
     add

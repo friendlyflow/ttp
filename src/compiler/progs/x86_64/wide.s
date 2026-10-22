@@ -1076,6 +1076,8 @@ near29:
     {disp32} jmp wide_back
 near30:
     {disp8} jmp near30
+    jrcxz near31
+near31:
     call wide_fwd
     {rex} call *%rbx
     {disp32} {rex} call *-1(%rbp,%riz,1)
@@ -1214,9 +1216,9 @@ near30:
     {disp32} {rex} cmovaeq -128(%r12,%riz,1), %rsi
     {disp32} {rex} cmovaeq 4660(%r13,%r9,4), %rdi
     {rex} cmovew %r9w, %r10w
+w6:
     {disp32} {rex} cmovew -2147483648(%r15,%riz,1), %r11w
     {disp32} {rex} cmovew 2147483647(%rsp,%r12,8), %r14w
-w6:
     {rex} cmovel %r12d, %r13d
     {disp32} {rex} cmovel 0(%rbp,%riz,1), %r15d
     {disp32} {rex} cmovel -1(%r8,%rbp,1), %r8d
@@ -1358,6 +1360,7 @@ w6:
     repz
     repne
     repnz
+    .byte 0x64
     {rex} xaddb %spl, %bpl
     {disp32} {rex} xaddb %sil, 4660(%rdi,%riz,1)
     {disp32} {rex} xaddb %dil, -2147483648(%rcx,%r13,2)
@@ -1414,10 +1417,10 @@ w6:
     {disp32} {rex} stmxcsr -128(%rdi,%riz,1)
     {disp32} {rex} stmxcsr 4660(%rcx,%rcx,8)
     {disp32} {rex} fldenv -2147483648(%r12,%riz,1)
+w7:
     {disp32} {rex} fldenv 2147483647(%r13,%rsi,1)
     {disp32} {rex} fnstenv 0(%r15,%riz,1)
     {disp32} {rex} fnstenv -1(%rsp,%r8,2)
-w7:
     fwait
     int $63
     {rex} nopw %si
@@ -1576,12 +1579,26 @@ w7:
     {rex} xorpd %xmm2, %xmm14
     {disp32} {rex} xorpd 0(%r12,%riz,1), %xmm3
     {disp32} {rex} xorpd -1(%r13,%r12,4), %xmm10
-    {rex} movaps %xmm4, %xmm11
-    {rex} movapd %xmm5, %xmm6
-    {rex} movd %r8d, %xmm15
-    {rex} movd %xmm8, %ecx
-    {rex} movq %rdx, %xmm0
-    {rex} movq %xmm12, %rbx
+    {rex} pcmpeqb %xmm4, %xmm11
+    {disp32} {rex} pcmpeqb 127(%r15,%riz,1), %xmm5
+    {disp32} {rex} pcmpeqb -128(%rsp,%rbp,8), %xmm6
+    {rex} pcmpeqw %xmm15, %xmm8
+    {disp32} {rex} pcmpeqw 4660(%rbp,%riz,1), %xmm0
+    {disp32} {rex} pcmpeqw -2147483648(%r8,%r13,1), %xmm12
+    {rex} pcmpeqd %xmm13, %xmm1
+    {disp32} {rex} pcmpeqd 2147483647(%rbx,%riz,1), %xmm7
+    {disp32} {rex} pcmpeqd 0(%r11,%rcx,2), %xmm9
+    {rex} movaps %xmm2, %xmm14
+    {rex} movapd %xmm3, %xmm10
+    {rex} movdqu %xmm4, %xmm11
+    {disp32} {rex} movdqu -1(%rdi,%riz,1), %xmm5
+    {disp32} {rex} movdqu 127(%rcx,%rsi,4), %xmm6
+    {disp32} {rex} movdqu %xmm15, -128(%r12,%riz,1)
+    {disp32} {rex} movdqu %xmm8, 4660(%r13,%r8,8)
+    {rex} movd %r8d, %xmm0
+    {rex} movd %xmm12, %ecx
+    {rex} movq %rdx, %xmm13
+    {rex} movq %xmm1, %rbx
 edge:
 edge_back:
     .skip 126

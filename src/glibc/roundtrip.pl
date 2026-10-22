@@ -52,6 +52,7 @@ sub kids { @{ $_[0]{inner} || [] } }
 # ---- types --------------------------------------------------------------------
 
 our %tdef;                 # the typedefs of the AST at hand
+our $typeof_depth = 0;     # (tstr through typeof_expr, at most 8 deep)
 our %typeof;               # what its typeof (expression) types are, where clang says
 our %declty;               # the types of its functions and globals, for typeof (name)
 my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'short' => 'i16', 'unsigned short' => 'u16',
@@ -73,6 +74,14 @@ sub tstr {
     return tstr($typeof{$s}) if exists $typeof{$s};
     # (typeof (name): the type of what the unit declares by that name)
     return tstr($declty{$1}) if $s =~ /^(?:typeof|__typeof__) \(\s*(\w+)\s*\)$/ && exists $declty{$1};
+    # (typeof of an expression, as c2ff's typeof_expr: x86_64's THREAD_GETMEM,
+    # __typeof (*descr) __seg_fs *, descr THREAD_SELF or a local)
+    if ($typeof_depth < 8 && $s =~ /^(?:typeof|__typeof__|__typeof)\s*(\((?:[^()]++|(?1))*\))(.*)$/) {
+        my ($e, $rest) = (substr($1, 1, -1), $2);
+        my $t = typeof_expr($e);
+        local $typeof_depth = $typeof_depth + 1;
+        return tstr("$t$rest") if defined $t && "$t$rest" ne $s;
+    }
     return '?typeof' if $s =~ /^(?:typeof|__typeof__) \(/ && $s =~ /\)$/;
     # (an anonymous record's spelling, union __mbstate_t::(unnamed at f.h:3:5), is a record)
     return 'rec' if $s =~ /^(?:struct|union)\b[^*\[]*\((?:unnamed|anonymous)\b[^()]*\)$/;
@@ -160,6 +169,9 @@ sub E {
         # (an int literal of a 32-bit type, that int or its unsigned, is its
         # value: aarch64's wchar_t is unsigned, L'\n' 10 either way)
         return E($c) if $ck eq 'IntegralCast' && tcls($n) =~ /^[iu]32$/ && small_literal($c);
+        # (so is __builtin_types_compatible_p's, the int c2ff makes of it:
+        # strfrom-skeleton's info.is_binary128, an unsigned bitfield)
+        return E($c) if $ck eq 'IntegralCast' && tcls($n) =~ /^[iu]32$/ && (unparen($c)->{kind} // '') eq 'TypeTraitExpr';
         # (0 is 0 in any integer type: ?:'s arms, one a long of an asm function)
         return '(int 0 i32)' if $ck eq 'IntegralCast' && small_literal($c) && unparen($c)->{value} == 0;
         # (a call of an asm function, whose value ff has as a long, made void)
@@ -169,6 +181,10 @@ sub E {
         return E($c) if tcls($n) eq tcls($c) && $ck ne 'ToVoid';
         # (ttpc makes every enum an int, C one of no negative constant an
         # unsigned: the same value either way)
+        # (but an anonymous enum of a block is an int in ff, c2ff's: a value
+        # of another type converted to it is converted to an int there)
+        return "(cast IntegralCast i32 " . E($c) . ')' if $side eq 'glibc' && $ck eq 'IntegralCast' && tcls($n) eq 'enum' && tcls($c) !~ /^(enum|i32)$/
+            && (($n->{type}{desugaredQualType} // $n->{type}{qualType} // '') =~ /^enum \((?:unnamed|anonymous)\b/);
         return E($c) if $ck eq 'IntegralCast' && (tcls($n) eq 'enum' || tcls($c) eq 'enum');
         # offsetof as ff has it: the field's address in a T at 0
         if ($ck eq 'PointerToIntegral' && is_offsetof($c)) { return '(offsetof)' }
@@ -182,6 +198,8 @@ sub E {
         my @t = map { my $q = $_->{type}{desugaredQualType} // $_->{type}{qualType} // ''; $q =~ s/\b(const|volatile|restrict)\b//g; $q =~ s/\s+/ /g; $q =~ s/^ | $//g; $q } kids($n);
         return '(int ' . (@t == 2 && $t[0] ne '' && $t[0] eq $t[1] ? 1 : 0) . ' ' . tcls($n) . ')';
     }
+    # ('\xff' where char is signed is -1, as c2ff writes it: clang has 4294967295)
+    return '(u- (int ' . (2**32 - $n->{value}) . ' i32))' if $k eq 'CharacterLiteral' && $n->{value} >= 2**31 && (($n->{type} // {})->{qualType} // '') eq 'int';
     return '(int ' . $n->{value} . ' i32)' if $k eq 'CharacterLiteral';
     # (a long double literal, binary128: clang's decimal of it, every digit)
     return '(fltl ' . $n->{value} . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble';
@@ -372,6 +390,8 @@ sub init {
 # ... the arguments (x0 set by an assignment after its declaration), svc 0
 sub syscall_idiom {
     my ($cs) = @_;
+    my $x86 = syscall_idiom_x86($cs);
+    return $x86 if defined $x86;
     my @st = kids($cs);
     my ($inner) = grep { $_->{kind} eq 'CompoundStmt' } @st;
     return undef unless $inner && grep { $_->{kind} eq 'GCCAsmStmt' } kids($inner);
@@ -405,6 +425,78 @@ sub syscall_idiom {
         push @a, E(strip($e));
     }
     '(syscall ' . join(' ', E(strip($reg{$nr})), @a) . ')';
+}
+
+# x86_64's INTERNAL_SYSCALL, as c2ff's syscall_idiom_x86 takes it: in the
+# statement expression only declarations (register variables rdi rsi rdx
+# r10 r8 r9 = the arguments, from the __argN before them), the asm syscall
+# ("=a" the result, "0" the number) and the result last; inputs in rdi rsi
+# rdx by their constraints (D S d) too.
+sub syscall_idiom_x86 {
+    my ($cs) = @_;
+    my @st = kids($cs);
+    my @asm = grep { $_->{kind} eq 'GCCAsmStmt' } @st;
+    return undef unless @asm == 1;
+    my ($template, $oc, $ic) = asm_text($asm[0]);
+    return undef unless defined $template && $template =~ /^\s*syscall[\s;]*$/ && @$oc == 1 && $oc->[0] eq '=a';
+    my @ops = kids($asm[0]);
+    my ($num) = grep { $ic->[$_] eq '0' } 0 .. $#$ic;
+    return undef unless defined $num;
+    my @other = grep { $_->{kind} ne 'DeclStmt' && $_->{kind} ne 'GCCAsmStmt' } @st;
+    return undef if @other > 1;
+    if (@other) {
+        my $last = strip($other[0]);
+        return undef unless $other[0] == $st[-1] && ($last->{kind} // '') eq 'DeclRefExpr' && ($last->{referencedDecl}{id} // '') eq (strip($ops[0])->{referencedDecl}{id} // '-');
+    }
+    my (%reg, %l);
+    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st) {
+        for my $v (kids($s)) {
+            my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
+            my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+            next unless $init;
+            if ($lab) { my $r = $lab->{label} // (($v->{name} // '') =~ /^_a([1-6])$/ ? (qw(rdi rsi rdx r10 r8 r9))[$1 - 1] : undef); $reg{$r} = $init if defined $r }
+            elsif (defined $v->{name}) { $l{ $v->{name} } = $init }
+        }
+    }
+    my %creg = (D => 'rdi', S => 'rsi', d => 'rdx');
+    for my $j (0 .. $#$ic) { my $r = $creg{ $ic->[$j] } or next; $reg{$r} //= $ops[@$oc + $j] }
+    my @a;
+    for my $r (qw(rdi rsi rdx r10 r8 r9)) {
+        my $e = $reg{$r} or last;
+        my $s = strip($e);
+        $e = $l{ $s->{referencedDecl}{name} } if ($s->{kind} // '') eq 'DeclRefExpr' && $l{ $s->{referencedDecl}{name} };
+        push @a, E(strip($e));
+    }
+    '(syscall ' . join(' ', E(strip($ops[@$oc + $num])), @a) . ')';
+}
+# An asm statement's template and constraints, from the unit's .i (next to
+# its AST, at the offset clang gives), as c2ff reads them (asm_parts).
+our ($unit_i, $itext_of, $itext) = ('', '', '');
+sub asm_text {
+    my ($n) = @_;
+    my $b = $n->{range}{begin}{offset} // ($n->{range}{begin}{expansionLoc} // {})->{offset};
+    return () unless defined $b && $unit_i ne '' && -e $unit_i;
+    if ($itext_of ne $unit_i) { open my $h, '<', $unit_i or return (); local $/; $itext = <$h>; $itext_of = $unit_i }
+    (my $s = substr($itext, $b, 4000)) =~ s/^#.*\n//mg;
+    $s =~ s/^\s*(?:__asm__|__asm|asm)\s*(?:(?:__volatile__|__volatile|volatile)\s*)?\(// or return ();
+    my ($depth, $instr, $esc, @parts) = (0, 0, 0, '');
+    for my $c (split //, $s) {
+        if ($instr) { $parts[-1] .= $c; if ($esc) { $esc = 0 } elsif ($c eq '\\') { $esc = 1 } elsif ($c eq '"') { $instr = 0 } next }
+        if ($c eq '"') { $instr = 1 } elsif ($c eq '(') { $depth++ } elsif ($c eq ')') { last if $depth == 0; $depth-- }
+        if ($c eq ':' && $depth == 0) { push @parts, ''; next }
+        $parts[-1] .= $c;
+    }
+    my ($tmpl, $outs, $ins) = @parts;
+    my $template = join '', ($tmpl // '') =~ /"((?:[^"\\]|\\.)*)"/g;
+    $template =~ s/\\t/ /g;
+    $template =~ s/\\n/;/g;
+    ($template, [($outs // '') =~ /"([^"]*)"/g], [($ins // '') =~ /"([^"]*)"/g]);
+}
+# glibc's optimization barrier, asm ("" : "+r" (x)): c2ff makes no code of it
+sub asm_barrier {
+    my ($n) = @_;
+    my ($t, $oc) = asm_text($n);
+    defined $t && $t !~ /\S/ && @$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc;
 }
 
 # A declaration's value: a char array set from a text as the text's codes, the
@@ -514,7 +606,7 @@ sub S {
         if ($k eq 'ContinueStmt') { push @out, '(continue)'; next }
         if ($k eq 'GotoStmt') { push @out, '(goto ' . ($labels{ $n->{targetLabelDeclId} } // '?') . ')'; next }
         if ($k eq 'IndirectGotoStmt') { push @out, '(goto* ' . E((kids($n))[0]) . ')'; next }
-        if ($k eq 'GCCAsmStmt') { push @out, '(asm)'; next }
+        if ($k eq 'GCCAsmStmt') { push @out, '(asm)' unless $side eq 'glibc' && asm_barrier($n); next }
         # an expression whose value is not used
         push @out, xstmt($n);
     }
@@ -556,9 +648,29 @@ sub effect {
 }
 
 sub labels_of { my ($n) = @_; (($n->{kind} // '') eq 'LabelStmt' ? ($n->{declId} => $n->{name}) : ()), map { labels_of($_) } kids($n) }
+sub locals_decls { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n : ()), map { locals_decls($_) } kids($n) }
 sub locals_of { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? ($n->{id} => 1) : ()), map { locals_of($_) } kids($n) }
+our %ltype;
+
+sub typeof_expr {
+    my ($e) = @_;
+    $e =~ s/__attribute__\s*\(\(address_space\(257\)\)\)//g;
+    $e =~ s/^\s+|\s+$//g;
+    ($e = $1) =~ s/^\s+|\s+$//g while $e =~ /^(\((?:[^()]++|(?1))*\))$/ && $e =~ /^\((.*)\)$/s;
+    return $ltype{$e} if exists $ltype{$e};
+    return $declty{$e} if exists $declty{$e};
+    if ($e =~ /^\*(.*)$/s) {
+        my $t = typeof_expr($1) // return undef;
+        $t = noattr($t);
+        $t =~ s/\s*\b(?:const|volatile)\s*$//;
+        return $t =~ /^(.*?)\s*\*$/ ? $1 : undef;
+    }
+    return $1 =~ s/^\s+|\s+$//gr if $e =~ /^\(([^()]*\*)\s*\)\s*\S/;
+    undef;
+}
 sub fnorm {
     my ($fn) = @_;
+    local %ltype = map { ($_->{name} => $_->{type}{qualType}) } grep { defined $_->{name} && $_->{type} } locals_decls($fn);
     local %labels = labels_of($fn);
     local %local = locals_of($fn);
     my @p = map { tcls($_) } grep { $_->{kind} eq 'ParmVarDecl' } kids($fn);
@@ -613,6 +725,7 @@ for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
     my $ast = load($j);
     local %enumval = enumvals($ast);
     local $side = 'glibc';
+    local $unit_i = $j =~ s/\.json$/.i/r;
     local %regvar;
     local %asmalias = map { ((kids($_))[0]{value} // '') =~ /^"\s*([.\w]+)\s*=\s*([.\w]+)\s*"$/ ? ($1 => $2) : () } grep { $_->{kind} eq 'FileScopeAsmDecl' } kids($ast);
     local %tdef = typedefs($ast);
