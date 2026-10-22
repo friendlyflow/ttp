@@ -129,11 +129,20 @@ sub ctype {
     local $ctype_depth = $ctype_depth + 1;
     die "c2ff: a type that does not end: $t\n" if $ctype_depth > 100;
     $t = trim($t);
+    $t = typeof_subst($t) if $t =~ /typeof/;
+    $t = vector_mark($t);
+    # (x86_64's __seg_fs, clang's address space 257: the user's fs, a type
+    # word after the type it qualifies, here a prefix as address is: fs / T)
+    $t =~ s/__attribute__\s*\(\(address_space\(257\)\)\)/ __seg_fs /g;
     # an attribute (noreturn, ...) says nothing of the type's layout
     $t =~ s/\s*__attribute__\s*(\(\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\))?//g;
     $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
     $t = trim($t);
     $t =~ s/\s+/ /g;
+    # (T *__seg_fs: the pointer in fs; __seg_fs T: T in fs, after the
+    # pointers below, which bind first: __seg_fs struct p * is (__seg_fs
+    # struct p) *)
+    return ('fs', ctype($1)) if $t =~ /^(.*\S)\s*\b__seg_fs$/;
     # (x86_64's va_list, before the arrays and pointers: %scalar has it)
     return $scalar{$t} if $t =~ /^struct __va_list_tag\b/ && exists $scalar{$t};
     # an array of function pointers, ret (*[n]) (params): the init arrays'
@@ -159,7 +168,17 @@ sub ctype {
         my ($r, $p) = split_fn($base);
         return defined $r ? ('address', fntype($r, $p)) : ('address', ctype($base));
     }
+    # (a vector, gcc's vector_size (x86_64's __m128i, __v16qi): vector, its
+    # element's type, the count of its elements)
+    return ('vector', ctype($2), $1) if $t =~ /^__vector_(\d+)\s+(.*?)\s*$/;
+    return ('fs', ctype($1)) if $t =~ /^__seg_fs\s+(.*)$/;
+    return ('fs', ctype("$1 $2")) if $t =~ /^(.*?)\s*\b__seg_fs\b\s*(.*)$/;
     return $scalar{$t} if exists $scalar{$t};
+    # (__int128, x86_64's, which ttpc has no integer of: its 16 bytes as two
+    # u64, for the layout of the audit interface's La_x86_64_regs and
+    # La_x86_64_retval, which no code of a static program reads; arithmetic
+    # on one stops ttpc)
+    return ('array', 'u64', 2) if $t =~ /^(?:__int128_t|__uint128_t|(?:unsigned )?__int128)$/;
     return ctype($owntd{$cur_unit}{$t}) if $cur_unit && $owntd{$cur_unit} && exists $owntd{$cur_unit}{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($desugar{$t}) if exists $desugar{$t};
@@ -201,10 +220,42 @@ sub ctype {
 
 # A type with its typedef names and typeof (name) at the top replaced by what
 # they stand for.
+# The type of a typeof of an expression clang leaves as text in a type
+# (x86_64's THREAD_GETMEM: __typeof (*descr) __seg_fs *, descr THREAD_SELF,
+# *(struct pthread *__seg_fs *) ...): a name's declared type, a cast's
+# type, one pointer less for a *; undef where it is none of those.
+our %ltypeof;
+sub typeof_expr {
+    my ($e) = @_;
+    $e = trim($e);
+    $e = trim($1) while $e =~ /^(\((?:[^()]++|(?1))*\))$/ && $e =~ /^\((.*)\)$/s;
+    return $ltypeof{$e} if exists $ltypeof{$e};
+    return $typeof{$e} if exists $typeof{$e};
+    if ($e =~ /^\*(.*)$/s) {
+        my $t = typeof_expr($1) // return undef;
+        $t = expand($t);
+        $t =~ s/\s*\b(?:__seg_fs|const|volatile)\s*$//;
+        return $t =~ /^(.*?)\s*\*$/ ? $1 : undef;
+    }
+    # a cast: (T) then its operand
+    return trim($1) if $e =~ /^(\((?:[^()]++|(?1))*\))/ && $e =~ /^\(([^()]*\*)\s*\)\s*\S/;
+    undef;
+}
+sub typeof_subst {
+    my ($t) = @_;
+    $t =~ s/__attribute__\s*\(\(address_space\(257\)\)\)/ __seg_fs /g;
+    $t =~ s{\b(?:typeof|__typeof__|__typeof)\s*(\((?:[^()]++|(?1))*\))}{ my $r = typeof_expr(substr($1, 1, -1)); defined $r ? $r : $& }ge;
+    $t;
+}
+# clang's spelling of a vector type, __attribute__((__vector_size__(16 *
+# sizeof(char)))) char, as __vector_16 char, which no attribute's removal
+# takes away
+sub vector_mark { my ($t) = @_; $t =~ s/__attribute__\(\(__vector_size__\((\d+) \* sizeof\(([^()]*)\)\)\)\)\s*/__vector_$1 /g; $t }
 sub expand {
     my ($t) = @_;
+    $t = typeof_subst($t) if $t =~ /typeof/;
     for (1 .. 50) {
-        $t = trim($t);
+        $t = vector_mark(trim($t));
         $t =~ s/\s*__attribute__\s*(\(\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\))?//g;
         $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
         $t = trim($t);
@@ -375,6 +426,7 @@ $scalar{'unsigned long'} = 'u32' if $target eq 'arm';
 @scalar{'struct __va_list_tag[1]', 'struct __va_list_tag *'} = ('va_list', 'va_list') if $target eq 'x86_64';
 
 my %enumof;                 # each enum constant's enum, as a tag
+my (%enumref, %enumunit);   # the uses of each enum constant and its first unit (enum_rename)
 my $lastanon;               # the last anonymous record or enum at the top of a unit
 my %weak;                   # names declared weak (#pragma weak), their declarations
 my %recid;                  # complete records by id, the anonymous ones too
@@ -1111,7 +1163,7 @@ sub asm_stmt {
 # exceptions); x86_64's
 # x operand, only in an empty template (sfp-exceptions.c: the division is
 # the C around it), passes through a register as it is.
-my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9 r12 r13)]);
+my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9)]);
 my %retreg = (aarch64 => 'x0', x86_64 => 'rax');
 # aarch64's system registers as mrs and msr take them: op0 op1 CRn CRm op2
 # in 16 bits (tpidr_el0 56962), by name or as GNU's s3_3_c13_c0_2
@@ -1149,7 +1201,23 @@ sub asm_ins_other {
     } elsif ($target eq 'x86_64') {
         # instructions without operands (ABORT_INSTRUCTION's hlt, the spin
         # loops' pause, cpuid with its fixed registers)
-        return node($op) if !@a && $op =~ /^(?:fwait|hlt|pause|nop|cpuid|rdtsc|mfence|lfence|sfence)$/;
+        return node($op) if !@a && $op =~ /^(?:fwait|hlt|pause|nop|cpuid|xgetbv|rdtsc|mfence|lfence|sfence|fnclex|fpatan|syscall)$/;
+        # the x87 control and status words in memory (get_rounding_mode's
+        # fnstcw): GNU as's forms (x86_64gnu.ff), without REX for rax..rdi
+        if ($op =~ /^(?:fnstcw|fldcw|fnstsw)$/ && @a == 1 && $a[0] =~ /^0?\(%(\w+)\)$/ && $1 !~ /^(?:rsp|rbp|r12|r13)$/) {
+            my $r = $1;
+            return node($op . ($r =~ /^r\d/ ? '' : '.n') . '.m0', node(0), node($r));
+        }
+        # xchg of a register and memory (THREAD_GSCOPE_RESET_FLAG's xchgl
+        # with the thread's gscope_flag: its address, an argument)
+        if ($op =~ /^xchg[lq]$/ && @a == 2) {
+            my ($m) = grep { $a[$_] =~ /^-?\d*\(%\w+\)$/ } 0 .. 1;
+            if (defined $m && $a[1 - $m] =~ /^%(\w+)$/) {
+                my $r = $1;
+                $a[$m] =~ /^(-?\d*)\(%(\w+)\)$/;
+                return node("$op.mr", node($r), node($1 eq '' ? 0 : $1), node($2));
+            }
+        }
         # an integer instruction on registers: ttpc's name has the size,
         # GNU's may leave it to the operands (bsr %1, %0: the C type of the
         # register output's, $asm_size)
@@ -1169,6 +1237,9 @@ sub asm_stmt_other {
     my ($n) = @_;
     my $regs = $argregs{$target} or stop("an asm statement on $target", $n);
     my ($template, $oc, $ic, $ops) = asm_parts($n);
+    # an empty template whose outputs are all read and written (+r: the
+    # optimization barriers of dl-new-hash.h) changes nothing: no code
+    return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc;
     # (rbx too: the C layer keeps nothing in it across a call)
     my %fixed = $target eq 'x86_64' ? (a => 'rax', b => 'rbx', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
     local $asm_size;
@@ -1183,7 +1254,7 @@ sub asm_stmt_other {
         my $out = $i < @$oc;
         my $c = $out ? $oc->[$i] : $ic->[$i - @$oc];
         (my $k = $c) =~ s/[=+&]//g;
-        $k = 'r' if $k eq 'rm' && $target eq 'x86_64';
+        $k = 'r' if ($k eq 'rm' || $k eq 'g') && $target eq 'x86_64';
         if ($out && $fixed{$k}) {
             # an output in a fixed register: stored through its address after
             stop("the asm constraint $c", $n) if $c =~ /\+/;
@@ -1224,12 +1295,24 @@ sub asm_stmt_other {
     for my $w (@want) { next if defined $w->[3]; $w->[3] = 100 + $fpn++ }
     stop('an asm statement with too many operands', $n) if grep { $_->[3] > $#$regs && $_->[3] < 100 } @want or $fpn > 8;
     my @arg;
+    my @scratch = qw(r10 r11);
     for my $w (sort { $a->[3] <=> $b->[3] } @want) {
         my ($i, $how, $r, $j) = @$w;
         my $a = $j < 100 ? $regs->[$j] : undef;
         $arg[$j] = [$i, $how eq 'value' ? 'value' : 'address'];
         if ($how eq 'address') {
-            push @after, $target eq 'x86_64' ? node('movq.mr', node($text{$i}), node(0), node($a)) : stop("the asm output $oc->[$i]", $n);
+            stop("the asm output $oc->[$i]", $n) unless $target eq 'x86_64';
+            # stored by its C type's size (cpuid's are 32 bits); an address
+            # in a register the instructions write (cpuid's rcx, rdx) is
+            # kept in r10 or r11 until then
+            my $t = tword_int($ops->[$i]);
+            my $s = $t =~ /^(int|u32|i32)$/ ? 'l' : $t =~ /^(long|u64|i64)$/ || $t =~ /\b(address|pointer)$/ ? 'q' : stop("the asm output $oc->[$i] of a $t", $n);
+            if (grep { $_ eq $a } values %text) {
+                my $k = shift @scratch // stop('an asm statement with too many outputs', $n);
+                unshift @code, node('movq', node($a), node($k));
+                $a = $k;
+            }
+            push @after, node("mov$s.mr", node($text{$i}), node(0), node($a));
         } elsif ($how eq 'mem') {
             $text{$i} = $target eq 'x86_64' ? "0(%$a)" : "[$a]";
         } elsif (defined $r && $r eq 'w') {
@@ -1247,6 +1330,10 @@ sub asm_stmt_other {
             $text{$i} //= $a;
         }
     }
+    # (an argument register no operand takes, before one that is taken:
+    # xgetbv's "c" (0) is the fourth, rcx, after two outputs, a 0 between)
+    my ($lastarg) = grep { defined $arg[$_] } reverse 0 .. ($#arg < 99 ? $#arg : 99);
+    $arg[$_] //= ['zero'] for 0 .. ($lastarg // -1);
     @arg = grep { defined } @arg;
     # the template: x86's %v (v under AVX, nothing here: glibc is not built
     # for AVX) and gcc's dialects, {att|intel} or {att}
@@ -1267,7 +1354,7 @@ sub asm_stmt_other {
     $name = asm_once($name, "$template : @$oc : @$ic", $n);
     push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\"")), @code, node('ret'))]
         unless $asmfn{$name}++;
-    my @args = map { my ($i, $how) = @$_; $how eq 'address' ? node('address', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
+    my @args = map { my ($i, $how) = @$_; $i eq 'zero' ? node(0) : $how eq 'address' ? node('address', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
     my $call = @args ? node($name, @args) : node($name);
     return defined $ret ? (item(expr($ops->[$ret])), node('='), $call) : $call;
 }
@@ -1326,7 +1413,9 @@ sub expr {
         my @t = ctype(qt($n));
         return @t == 1 && $t[0] ne 'int' ? node($t[0], node($n->{value})) : node($n->{value});
     }
-    return node($n->{value}) if $k eq 'CharacterLiteral';
+    # (a char literal is an int: '\xff' where char is signed, x86_64's, is -1,
+    # which clang's JSON has as 4294967295)
+    return node($n->{value} >= 2**31 && qt($n) eq 'int' ? $n->{value} - 2**32 : $n->{value}) if $k eq 'CharacterLiteral';
     # GNU C's __builtin_types_compatible_p (strfromd's float or double): a
     # constant, 1 where the two types are one (their qualifiers aside), as
     # gcc answers it
@@ -1353,6 +1442,13 @@ sub expr {
         # a function, or a variable that is not this function's own: a global
         # (this unit's own static, if another unit has one of its name)
         if ($d->{kind} eq 'FunctionDecl' || ($d->{kind} eq 'VarDecl' && !$local{ $d->{id} })) { my $g = own($d->{name}); want($g); return node(ffname($g)) }
+        if ($d->{kind} eq 'EnumConstantDecl') {
+            # (kept, to be named with its unit where a global has its name: enum_rename)
+            my $r = node(ffname($d->{name}));
+            push @{ $enumref{ $d->{name} } }, $r;
+            $enumunit{ $d->{name} } //= $cur_unit;
+            return $r;
+        }
         return node(ffname($d->{name}));
     }
     if ($k eq 'OffsetOfExpr') {
@@ -1547,6 +1643,16 @@ sub expr {
         return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
+        return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
+        # gcc's _mm_cmpistri, _mm_cmpistrc, _mm_cmpistrz (<smmintrin.h>, whose
+        # bodies clangvec.pl leaves out): the builtin of its immediate, a
+        # function of builtins-x86_64.ff.txt for each (pcmpistri $imm)
+        if ($name =~ /^_mm_cmpistr([icz])$/ && $target eq 'x86_64' && @args == 3) {
+            my $imm = int_const($args[2]);
+            defined $imm or stop("$name of an immediate that is no constant", $n);
+            return node(sprintf('__builtin_ia32_pcmpistr%s128 0x%x', { i => 'i', c => 'ic', z => 'iz' }->{$1}, $imm), map { item(expr($_)) } @args[0, 1]);
+        }
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
         $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
         want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl' && $name !~ /^__builtin_/;
@@ -1601,6 +1707,8 @@ sub expr {
         # literal, the type's first word on top, the rest of the type and then
         # the items under it
         return node('array', map({ node($_) } @t[1 .. $#t]), init((kids($n))[0])) if $t[0] eq 'array';
+        # (and of a vector, _mm_set_epi8's (__v16qi){ ... }: as an array's)
+        return node('vector', map({ node($_) } @t[1 .. $#t]), init((kids($n))[0])) if $t[0] eq 'vector';
         @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne 'address' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
         # (one of a scalar type is a typed literal, u32 / 0; ttpc gives
         # address / u32 / 0 a temporary, C's &(unsigned int){0})
@@ -1991,6 +2099,14 @@ sub syscall_idiom_x86 {
     return () unless $asm;
     my ($template, $oc, $ic, $ops) = asm_parts($asm);
     return () unless $template =~ /^\s*syscall[\s;]*$/ && @$oc == 1 && $oc->[0] eq '=a';
+    # (only declarations, the asm and the output last: INTERNAL_SYSCALL's;
+    # TLS_INIT_TP's sets the TCB's words first and gives _result == 0, its
+    # asm an asm function of its own)
+    my @other = grep { $_->{kind} ne 'DeclStmt' && $_->{kind} ne 'GCCAsmStmt' } @st;
+    my $outid = (strip($ops->[0])->{referencedDecl} // {})->{id} // '';
+    my $last = @other ? strip($other[0]) : undef;
+    $last = strip((kids($last))[0]) while $last && $last->{kind} =~ /^(CStyleCastExpr|ParenExpr)$/;
+    return () if @other > 1 || (@other && ($other[0] != $st[-1] || (($last->{referencedDecl} // {})->{id} // '-') ne $outid));
     my ($num) = grep { $ic->[$_] eq '0' } 0 .. $#$ic;
     defined $num or stop('a syscall without its number', $asm);
     my (%reg, %local);
@@ -2002,6 +2118,10 @@ sub syscall_idiom_x86 {
             if ($lab) { my $r = $lab->{label} // (($v->{name} // '') =~ /^_a([1-6])$/ ? (qw(rdi rsi rdx r10 r8 r9))[$1 - 1] : undef); $reg{$r} = $init if defined $r } elsif (defined $v->{name}) { $local{ $v->{name} } = $init }
         }
     }
+    # (or inputs in them by their constraints, D S d: TLS_INIT_TP's
+    # arch_prctl (ARCH_SET_FS, the TCB))
+    my %creg = (D => 'rdi', S => 'rsi', d => 'rdx');
+    for my $j (0 .. $#$ic) { my $r = $creg{ $ic->[$j] } or next; $reg{$r} //= $ops->[@$oc + $j] }
     my @args;
     for my $r (qw(rdi rsi rdx r10 r8 r9)) {
         my $e = $reg{$r} or last;
@@ -2195,6 +2315,9 @@ sub decl {
 # + - * / and parentheses, as ff infix.
 sub vla_count {
     my ($text, $v) = @_;
+    # (sizeof of a string, its bytes and the 0: sysconf's sizeof ("/POSIX_V6_"))
+    $text =~ s{\bsizeof\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)}{ (my $b = $1) =~ s/\\./x/g; length($b) + 1 }ge;
+    stop("the count of a variable-length array: $text", $v) if $text =~ /["']|\bsizeof\b/;
     my @stack = ([]);
     for my $tok ($text =~ /\s*([A-Za-z_]\w*|\d+|[-+*\/()])/g) {
         if ($tok eq '(') { push @stack, []; next }
@@ -2255,7 +2378,8 @@ sub init_item {
         # codes where a text such as "0" would read as a number; "" an empty :
         return node(':', grouped(255, array_text($str)));
     }
-    if ($s->{kind} eq 'ImplicitValueInitExpr') { my @t = ctype(qt($s)); return @t == 1 && $scalar_word{$t[0]} || $t[0] eq 'address' ? node(0) : node(':') }
+    # (an enum's is a number too: x86_64's link_map l_property, a bitfield)
+    if ($s->{kind} eq 'ImplicitValueInitExpr') { my @t = ctype(qt($s)); return @t == 1 && $scalar_word{$t[0]} || $t[0] eq 'address' || expand(qt($s)) =~ /^enum\b/ ? node(0) : node(':') }
     # an item of a list is one node
     my @e = item(expr($n));
     @e > 1 ? node(':', @e) : @e;
@@ -2267,6 +2391,8 @@ sub function {
     my ($name, $d) = @_;
     local $cur_fn = $name;
     local %local = map { ($_->{id} => 1) } locals($d);
+    # (the types of its locals by name, for a typeof of one: typeof_expr)
+    local %ltypeof = map { ($_->{name} => qt($_)) } grep { $_->{name} && $_->{type} } locals($d);
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);
     my ($ret) = split_fn(expand(qt($d)));
     defined $ret or die "c2ff: not a function type: " . qt($d) . "\n";
@@ -2363,6 +2489,19 @@ while (defined(my $name = next_name())) {
     warn "c2ff: no definition of $name, left out\n";
 }
 
+# An enum constant whose name a function or global of the tree has too (a
+# block's enum { null, data, inst, uni } of dl-cacheinfo.h, vfprintf's static
+# null): C keeps them apart by scope, ff by name, so the constant is named
+# with the unit it is used in (null csu/libc-start), its uses too.
+my %defname = map { $_->[1]{content} =~ /^(.*):$/ ? ($1 => 1) : () } @out;
+sub enum_rename {
+    my ($c) = @_;
+    my $n = ffname($c);
+    return $n unless $defname{$n} && $enumunit{$c};
+    my $new = ffname("$c " . unit_name($enumunit{$c}));
+    $_->{content} = $new for @{ $enumref{$c} || [] };
+    $new;
+}
 # the types the definitions use, before them
 my @types;
 # the function types and the tags bring in more of each other: until none
@@ -2390,7 +2529,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
             # a constant keeps its value where C gives it one (clang has worked it out)
             unshift @types, node($tagname{$tag} . ':', node('enum'), grouped(254, map {
                 my $v = enum_value($_);
-                node(ffname($_->{name}) . ':', defined $v ? node($v) : ())
+                node(enum_rename($_->{name}) . ':', defined $v ? node($v) : ())
             } grep { $_->{kind} eq 'EnumConstantDecl' } kids($d)));
         } else {
             # a bitfield: its type run, then its width (one with no name, padding,

@@ -37,14 +37,29 @@
 #                   of 32-bit registers is addr32, then their 64-bit names
 #   GNU's macros    .macro / .endm (\arg, \()), .rept / .endr, .if / .else
 #                   / .endif of numbers: expanded as GNU as does
-#   GOT and TLS     sym@GOTPCREL(%rip) reads a word the function carries,
-#                   .Lgot sym: / dword / sym; sym@GOTTPOFF(%rip) (initial
-#                   exec) .Ltls sym: / dword / sym: on x86_64 a thread
-#                   local is still a global (cc_tls 0) and fs is 0, so its
-#                   offset from fs is its address
-#   other sections  as s2ff.pl: a zeroed object (.zero N) is c2ff --zero's
-#                   global, its other labels aliases; any other bytes stop
-#                   the translation
+#   GOT and TLS     sym@GOTPCREL(%rip) (and *sym@GOTPCREL(%rip), a call
+#                   through it) reads a word the function carries, .Lgot
+#                   sym: / dword / sym; sym@GOTTPOFF(%rip) (initial exec)
+#                   .Ltls sym: / dword / (tprel / sym), the thread local's
+#                   offset from fs (TLS variant II, below 0); the words
+#                   come after all of the function's code
+#   .weak X         X undefined here (crti's __gmon_start__): X: / weak /
+#                   function / void, at 0 unless something defines it, its
+#                   GOT word a C global, .Lgot X: / void / * pointer / X /
+#                   & address
+#   sym+n           a symbol plus an offset (sym+352(%rip), sym+128*4):
+#                   the compile time instruction addi / n / sym / a0 (the
+#                   user's choice B, 2026-10-21)
+#   code sections   .text (one an object), and .init and .fini (crti,
+#                   crtn): --then crtn.s crtn.dump goes on with crti's
+#                   _init and _fini, as the linker puts crtn's after them
+#   other sections  as s2ff.pl: a zeroed object (.zero N, or a zero word:
+#                   start.S's __data_start) is c2ff --zero's global, its
+#                   other labels aliases where --zero names it; read-only
+#                   data (.rodata, rodata.cst32 ...) is carried by each
+#                   function naming it, a jump table's .int L1 - L2 a word
+#                   of sub / L2 / L1 / a0 (the user's choice B); any other
+#                   bytes stop the translation
 #
 # s2ff.pl's --size gives the bytes of the instructions, --align the
 # alignment of the first function (where ttpc places it).
@@ -53,6 +68,7 @@
 package s2ffx86;
 use strict;
 use warnings;
+no warnings "portable";    # (64-bit hex numbers: a 64-bit Perl)
 use FindBin;
 use FF qw(node);
 
@@ -309,6 +325,12 @@ sub bindop {
     if ($k eq 'scale') { return () unless $s =~ /^[1248]$/; return ($s + 0, $s) }
     if ($k =~ /^label8?$/) {
         return () if $s eq '' || $s =~ /^[%\$(*]/ || $s =~ /[(),{}]/;
+        # (a symbol plus an offset, sym+352: the compile time instruction
+        # addi / 352 / sym / a0, the user's choice B)
+        if ($s =~ /^([.\w\x01]+)([-+][\d*+\-]+)$/) {
+            my ($sym, $off) = ($1, num("0$2"));
+            return (undef, node('addi', node($off), node(label($sym)), node('a0'))) if defined $off;
+        }
         return (undef, label($s));
     }
     # an immediate or a displacement: a number, or a symbol (a relocation)
@@ -432,14 +454,16 @@ sub translate {
             . (@near ? " (of @near[0 .. ($#near < 5 ? $#near : 5)])" : " (ttpc has no form of it)");
     }
     my ($m) = sort { $a->[0]{order} <=> $b->[0]{order} } @hit;
-    ((map { node($PREFIX{$_}[0]) } @pre), node($m->[0]{name}, map { node($_) } @{ $m->[2] }));
+    ((map { node($PREFIX{$_}[0]) } @pre), node($m->[0]{name}, map { ref $_ ? $_ : node($_) } @{ $m->[2] }));
 }
 
 # ---- the dump: the bytes and objdump's text of each instruction -------------
+# (by section: the code of an object is in one .text section, but crti's
+# and crtn's in .init and .fini, each from address 0)
 sub read_dump {
     my ($dump) = @_;
     open my $d, '<', $dump or die "s2ff: cannot open $dump: $!\n";
-    my (@made, $sec, %secs);
+    my ($sec, %made, @t);
     while (<$d>) {
         if (/^Disassembly of section (\S+):/) { $sec = $1; next }
         next unless /^\s*([0-9a-f]+):\t([0-9a-f ]+?)\s*(?:\t(.*))?$/;
@@ -447,17 +471,26 @@ sub read_dump {
         $asm =~ s/\s*#.*//;
         $asm =~ s/\s+<[^>]*>\s*$//;
         my @b = map { hex } split ' ', $hex;
-        if ($asm eq '' && @made) { push @{ $made[-1]{bytes} }, @b; next }
-        $secs{$sec}++;
-        push @made, { addr => $addr, bytes => \@b, asm => $asm };
+        push @t, $sec if $sec =~ /^\.text/ && !grep { $_ eq $sec } @t;
+        my $m = $made{ $sec =~ /^\.text/ ? '.text' : $sec } //= [];
+        if ($asm eq '' && @$m) { push @{ $m->[-1]{bytes} }, @b; next }
+        push @$m, { addr => $addr, bytes => \@b, asm => $asm };
     }
     close $d;
-    fail "code in more than one section: @{[sort keys %secs]}" if keys %secs > 1;
-    @made;
+    fail "code in more than one section: @{[sort @t]}" if @t > 1;
+    %made;
 }
+# a code section: a .text one, or .init and .fini (crti, crtn)
+sub is_code { $_[0] =~ /^\.text(\.|$)/ || $_[0] =~ /^\.(init|fini)$/ }
 
 # ---- the source walk -----------------------------------------------------------
 my (@made, $n, $pos, @fns, $fn, $block, $other, @pending, %datadef, $ends, %got, %tls, $align, $maxalign, @prefix, %macro, @sections);
+# the code sections: GNU's instructions of each (%MADE) and where the walk
+# is in each (%CODE: made n pos fn block ends), the current one $code;
+# --zero's names; .weak names; the words each function carries, placed at
+# the end (after crtn's part of it, --then); the weak names' GOT words, C
+# globals
+my (%MADE, %CODE, $code, %zeroed, %weak, @carried, %weakgot);
 my (%rodata, $roblob, %ro, @carry, %roset);    # read-only data: a label's bytes, the labels a function names
 sub take {
     my $m = $made[$n++] or fail "GNU as made fewer instructions than the source has";
@@ -466,15 +499,43 @@ sub take {
     $m;
 }
 sub into { ($block // $fn)->{children} }
-# the end of a function: the words its GOT and TLS operands read
+# the end of a function: the words its GOT and TLS operands read (a TLS
+# word its offset from fs: tprel / sym), after all of its code (placed
+# last: crtn's part of crti's _init comes after it); a weak name's GOT
+# word is a C global of its own (its address, 0 where nothing defines it)
 sub finish {
     push @carry, [$fn, [sort keys %ro]] if $fn && %ro;
     %ro = ();
+    $weakgot{$_} = 1 for grep { $weak{$_} } keys %got;
+    delete @got{ keys %weakgot };
     return unless $fn && (%tls || %got);
-    push @{ $fn->{children} }, node('align', node(8)),
-        (map { node(".Ltls $_:", node('dword', node($_))) } sort keys %tls),
-        (map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got);
+    push @carried, [$fn, [node('align', node(8)),
+        (map { node(".Ltls $_:", node('dword', node('tprel', node($_)))) } sort keys %tls),
+        (map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got)]];
     %tls = %got = ();
+}
+# into the code section sec: where the walk was in it, or its start
+sub code_to {
+    my ($sec) = @_;
+    $CODE{$code} = { made => [@made], n => $n, pos => $pos, fn => $fn, block => $block, ends => $ends } if defined $code;
+    my $c = $CODE{$sec} // { made => $MADE{$sec} // [], n => 0, pos => 0, fn => $fn, block => undef, ends => 1 };
+    $code = $sec;
+    @made = @{ $c->{made} };
+    ($n, $pos, $fn, $block, $ends) = @$c{qw(n pos fn block ends)};
+    # (a label after another section's code is a function of its own)
+    ($block, $ends) = (undef, 1) unless $CODE{$sec};
+}
+# each code section's instructions all taken: but the padding GNU as put
+# at its end
+sub code_done {
+    code_to($code);
+    for my $sec (sort keys %CODE) {
+        my $c = $CODE{$sec};
+        my $m = $c->{made};
+        pop @$m while @$m > $c->{n} && $m->[-1]{asm} =~ /^((data16|cs)\s+)*(nop\w*|xchg\s+%ax,%ax)\b/;
+        fail "GNU as made " . scalar(@$m) . " instructions in $sec, the source $c->{n}" unless $c->{n} == @$m;
+    }
+    for my $sec (sort keys %MADE) { fail "GNU as made code in $sec, the source has none" unless $CODE{$sec} }
 }
 # the nops GNU as put in, up to the next multiple of a (if at most max)
 sub pad {
@@ -504,14 +565,9 @@ sub padnode {
     fail "padding of no form: $m->{asm} (" . hexes(@{ $m->{bytes} }) . ")";
 }
 
-sub run {
-    my ($mode, $src, $dump) = @_;
-    load();
-    $where = $src;
-    @made = read_dump($dump);
-    ($n, $pos, $ends, $maxalign, $fn, $block, $other, $align) = (0, 0, 1);
-    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset) = ();
-    undef $roblob;
+# the lines of a .s, each with its file and line
+sub read_src {
+    my ($src) = @_;
     open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
     my ($file, $line) = ('', 0);
     my @src;
@@ -525,8 +581,53 @@ sub run {
         push @src, [$l, $file, $line];
     }
     close $s;
-    walk_lines(\@src, 0);
+    \@src;
+}
+
+# run(mode, file.s, file.dump, options): options zero => [names] (the
+# objects c2ff --zero makes), then => [crtn.s, crtn.dump] (crtn's .init
+# and .fini: the end of crti's _init and _fini, as the linker puts them
+# after crti's)
+sub run {
+    my ($mode, $src, $dump, %opt) = @_;
+    load();
+    $where = $src;
+    %MADE = read_dump($dump);
+    %CODE = ();
+    undef $code;
+    ($n, $pos, $ends, $maxalign, $fn, $block, $other, $align) = (0, 0, 1);
+    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset, %weak, @carried, %weakgot) = ();
+    %zeroed = map { $_ => 1 } @{ $opt{zero} // [] };
+    undef $roblob;
+    code_to('.text');
+    walk_lines(read_src($src), 0);
     finish();
+    code_done();
+    if (my $then = $opt{then}) {
+        # crtn: each of its code sections goes on with crti's last function
+        # there, from crtn's own instructions
+        my %more = read_dump($then->[1]);
+        $where = $then->[0];
+        code_to($code);
+        for my $sec (keys %CODE) { $CODE{$sec} = { made => $more{$sec} // [], n => 0, pos => 0, fn => $CODE{$sec}{fn}, block => $CODE{$sec}{block}, ends => 0 } }
+        $CODE{$_} //= { made => $more{$_}, n => 0, pos => 0, fn => undef, block => undef, ends => 1 } for keys %more;
+        $code = undef;
+        ($other, @sections) = (undef);
+        code_to('.text');
+        %MADE = %more;
+        walk_lines(read_src($then->[0]), 0);
+        finish();
+        code_done();
+    }
+    push @{ $_->[0]{children} }, @{ $_->[1] } for @carried;
+    # a weak name defined nowhere here: X: / weak / function / void (0
+    # unless something defines it), its GOT word a C global
+    my %defined = map { $_->{content} =~ s/:$//r => 1 } @fns;
+    for my $w (sort keys %weak) {
+        next if $defined{$w};
+        push @fns, node("$w:", node('weak'), node('function'), node('void'));
+    }
+    push @fns, node(".Lgot $_:", node('void'), node('* pointer'), node($_), node('& address')) for sort keys %weakgot;
     # each function carries the read-only data it names, after its code
     for my $c (@carry) {
         my ($f, $labels) = @$c;
@@ -535,9 +636,6 @@ sub run {
         push @{ $f->{children} }, map { (node('align', node(16)), node("$_:", @{ $rodata{$_} })) } @l;
     }
     fail "a prefix with no instruction after it: @prefix" if @prefix;
-    # what is left is the padding GNU as put at the end of the section
-    pop @made while @made > $n && $made[-1]{asm} =~ /^((data16|cs)\s+)*(nop\w*|xchg\s+%ax,%ax)\b/;
-    fail "GNU as made " . scalar(@made) . " instructions, the source $n" unless $n == @made;
     # the first function starts where GNU's section does, at its alignment
     my ($first) = grep { @{ $_->{children} } && $_->{children}[0]{content} eq 'asm' } @fns;
     if ($first && ($maxalign // 1) > 1) {
@@ -545,7 +643,7 @@ sub run {
         if (@$c > 1 && $c->[1]{content} eq 'align') { $c->[1]{children}[0]{content} = $maxalign }
         else { splice @$c, 1, 0, node('align', node($maxalign)) }
     }
-    return $pos if $mode eq 'size';
+    return $CODE{'.text'}{pos} if $mode eq 'size';
     return $maxalign // 1 if $mode eq 'align';
     merge_runons();
     \@fns;
@@ -628,7 +726,7 @@ sub walk_lines {
 
 sub section {
     my ($sec) = @_;
-    if ($sec =~ /^\.text(\.|$)/) { $other = undef; return }
+    if (is_code($sec)) { $other = undef; code_to($sec =~ /^\.text/ ? '.text' : $sec); return }
     $other = $sec;
     @pending = ();
     undef $roblob;
@@ -662,18 +760,33 @@ sub rodata_set {
 sub walk_stmt {
     my ($st, $file, $line) = @_;
     # sections: code (.text, .text.x) or another
-    if ($st =~ /^\.(text|data|bss)$/) { push @sections, $other; section(".$1"); return }
-    if ($st =~ /^\.section\s+"?([^",\s]+)"?/) { push @sections, $other; section($1); return }
-    if ($st eq '.previous') { my $p = pop @sections; push @sections, $other; $other = $p; return }
+    $weak{$1} = 1 if $st =~ /^\.weak\s+([.\w]+)$/;
+    if ($st =~ /^\.(text|data|bss)$/) { push @sections, [$other, $code]; section(".$1"); return }
+    if ($st =~ /^\.section\s+"?([^",\s]+)"?/) { push @sections, [$other, $code]; section($1); return }
+    if ($st eq '.previous') {
+        my $p = pop @sections or fail ".previous with no section before";
+        push @sections, [$other, $code];
+        ($other, my $c) = @$p;
+        code_to($c) unless defined $other;
+        return;
+    }
     if (defined $other) {
         return if $st =~ /^\.(globl|global|weak|type|size|hidden|protected|align|p2align|balign|cfi_\w+|ident)\b/;
         if ($st =~ /^([.\w]+):$/) { push @pending, $1; undef $roblob; return }
         if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)) if $datadef{$2}; return }
         # read-only data (gcc's constants, a string): its label's bytes, as
         # data each function that names it carries (its labels are its own)
-        if ($other =~ /^\.rodata/) {
+        if ($other =~ /^\.?rodata/) {
             # (.set X, Y+n: X's bytes are Y's from n on, gcc's constants shared)
             if ($st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)\s*(?:\+\s*(\d+))?$/) { $roset{$1} = [$2, $3 // 0]; return }
+            # (a jump table: .int L1 - L2, a word of the compile time
+            # instruction sub / L2 / L1 / a0, L1 - L2, the user's choice B;
+            # the labels the function's own, which carries the table)
+            if ($st =~ /^\.(int|long|4byte)\s+([.\w]+)\s*-\s*([.\w]+)$/) {
+                my ($x, $y) = ($2, $3);
+                $ro{$_} = 1 for grep { !/^\.L/ } $x, $y;
+                return rodata_add(node('word', node('sub', node($y), node($x), node('a0'))));
+            }
             if ($st =~ /^\.(string|asciz|ascii)\s+"((?:[^"\\]|\\.)*)"$/) {
                 my ($k, $t) = ($1, $2);
                 my %e = (n => "\n", t => "\t", r => "\r", f => "\f", b => "\b", '"' => '"', '\\' => '\\');
@@ -693,10 +806,16 @@ sub walk_stmt {
                 return;
             }
         }
+        # (a zero word is one too: start.S's __data_start, .long 0)
+        $st = '.zero ' . { long => 4, int => 4, quad => 8, byte => 1, value => 2, short => 2, word => 2 }->{$1} if $st =~ /^\.(long|int|quad|byte|value|short|word)\s+0$/;
         if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
             my ($first, @more) = @pending;
-            $datadef{$_} = 1 for @pending;
-            push @fns, map { node("$_:", node('alias'), node($first)) } @more;
+            # (its aliases only where c2ff --zero makes it, given --zero:
+            # start.S's __data_start, which no C declares, is not)
+            if (!%zeroed || $zeroed{$first}) {
+                $datadef{$_} = 1 for @pending;
+                push @fns, map { node("$_:", node('alias'), node($first)) } @more;
+            }
             warn "s2ff: $where: $first is zero, c2ff --zero $first makes it\n";
             @pending = ();
             return;
@@ -754,7 +873,7 @@ sub walk_stmt {
     my @ops = split_ops($rest);
     # GOT and TLS words: read from the function's own (\x01: a space)
     for (@ops) {
-        if (/^([.\w]+)\@GOTPCREL\(%rip\)$/i) { $got{$1} = 1; $_ = ".Lgot\x01$1(%rip)" }
+        if (/^(\*?)([.\w]+)\@GOTPCREL\(%rip\)$/i) { $got{$2} = 1; $_ = "$1.Lgot\x01$2(%rip)" }
         elsif (/^([.\w]+)\@GOTTPOFF\(%rip\)$/i) { $tls{$1} = 1; $_ = ".Ltls\x01$1(%rip)" }
         elsif (/\@/) { fail "a relocation with no ff form: $_" }
         $ro{$1} = 1 if /^([.\w]+)(?:[-+]\d+)?\(%rip\)$/ || /^\$(\.L\w+)$/;

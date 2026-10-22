@@ -121,9 +121,16 @@ ff, the language ttpc compiles
       i64 and u64 are refused on arm
       T * pointer: a word, the address of a T, the base type and then * pointer, siblings, in C's order: char / * pointer is char *, char / * pointer / * pointer char **; void / * pointer the address of nothing (C's void *)
       a type run is its base, a type word (or an array node), and the * pointer leaves after it; it ends at the first node that is neither, so the items after it are never read as a type (a variable is never named as a type)
+      fs after the type it qualifies, before the * pointer that points at it, is gcc's __seg_fs (x86_64): pthread / fs / * pointer is C's struct pthread __seg_fs *, pthread / * pointer / fs / * pointer struct pthread *__seg_fs *
+      a value of a type with fs is its flat address: a cast of a number (an integer type) to a type run with fs adds the thread pointer's base (fs's TCB), a cast of an address keeps it
       array T n: n elements of T, the array node holding the element's type run and the count: (array / int / 3) is C's int [3]; n a number or a constant; no count is C's T [], no elements of its own
       the array node's * pointer after it is a pointer to the array: (array / int / 4) / * pointer is C's int (*)[4]; (array / char / * pointer / 5) is C's char *[5]; arrays of arrays nest, (array / (array / int / 4) / 3) is C's int [3][4]
       in a function n may be any value, worked out at run time (C's variable-length array): its n elements are on the stack until the function returns; alloca n (C on the shared page) likewise gives n bytes there
+      vector T n: a vector (gcc's vector_size, x86_64's SSE: 16 bytes), the vector node holding the element's type run and the count of elements, as array; another target stops at it
+      (vector / char / 16) is C's char __attribute__ ((vector_size (16))), gcc's __v16qi; (vector / long long / 2) is __m128i
+      a vector is a value in memory, as a struct: = copies it, a parameter or a result of one goes in one xmm register (the SysV ABI's, as a long double), its alignment its size
+      | ^ & == != of two vectors of one type are element by element (== gives an element all ones where they are equal, else 0; != the other way; the elements 1, 2 or 4 bytes); a cast to another vector type keeps the bits
+      the vector node as a value, its count's items after it, is a vector literal, as an array's temporary: (vector / char / 16), then 16 items, is C's (__v16qi){ ... }
       a struct name is a type: point:, struct, then its fields, each name: and a type run, laid out as C does
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
@@ -251,7 +258,7 @@ ff, the language ttpc compiles
             4
       a page item whose items have children only as :, items, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
-      thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64), else a global
+      thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64, aarch64, x86_64), else a global
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
       ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled
@@ -537,7 +544,7 @@ ff, the language ttpc compiles
           ret
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
-      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, struct, enum, function, sizeof, alignof, union
+      the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, vector, struct, enum, function, sizeof, alignof, union
       and: ..., va_start, va_arg, va_end, va_copy, thread local, constructor, destructor, alias, ifunc, asm, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error

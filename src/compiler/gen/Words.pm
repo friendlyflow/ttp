@@ -19,6 +19,8 @@
 #   point / 1                       point, 1, 0             (point){1}
 #   array / T / 3 / a / b           (array / T / 3), a, b, 0  (T[3]){a, b}
 #   padding 1: / u32 / 4            : / u32 / 4             unsigned : 4
+#   address / fs / pthread          pthread / fs / * pointer  struct pthread __seg_fs *
+#   vector / char / 16              (vector / char / 16)    __v16qi (as array, also its literal)
 #
 # Siblings in a row (a, b) are what before was one node. cast and the
 # suffixes U L UL LL ULL are prefixes, their operand the next sibling;
@@ -87,7 +89,7 @@ sub has_newwords {
     my ($n) = @_;
     return 1 if $n->{content} =~ /^(?:\* pointer|& address):?$/ || $n->{content} =~ / \* pointer:$/ || $n->{content} eq 'cast' && !leaf($n);
     # (a declaration's type an array node: before, array was a leaf there)
-    if ($n->{content} =~ /.:$/) { my @k = kids($n); my $i = marks(\@k); return 1 if $i < @k && $k[$i]{content} eq 'array' && !leaf($k[$i]) }
+    if ($n->{content} =~ /.:$/) { my @k = kids($n); my $i = marks(\@k); return 1 if $i < @k && $k[$i]{content} =~ /^(?:array|vector)$/ && !leaf($k[$i]) }
     for (kids($n)) { return 1 if has_newwords($_) }
     0;
 }
@@ -147,7 +149,7 @@ sub lit_end {
 # name); nothing if it is none
 sub lit_count {
     my ($t, $n) = @_;
-    if ($n->{content} eq 'array' && !leaf($n)) {
+    if ($n->{content} =~ /^(?:array|vector)$/ && !leaf($n)) {
         my $c = (kids($n))[-1];
         return leaf($c) && $c->{content} =~ /^(?:\d+|0x[0-9a-fA-F]+)$/ ? oct_or_dec($c->{content}) : undef;
     }
@@ -220,7 +222,7 @@ sub regroup {
 sub oldrun_new {
     my ($t, $l, $i) = @_;
     $i++;
-    $i++ while $i < @$l && is($l->[$i], '* pointer');
+    $i++ while $i < @$l && (is($l->[$i], '* pointer') || is($l->[$i], 'fs'));
     (undef, $i);
 }
 
@@ -235,11 +237,17 @@ sub newrun {
         $Words::warn->($l->[$i + 1]{content}) if $Words::warn && $i + 1 < @$l && leaf($l->[$i + 1]) && $l->[$i + 1]{content} =~ /^[A-Za-z_]/;
         return ([node('void'), node('* pointer')], $i + 1);
     }
-    if ($w eq 'array') {
+    # (fs / T before, T / fs now: x86_64's __seg_fs, after the type it
+    # qualifies, before the * pointer that points at it)
+    if ($w eq 'fs') {
+        my ($in, $j) = newrun($t, $l, $i + 1) or return;
+        return ([@$in, node('fs')], $j);
+    }
+    if ($w eq 'array' || $w eq 'vector') {
         my ($in, $j) = newrun($t, $l, $i + 1) or return;
         return if $j >= @$l;
         # (c2ff's [] for C's T[]: no count)
-        return ([node('array', @$in, is($l->[$j], '[]') ? () : newone($t, $l->[$j], 'fn'))], $j + 1);
+        return ([node($w, @$in, is($l->[$j], '[]') ? () : newone($t, $l->[$j], 'fn'))], $j + 1);
     }
     return ([node($w)], $i + 1) if $t->{word}{$w};
     return;
@@ -335,8 +343,8 @@ sub newnode {
         return with_path($t, \@k, sub { (node('cast', node($w)), operand($t, 1, @{ $_[0] })) });
     }
     if ($t->{rec}{$w}) { return with_path($t, \@k, sub { new_lit($t, [node($w)], $_[0]) }) }
-    if ($w eq 'array') {
-        my ($r, $j) = newrun($t, [node('array'), @k], 0) or die "words: an array literal without its type\n";
+    if ($w eq 'array' || $w eq 'vector') {
+        my ($r, $j) = newrun($t, [node($w), @k], 0) or die "words: an array literal without its type\n";
         return with_path($t, [@k[$j - 1 .. $#k]], sub { new_lit($t, $r, $_[0]) });
     }
     if ($w =~ /^(.+):$/ && $w ne ':') { return newdef($t, $n, $ctx) }
@@ -347,7 +355,7 @@ sub newlist {
     my @out;
     for (my $i = 0; $i < @$l; ) {
         my $n = $l->[$i];
-        if (leaf($n) && ($n->{content} eq 'address' || $n->{content} eq 'array')) {
+        if (leaf($n) && ($n->{content} eq 'address' || $n->{content} =~ /^(?:array|vector)$/)) {
             my ($r, $j) = newrun($t, $l, $i);
             if ($r) { push @out, @$r; $i = $j; next }
         }
@@ -388,7 +396,7 @@ sub new_lit {
     die "words: compound literals nested too deep\n" if ($depth // 0) > 32;
     my @items = items_of($old, $t, 0);
     my $h = $ty->[0];
-    if ($h->{content} eq 'array' && !leaf($h)) {
+    if ($h->{content} =~ /^(?:array|vector)$/ && !leaf($h)) {
         my @c = kids($h);
         my $n = oct_or_dec($c[-1]{content});
         my @e = @c[0 .. $#c - 1];
@@ -428,7 +436,7 @@ sub new_fields {
 # one place of the type run (now): its item, a zero one if none
 sub new_place {
     my ($t, $run, $it, $depth) = @_;
-    my $agg = @$run == 1 && ($run->[0]{content} eq 'array' && !leaf($run->[0]) || leaf($run->[0]) && $t->{rec}{ $run->[0]{content} });
+    my $agg = @$run == 1 && ($run->[0]{content} =~ /^(?:array|vector)$/ && !leaf($run->[0]) || leaf($run->[0]) && $t->{rec}{ $run->[0]{content} });
     if ($agg) {
         return new_lit($t, $run, [kids($it->[0])], ($depth // 0) + 1) if $it && @$it == 1 && $it->[0]{content} eq ':' && !leaf($it->[0]);
         # (a zero one: its zeros written out, the user's)
@@ -449,7 +457,7 @@ sub oldwords {
     map { oldnode($t, $_) } @n;
 }
 my %olddecl = reverse %newdecl;
-sub is_typeword { my ($t, $n) = @_; leaf($n) && $t->{word}{ $n->{content} } || $n->{content} eq 'array' && !leaf($n) }
+sub is_typeword { my ($t, $n) = @_; leaf($n) && $t->{word}{ $n->{content} } || $n->{content} =~ /^(?:array|vector)$/ && !leaf($n) }
 
 # the type run now at $i of l: [nodes before], the index after it
 sub oldrun {
@@ -457,15 +465,15 @@ sub oldrun {
     return if $i >= @$l || is($l->[$i], '* pointer');
     my $n = $l->[$i];
     my @r;
-    if ($n->{content} eq 'array' && !leaf($n)) {
+    if ($n->{content} =~ /^(?:array|vector)$/ && !leaf($n)) {
         my @c = kids($n);
         my ($in, $j) = oldrun($t, \@c, 0) or die "words: an array without its element type\n";
-        @r = (node('array'), @$in, $j < @c ? oldnode1($t, $c[$j]) : node('0'));
+        @r = (node($n->{content}), @$in, $j < @c ? oldnode1($t, $c[$j]) : node('0'));
     } elsif (leaf($n)) {
         @r = (node($n->{content}));
     } else { return }
     $i++;
-    while ($i < @$l && is($l->[$i], '* pointer')) { unshift @r, node('address'); $i++ }
+    while ($i < @$l && (is($l->[$i], '* pointer') || is($l->[$i], 'fs'))) { unshift @r, node(is($l->[$i], 'fs') ? 'fs' : 'address'); $i++ }
     (\@r, $i);
 }
 sub oldnode1 { my ($t, $n) = @_; my @r = oldnode($t, $n); @r == 1 ? $r[0] : die "words: one node became several: $n->{content}\n" }
@@ -535,9 +543,9 @@ sub oldlit {
     my $n = $l->[$i];
     my $e = lit_end($t, $l, $i);
     my @rest = @$l[$i + 1 .. $e - 1];
-    if ($n->{content} eq 'array') {
+    if ($n->{content} =~ /^(?:array|vector)$/) {
         my ($r) = oldrun($t, [$n], 0);
-        return (node('array', @$r[1 .. $#$r], map { old_place($t, $_) } items_of(\@rest, $t, 1)), $e);
+        return (node($n->{content}, @$r[1 .. $#$r], map { old_place($t, $_) } items_of(\@rest, $t, 1)), $e);
     }
     my $rec = $t->{rec}{ $n->{content} };
     if ($rec->{kind} eq 'union') {
@@ -565,7 +573,7 @@ sub old_place {
     if (@$it && defined lit_count($t, $it->[0]) && lit_end($t, $it, 0) == @$it) {
         my ($v) = oldlit($t, $it, 0);
         my @c = kids($v);
-        if ($v->{content} eq 'array') { my ($r) = oldrun($t, [$it->[0]], 0); splice @c, 0, @$r - 1 }
+        if ($v->{content} =~ /^(?:array|vector)$/) { my ($r) = oldrun($t, [$it->[0]], 0); splice @c, 0, @$r - 1 }
         return node(':', @c);
     }
     my @v = oldvals($t, $it);
@@ -612,7 +620,7 @@ sub oldnode {
     }
     if ($w eq 'generic') { my ($x, @as) = @k; return node($w, oldvals($t, [$x]), map { node(gen_old($_->{content}), oldvals($t, [kids($_)])) } @as) }
     die "words: a cast out of a run\n" if $w eq 'cast';
-    die "words: an array type out of a type run\n" if $w eq 'array';
+    die "words: an array type out of a type run\n" if $w =~ /^(?:array|vector)$/;
     return node($w, olddef($t, \@k)) if $w =~ /^(.+):$/ && $w ne ':';
     return node($w, is_typeword($t, $k[0]) ? oldtype($t, \@k) : oldvals($t, \@k)) if $w eq 'sizeof' || $w eq 'alignof';
     if ($w eq 'va_arg') { my ($v, $j) = oldunit($t, \@k, 0); return node($w, @$v, oldtype($t, [@k[$j .. $#k]])) }
@@ -632,7 +640,7 @@ sub olddef {
     return oldvals($t, $k) unless $i < @$k && is_typeword($t, $k->[$i]) && !(leaf($k->[0]) && $k->[0]{content} =~ /^(?:struct|union|enum)$/);
     my ($r, $j) = oldrun($t, $k, $i);
     # (an aggregate's items: a : of its own one of an aggregate in it)
-    my $agg = $r->[0]{content} eq 'array' || @$r == 1 && $t->{rec}{ $r->[0]{content} };
+    my $agg = $r->[0]{content} =~ /^(?:array|vector)$/ || @$r == 1 && $t->{rec}{ $r->[0]{content} };
     (oldvals($t, [@$k[0 .. $i - 1]]), @$r, $agg ? olditems($t, [@$k[$j .. $#$k]]) : oldvals($t, [@$k[$j .. $#$k]]));
 }
 

@@ -17,7 +17,11 @@ void *memset (void *, int, size_t);
 int strcmp (const char *, const char *);
 char *strchr (const char *, int);
 /* memcpy's generic C, which its resolver leaves out where misaligned
-   access is fast (qemu without V): called by its own name */
+   access is fast (qemu without V): called by its own name (x86_64 has
+   none: its SSE2 asm, the one every x86_64 runs) */
+#ifdef __x86_64__
+#define __memcpy_generic __memcpy_sse2_unaligned
+#endif
 void *__memcpy_generic (void *, const void *, size_t);
 
 static char src[300];
