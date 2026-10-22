@@ -175,8 +175,11 @@ sub rec { my ($t, $name) = @_; $t->{rec}{$name} // die "words: not a struct or a
 # before -> now
 # ---------------------------------------------------------------------------
 
+# (a stop names the definitions it is in: @at)
+our @at;
 sub newwords {
     my ($types, @n) = @_;
+    local $SIG{__DIE__} = sub { my ($m) = @_; $m =~ s{\n\z}{" (in " . join(" / ", @at) . ")\n"}e if $m =~ /^words: / && $m !~ / \(in /; die $m };
     return @n if grep { has_newwords($_) } @n;
     my $t = newtypes($types // {});
     typenames($t, @n);
@@ -273,10 +276,30 @@ sub with_path {
 }
 sub textish { my ($r) = @_; @$r == 2 && leaf($r->[0]) && $r->[0]{content} =~ /^(?:char|u8|i8)$/ && is($r->[1], '* pointer') }
 
+our $scoped;
+my %record = map { $_ => 1 } qw(struct union enum function);
+# the names that nodes under these declare (name: and a type) and that are
+# type words: those of a function's parameters and locals
+sub declared {
+    my ($t, @n) = @_;
+    my %d;
+    while (my $n = shift @n) {
+        my @k = kids($n);
+        $d{$1} = 1 if $n->{content} =~ /^([A-Za-z_]\w*):$/ && $t->{word}{$1} && !$scalarword{$1} && @k && !(leaf($k[0]) && $record{ $k[0]{content} });
+        push @n, @k;
+    }
+    keys %d;
+}
 my %newdecl = ("address:" => "& address:", "content:" => "* pointer:", "cast::" => "cast:");
 sub newnode {
     my ($t, $n, $ctx) = @_;
     my ($w, @k) = ($n->{content}, kids($n));
+    local @at = (@at, $w) if $w =~ /.:$/;
+    # a function's parameters and locals are no types in it, though another
+    # unit has a tag of their name (tsearch's action, wordexp's enum action)
+    my @shadow = !$scoped && $w =~ /.:$/ && @k && leaf($k[0]) && !$record{ $k[0]{content} } ? declared($t, @k) : ();
+    local $scoped = 1 if @shadow;
+    local @{ $t->{word} }{@shadow} if @shadow;
     # the shared page's declarations: their parameters stay
     return node($newdecl{$w}, map { node($_->{content}, kids($_)) } @k) if $newdecl{$w};
     return $n if !@k;
@@ -286,6 +309,10 @@ sub newnode {
     if ($w eq 'content') { return with_path($t, \@k, sub { (operand($t, 0, @{ $_[0] }), node('* pointer')) }) }
     if ($w eq 'address') {
         my ($r, $j) = newrun($t, \@k, 0);
+        # (a name that is a type somewhere, a tag of another unit, but has
+        # no value after it is the value: utmp_file's &action, wordexp's
+        # enum action)
+        $r = undef if $r && @$r == 1 && leaf($k[0]) && ($j == @k || is($k[$j], '.'));
         return with_path($t, \@k, sub { (operand($t, 0, @{ $_[0] }), node('& address')) }) unless $r;
         # a conversion to a pointer: a cast (a leaf under char is text)
         die "words: a conversion to the address of an array (write cast:)\n" if $r->[0]{content} eq 'array';

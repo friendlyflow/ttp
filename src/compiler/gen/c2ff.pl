@@ -339,7 +339,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section zero ra sp gp tp fp pc
+    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -386,6 +386,7 @@ my $start;                 # --start: a _start of the program's own, SYS_exit (m
 my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, in .bss)
 my %forceweak;             # --weak name: nothing defines it for a static program
 my %section;               # a named section: its globals (their keys in %var), in their order
+my (%ctor, %ctors_of);      # a constructor or destructor (by key): its word and priority; a unit's
 my (@units, @roots);
 my $passonly;              # --pass: only each unit's own pass (unit_pass), made where it is not
 our $keep_going;           # --keep-going: what cannot be translated yet is left out (leave_out)
@@ -579,7 +580,16 @@ for my $u (@units) {
             # and its body may only inline, error.h's error with
             # __builtin_va_arg_pack)
             my $inline_only = %treedefs && $d->{inline} && ($d->{storageClass} // '') eq 'extern' && $treedefs{ ffname($name) };
-            if (!$inline_only && grep { $_->{kind} eq 'CompoundStmt' } @in) { my $k = own_name(\%fn, $name, $d, $u); $fn{$k} //= [$d, $u] }
+            if (!$inline_only && grep { $_->{kind} eq 'CompoundStmt' } @in) {
+                my $k = own_name(\%fn, $name, $d, $u);
+                $fn{$k} //= [$d, $u];
+                # a constructor or destructor: run by the start code, so a
+                # root wherever its unit is linked (as an archive member is)
+                if (my ($c) = grep { $_->{kind} =~ /^(?:Con|De)structorAttr$/ } @in) {
+                    $ctor{$k} = [$c->{kind} eq 'ConstructorAttr' ? 'constructor' : 'destructor', ctor_priority($u, $c)];
+                    push @{ $ctors_of{$u} }, $k;
+                }
+            }
             # (and under address a local named as a tag would be the type: struct
             # msort_param msort_param in qsort)
             # (both found by the unit's own pass, unit_pass)
@@ -882,6 +892,15 @@ sub resolver {
     my $s = substr($u->{text}, $b, 400);
     $s =~ /ifunc\s*\(\s*((?:"[^"]*"\s*)+)\)/ or die "c2ff: no resolver in '$s'\n";
     join '', $1 =~ /"([^"]*)"/g;
+}
+
+# The priority of a constructor or destructor (constructor (101)): the JSON
+# has none, the .i has it; undef without one.
+sub ctor_priority {
+    my ($u, $attr) = @_;
+    my $b = $attr->{range}{begin}{offset} // $attr->{range}{begin}{expansionLoc}{offset};
+    return undef unless defined $b;
+    substr($u->{text}, $b, 80) =~ /^(?:__)?(?:con|de)structor(?:__)?\s*\(\s*(\d+)\s*\)/ ? $1 + 0 : undef;
 }
 
 # ---- expressions ----------------------------------------------------------------
@@ -1693,7 +1712,10 @@ sub expr {
         @t == 1 && (!$scalar_word{$t[0]} || $t[0] ne 'address' && $t[0] ne 'array') or stop('a compound literal of ' . qt($n), $n);
         # (one of a scalar type is a typed literal, u32 / 0; ttpc gives
         # address / u32 / 0 a temporary, C's &(unsigned int){0})
-        return node($t[0], init((kids($n))[0]));
+        # (an empty one, C23's and GNU's {}, is {0}: support_blob_repeat_free's
+        # *blob = (struct support_blob_repeat) {})
+        my @i = init((kids($n))[0]);
+        return node($t[0], @i ? @i : node('0'));
     }
     if ($k eq 'UnaryExprOrTypeTraitExpr') {
         my $w = $n->{name};
@@ -2382,6 +2404,10 @@ sub function {
         ($d->{variadic} ? node('...') : ()),
         # (the .i, not the copy of it clang read: CLANGFIX)
         node('comment', node("glibc-2.44 " . ($d->{file} =~ s/\.clang\.i$/.i/r))));
+    # (constructor or destructor first, its priority under it: the user's
+    # choice, 2026-10-21)
+    my $c = $ctor{$name};
+    unshift @head, node($c->[0], defined $c->[1] ? node($c->[1]) : ()) if $c;
     node(ffname($name) . ':', @head, stmt_layers(scalar @head, map { [stmt($_)] } kids($cs)));
 }
 # A function's statements, each a run of nodes: past what a node holds
@@ -2430,11 +2456,13 @@ while (defined(my $name = next_name())) {
     }
     if (my $f = $fn{$name}) {
         local $cur_unit = $f->[1];
+        want($_) for @{ $ctors_of{ $f->[1] } // [] };
         eval { push @out, [$f->[1], function($name, body_of(@$f))]; 1 } or leave_out($name);
         next;
     }
     if (my $v = $var{$name}) {
         local $cur_unit = $v->[1];
+        want($_) for @{ $ctors_of{ $v->[1] } // [] };
         local $cur_global = $name;
         eval { push @out, [$v->[1], decl($v->[0], 1, $name ne $v->[0]{name} ? ffname($name) : undef)]; 1 } or leave_out($name);
         next;

@@ -468,6 +468,15 @@ comment
 section:
   name
 comment
+  constructor priority: C, first under a function's name, before its type: the start code runs the function before main (glibc's call_init), from where ttpc lays its address out, between __init_array_start and __init_array_end, as ld does.
+  priority (0 to 65535, may be left out) puts lower ones first, those without one last; every constructor of the program and of the library it is built with is compiled.
+constructor:
+  priority
+comment
+  destructor priority: C, as constructor, for exit: between __fini_array_start and __fini_array_end, which exit walks from the end.
+destructor:
+  priority
+comment
   void: C, no value, the type of a function that returns none.
 void:
 comment

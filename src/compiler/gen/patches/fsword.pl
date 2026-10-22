@@ -11,8 +11,9 @@
 # pointer's base, cc_addtls (x86_64: fs's TCB, which points at itself);
 # a cast of an address (one already in fs: THREAD_SELF's
 # *(struct pthread *__seg_fs *) &...->header.self) keeps it. The type is
-# otherwise the type without fs. cc_kw gains fs (KW_fs, 59, after the
-# literal suffixes, which the checks for KW_U and on keep apart).
+# otherwise the type without fs. cc_kw gains fs (KW_fs, 61, after the
+# literal suffixes and constructor, destructor, which the checks for KW_U
+# and on keep apart).
 #
 #   ptrsuf    takes fs in the * pointer run and notes it (cc_fsrun)
 #   tskip     skips it as a * pointer
@@ -27,7 +28,7 @@ our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 # (T=ttpc.defs.ff: the constant KW_fs)
 if ($t =~ /^ttpc:\n/m) {
-    once(\$t, "  KW_U:\n    addi\n      54\n      zero\n      a0\n", "  KW_U:\n    addi\n      54\n      zero\n      a0\n  KW_fs:\n    addi\n      59\n      zero\n      a0\n", 'KW_U');
+    once(\$t, "  KW_U:\n    addi\n      54\n      zero\n      a0\n", "  KW_U:\n    addi\n      54\n      zero\n      a0\n  KW_fs:\n    addi\n      61\n      zero\n      a0\n", 'KW_U');
     save();
     exit;
 }
@@ -54,7 +55,7 @@ sub reasm {
 # a block (a label and its instructions) at the end of function $name
 sub add_block { my ($name, $src) = @_; after_fn($name, asm(indent_of($name) + 2, $src)) }
 
-once(\$t, "ULL\\x00\\x00\n", "ULL\\x00fs\\x00\\x00\n", 'cc_kw');
+once(\$t, "destructor\\x00\\x00\n", "destructor\\x00fs\\x00\\x00\n", 'cc_kw');
 once(\$t, "  start_node:\n    reserve\n      NODE_size\n", "  start_node:\n    reserve\n      NODE_size\n  cc_fsrun:\n    reserve\n      8\n", 'start_node');
 
 reasm('ptrsuf', "

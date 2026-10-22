@@ -260,6 +260,17 @@ ff, the language ttpc compiles
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64, aarch64, x86_64), else a global
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
+      constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
+      ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled
+      constructor / 101 gives it a priority, lower first, those without one last
+      destructor, the same way, runs it at exit (C's __attribute__ ((destructor))): between __fini_array_start and __fini_array_end, walked from the end
+      example
+        init:
+          constructor
+          void
+          ready
+          =
+          1
       example
         errno:
           thread local
@@ -534,7 +545,7 @@ ff, the language ttpc compiles
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
       the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, vector, struct, enum, function, sizeof, alignof, union
-      and: ..., va_start, va_arg, va_end, va_copy, thread local, alias, ifunc, asm, compile time, emit, fail, number, target
+      and: ..., va_start, va_arg, va_end, va_copy, thread local, constructor, destructor, alias, ifunc, asm, compile time, emit, fail, number, target
   compile time
     compile time goes only first in a named function or a lambda; elsewhere it is an error
     that function or lambda runs while compiling, natively on the host, once per node in pass 1, with the whole program page (C and asm); it is not in the program

@@ -11,7 +11,7 @@
 # bits. A vector literal is the array temporary with vector at its head
 # (vector / char / 16, then its 16 items). x86_64's alone for now: on
 # another target a vector stops ttpc (msg_vector). cc_kw gains vector
-# (KW_vector, 60, after fs); the type kind TY_VECTOR is 6.
+# (KW_vector, 62, after fs); the type kind TY_VECTOR is 6.
 #
 #   typerun   vector / T / n: vectype, one TY_VECTOR record for each (on
 #             x86_64; else stop)
@@ -30,7 +30,7 @@ our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 # (T=ttpc.defs.ff: the constants KW_vector, TY_VECTOR)
 if ($t =~ /^ttpc:\n/m) {
-    once(\$t, "  KW_fs:\n    addi\n      59\n      zero\n      a0\n", "  KW_fs:\n    addi\n      59\n      zero\n      a0\n  KW_vector:\n    addi\n      60\n      zero\n      a0\n", 'KW_fs');
+    once(\$t, "  KW_fs:\n    addi\n      61\n      zero\n      a0\n", "  KW_fs:\n    addi\n      61\n      zero\n      a0\n  KW_vector:\n    addi\n      62\n      zero\n      a0\n", 'KW_fs');
     once(\$t, "  TY_BITS:\n    addi\n      5\n      zero\n      a0\n", "  TY_BITS:\n    addi\n      5\n      zero\n      a0\n  TY_VECTOR:\n    addi\n      6\n      zero\n      a0\n", 'TY_BITS');
     save();
     exit;
@@ -58,7 +58,7 @@ sub reasm {
 # a block (a label and its instructions) at the end of function $name
 sub add_block { my ($name, $src) = @_; after_fn($name, asm(indent_of($name) + 2, $src)) }
 
-once(\$t, "ULL\\x00fs\\x00\\x00\n", "ULL\\x00fs\\x00vector\\x00\\x00\n", 'cc_kw');
+once(\$t, "destructor\\x00fs\\x00\\x00\n", "destructor\\x00fs\\x00vector\\x00\\x00\n", 'cc_kw');
 
 # the message of a vector on a target without them
 my $msg = 'ttpc: vector, of the SysV ABI of x86_64, on another target:\x20';

@@ -134,7 +134,8 @@ if ($cmd eq 'run') {
             }
             waitpid $pid, 0;
             my $s = $? & 127 ? 128 + ($? & 127) : $? >> 8;
-            $got{$b}{$cpu} = [$s, slurp("$out.out"), slurp("$out.err")];
+            # (slot.sh's own lines, where it waited for a slot, are no stderr of the test's)
+            $got{$b}{$cpu} = [$s, slurp("$out.out"), slurp("$out.err") =~ s/^slot\.sh: .*\n//mgr];
         }
     }
     system('rm', '-rf', $run);
