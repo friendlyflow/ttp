@@ -11109,12 +11109,36 @@ g55:
     {vex3} vmovq %xmm9, gnu_fwd(%rip)
     vzeroupper
     vzeroall
+    {vex3} vfmadd213sd %xmm2, %xmm12, %xmm3
+    {vex3} vfmadd213sd 0(%r14), %xmm13, %xmm6
+    {vex3} vfmadd213sd 64(%rsi), %xmm14, %xmm7
+    {vex3} vfmadd213sd 4660(%r11), %xmm15, %xmm5
+    {vex3} vfmadd213sd 0(%rsp), %xmm8, %xmm1
+    {vex3} vfmadd213sd 8(%r12), %xmm9, %xmm2
+    {vex3} vfmadd213sd 128(%rsp), %xmm12, %xmm3
+    {vex3} vfmadd213sd 0(%rdx,%rbp,4), %xmm13, %xmm6
+    {vex3} vfmadd213sd -128(%rbp,%r12,8), %xmm14, %xmm7
+    {vex3} vfmadd213sd -129(%r12,%rax,1), %xmm15, %xmm5
+    {vex3} vfmadd213sd gnu_back(%rip), %xmm8, %xmm1
+    {vex3} vfmadd213ss %xmm9, %xmm2, %xmm12
+    {vex3} vfmadd213ss 0(%r15), %xmm3, %xmm13
+    {vex3} vfmadd213ss 127(%rdi), %xmm6, %xmm14
+    {vex3} vfmadd213ss -2147483648(%r14), %xmm7, %xmm15
+    {vex3} vfmadd213ss 0(%r12), %xmm5, %xmm8
+    {vex3} vfmadd213ss -1(%rsp), %xmm1, %xmm9
+    {vex3} vfmadd213ss 2147483647(%r12), %xmm2, %xmm12
+    {vex3} vfmadd213ss 0(%r9,%r15,2), %xmm3, %xmm13
+    {vex3} vfmadd213ss 64(%rdi,%rsi,4), %xmm6, %xmm14
+    {vex3} vfmadd213ss 4660(%r15,%rcx,8), %xmm7, %xmm15
+    {vex3} vfmadd213ss gnu_fwd(%rip), %xmm5, %xmm8
+    vfmaddsd %xmm1, %xmm9, %xmm2, %xmm12
+    vfmaddss %xmm3, %xmm13, %xmm6, %xmm14
     kmovd %edx, %k1
-    {vex3} kmovd %edx, %k2
-    kmovd %k1, %r12d
-    {vex3} kmovd %k3, %ebx
-    {vex3} kmovq %r13, %k4
-    {vex3} kmovq %k5, %rsi
+    {vex3} kmovd %edi, %k2
+    kmovd %k1, %r15d
+    {vex3} kmovd %k3, %ebp
+    {vex3} kmovq %r8, %k4
+    {vex3} kmovq %k5, %rcx
     kortestb %k2, %k6
     {vex3} kortestb %k7, %k1
     kortestw %k3, %k2
@@ -11125,237 +11149,237 @@ g55:
     {vex3} korq %k5, %k6, %k7
     korw %k4, %k1, %k2
     {vex3} korw %k3, %k4, %k5
-    {vex3} andn %r14d, %edi, %r15d
-    {vex3} andn 0(%r14), %ebp, %r8d
-    {vex3} andn 64(%rsi), %ecx, %r9d
-    {vex3} andn 4660(%r11), %edx, %r12d
-    {vex3} andn 0(%rsp), %ebx, %r13d
-    {vex3} andn 8(%r12), %esi, %r14d
-    {vex3} andn 128(%rsp), %edi, %r15d
-    {vex3} andn 0(%rdx,%rbp,4), %ebp, %r8d
-    {vex3} andn -128(%rbp,%r12,8), %ecx, %r9d
-    {vex3} andn -129(%r12,%rax,1), %edx, %r12d
-    {vex3} andn gnu_back(%rip), %ebx, %r13d
-    {vex3} bzhi %esi, %r14d, %edi
-    {vex3} bzhi %r15d, 0(%r15), %ebp
-    {vex3} bzhi %r8d, 127(%rdi), %ecx
-    {vex3} bzhi %r9d, -2147483648(%r14), %edx
-    {vex3} bzhi %r12d, 0(%r12), %ebx
-    {vex3} bzhi %r13d, -1(%rsp), %esi
-    {vex3} bzhi %r14d, 2147483647(%r12), %edi
-    {vex3} bzhi %r15d, 0(%r9,%r15,2), %ebp
-    {vex3} bzhi %r8d, 64(%rdi,%rsi,4), %ecx
-    {vex3} bzhi %r9d, 4660(%r15,%rcx,8), %edx
-    {vex3} bzhi %r12d, gnu_fwd(%rip), %ebx
-    {vex3} blsmsk %r13d, %esi
-    {vex3} blsmsk 0(%rcx), %r14d
-    {vex3} blsmsk 8(%r15), %edi
-    {vex3} blsmsk 128(%rcx), %r15d
-    {vex3} blsmsk 0(%rsp), %ebp
-    {vex3} blsmsk -128(%r12), %r8d
-    {vex3} blsmsk -129(%rsp), %ecx
-    {vex3} blsmsk 0(%rsp,%r9,1), %r9d
-    {vex3} blsmsk 127(%rax,%rbp,2), %edx
-    {vex3} blsmsk -2147483648(%r9,%r12,4), %r12d
-    {vex3} blsmsk gnu_back(%rip), %ebx
-    {vex3} shlx %r13d, %esi, %r14d
-    {vex3} shlx %edi, 0(%r8), %r15d
-    {vex3} shlx %ebp, -1(%r8), %r8d
-    {vex3} shlx %ecx, 2147483647(%rbp), %r9d
-    {vex3} shlx %edx, 0(%r12), %r12d
-    {vex3} shlx %ebx, 64(%rsp), %r13d
-    {vex3} shlx %esi, 4660(%r12), %r14d
-    {vex3} shlx %edi, 0(%r14,%rax,8), %r15d
-    {vex3} shlx %ebp, 8(%rsp,%r15,1), %r8d
-    {vex3} shlx %ecx, 128(%r13,%rsi,2), %r9d
-    {vex3} shlx %edx, gnu_fwd(%rip), %r12d
-    {vex3} shrx %ebx, %r13d, %esi
-    {vex3} shrx %r14d, 0(%rdx), %edi
-    {vex3} shrx %r15d, -128(%r13), %ebp
-    {vex3} shrx %r8d, -129(%rdx), %ecx
-    {vex3} shrx %r9d, 0(%rsp), %edx
-    {vex3} shrx %r12d, 127(%r12), %ebx
-    {vex3} shrx %r13d, -2147483648(%rsp), %esi
-    {vex3} shrx %r14d, 0(%rsi,%rcx,4), %edi
-    {vex3} shrx %r15d, -1(%rbp,%r9,8), %ebp
-    {vex3} shrx %r8d, 2147483647(%r12,%rbp,1), %ecx
-    {vex3} shrx %r9d, gnu_back(%rip), %edx
-    {vex3} sarx %r12d, %ebx, %r13d
-    {vex3} sarx %esi, 0(%r9), %r14d
-    {vex3} sarx %edi, 64(%r9), %r15d
-    {vex3} sarx %ebp, 4660(%rbx), %r8d
-    {vex3} sarx %ecx, 0(%r12), %r9d
-    {vex3} sarx %edx, 8(%rsp), %r12d
-    {vex3} sarx %ebx, 128(%r12), %r13d
-    {vex3} sarx %esi, 0(%r15,%r12,2), %r14d
-    {vex3} sarx %edi, -128(%rdi,%rax,4), %r15d
-    {vex3} sarx %ebp, -129(%r15,%r15,8), %r8d
-    {vex3} sarx %ecx, gnu_fwd(%rip), %r9d
-    {vex3} andn %rdx, %r12, %rbx
-    {vex3} andn 0(%rbx), %r13, %rsi
-    {vex3} andn 127(%r10), %r14, %rdi
-    {vex3} andn -2147483648(%rsi), %r15, %rbp
-    {vex3} andn 0(%rsp), %r8, %rcx
-    {vex3} andn -1(%r12), %r9, %rdx
-    {vex3} andn 2147483647(%rsp), %r12, %rbx
-    {vex3} andn 0(%rax,%rsi,1), %r13, %rsi
-    {vex3} andn 64(%rax,%rcx,2), %r14, %rdi
-    {vex3} andn 4660(%r9,%r9,4), %r15, %rbp
-    {vex3} andn gnu_back(%rip), %r8, %rcx
-    {vex3} bzhi %r9, %rdx, %r12
-    {vex3} bzhi %rbx, 0(%r10), %r13
-    {vex3} bzhi %rsi, 8(%r11), %r14
-    {vex3} bzhi %rdi, 128(%rdi), %r15
-    {vex3} bzhi %rbp, 0(%r12), %r8
-    {vex3} bzhi %rcx, -128(%rsp), %r9
-    {vex3} bzhi %rdx, -129(%r12), %r12
-    {vex3} bzhi %rbx, 0(%r8,%rbp,8), %r13
-    {vex3} bzhi %rsi, 127(%rsp,%r12,1), %r14
-    {vex3} bzhi %rdi, -2147483648(%r13,%rax,2), %r15
-    {vex3} bzhi %rbp, gnu_fwd(%rip), %r8
-    {vex3} blsmsk %rcx, %r9
-    {vex3} blsmsk 0(%rsi), %rdx
-    {vex3} blsmsk -1(%r14), %r12
-    {vex3} blsmsk 2147483647(%r15), %rbx
-    {vex3} blsmsk 0(%rsp), %r13
-    {vex3} blsmsk 64(%r12), %rsi
-    {vex3} blsmsk 4660(%rsp), %r14
-    {vex3} blsmsk 0(%rcx,%r15,4), %rdi
-    {vex3} blsmsk 8(%rbp,%rsi,8), %r15
-    {vex3} blsmsk 128(%r12,%rcx,1), %rbp
-    {vex3} blsmsk gnu_back(%rip), %r8
-    {vex3} shlx %rcx, %r9, %rdx
-    {vex3} shlx %r12, 0(%r11), %rbx
-    {vex3} shlx %r13, -128(%rcx), %rsi
-    {vex3} shlx %r14, -129(%r8), %rdi
-    {vex3} shlx %r15, 0(%r12), %rbp
-    {vex3} shlx %r8, 127(%rsp), %rcx
-    {vex3} shlx %r9, -2147483648(%r12), %rdx
-    {vex3} shlx %r12, 0(%r12,%r9,2), %rbx
-    {vex3} shlx %r13, -1(%rdi,%rbp,4), %rsi
-    {vex3} shlx %r14, 2147483647(%r15,%r12,8), %rdi
-    {vex3} shlx %r15, gnu_fwd(%rip), %rbp
-    {vex3} shrx %r8, %rcx, %r9
-    {vex3} shrx %rdx, 0(%rdi), %r12
-    {vex3} shrx %rbx, 64(%rbp), %r13
-    {vex3} shrx %rsi, 4660(%r13), %r14
-    {vex3} shrx %rdi, 0(%rsp), %r15
-    {vex3} shrx %rbp, 8(%r12), %r8
-    {vex3} shrx %rcx, 128(%rsp), %r9
-    {vex3} shrx %rdx, 0(%rdx,%rax,1), %r12
-    {vex3} shrx %rbx, -128(%rax,%r15,2), %r13
-    {vex3} shrx %rsi, -129(%r9,%rsi,4), %r14
-    {vex3} shrx %rdi, gnu_back(%rip), %r15
-    {vex3} sarx %rbp, %r8, %rcx
-    {vex3} sarx %r9, 0(%r14), %rdx
-    {vex3} sarx %r12, 127(%rdx), %rbx
-    {vex3} sarx %r13, -2147483648(%r9), %rsi
-    {vex3} sarx %r14, 0(%r12), %rdi
-    {vex3} sarx %r15, -1(%rsp), %rbp
-    {vex3} sarx %r8, 2147483647(%r12), %rcx
-    {vex3} sarx %r9, 0(%r9,%rcx,8), %rdx
-    {vex3} sarx %r12, 64(%rsp,%r9,1), %rbx
-    {vex3} sarx %r13, 4660(%r13,%rbp,2), %rsi
-    {vex3} sarx %r14, gnu_fwd(%rip), %rdi
+    {vex3} andn %r9d, %edx, %r12d
+    {vex3} andn 0(%rcx), %ebx, %r13d
+    {vex3} andn 8(%r15), %esi, %r14d
+    {vex3} andn 128(%rcx), %edi, %r15d
+    {vex3} andn 0(%rsp), %ebp, %r8d
+    {vex3} andn -128(%r12), %ecx, %r9d
+    {vex3} andn -129(%rsp), %edx, %r12d
+    {vex3} andn 0(%rsp,%r9,1), %ebx, %r13d
+    {vex3} andn 127(%rax,%rbp,2), %esi, %r14d
+    {vex3} andn -2147483648(%r9,%r12,4), %edi, %r15d
+    {vex3} andn gnu_back(%rip), %ebp, %r8d
+    {vex3} bzhi %ecx, %r9d, %edx
+    {vex3} bzhi %r12d, 0(%r8), %ebx
+    {vex3} bzhi %r13d, -1(%r8), %esi
+    {vex3} bzhi %r14d, 2147483647(%rbp), %edi
+    {vex3} bzhi %r15d, 0(%r12), %ebp
+    {vex3} bzhi %r8d, 64(%rsp), %ecx
+    {vex3} bzhi %r9d, 4660(%r12), %edx
+    {vex3} bzhi %r12d, 0(%r14,%rax,8), %ebx
+    {vex3} bzhi %r13d, 8(%rsp,%r15,1), %esi
+    {vex3} bzhi %r14d, 128(%r13,%rsi,2), %edi
+    {vex3} bzhi %r15d, gnu_fwd(%rip), %ebp
+    {vex3} blsmsk %r8d, %ecx
+    {vex3} blsmsk 0(%rdx), %r9d
+    {vex3} blsmsk -128(%r13), %edx
+    {vex3} blsmsk -129(%rdx), %r12d
+    {vex3} blsmsk 0(%rsp), %ebx
+    {vex3} blsmsk 127(%r12), %r13d
+    {vex3} blsmsk -2147483648(%rsp), %esi
+    {vex3} blsmsk 0(%rsi,%rcx,4), %r14d
+    {vex3} blsmsk -1(%rbp,%r9,8), %edi
+    {vex3} blsmsk 2147483647(%r12,%rbp,1), %r15d
+    {vex3} blsmsk gnu_back(%rip), %ebp
+    {vex3} shlx %r8d, %ecx, %r9d
+    {vex3} shlx %edx, 0(%r9), %r12d
+    {vex3} shlx %ebx, 64(%r9), %r13d
+    {vex3} shlx %esi, 4660(%rbx), %r14d
+    {vex3} shlx %edi, 0(%r12), %r15d
+    {vex3} shlx %ebp, 8(%rsp), %r8d
+    {vex3} shlx %ecx, 128(%r12), %r9d
+    {vex3} shlx %edx, 0(%r15,%r12,2), %r12d
+    {vex3} shlx %ebx, -128(%rdi,%rax,4), %r13d
+    {vex3} shlx %esi, -129(%r15,%r15,8), %r14d
+    {vex3} shlx %edi, gnu_fwd(%rip), %r15d
+    {vex3} shrx %ebp, %r8d, %ecx
+    {vex3} shrx %r9d, 0(%rbx), %edx
+    {vex3} shrx %r12d, 127(%r10), %ebx
+    {vex3} shrx %r13d, -2147483648(%rsi), %esi
+    {vex3} shrx %r14d, 0(%rsp), %edi
+    {vex3} shrx %r15d, -1(%r12), %ebp
+    {vex3} shrx %r8d, 2147483647(%rsp), %ecx
+    {vex3} shrx %r9d, 0(%rax,%rsi,1), %edx
+    {vex3} shrx %r12d, 64(%rax,%rcx,2), %ebx
+    {vex3} shrx %r13d, 4660(%r9,%r9,4), %esi
+    {vex3} shrx %r14d, gnu_back(%rip), %edi
+    {vex3} sarx %r15d, %ebp, %r8d
+    {vex3} sarx %ecx, 0(%r10), %r9d
+    {vex3} sarx %edx, 8(%r11), %r12d
+    {vex3} sarx %ebx, 128(%rdi), %r13d
+    {vex3} sarx %esi, 0(%r12), %r14d
+    {vex3} sarx %edi, -128(%rsp), %r15d
+    {vex3} sarx %ebp, -129(%r12), %r8d
+    {vex3} sarx %ecx, 0(%r8,%rbp,8), %r9d
+    {vex3} sarx %edx, 127(%rsp,%r12,1), %r12d
+    {vex3} sarx %ebx, -2147483648(%r13,%rax,2), %r13d
+    {vex3} sarx %esi, gnu_fwd(%rip), %r14d
+    {vex3} andn %rdi, %r15, %rbp
+    {vex3} andn 0(%rsi), %r8, %rcx
+    {vex3} andn -1(%r14), %r9, %rdx
+    {vex3} andn 2147483647(%r15), %r12, %rbx
+    {vex3} andn 0(%rsp), %r13, %rsi
+    {vex3} andn 64(%r12), %r14, %rdi
+    {vex3} andn 4660(%rsp), %r15, %rbp
+    {vex3} andn 0(%rcx,%r15,4), %r8, %rcx
+    {vex3} andn 8(%rbp,%rsi,8), %r9, %rdx
+    {vex3} andn 128(%r12,%rcx,1), %r12, %rbx
+    {vex3} andn gnu_back(%rip), %r13, %rsi
+    {vex3} bzhi %r14, %rdi, %r15
+    {vex3} bzhi %rbp, 0(%r11), %r8
+    {vex3} bzhi %rcx, -128(%rcx), %r9
+    {vex3} bzhi %rdx, -129(%r8), %r12
+    {vex3} bzhi %rbx, 0(%r12), %r13
+    {vex3} bzhi %rsi, 127(%rsp), %r14
+    {vex3} bzhi %rdi, -2147483648(%r12), %r15
+    {vex3} bzhi %rbp, 0(%r12,%r9,2), %r8
+    {vex3} bzhi %rcx, -1(%rdi,%rbp,4), %r9
+    {vex3} bzhi %rdx, 2147483647(%r15,%r12,8), %r12
+    {vex3} bzhi %rbx, gnu_fwd(%rip), %r13
+    {vex3} blsmsk %rsi, %r14
+    {vex3} blsmsk 0(%rdi), %rdi
+    {vex3} blsmsk 64(%rbp), %r15
+    {vex3} blsmsk 4660(%r13), %rbp
+    {vex3} blsmsk 0(%rsp), %r8
+    {vex3} blsmsk 8(%r12), %rcx
+    {vex3} blsmsk 128(%rsp), %r9
+    {vex3} blsmsk 0(%rdx,%rax,1), %rdx
+    {vex3} blsmsk -128(%rax,%r15,2), %r12
+    {vex3} blsmsk -129(%r9,%rsi,4), %rbx
+    {vex3} blsmsk gnu_back(%rip), %r13
+    {vex3} shlx %rsi, %r14, %rdi
+    {vex3} shlx %r15, 0(%r14), %rbp
+    {vex3} shlx %r8, 127(%rdx), %rcx
+    {vex3} shlx %r9, -2147483648(%r9), %rdx
+    {vex3} shlx %r12, 0(%r12), %rbx
+    {vex3} shlx %r13, -1(%rsp), %rsi
+    {vex3} shlx %r14, 2147483647(%r12), %rdi
+    {vex3} shlx %r15, 0(%r9,%rcx,8), %rbp
+    {vex3} shlx %r8, 64(%rsp,%r9,1), %rcx
+    {vex3} shlx %r9, 4660(%r13,%rbp,2), %rdx
+    {vex3} shlx %r12, gnu_fwd(%rip), %rbx
+    {vex3} shrx %r13, %rsi, %r14
+    {vex3} shrx %rdi, 0(%r15), %r15
+    {vex3} shrx %rbp, 8(%rbx), %r8
+    {vex3} shrx %rcx, 128(%r10), %r9
+    {vex3} shrx %rdx, 0(%rsp), %r12
+    {vex3} shrx %rbx, -128(%r12), %r13
+g56:
+    {vex3} shrx %rsi, -129(%rsp), %r14
+    {vex3} shrx %rdi, 0(%rsp,%r12,4), %r15
+    {vex3} shrx %rbp, 127(%rbp,%rax,8), %r8
+    {vex3} shrx %rcx, -2147483648(%r12,%r15,1), %r9
+    {vex3} shrx %rdx, gnu_back(%rip), %r12
+    {vex3} sarx %rbx, %r13, %rsi
+    {vex3} sarx %r14, 0(%rcx), %rdi
+    {vex3} sarx %r15, -1(%rsi), %rbp
+    {vex3} sarx %r8, 2147483647(%r11), %rcx
+    {vex3} sarx %r9, 0(%r12), %rdx
+    {vex3} sarx %r12, 64(%rsp), %rbx
+    {vex3} sarx %r13, 4660(%r12), %rsi
+    {vex3} sarx %r14, 0(%r14,%rsi,2), %rdi
+    {vex3} sarx %r15, 8(%rdi,%rcx,4), %rbp
+    {vex3} sarx %r8, 128(%r15,%r9,8), %rcx
+    {vex3} sarx %r9, gnu_fwd(%rip), %rdx
     {evex} vmovdqu64 %xmm16, %xmm3
-    {evex} vmovdqu64 0(%r15), %xmm25
-    {evex} vmovdqu64 -2048(%rbx), %xmm9
-    {evex} vmovdqu64 -2147483648(%r10), %xmm31
+    {evex} vmovdqu64 0(%r8), %xmm25
+    {evex} vmovdqu64 -2048(%rdi), %xmm9
+    {evex} vmovdqu64 -2147483648(%r14), %xmm31
     {evex} vmovdqu64 0(%rsp), %xmm20
     {evex} vmovdqu64 2032(%r12), %xmm12
     {evex} vmovdqu64 2147483647(%rsp), %xmm17
-    {evex} vmovdqu64 0(%rsp,%r12,4), %xmm16
-g56:
-    {evex} vmovdqu64 -16(%rbp,%rax,8), %xmm3
-    {evex} vmovdqu64 4660(%r12,%r15,1), %xmm25
+    {evex} vmovdqu64 0(%rsi,%rbp,1), %xmm16
+    {evex} vmovdqu64 -16(%rax,%r12,2), %xmm3
+    {evex} vmovdqu64 4660(%r9,%rax,4), %xmm25
     {evex} vmovdqu64 gnu_back(%rip), %xmm9
     {evex} vmovdqu64 %xmm31, %xmm20{%k6}
-    {evex} vmovdqu64 0(%rcx), %xmm12{%k7}
-    {evex} vmovdqu64 32(%rsi), %xmm17{%k1}
-    {evex} vmovdqu64 -129(%r11), %xmm16{%k2}
+    {evex} vmovdqu64 0(%rdx), %xmm12{%k7}
+    {evex} vmovdqu64 32(%r15), %xmm17{%k1}
+    {evex} vmovdqu64 -129(%rcx), %xmm16{%k2}
     {evex} vmovdqu64 0(%r12), %xmm3{%k3}
     {evex} vmovdqu64 -2048(%rsp), %xmm25{%k4}
     {evex} vmovdqu64 1001(%r12), %xmm9{%k5}
-    {evex} vmovdqu64 0(%r14,%rsi,2), %xmm31{%k6}
-    {evex} vmovdqu64 2032(%rdi,%rcx,4), %xmm20{%k7}
-    {evex} vmovdqu64 -2147483648(%r15,%r9,8), %xmm12{%k1}
+    {evex} vmovdqu64 0(%r15,%r15,8), %xmm31{%k6}
+    {evex} vmovdqu64 2032(%rsp,%rsi,1), %xmm20{%k7}
+    {evex} vmovdqu64 -2147483648(%r13,%rcx,2), %xmm12{%k1}
     {evex} vmovdqu64 gnu_fwd(%rip), %xmm17{%k2}
     {evex} vmovdqu64 %xmm16, %xmm3{%k3}{z}
-    {evex} vmovdqu64 0(%r8), %xmm25{%k4}{z}
-    {evex} vmovdqu64 -16(%rdi), %xmm9{%k5}{z}
-    {evex} vmovdqu64 2147483647(%r14), %xmm31{%k6}{z}
+    {evex} vmovdqu64 0(%r9), %xmm25{%k4}{z}
+    {evex} vmovdqu64 -16(%r8), %xmm9{%k5}{z}
+    {evex} vmovdqu64 2147483647(%rbp), %xmm31{%k6}{z}
     {evex} vmovdqu64 0(%rsp), %xmm20{%k7}{z}
     {evex} vmovdqu64 32(%r12), %xmm12{%k1}{z}
     {evex} vmovdqu64 4660(%rsp), %xmm17{%k2}{z}
-    {evex} vmovdqu64 0(%rsi,%rbp,1), %xmm16{%k3}{z}
-    {evex} vmovdqu64 -2048(%rax,%r12,2), %xmm3{%k4}{z}
-    {evex} vmovdqu64 -129(%r9,%rax,4), %xmm25{%k5}{z}
+    {evex} vmovdqu64 0(%rax,%r9,4), %xmm16{%k3}{z}
+    {evex} vmovdqu64 -2048(%rbp,%rbp,8), %xmm3{%k4}{z}
+    {evex} vmovdqu64 -129(%r12,%r12,1), %xmm25{%k5}{z}
     {evex} vmovdqu64 gnu_back(%rip), %xmm9{%k6}{z}
     {evex} vmovdqu64 %ymm31, %ymm20
-    {evex} vmovdqu64 0(%rdx), %ymm12
-    {evex} vmovdqu64 -4096(%r15), %ymm17
-    {evex} vmovdqu64 1001(%rcx), %ymm16
+    {evex} vmovdqu64 0(%rbx), %ymm12
+    {evex} vmovdqu64 -4096(%r13), %ymm17
+    {evex} vmovdqu64 1001(%rdx), %ymm16
     {evex} vmovdqu64 0(%r12), %ymm3
     {evex} vmovdqu64 4064(%rsp), %ymm25
     {evex} vmovdqu64 -2147483648(%r12), %ymm9
-    {evex} vmovdqu64 0(%r15,%r15,8), %ymm31
-    {evex} vmovdqu64 -32(%rsp,%rsi,1), %ymm20
-    {evex} vmovdqu64 2147483647(%r13,%rcx,2), %ymm12
+    {evex} vmovdqu64 0(%r8,%rax,2), %ymm31
+    {evex} vmovdqu64 -32(%rdi,%r15,4), %ymm20
+    {evex} vmovdqu64 2147483647(%r15,%rsi,8), %ymm12
     {evex} vmovdqu64 gnu_fwd(%rip), %ymm17
     {evex} vmovdqu64 %ymm16, %ymm3{%k7}
-    {evex} vmovdqu64 0(%r9), %ymm25{%k1}
-    {evex} vmovdqu64 64(%r8), %ymm9{%k2}
-    {evex} vmovdqu64 4660(%rbp), %ymm31{%k3}
+    {evex} vmovdqu64 0(%r10), %ymm25{%k1}
+    {evex} vmovdqu64 64(%r9), %ymm9{%k2}
+    {evex} vmovdqu64 4660(%rbx), %ymm31{%k3}
     {evex} vmovdqu64 0(%rsp), %ymm20{%k4}
     {evex} vmovdqu64 -4096(%r12), %ymm12{%k5}
     {evex} vmovdqu64 -129(%rsp), %ymm17{%k6}
-    {evex} vmovdqu64 0(%rax,%r9,4), %ymm16{%k7}
-    {evex} vmovdqu64 4064(%rbp,%rbp,8), %ymm3{%k1}
-    {evex} vmovdqu64 1001(%r12,%r12,1), %ymm25{%k2}
+    {evex} vmovdqu64 0(%rcx,%rcx,1), %ymm16{%k7}
+    {evex} vmovdqu64 4064(%rax,%r9,2), %ymm3{%k1}
+    {evex} vmovdqu64 1001(%r9,%rbp,4), %ymm25{%k2}
     {evex} vmovdqu64 gnu_back(%rip), %ymm9{%k3}
     {evex} vmovdqu64 %ymm31, %ymm20{%k4}{z}
-    {evex} vmovdqu64 0(%rbx), %ymm12{%k5}{z}
-    {evex} vmovdqu64 -32(%r13), %ymm17{%k6}{z}
-    {evex} vmovdqu64 -2147483648(%rdx), %ymm16{%k7}{z}
+    {evex} vmovdqu64 0(%rsi), %ymm12{%k5}{z}
+    {evex} vmovdqu64 -32(%r10), %ymm17{%k6}{z}
+    {evex} vmovdqu64 -2147483648(%rsi), %ymm16{%k7}{z}
     {evex} vmovdqu64 0(%r12), %ymm3{%k1}{z}
     {evex} vmovdqu64 64(%rsp), %ymm25{%k2}{z}
     {evex} vmovdqu64 2147483647(%r12), %ymm9{%k3}{z}
-    {evex} vmovdqu64 0(%r8,%rax,2), %ymm31{%k4}{z}
-    {evex} vmovdqu64 -4096(%rdi,%r15,4), %ymm20{%k5}{z}
-    {evex} vmovdqu64 4660(%r15,%rsi,8), %ymm12{%k6}{z}
+    {evex} vmovdqu64 0(%r12,%r12,8), %ymm31{%k4}{z}
+    {evex} vmovdqu64 -4096(%rsp,%rax,1), %ymm20{%k5}{z}
+    {evex} vmovdqu64 4660(%r13,%r15,2), %ymm12{%k6}{z}
     {evex} vmovdqu64 gnu_fwd(%rip), %ymm17{%k7}{z}
     {evex} vmovdqu64 %zmm16, %zmm3
-    {evex} vmovdqu64 0(%r10), %zmm25
-    {evex} vmovdqu64 -8192(%r9), %zmm9
-    {evex} vmovdqu64 -129(%rbx), %zmm31
+    {evex} vmovdqu64 0(%r11), %zmm25
+    {evex} vmovdqu64 -8192(%r11), %zmm9
+    {evex} vmovdqu64 -129(%rdi), %zmm31
     {evex} vmovdqu64 0(%rsp), %zmm20
     {evex} vmovdqu64 8128(%r12), %zmm12
     {evex} vmovdqu64 1001(%rsp), %zmm17
-    {evex} vmovdqu64 0(%rcx,%rcx,1), %zmm16
-    {evex} vmovdqu64 -64(%rax,%r9,2), %zmm3
-    {evex} vmovdqu64 -2147483648(%r9,%rbp,4), %zmm25
+    {evex} vmovdqu64 0(%rdx,%rsi,4), %zmm16
+    {evex} vmovdqu64 -64(%rbp,%rcx,8), %zmm3
+    {evex} vmovdqu64 -2147483648(%r12,%r9,1), %zmm25
     {evex} vmovdqu64 gnu_back(%rip), %zmm9
     {evex} vmovdqu64 %zmm31, %zmm20{%k1}
-    {evex} vmovdqu64 0(%rsi), %zmm12{%k2}
-    {evex} vmovdqu64 128(%r10), %zmm17{%k3}
-    {evex} vmovdqu64 2147483647(%rsi), %zmm16{%k4}
+    {evex} vmovdqu64 0(%rdi), %zmm12{%k2}
+    {evex} vmovdqu64 128(%r14), %zmm17{%k3}
+    {evex} vmovdqu64 2147483647(%r15), %zmm16{%k4}
     {evex} vmovdqu64 0(%r12), %zmm3{%k5}
     {evex} vmovdqu64 -8192(%rsp), %zmm25{%k6}
     {evex} vmovdqu64 4660(%r12), %zmm9{%k7}
-    {evex} vmovdqu64 0(%r12,%r12,8), %zmm31{%k1}
-    {evex} vmovdqu64 8128(%rsp,%rax,1), %zmm20{%k2}
-    {evex} vmovdqu64 -129(%r13,%r15,2), %zmm12{%k3}
+    {evex} vmovdqu64 0(%r9,%rbp,2), %zmm31{%k1}
+    {evex} vmovdqu64 8128(%rdi,%r12,4), %zmm20{%k2}
+    {evex} vmovdqu64 -129(%r15,%rax,8), %zmm12{%k3}
     {evex} vmovdqu64 gnu_fwd(%rip), %zmm17{%k4}
     {evex} vmovdqu64 %zmm16, %zmm3{%k5}{z}
-    {evex} vmovdqu64 0(%r11), %zmm25{%k6}{z}
-    {evex} vmovdqu64 -64(%r11), %zmm9{%k7}{z}
-    {evex} vmovdqu64 1001(%rdi), %zmm31{%k1}{z}
+    {evex} vmovdqu64 0(%r14), %zmm25{%k6}{z}
+    {evex} vmovdqu64 -64(%rcx), %zmm9{%k7}{z}
+    {evex} vmovdqu64 1001(%r8), %zmm31{%k1}{z}
     {evex} vmovdqu64 0(%rsp), %zmm20{%k2}{z}
     {evex} vmovdqu64 128(%r12), %zmm12{%k3}{z}
     {evex} vmovdqu64 -2147483648(%rsp), %zmm17{%k4}{z}
-    {evex} vmovdqu64 0(%rdx,%rsi,4), %zmm16{%k5}{z}
-    {evex} vmovdqu64 -8192(%rbp,%rcx,8), %zmm3{%k6}{z}
-    {evex} vmovdqu64 2147483647(%r12,%r9,1), %zmm25{%k7}{z}
+    {evex} vmovdqu64 0(%rsp,%r15,1), %zmm16{%k5}{z}
+    {evex} vmovdqu64 -8192(%rax,%rsi,2), %zmm3{%k6}{z}
+    {evex} vmovdqu64 2147483647(%r9,%rcx,4), %zmm25{%k7}{z}
     {evex} vmovdqu64 gnu_back(%rip), %zmm9{%k1}{z}
     {evex} {store} vmovdqu64 %xmm31, %xmm20
     {evex} {store} vmovdqu64 %xmm12, %xmm17{%k2}
@@ -11366,165 +11390,165 @@ g56:
     {evex} {store} vmovdqu64 %zmm16, %zmm3
     {evex} {store} vmovdqu64 %zmm25, %zmm9{%k6}
     {evex} {store} vmovdqu64 %zmm31, %zmm20{%k7}{z}
-    {evex} vmovdqu64 %xmm12, 0(%rdi)
-    {evex} vmovdqu64 %xmm17, 2032(%r14)
-    {evex} vmovdqu64 %xmm16, 4660(%r15)
+    {evex} vmovdqu64 %xmm12, 0(%r15)
+    {evex} vmovdqu64 %xmm17, 2032(%rbp)
+    {evex} vmovdqu64 %xmm16, 4660(%r13)
     {evex} vmovdqu64 %xmm3, 0(%r12)
     {evex} vmovdqu64 %xmm25, -16(%rsp)
     {evex} vmovdqu64 %xmm9, -129(%r12)
-    {evex} vmovdqu64 %xmm31, 0(%r9,%rbp,2)
-    {evex} vmovdqu64 %xmm20, 32(%rdi,%r12,4)
-    {evex} vmovdqu64 %xmm12, 1001(%r15,%rax,8)
+    {evex} vmovdqu64 %xmm31, 0(%r14,%r9,8)
+    {evex} vmovdqu64 %xmm20, 32(%rsp,%rbp,1)
+    {evex} vmovdqu64 %xmm12, 1001(%r13,%r12,2)
     {evex} vmovdqu64 %xmm17, gnu_fwd(%rip)
-    {evex} vmovdqu64 %xmm16, 0(%r14){%k1}
-    {evex} vmovdqu64 %xmm3, -2048(%rcx){%k2}
-    {evex} vmovdqu64 %xmm25, -2147483648(%r8){%k3}
+    {evex} vmovdqu64 %xmm16, 0(%rcx){%k1}
+    {evex} vmovdqu64 %xmm3, -2048(%rdx){%k2}
+    {evex} vmovdqu64 %xmm25, -2147483648(%r9){%k3}
     {evex} vmovdqu64 %xmm9, 0(%rsp){%k4}
     {evex} vmovdqu64 %xmm31, 2032(%r12){%k5}
     {evex} vmovdqu64 %xmm20, 2147483647(%rsp){%k6}
-    {evex} vmovdqu64 %xmm12, 0(%rsp,%r15,1){%k7}
-    {evex} vmovdqu64 %xmm17, -16(%rax,%rsi,2){%k1}
-    {evex} vmovdqu64 %xmm16, 4660(%r9,%rcx,4){%k2}
+    {evex} vmovdqu64 %xmm12, 0(%rsi,%rax,4){%k7}
+    {evex} vmovdqu64 %xmm17, -16(%rbp,%r15,8){%k1}
+    {evex} vmovdqu64 %xmm16, 4660(%r12,%rsi,1){%k2}
     {evex} vmovdqu64 %xmm3, gnu_back(%rip){%k3}
-    {evex} vmovdqu64 %ymm25, 0(%r15)
-    {evex} vmovdqu64 %ymm9, 4064(%rbp)
-    {evex} vmovdqu64 %ymm31, -129(%r13)
+    {evex} vmovdqu64 %ymm25, 0(%r8)
+    {evex} vmovdqu64 %ymm9, 4064(%rbx)
+    {evex} vmovdqu64 %ymm31, -129(%r10)
     {evex} vmovdqu64 %ymm20, 0(%r12)
     {evex} vmovdqu64 %ymm12, -32(%rsp)
     {evex} vmovdqu64 %ymm17, 1001(%r12)
-    {evex} vmovdqu64 %ymm16, 0(%r14,%r9,8)
-    {evex} vmovdqu64 %ymm3, 64(%rsp,%rbp,1)
-    {evex} vmovdqu64 %ymm25, -2147483648(%r13,%r12,2)
+    {evex} vmovdqu64 %ymm16, 0(%r15,%rcx,2)
+    {evex} vmovdqu64 %ymm3, 64(%rdi,%r9,4)
+    {evex} vmovdqu64 %ymm25, -2147483648(%r15,%rbp,8)
     {evex} vmovdqu64 %ymm9, gnu_fwd(%rip)
-    {evex} vmovdqu64 %ymm31, 0(%rcx){%k4}
-    {evex} vmovdqu64 %ymm20, -4096(%rdx){%k5}
-    {evex} vmovdqu64 %ymm12, 2147483647(%r9){%k6}
+    {evex} vmovdqu64 %ymm31, 0(%rdx){%k4}
+    {evex} vmovdqu64 %ymm20, -4096(%rsi){%k5}
+    {evex} vmovdqu64 %ymm12, 2147483647(%r11){%k6}
     {evex} vmovdqu64 %ymm17, 0(%rsp){%k7}
     {evex} vmovdqu64 %ymm16, 4064(%r12){%k1}
     {evex} vmovdqu64 %ymm3, 4660(%rsp){%k2}
-    {evex} vmovdqu64 %ymm25, 0(%rsi,%rax,4){%k3}
-    {evex} vmovdqu64 %ymm9, -32(%rbp,%r15,8){%k4}
-    {evex} vmovdqu64 %ymm31, -129(%r12,%rsi,1){%k5}
+    {evex} vmovdqu64 %ymm25, 0(%rax,%r12,1){%k3}
+    {evex} vmovdqu64 %ymm9, -32(%rax,%rax,2){%k4}
+    {evex} vmovdqu64 %ymm31, -129(%r9,%r15,4){%k5}
     {evex} vmovdqu64 %ymm20, gnu_back(%rip){%k6}
-    {evex} vmovdqu64 %zmm12, 0(%r8)
-    {evex} vmovdqu64 %zmm17, 8128(%rbx)
-    {evex} vmovdqu64 %zmm16, 1001(%r10)
+    {evex} vmovdqu64 %zmm12, 0(%r9)
+    {evex} vmovdqu64 %zmm17, 8128(%rdi)
+    {evex} vmovdqu64 %zmm16, 1001(%r14)
     {evex} vmovdqu64 %zmm3, 0(%r12)
     {evex} vmovdqu64 %zmm25, -64(%rsp)
     {evex} vmovdqu64 %zmm9, -2147483648(%r12)
-    {evex} vmovdqu64 %zmm31, 0(%r15,%rcx,2)
-    {evex} vmovdqu64 %zmm20, 128(%rdi,%r9,4)
-    {evex} vmovdqu64 %zmm12, 2147483647(%r15,%rbp,8)
+    {evex} vmovdqu64 %zmm31, 0(%r8,%rsi,8)
+    {evex} vmovdqu64 %zmm20, 128(%rsp,%rcx,1)
+    {evex} vmovdqu64 %zmm12, 2147483647(%r13,%r9,2)
     {evex} vmovdqu64 %zmm17, gnu_fwd(%rip)
-    {evex} vmovdqu64 %zmm16, 0(%rdx){%k7}
-    {evex} vmovdqu64 %zmm3, -8192(%rsi){%k1}
-    {evex} vmovdqu64 %zmm25, 4660(%r11){%k2}
+    {evex} vmovdqu64 %zmm16, 0(%rbx){%k7}
+    {evex} vmovdqu64 %zmm3, -8192(%r15){%k1}
+    {evex} vmovdqu64 %zmm25, 4660(%rcx){%k2}
     {evex} vmovdqu64 %zmm9, 0(%rsp){%k3}
     {evex} vmovdqu64 %zmm31, 8128(%r12){%k4}
     {evex} vmovdqu64 %zmm20, -129(%rsp){%k5}
-    {evex} vmovdqu64 %zmm12, 0(%rax,%r12,1){%k6}
-    {evex} vmovdqu64 %zmm17, -64(%rax,%rax,2){%k7}
-    {evex} vmovdqu64 %zmm16, 1001(%r9,%r15,4){%k1}
+    {evex} vmovdqu64 %zmm12, 0(%rcx,%rbp,4){%k6}
+    {evex} vmovdqu64 %zmm17, -64(%rbp,%r12,8){%k7}
+    {evex} vmovdqu64 %zmm16, 1001(%r12,%rax,1){%k1}
     {evex} vmovdqu64 %zmm3, gnu_back(%rip){%k2}
     {evex} vmovdqu32 %xmm25, %xmm9
-    {evex} vmovdqu32 0(%r9), %xmm31
-    {evex} vmovdqu32 32(%rdi), %xmm20
-    {evex} vmovdqu32 -2147483648(%r14), %xmm12
+    {evex} vmovdqu32 0(%r10), %xmm31
+    {evex} vmovdqu32 32(%r8), %xmm20
+    {evex} vmovdqu32 -2147483648(%rbp), %xmm12
     {evex} vmovdqu32 0(%r12), %xmm17
     {evex} vmovdqu32 -2048(%rsp), %xmm16
     {evex} vmovdqu32 2147483647(%r12), %xmm3
-    {evex} vmovdqu32 0(%r8,%rsi,8), %xmm25
-    {evex} vmovdqu32 2032(%rsp,%rcx,1), %xmm9
-    {evex} vmovdqu32 4660(%r13,%r9,2), %xmm31
+    {evex} vmovdqu32 0(%r12,%r15,2), %xmm25
+    {evex} vmovdqu32 2032(%rdi,%rsi,4), %xmm9
+    {evex} vmovdqu32 4660(%r15,%rcx,8), %xmm31
     {evex} vmovdqu32 gnu_fwd(%rip), %xmm20
     {evex} vmovdqu32 %xmm12, %xmm17{%k3}
-    {evex} vmovdqu32 0(%rbx), %xmm16{%k4}
-    {evex} vmovdqu32 -16(%r15), %xmm3{%k5}
-    {evex} vmovdqu32 -129(%rcx), %xmm25{%k6}
+    {evex} vmovdqu32 0(%rsi), %xmm16{%k4}
+    {evex} vmovdqu32 -16(%r13), %xmm3{%k5}
+    {evex} vmovdqu32 -129(%rdx), %xmm25{%k6}
     {evex} vmovdqu32 0(%rsp), %xmm9{%k7}
+g57:
     {evex} vmovdqu32 32(%r12), %xmm31{%k1}
     {evex} vmovdqu32 1001(%rsp), %xmm20{%k2}
-    {evex} vmovdqu32 0(%rcx,%rbp,4), %xmm12{%k3}
-    {evex} vmovdqu32 -2048(%rbp,%r12,8), %xmm17{%k4}
-    {evex} vmovdqu32 -2147483648(%r12,%rax,1), %xmm16{%k5}
+    {evex} vmovdqu32 0(%rdx,%r9,1), %xmm12{%k3}
+    {evex} vmovdqu32 -2048(%rax,%rbp,2), %xmm17{%k4}
+    {evex} vmovdqu32 -2147483648(%r9,%r12,4), %xmm16{%k5}
     {evex} vmovdqu32 gnu_back(%rip), %xmm3{%k6}
     {evex} vmovdqu32 %xmm25, %xmm9{%k7}{z}
-    {evex} vmovdqu32 0(%r10), %xmm31{%k1}{z}
-    {evex} vmovdqu32 2032(%r8), %xmm20{%k2}{z}
-    {evex} vmovdqu32 2147483647(%rbp), %xmm12{%k3}{z}
+    {evex} vmovdqu32 0(%r11), %xmm31{%k1}{z}
+    {evex} vmovdqu32 2032(%r9), %xmm20{%k2}{z}
+    {evex} vmovdqu32 2147483647(%rbx), %xmm12{%k3}{z}
     {evex} vmovdqu32 0(%r12), %xmm17{%k4}{z}
     {evex} vmovdqu32 -16(%rsp), %xmm16{%k5}{z}
     {evex} vmovdqu32 4660(%r12), %xmm3{%k6}{z}
-    {evex} vmovdqu32 0(%r12,%r15,2), %xmm25{%k7}{z}
-    {evex} vmovdqu32 32(%rdi,%rsi,4), %xmm9{%k1}{z}
-    {evex} vmovdqu32 -129(%r15,%rcx,8), %xmm31{%k2}{z}
+    {evex} vmovdqu32 0(%r9,%rax,8), %xmm25{%k7}{z}
+    {evex} vmovdqu32 32(%rsp,%r15,1), %xmm9{%k1}{z}
+    {evex} vmovdqu32 -129(%r13,%rsi,2), %xmm31{%k2}{z}
     {evex} vmovdqu32 gnu_fwd(%rip), %xmm20{%k3}{z}
     {evex} vmovdqu32 %ymm12, %ymm17
-    {evex} vmovdqu32 0(%rsi), %ymm16
-    {evex} vmovdqu32 64(%r13), %ymm3
-    {evex} vmovdqu32 1001(%rdx), %ymm25
+    {evex} vmovdqu32 0(%rdi), %ymm16
+    {evex} vmovdqu32 64(%r10), %ymm3
+    {evex} vmovdqu32 1001(%rsi), %ymm25
     {evex} vmovdqu32 0(%rsp), %ymm9
     {evex} vmovdqu32 -4096(%r12), %ymm31
     {evex} vmovdqu32 -2147483648(%rsp), %ymm20
-g57:
-    {evex} vmovdqu32 0(%rdx,%r9,1), %ymm12
-    {evex} vmovdqu32 4064(%rax,%rbp,2), %ymm17
-    {evex} vmovdqu32 2147483647(%r9,%r12,4), %ymm16
+    {evex} vmovdqu32 0(%rsp,%rcx,4), %ymm12
+    {evex} vmovdqu32 4064(%rbp,%r9,8), %ymm17
+    {evex} vmovdqu32 2147483647(%r12,%rbp,1), %ymm16
     {evex} vmovdqu32 gnu_back(%rip), %ymm3
     {evex} vmovdqu32 %ymm25, %ymm9{%k4}
-    {evex} vmovdqu32 0(%r11), %ymm31{%k5}
-    {evex} vmovdqu32 -32(%r9), %ymm20{%k6}
-    {evex} vmovdqu32 4660(%rbx), %ymm12{%k7}
+    {evex} vmovdqu32 0(%r14), %ymm31{%k5}
+    {evex} vmovdqu32 -32(%r11), %ymm20{%k6}
+    {evex} vmovdqu32 4660(%rdi), %ymm12{%k7}
     {evex} vmovdqu32 0(%r12), %ymm17{%k1}
     {evex} vmovdqu32 64(%rsp), %ymm16{%k2}
     {evex} vmovdqu32 -129(%r12), %ymm3{%k3}
-    {evex} vmovdqu32 0(%r9,%rax,8), %ymm25{%k4}
-    {evex} vmovdqu32 -4096(%rsp,%r15,1), %ymm9{%k5}
-    {evex} vmovdqu32 1001(%r13,%rsi,2), %ymm31{%k6}
+    {evex} vmovdqu32 0(%r14,%r12,2), %ymm25{%k4}
+    {evex} vmovdqu32 -4096(%rdi,%rax,4), %ymm9{%k5}
+    {evex} vmovdqu32 1001(%r15,%r15,8), %ymm31{%k6}
     {evex} vmovdqu32 gnu_fwd(%rip), %ymm20{%k7}
     {evex} vmovdqu32 %ymm12, %ymm17{%k1}{z}
-    {evex} vmovdqu32 0(%rdi), %ymm16{%k2}{z}
-    {evex} vmovdqu32 4064(%r10), %ymm3{%k3}{z}
-    {evex} vmovdqu32 -2147483648(%rsi), %ymm25{%k4}{z}
+    {evex} vmovdqu32 0(%r15), %ymm16{%k2}{z}
+    {evex} vmovdqu32 4064(%r14), %ymm3{%k3}{z}
+    {evex} vmovdqu32 -2147483648(%r15), %ymm25{%k4}{z}
     {evex} vmovdqu32 0(%rsp), %ymm9{%k5}{z}
     {evex} vmovdqu32 -32(%r12), %ymm31{%k6}{z}
     {evex} vmovdqu32 2147483647(%rsp), %ymm20{%k7}{z}
-    {evex} vmovdqu32 0(%rsp,%rcx,4), %ymm12{%k1}{z}
-    {evex} vmovdqu32 64(%rbp,%r9,8), %ymm17{%k2}{z}
-    {evex} vmovdqu32 4660(%r12,%rbp,1), %ymm16{%k3}{z}
+    {evex} vmovdqu32 0(%rsi,%rsi,1), %ymm12{%k1}{z}
+    {evex} vmovdqu32 64(%rax,%rcx,2), %ymm17{%k2}{z}
+    {evex} vmovdqu32 4660(%r9,%r9,4), %ymm16{%k3}{z}
     {evex} vmovdqu32 gnu_back(%rip), %ymm3{%k4}{z}
     {evex} vmovdqu32 %zmm25, %zmm9
-    {evex} vmovdqu32 0(%r14), %zmm31
-    {evex} vmovdqu32 128(%r11), %zmm20
-    {evex} vmovdqu32 -129(%rdi), %zmm12
+    {evex} vmovdqu32 0(%rcx), %zmm31
+    {evex} vmovdqu32 128(%rcx), %zmm20
+    {evex} vmovdqu32 -129(%r8), %zmm12
     {evex} vmovdqu32 0(%r12), %zmm17
     {evex} vmovdqu32 -8192(%rsp), %zmm16
     {evex} vmovdqu32 1001(%r12), %zmm3
-    {evex} vmovdqu32 0(%r14,%r12,2), %zmm25
-    {evex} vmovdqu32 8128(%rdi,%rax,4), %zmm9
-    {evex} vmovdqu32 -2147483648(%r15,%r15,8), %zmm31
+    {evex} vmovdqu32 0(%r15,%rbp,8), %zmm25
+    {evex} vmovdqu32 8128(%rsp,%r12,1), %zmm9
+    {evex} vmovdqu32 -2147483648(%r13,%rax,2), %zmm31
     {evex} vmovdqu32 gnu_fwd(%rip), %zmm20
     {evex} vmovdqu32 %zmm12, %zmm17{%k5}
-    {evex} vmovdqu32 0(%r15), %zmm16{%k6}
-    {evex} vmovdqu32 -64(%r14), %zmm3{%k7}
-    {evex} vmovdqu32 2147483647(%r15), %zmm25{%k1}
+    {evex} vmovdqu32 0(%r8), %zmm16{%k6}
+    {evex} vmovdqu32 -64(%rbp), %zmm3{%k7}
+    {evex} vmovdqu32 2147483647(%r13), %zmm25{%k1}
     {evex} vmovdqu32 0(%rsp), %zmm9{%k2}
     {evex} vmovdqu32 128(%r12), %zmm31{%k3}
     {evex} vmovdqu32 4660(%rsp), %zmm20{%k4}
-    {evex} vmovdqu32 0(%rsi,%rsi,1), %zmm12{%k5}
-    {evex} vmovdqu32 -8192(%rax,%rcx,2), %zmm17{%k6}
-    {evex} vmovdqu32 -129(%r9,%r9,4), %zmm16{%k7}
+    {evex} vmovdqu32 0(%rax,%r15,4), %zmm12{%k5}
+    {evex} vmovdqu32 -8192(%rbp,%rsi,8), %zmm17{%k6}
+    {evex} vmovdqu32 -129(%r12,%rcx,1), %zmm16{%k7}
     {evex} vmovdqu32 gnu_back(%rip), %zmm3{%k1}
     {evex} vmovdqu32 %zmm25, %zmm9{%k2}{z}
-    {evex} vmovdqu32 0(%rcx), %zmm31{%k3}{z}
-    {evex} vmovdqu32 8128(%rcx), %zmm20{%k4}{z}
-    {evex} vmovdqu32 1001(%r8), %zmm12{%k5}{z}
+    {evex} vmovdqu32 0(%rdx), %zmm31{%k3}{z}
+    {evex} vmovdqu32 8128(%rdx), %zmm20{%k4}{z}
+    {evex} vmovdqu32 1001(%r9), %zmm12{%k5}{z}
     {evex} vmovdqu32 0(%r12), %zmm17{%k6}{z}
     {evex} vmovdqu32 -64(%rsp), %zmm16{%k7}{z}
     {evex} vmovdqu32 -2147483648(%r12), %zmm3{%k1}{z}
-    {evex} vmovdqu32 0(%r15,%rbp,8), %zmm25{%k2}{z}
-    {evex} vmovdqu32 128(%rsp,%r12,1), %zmm9{%k3}{z}
-    {evex} vmovdqu32 2147483647(%r13,%rax,2), %zmm31{%k4}{z}
+    {evex} vmovdqu32 0(%r8,%r9,2), %zmm25{%k2}{z}
+    {evex} vmovdqu32 128(%rdi,%rbp,4), %zmm9{%k3}{z}
+    {evex} vmovdqu32 2147483647(%r15,%r12,8), %zmm31{%k4}{z}
     {evex} vmovdqu32 gnu_fwd(%rip), %zmm20{%k5}{z}
     {evex} {store} vmovdqu32 %xmm12, %xmm17
     {evex} {store} vmovdqu32 %xmm16, %xmm3{%k6}
@@ -11535,165 +11559,165 @@ g57:
     {evex} {store} vmovdqu32 %zmm25, %zmm9
     {evex} {store} vmovdqu32 %zmm31, %zmm20{%k3}
     {evex} {store} vmovdqu32 %zmm12, %zmm17{%k4}{z}
-    {evex} vmovdqu32 %xmm16, 0(%r8)
-    {evex} vmovdqu32 %xmm3, -2048(%rbp)
-    {evex} vmovdqu32 %xmm25, 4660(%r13)
+    {evex} vmovdqu32 %xmm16, 0(%r9)
+    {evex} vmovdqu32 %xmm3, -2048(%rbx)
+    {evex} vmovdqu32 %xmm25, 4660(%r10)
     {evex} vmovdqu32 %xmm9, 0(%rsp)
     {evex} vmovdqu32 %xmm31, 2032(%r12)
     {evex} vmovdqu32 %xmm20, -129(%rsp)
-    {evex} vmovdqu32 %xmm12, 0(%rax,%r15,4)
-    {evex} vmovdqu32 %xmm17, -16(%rbp,%rsi,8)
-    {evex} vmovdqu32 %xmm16, 1001(%r12,%rcx,1)
+    {evex} vmovdqu32 %xmm12, 0(%rcx,%rax,1)
+    {evex} vmovdqu32 %xmm17, -16(%rax,%r15,2)
+    {evex} vmovdqu32 %xmm16, 1001(%r9,%rsi,4)
     {evex} vmovdqu32 %xmm3, gnu_back(%rip)
-    {evex} vmovdqu32 %xmm25, 0(%rdx){%k5}
-    {evex} vmovdqu32 %xmm9, 32(%rdx){%k6}
-    {evex} vmovdqu32 %xmm31, -2147483648(%r9){%k7}
+    {evex} vmovdqu32 %xmm25, 0(%rbx){%k5}
+    {evex} vmovdqu32 %xmm9, 32(%rsi){%k6}
+    {evex} vmovdqu32 %xmm31, -2147483648(%r11){%k7}
     {evex} vmovdqu32 %xmm20, 0(%r12){%k1}
     {evex} vmovdqu32 %xmm12, -2048(%rsp){%k2}
     {evex} vmovdqu32 %xmm17, 2147483647(%r12){%k3}
-    {evex} vmovdqu32 %xmm16, 0(%r8,%r9,2){%k4}
-    {evex} vmovdqu32 %xmm3, 2032(%rdi,%rbp,4){%k5}
-    {evex} vmovdqu32 %xmm25, 4660(%r15,%r12,8){%k6}
+    {evex} vmovdqu32 %xmm16, 0(%r12,%rcx,8){%k4}
+    {evex} vmovdqu32 %xmm3, 2032(%rsp,%r9,1){%k5}
+    {evex} vmovdqu32 %xmm25, 4660(%r13,%rbp,2){%k6}
     {evex} vmovdqu32 %xmm9, gnu_fwd(%rip){%k7}
-    {evex} vmovdqu32 %ymm31, 0(%r9)
-    {evex} vmovdqu32 %ymm20, -4096(%rbx)
-    {evex} vmovdqu32 %ymm12, -129(%r10)
+    {evex} vmovdqu32 %ymm31, 0(%r10)
+    {evex} vmovdqu32 %ymm20, -4096(%rdi)
+    {evex} vmovdqu32 %ymm12, -129(%r14)
     {evex} vmovdqu32 %ymm17, 0(%rsp)
     {evex} vmovdqu32 %ymm16, 4064(%r12)
     {evex} vmovdqu32 %ymm3, 1001(%rsp)
-    {evex} vmovdqu32 %ymm25, 0(%rcx,%rax,1)
-    {evex} vmovdqu32 %ymm9, -32(%rax,%r15,2)
-    {evex} vmovdqu32 %ymm31, -2147483648(%r9,%rsi,4)
+    {evex} vmovdqu32 %ymm25, 0(%rdx,%r12,4)
+    {evex} vmovdqu32 %ymm9, -32(%rbp,%rax,8)
+    {evex} vmovdqu32 %ymm31, -2147483648(%r12,%r15,1)
     {evex} vmovdqu32 %ymm20, gnu_back(%rip)
-    {evex} vmovdqu32 %ymm12, 0(%rbx){%k1}
-    {evex} vmovdqu32 %ymm17, 64(%rsi){%k2}
-    {evex} vmovdqu32 %ymm16, 2147483647(%r11){%k3}
+    {evex} vmovdqu32 %ymm12, 0(%rsi){%k1}
+    {evex} vmovdqu32 %ymm17, 64(%r15){%k2}
+    {evex} vmovdqu32 %ymm16, 2147483647(%rcx){%k3}
     {evex} vmovdqu32 %ymm3, 0(%r12){%k4}
     {evex} vmovdqu32 %ymm25, -4096(%rsp){%k5}
     {evex} vmovdqu32 %ymm9, 4660(%r12){%k6}
-    {evex} vmovdqu32 %ymm31, 0(%r12,%rcx,8){%k7}
-    {evex} vmovdqu32 %ymm20, 4064(%rsp,%r9,1){%k1}
-    {evex} vmovdqu32 %ymm12, -129(%r13,%rbp,2){%k2}
+    {evex} vmovdqu32 %ymm31, 0(%r9,%rsi,2){%k7}
+    {evex} vmovdqu32 %ymm20, 4064(%rdi,%rcx,4){%k1}
+    {evex} vmovdqu32 %ymm12, -129(%r15,%r9,8){%k2}
     {evex} vmovdqu32 %ymm17, gnu_fwd(%rip){%k3}
-    {evex} vmovdqu32 %zmm16, 0(%r10)
-    {evex} vmovdqu32 %zmm3, -8192(%rdi)
-    {evex} vmovdqu32 %zmm25, 1001(%r14)
+    {evex} vmovdqu32 %zmm16, 0(%r11)
+    {evex} vmovdqu32 %zmm3, -8192(%r8)
+    {evex} vmovdqu32 %zmm25, 1001(%rbp)
     {evex} vmovdqu32 %zmm9, 0(%rsp)
     {evex} vmovdqu32 %zmm31, 8128(%r12)
     {evex} vmovdqu32 %zmm20, -2147483648(%rsp)
-    {evex} vmovdqu32 %zmm12, 0(%rdx,%r12,4)
-    {evex} vmovdqu32 %zmm17, -64(%rbp,%rax,8)
-    {evex} vmovdqu32 %zmm16, 2147483647(%r12,%r15,1)
+    {evex} vmovdqu32 %zmm12, 0(%rsp,%rbp,1)
+    {evex} vmovdqu32 %zmm17, -64(%rax,%r12,2)
+    {evex} vmovdqu32 %zmm16, 2147483647(%r9,%rax,4)
     {evex} vmovdqu32 %zmm3, gnu_back(%rip)
-    {evex} vmovdqu32 %zmm25, 0(%rsi){%k4}
-    {evex} vmovdqu32 %zmm9, 128(%r15){%k5}
-    {evex} vmovdqu32 %zmm31, 4660(%rcx){%k6}
+    {evex} vmovdqu32 %zmm25, 0(%rdi){%k4}
+    {evex} vmovdqu32 %zmm9, 128(%r13){%k5}
+    {evex} vmovdqu32 %zmm31, 4660(%rdx){%k6}
     {evex} vmovdqu32 %zmm20, 0(%r12){%k7}
     {evex} vmovdqu32 %zmm12, -8192(%rsp){%k1}
     {evex} vmovdqu32 %zmm17, -129(%r12){%k2}
-    {evex} vmovdqu32 %zmm16, 0(%r9,%rsi,2){%k3}
-    {evex} vmovdqu32 %zmm3, 8128(%rdi,%rcx,4){%k4}
-    {evex} vmovdqu32 %zmm25, 1001(%r15,%r9,8){%k5}
+    {evex} vmovdqu32 %zmm16, 0(%r14,%r15,8){%k3}
+    {evex} vmovdqu32 %zmm3, 8128(%rsp,%rsi,1){%k4}
+    {evex} vmovdqu32 %zmm25, 1001(%r13,%rcx,2){%k5}
     {evex} vmovdqu32 %zmm9, gnu_fwd(%rip){%k6}
     {evex} vmovdqu8 %xmm31, %xmm20
-    {evex} vmovdqu8 0(%r11), %xmm12
-    {evex} vmovdqu8 -16(%r8), %xmm17
-    {evex} vmovdqu8 -2147483648(%rbp), %xmm16
+    {evex} vmovdqu8 0(%r14), %xmm12
+    {evex} vmovdqu8 -16(%r9), %xmm17
+    {evex} vmovdqu8 -2147483648(%rbx), %xmm16
     {evex} vmovdqu8 0(%rsp), %xmm3
     {evex} vmovdqu8 32(%r12), %xmm25
     {evex} vmovdqu8 2147483647(%rsp), %xmm9
-    {evex} vmovdqu8 0(%rsp,%rbp,1), %xmm31
-    {evex} vmovdqu8 -2048(%rax,%r12,2), %xmm20
-    {evex} vmovdqu8 4660(%r9,%rax,4), %xmm12
+    {evex} vmovdqu8 0(%rsi,%r9,4), %xmm31
+    {evex} vmovdqu8 -2048(%rbp,%rbp,8), %xmm20
+    {evex} vmovdqu8 4660(%r12,%r12,1), %xmm12
     {evex} vmovdqu8 gnu_back(%rip), %xmm17
     {evex} vmovdqu8 %xmm16, %xmm3{%k7}
-    {evex} vmovdqu8 0(%rdi), %xmm25{%k1}
-    {evex} vmovdqu8 2032(%r13), %xmm9{%k2}
-    {evex} vmovdqu8 -129(%rdx), %xmm31{%k3}
+    {evex} vmovdqu8 0(%r15), %xmm25{%k1}
+    {evex} vmovdqu8 2032(%r10), %xmm9{%k2}
+    {evex} vmovdqu8 -129(%rsi), %xmm31{%k3}
     {evex} vmovdqu8 0(%r12), %xmm20{%k4}
     {evex} vmovdqu8 -16(%rsp), %xmm12{%k5}
     {evex} vmovdqu8 1001(%r12), %xmm17{%k6}
-    {evex} vmovdqu8 0(%r14,%r15,8), %xmm16{%k7}
-    {evex} vmovdqu8 32(%rsp,%rsi,1), %xmm3{%k1}
-    {evex} vmovdqu8 -2147483648(%r13,%rcx,2), %xmm25{%k2}
+    {evex} vmovdqu8 0(%r15,%rax,2), %xmm16{%k7}
+    {evex} vmovdqu8 32(%rdi,%r15,4), %xmm3{%k1}
+    {evex} vmovdqu8 -2147483648(%r15,%rsi,8), %xmm25{%k2}
     {evex} vmovdqu8 gnu_fwd(%rip), %xmm9{%k3}
     {evex} vmovdqu8 %xmm31, %xmm20{%k4}{z}
-    {evex} vmovdqu8 0(%r14), %xmm12{%k5}{z}
-    {evex} vmovdqu8 -2048(%r9), %xmm17{%k6}{z}
-    {evex} vmovdqu8 2147483647(%rbx), %xmm16{%k7}{z}
+    {evex} vmovdqu8 0(%rcx), %xmm12{%k5}{z}
+    {evex} vmovdqu8 -2048(%r11), %xmm17{%k6}{z}
+    {evex} vmovdqu8 2147483647(%rdi), %xmm16{%k7}{z}
     {evex} vmovdqu8 0(%rsp), %xmm3{%k1}{z}
     {evex} vmovdqu8 2032(%r12), %xmm25{%k2}{z}
     {evex} vmovdqu8 4660(%rsp), %xmm9{%k3}{z}
-    {evex} vmovdqu8 0(%rsi,%r9,4), %xmm31{%k4}{z}
-    {evex} vmovdqu8 -16(%rbp,%rbp,8), %xmm20{%k5}{z}
-    {evex} vmovdqu8 -129(%r12,%r12,1), %xmm12{%k6}{z}
+    {evex} vmovdqu8 0(%rax,%rcx,1), %xmm31{%k4}{z}
+    {evex} vmovdqu8 -16(%rax,%r9,2), %xmm20{%k5}{z}
+    {evex} vmovdqu8 -129(%r9,%rbp,4), %xmm12{%k6}{z}
     {evex} vmovdqu8 gnu_back(%rip), %xmm17{%k7}{z}
     {evex} vmovdqu8 %ymm16, %ymm3
-    {evex} vmovdqu8 0(%r15), %ymm25
-    {evex} vmovdqu8 -32(%r10), %ymm9
-    {evex} vmovdqu8 1001(%rsi), %ymm31
+    {evex} vmovdqu8 0(%r8), %ymm25
+    {evex} vmovdqu8 -32(%r14), %ymm9
+    {evex} vmovdqu8 1001(%r15), %ymm31
     {evex} vmovdqu8 0(%r12), %ymm20
     {evex} vmovdqu8 64(%rsp), %ymm12
     {evex} vmovdqu8 -2147483648(%r12), %ymm17
-    {evex} vmovdqu8 0(%r15,%rax,2), %ymm16
-    {evex} vmovdqu8 -4096(%rdi,%r15,4), %ymm3
-    {evex} vmovdqu8 2147483647(%r15,%rsi,8), %ymm25
+    {evex} vmovdqu8 0(%r8,%r12,8), %ymm16
+    {evex} vmovdqu8 -4096(%rsp,%rax,1), %ymm3
+    {evex} vmovdqu8 2147483647(%r13,%r15,2), %ymm25
     {evex} vmovdqu8 gnu_fwd(%rip), %ymm9
     {evex} vmovdqu8 %ymm31, %ymm20{%k1}
-    {evex} vmovdqu8 0(%rcx), %ymm12{%k2}
-    {evex} vmovdqu8 4064(%r11), %ymm17{%k3}
-    {evex} vmovdqu8 4660(%rdi), %ymm16{%k4}
+    {evex} vmovdqu8 0(%rdx), %ymm12{%k2}
+    {evex} vmovdqu8 4064(%rcx), %ymm17{%k3}
+    {evex} vmovdqu8 4660(%r8), %ymm16{%k4}
+g58:
     {evex} vmovdqu8 0(%rsp), %ymm3{%k5}
     {evex} vmovdqu8 -32(%r12), %ymm25{%k6}
     {evex} vmovdqu8 -129(%rsp), %ymm9{%k7}
-    {evex} vmovdqu8 0(%rax,%rcx,1), %ymm31{%k1}
-    {evex} vmovdqu8 64(%rax,%r9,2), %ymm20{%k2}
-    {evex} vmovdqu8 1001(%r9,%rbp,4), %ymm12{%k3}
+    {evex} vmovdqu8 0(%rcx,%rsi,4), %ymm31{%k1}
+    {evex} vmovdqu8 64(%rbp,%rcx,8), %ymm20{%k2}
+    {evex} vmovdqu8 1001(%r12,%r9,1), %ymm12{%k3}
     {evex} vmovdqu8 gnu_back(%rip), %ymm17{%k4}
     {evex} vmovdqu8 %ymm16, %ymm3{%k5}{z}
-    {evex} vmovdqu8 0(%r8), %ymm25{%k6}{z}
-    {evex} vmovdqu8 -4096(%r14), %ymm9{%k7}{z}
-    {evex} vmovdqu8 -2147483648(%r15), %ymm31{%k1}{z}
+    {evex} vmovdqu8 0(%r9), %ymm25{%k6}{z}
+    {evex} vmovdqu8 -4096(%rbp), %ymm9{%k7}{z}
+    {evex} vmovdqu8 -2147483648(%r13), %ymm31{%k1}{z}
     {evex} vmovdqu8 0(%r12), %ymm20{%k2}{z}
     {evex} vmovdqu8 4064(%rsp), %ymm12{%k3}{z}
     {evex} vmovdqu8 2147483647(%r12), %ymm17{%k4}{z}
-    {evex} vmovdqu8 0(%r8,%r12,8), %ymm16{%k5}{z}
-    {evex} vmovdqu8 -32(%rsp,%rax,1), %ymm3{%k6}{z}
-    {evex} vmovdqu8 4660(%r13,%r15,2), %ymm25{%k7}{z}
+    {evex} vmovdqu8 0(%r12,%rbp,2), %ymm16{%k5}{z}
+    {evex} vmovdqu8 -32(%rdi,%r12,4), %ymm3{%k6}{z}
+    {evex} vmovdqu8 4660(%r15,%rax,8), %ymm25{%k7}{z}
     {evex} vmovdqu8 gnu_fwd(%rip), %ymm9{%k1}{z}
     {evex} vmovdqu8 %zmm31, %zmm20
-    {evex} vmovdqu8 0(%rdx), %zmm12
-    {evex} vmovdqu8 -64(%rcx), %zmm17
-    {evex} vmovdqu8 -129(%r8), %zmm16
+    {evex} vmovdqu8 0(%rbx), %zmm12
+    {evex} vmovdqu8 -64(%rdx), %zmm17
+    {evex} vmovdqu8 -129(%r9), %zmm16
     {evex} vmovdqu8 0(%rsp), %zmm3
     {evex} vmovdqu8 128(%r12), %zmm25
-g58:
     {evex} vmovdqu8 1001(%rsp), %zmm9
-    {evex} vmovdqu8 0(%rcx,%rsi,4), %zmm31
-    {evex} vmovdqu8 -8192(%rbp,%rcx,8), %zmm20
-    {evex} vmovdqu8 -2147483648(%r12,%r9,1), %zmm12
+    {evex} vmovdqu8 0(%rdx,%r15,1), %zmm31
+    {evex} vmovdqu8 -8192(%rax,%rsi,2), %zmm20
+    {evex} vmovdqu8 -2147483648(%r9,%rcx,4), %zmm12
     {evex} vmovdqu8 gnu_back(%rip), %zmm17
     {evex} vmovdqu8 %zmm16, %zmm3{%k2}
-    {evex} vmovdqu8 0(%r9), %zmm25{%k3}
-    {evex} vmovdqu8 8128(%rbp), %zmm9{%k4}
-    {evex} vmovdqu8 2147483647(%r13), %zmm31{%k5}
+    {evex} vmovdqu8 0(%r10), %zmm25{%k3}
+    {evex} vmovdqu8 8128(%rbx), %zmm9{%k4}
+    {evex} vmovdqu8 2147483647(%r10), %zmm31{%k5}
     {evex} vmovdqu8 0(%r12), %zmm20{%k6}
     {evex} vmovdqu8 -64(%rsp), %zmm12{%k7}
     {evex} vmovdqu8 4660(%r12), %zmm17{%k1}
-    {evex} vmovdqu8 0(%r12,%rbp,2), %zmm16{%k2}
-    {evex} vmovdqu8 128(%rdi,%r12,4), %zmm3{%k3}
-    {evex} vmovdqu8 -129(%r15,%rax,8), %zmm25{%k4}
+    {evex} vmovdqu8 0(%r9,%r9,8), %zmm16{%k2}
+    {evex} vmovdqu8 128(%rsp,%rbp,1), %zmm3{%k3}
+    {evex} vmovdqu8 -129(%r13,%r12,2), %zmm25{%k4}
     {evex} vmovdqu8 gnu_fwd(%rip), %zmm9{%k5}
     {evex} vmovdqu8 %zmm31, %zmm20{%k6}{z}
-    {evex} vmovdqu8 0(%rbx), %zmm12{%k7}{z}
-    {evex} vmovdqu8 -8192(%rdx), %zmm17{%k1}{z}
-    {evex} vmovdqu8 1001(%r9), %zmm16{%k2}{z}
+    {evex} vmovdqu8 0(%rsi), %zmm12{%k7}{z}
+    {evex} vmovdqu8 -8192(%rsi), %zmm17{%k1}{z}
+    {evex} vmovdqu8 1001(%r11), %zmm16{%k2}{z}
     {evex} vmovdqu8 0(%rsp), %zmm3{%k3}{z}
     {evex} vmovdqu8 8128(%r12), %zmm25{%k4}{z}
     {evex} vmovdqu8 -2147483648(%rsp), %zmm9{%k5}{z}
-    {evex} vmovdqu8 0(%rdx,%r15,1), %zmm31{%k6}{z}
-    {evex} vmovdqu8 -64(%rax,%rsi,2), %zmm20{%k7}{z}
-    {evex} vmovdqu8 2147483647(%r9,%rcx,4), %zmm12{%k1}{z}
+    {evex} vmovdqu8 0(%rsp,%rax,4), %zmm31{%k6}{z}
+    {evex} vmovdqu8 -64(%rbp,%r15,8), %zmm20{%k7}{z}
+    {evex} vmovdqu8 2147483647(%r12,%rsi,1), %zmm12{%k1}{z}
     {evex} vmovdqu8 gnu_back(%rip), %zmm17{%k2}{z}
     {evex} {store} vmovdqu8 %xmm16, %xmm3
     {evex} {store} vmovdqu8 %xmm25, %xmm9{%k3}
@@ -11704,333 +11728,333 @@ g58:
     {evex} {store} vmovdqu8 %zmm31, %zmm20
     {evex} {store} vmovdqu8 %zmm12, %zmm17{%k7}
     {evex} {store} vmovdqu8 %zmm16, %zmm3{%k1}{z}
-    {evex} vmovdqu8 %xmm25, 0(%r10)
-    {evex} vmovdqu8 %xmm9, 32(%rbx)
-    {evex} vmovdqu8 %xmm31, 4660(%r10)
+    {evex} vmovdqu8 %xmm25, 0(%r11)
+    {evex} vmovdqu8 %xmm9, 32(%rdi)
+    {evex} vmovdqu8 %xmm31, 4660(%r14)
     {evex} vmovdqu8 %xmm20, 0(%r12)
     {evex} vmovdqu8 %xmm12, -2048(%rsp)
     {evex} vmovdqu8 %xmm17, -129(%r12)
-    {evex} vmovdqu8 %xmm16, 0(%r9,%r9,8)
-    {evex} vmovdqu8 %xmm3, 2032(%rsp,%rbp,1)
-    {evex} vmovdqu8 %xmm25, 1001(%r13,%r12,2)
+    {evex} vmovdqu8 %xmm16, 0(%r14,%rcx,2)
+    {evex} vmovdqu8 %xmm3, 2032(%rdi,%r9,4)
+    {evex} vmovdqu8 %xmm25, 1001(%r15,%rbp,8)
     {evex} vmovdqu8 %xmm9, gnu_fwd(%rip)
-    {evex} vmovdqu8 %xmm31, 0(%rsi){%k2}
-    {evex} vmovdqu8 %xmm20, -16(%rsi){%k3}
-    {evex} vmovdqu8 %xmm12, -2147483648(%r11){%k4}
+    {evex} vmovdqu8 %xmm31, 0(%rdi){%k2}
+    {evex} vmovdqu8 %xmm20, -16(%r15){%k3}
+    {evex} vmovdqu8 %xmm12, -2147483648(%rcx){%k4}
     {evex} vmovdqu8 %xmm17, 0(%rsp){%k5}
     {evex} vmovdqu8 %xmm16, 32(%r12){%k6}
     {evex} vmovdqu8 %xmm3, 2147483647(%rsp){%k7}
-    {evex} vmovdqu8 %xmm25, 0(%rsp,%rax,4){%k1}
-    {evex} vmovdqu8 %xmm9, -2048(%rbp,%r15,8){%k2}
-    {evex} vmovdqu8 %xmm31, 4660(%r12,%rsi,1){%k3}
+    {evex} vmovdqu8 %xmm25, 0(%rsi,%r12,1){%k1}
+    {evex} vmovdqu8 %xmm9, -2048(%rax,%rax,2){%k2}
+    {evex} vmovdqu8 %xmm31, 4660(%r9,%r15,4){%k3}
     {evex} vmovdqu8 %xmm20, gnu_back(%rip){%k4}
-    {evex} vmovdqu8 %ymm12, 0(%r11)
-    {evex} vmovdqu8 %ymm17, 64(%rdi)
-    {evex} vmovdqu8 %ymm16, -129(%r14)
+    {evex} vmovdqu8 %ymm12, 0(%r14)
+    {evex} vmovdqu8 %ymm17, 64(%r8)
+    {evex} vmovdqu8 %ymm16, -129(%rbp)
     {evex} vmovdqu8 %ymm3, 0(%r12)
     {evex} vmovdqu8 %ymm25, -4096(%rsp)
     {evex} vmovdqu8 %ymm9, 1001(%r12)
-    {evex} vmovdqu8 %ymm31, 0(%r14,%rcx,2)
-    {evex} vmovdqu8 %ymm20, 4064(%rdi,%r9,4)
-    {evex} vmovdqu8 %ymm12, -2147483648(%r15,%rbp,8)
+    {evex} vmovdqu8 %ymm31, 0(%r15,%rsi,8)
+    {evex} vmovdqu8 %ymm20, 4064(%rsp,%rcx,1)
+    {evex} vmovdqu8 %ymm12, -2147483648(%r13,%r9,2)
     {evex} vmovdqu8 %ymm17, gnu_fwd(%rip)
-    {evex} vmovdqu8 %ymm16, 0(%rdi){%k5}
-    {evex} vmovdqu8 %ymm3, -32(%r15){%k6}
-    {evex} vmovdqu8 %ymm25, 2147483647(%rcx){%k7}
+    {evex} vmovdqu8 %ymm16, 0(%r15){%k5}
+    {evex} vmovdqu8 %ymm3, -32(%r13){%k6}
+    {evex} vmovdqu8 %ymm25, 2147483647(%rdx){%k7}
     {evex} vmovdqu8 %ymm9, 0(%rsp){%k1}
     {evex} vmovdqu8 %ymm31, 64(%r12){%k2}
     {evex} vmovdqu8 %ymm20, 4660(%rsp){%k3}
-    {evex} vmovdqu8 %ymm12, 0(%rsi,%r12,1){%k4}
-    {evex} vmovdqu8 %ymm17, -4096(%rax,%rax,2){%k5}
-    {evex} vmovdqu8 %ymm16, -129(%r9,%r15,4){%k6}
+    {evex} vmovdqu8 %ymm12, 0(%rax,%rbp,4){%k4}
+    {evex} vmovdqu8 %ymm17, -4096(%rbp,%r12,8){%k5}
+    {evex} vmovdqu8 %ymm16, -129(%r12,%rax,1){%k6}
     {evex} vmovdqu8 %ymm3, gnu_back(%rip){%k7}
-    {evex} vmovdqu8 %zmm25, 0(%r14)
-    {evex} vmovdqu8 %zmm9, 128(%r8)
-    {evex} vmovdqu8 %zmm31, 1001(%rbp)
+    {evex} vmovdqu8 %zmm25, 0(%rcx)
+    {evex} vmovdqu8 %zmm9, 128(%r9)
+    {evex} vmovdqu8 %zmm31, 1001(%rbx)
     {evex} vmovdqu8 %zmm20, 0(%r12)
     {evex} vmovdqu8 %zmm12, -8192(%rsp)
     {evex} vmovdqu8 %zmm17, -2147483648(%r12)
-    {evex} vmovdqu8 %zmm16, 0(%r15,%rsi,8)
-    {evex} vmovdqu8 %zmm3, 8128(%rsp,%rcx,1)
-    {evex} vmovdqu8 %zmm25, 2147483647(%r13,%r9,2)
+    {evex} vmovdqu8 %zmm16, 0(%r8,%r15,2)
+    {evex} vmovdqu8 %zmm3, 8128(%rdi,%rsi,4)
+    {evex} vmovdqu8 %zmm25, 2147483647(%r15,%rcx,8)
     {evex} vmovdqu8 %zmm9, gnu_fwd(%rip)
-    {evex} vmovdqu8 %zmm31, 0(%r15){%k1}
-    {evex} vmovdqu8 %zmm20, -64(%r13){%k2}
-    {evex} vmovdqu8 %zmm12, 4660(%rdx){%k3}
+    {evex} vmovdqu8 %zmm31, 0(%r8){%k1}
+    {evex} vmovdqu8 %zmm20, -64(%r10){%k2}
+    {evex} vmovdqu8 %zmm12, 4660(%rsi){%k3}
     {evex} vmovdqu8 %zmm17, 0(%rsp){%k4}
     {evex} vmovdqu8 %zmm16, 128(%r12){%k5}
     {evex} vmovdqu8 %zmm3, -129(%rsp){%k6}
-    {evex} vmovdqu8 %zmm25, 0(%rax,%rbp,4){%k7}
-    {evex} vmovdqu8 %zmm9, -8192(%rbp,%r12,8){%k1}
-    {evex} vmovdqu8 %zmm31, 1001(%r12,%rax,1){%k2}
+    {evex} vmovdqu8 %zmm25, 0(%rcx,%r9,1){%k7}
+    {evex} vmovdqu8 %zmm9, -8192(%rax,%rbp,2){%k1}
+    {evex} vmovdqu8 %zmm31, 1001(%r9,%r12,4){%k2}
     {evex} vmovdqu8 %zmm20, gnu_back(%rip){%k3}
     {evex} vmovdqa64 %xmm12, %xmm17
-    {evex} vmovdqa64 0(%rcx), %xmm16
-    {evex} vmovdqa64 2032(%r9), %xmm3
-    {evex} vmovdqa64 -2147483648(%rbx), %xmm25
+    {evex} vmovdqa64 0(%rdx), %xmm16
+    {evex} vmovdqa64 2032(%r11), %xmm3
+    {evex} vmovdqa64 -2147483648(%rdi), %xmm25
     {evex} vmovdqa64 0(%r12), %xmm9
     {evex} vmovdqa64 -16(%rsp), %xmm31
     {evex} vmovdqa64 2147483647(%r12), %xmm20
-    {evex} vmovdqa64 0(%r8,%r15,2), %xmm12
-    {evex} vmovdqa64 32(%rdi,%rsi,4), %xmm17
-    {evex} vmovdqa64 4660(%r15,%rcx,8), %xmm16
+    {evex} vmovdqa64 0(%r12,%rax,8), %xmm12
+    {evex} vmovdqa64 32(%rsp,%r15,1), %xmm17
+    {evex} vmovdqa64 4660(%r13,%rsi,2), %xmm16
     {evex} vmovdqa64 gnu_fwd(%rip), %xmm3
     {evex} vmovdqa64 %xmm25, %xmm9{%k4}
-    {evex} vmovdqa64 0(%r8), %xmm31{%k5}
-    {evex} vmovdqa64 -2048(%r10), %xmm20{%k6}
-    {evex} vmovdqa64 -129(%rsi), %xmm12{%k7}
+    {evex} vmovdqa64 0(%r9), %xmm31{%k5}
+    {evex} vmovdqa64 -2048(%r14), %xmm20{%k6}
+    {evex} vmovdqa64 -129(%r15), %xmm12{%k7}
     {evex} vmovdqa64 0(%rsp), %xmm17{%k1}
     {evex} vmovdqa64 2032(%r12), %xmm16{%k2}
     {evex} vmovdqa64 1001(%rsp), %xmm3{%k3}
-    {evex} vmovdqa64 0(%rcx,%r9,1), %xmm25{%k4}
-    {evex} vmovdqa64 -16(%rax,%rbp,2), %xmm9{%k5}
-    {evex} vmovdqa64 -2147483648(%r9,%r12,4), %xmm31{%k6}
+    {evex} vmovdqa64 0(%rdx,%rcx,4), %xmm25{%k4}
+    {evex} vmovdqa64 -16(%rbp,%r9,8), %xmm9{%k5}
+    {evex} vmovdqa64 -2147483648(%r12,%rbp,1), %xmm31{%k6}
     {evex} vmovdqa64 gnu_back(%rip), %xmm20{%k7}
     {evex} vmovdqa64 %xmm12, %xmm17{%k1}{z}
-    {evex} vmovdqa64 0(%rdx), %xmm16{%k2}{z}
-    {evex} vmovdqa64 32(%r11), %xmm3{%k3}{z}
-    {evex} vmovdqa64 2147483647(%rdi), %xmm25{%k4}{z}
+    {evex} vmovdqa64 0(%rbx), %xmm16{%k2}{z}
+    {evex} vmovdqa64 32(%rcx), %xmm3{%k3}{z}
+    {evex} vmovdqa64 2147483647(%r8), %xmm25{%k4}{z}
     {evex} vmovdqa64 0(%r12), %xmm9{%k5}{z}
     {evex} vmovdqa64 -2048(%rsp), %xmm31{%k6}{z}
     {evex} vmovdqa64 4660(%r12), %xmm20{%k7}{z}
-    {evex} vmovdqa64 0(%r12,%rax,8), %xmm12{%k1}{z}
-    {evex} vmovdqa64 2032(%rsp,%r15,1), %xmm17{%k2}{z}
-    {evex} vmovdqa64 -129(%r13,%rsi,2), %xmm16{%k3}{z}
+    {evex} vmovdqa64 0(%r9,%r12,2), %xmm12{%k1}{z}
+    {evex} vmovdqa64 2032(%rdi,%rax,4), %xmm17{%k2}{z}
+    {evex} vmovdqa64 -129(%r15,%r15,8), %xmm16{%k3}{z}
     {evex} vmovdqa64 gnu_fwd(%rip), %xmm3{%k4}{z}
     {evex} vmovdqa64 %ymm25, %ymm9
-    {evex} vmovdqa64 0(%r9), %ymm31
-    {evex} vmovdqa64 4064(%r14), %ymm20
-    {evex} vmovdqa64 1001(%r15), %ymm12
+    {evex} vmovdqa64 0(%r10), %ymm31
+    {evex} vmovdqa64 4064(%rbp), %ymm20
+    {evex} vmovdqa64 1001(%r13), %ymm12
     {evex} vmovdqa64 0(%rsp), %ymm17
     {evex} vmovdqa64 -32(%r12), %ymm16
     {evex} vmovdqa64 -2147483648(%rsp), %ymm3
-    {evex} vmovdqa64 0(%rdx,%rcx,4), %ymm25
-    {evex} vmovdqa64 64(%rbp,%r9,8), %ymm9
-    {evex} vmovdqa64 2147483647(%r12,%rbp,1), %ymm31
+    {evex} vmovdqa64 0(%rsp,%rsi,1), %ymm25
+    {evex} vmovdqa64 64(%rax,%rcx,2), %ymm9
+    {evex} vmovdqa64 2147483647(%r9,%r9,4), %ymm31
     {evex} vmovdqa64 gnu_back(%rip), %ymm20
     {evex} vmovdqa64 %ymm12, %ymm17{%k5}
-    {evex} vmovdqa64 0(%rbx), %ymm16{%k6}
-    {evex} vmovdqa64 -4096(%rcx), %ymm3{%k7}
-    {evex} vmovdqa64 4660(%r8), %ymm25{%k1}
+    {evex} vmovdqa64 0(%rsi), %ymm16{%k6}
+    {evex} vmovdqa64 -4096(%rdx), %ymm3{%k7}
+    {evex} vmovdqa64 4660(%r9), %ymm25{%k1}
     {evex} vmovdqa64 0(%r12), %ymm9{%k2}
     {evex} vmovdqa64 4064(%rsp), %ymm31{%k3}
     {evex} vmovdqa64 -129(%r12), %ymm20{%k4}
-    {evex} vmovdqa64 0(%r9,%r12,2), %ymm12{%k5}
-    {evex} vmovdqa64 -32(%rdi,%rax,4), %ymm17{%k6}
-    {evex} vmovdqa64 1001(%r15,%r15,8), %ymm16{%k7}
+    {evex} vmovdqa64 0(%r14,%rbp,8), %ymm12{%k5}
+    {evex} vmovdqa64 -32(%rsp,%r12,1), %ymm17{%k6}
+    {evex} vmovdqa64 1001(%r13,%rax,2), %ymm16{%k7}
     {evex} vmovdqa64 gnu_fwd(%rip), %ymm3{%k1}
     {evex} vmovdqa64 %ymm25, %ymm9{%k2}{z}
-    {evex} vmovdqa64 0(%r10), %ymm31{%k3}{z}
-    {evex} vmovdqa64 64(%rbp), %ymm20{%k4}{z}
-    {evex} vmovdqa64 -2147483648(%r13), %ymm12{%k5}{z}
+    {evex} vmovdqa64 0(%r11), %ymm31{%k3}{z}
+    {evex} vmovdqa64 64(%rbx), %ymm20{%k4}{z}
+    {evex} vmovdqa64 -2147483648(%r10), %ymm12{%k5}{z}
     {evex} vmovdqa64 0(%rsp), %ymm17{%k6}{z}
     {evex} vmovdqa64 -4096(%r12), %ymm16{%k7}{z}
     {evex} vmovdqa64 2147483647(%rsp), %ymm3{%k1}{z}
-    {evex} vmovdqa64 0(%rsp,%rsi,1), %ymm25{%k2}{z}
-    {evex} vmovdqa64 4064(%rax,%rcx,2), %ymm9{%k3}{z}
-    {evex} vmovdqa64 4660(%r9,%r9,4), %ymm31{%k4}{z}
+    {evex} vmovdqa64 0(%rsi,%r15,4), %ymm25{%k2}{z}
+    {evex} vmovdqa64 4064(%rbp,%rsi,8), %ymm9{%k3}{z}
+    {evex} vmovdqa64 4660(%r12,%rcx,1), %ymm31{%k4}{z}
     {evex} vmovdqa64 gnu_back(%rip), %ymm20{%k5}{z}
     {evex} vmovdqa64 %zmm12, %zmm17
-    {evex} vmovdqa64 0(%rsi), %zmm16
-    {evex} vmovdqa64 8128(%rdx), %zmm3
-    {evex} vmovdqa64 -129(%r9), %zmm25
+    {evex} vmovdqa64 0(%rdi), %zmm16
+    {evex} vmovdqa64 8128(%rsi), %zmm3
+    {evex} vmovdqa64 -129(%r11), %zmm25
     {evex} vmovdqa64 0(%r12), %zmm9
     {evex} vmovdqa64 -64(%rsp), %zmm31
     {evex} vmovdqa64 1001(%r12), %zmm20
-    {evex} vmovdqa64 0(%r14,%rbp,8), %zmm12
-    {evex} vmovdqa64 128(%rsp,%r12,1), %zmm17
-    {evex} vmovdqa64 -2147483648(%r13,%rax,2), %zmm16
+    {evex} vmovdqa64 0(%r15,%r9,2), %zmm12
+    {evex} vmovdqa64 128(%rdi,%rbp,4), %zmm17
+    {evex} vmovdqa64 -2147483648(%r15,%r12,8), %zmm16
     {evex} vmovdqa64 gnu_fwd(%rip), %zmm3
     {evex} vmovdqa64 %zmm25, %zmm9{%k6}
-    {evex} vmovdqa64 0(%r11), %zmm31{%k7}
-    {evex} vmovdqa64 -8192(%rbx), %zmm20{%k1}
-    {evex} vmovdqa64 2147483647(%r10), %zmm12{%k2}
+    {evex} vmovdqa64 0(%r14), %zmm31{%k7}
+    {evex} vmovdqa64 -8192(%rdi), %zmm20{%k1}
+g59:
+    {evex} vmovdqa64 2147483647(%r14), %zmm12{%k2}
     {evex} vmovdqa64 0(%rsp), %zmm17{%k3}
     {evex} vmovdqa64 8128(%r12), %zmm16{%k4}
     {evex} vmovdqa64 4660(%rsp), %zmm3{%k5}
-    {evex} vmovdqa64 0(%rsi,%r15,4), %zmm25{%k6}
-    {evex} vmovdqa64 -64(%rbp,%rsi,8), %zmm9{%k7}
-    {evex} vmovdqa64 -129(%r12,%rcx,1), %zmm31{%k1}
+    {evex} vmovdqa64 0(%rax,%rax,1), %zmm25{%k6}
+    {evex} vmovdqa64 -64(%rax,%r15,2), %zmm9{%k7}
+    {evex} vmovdqa64 -129(%r9,%rsi,4), %zmm31{%k1}
     {evex} vmovdqa64 gnu_back(%rip), %zmm20{%k2}
     {evex} vmovdqa64 %zmm12, %zmm17{%k3}{z}
-    {evex} vmovdqa64 0(%rdi), %zmm16{%k4}{z}
-    {evex} vmovdqa64 128(%rsi), %zmm3{%k5}{z}
-    {evex} vmovdqa64 1001(%r11), %zmm25{%k6}{z}
+    {evex} vmovdqa64 0(%r15), %zmm16{%k4}{z}
+    {evex} vmovdqa64 128(%r15), %zmm3{%k5}{z}
+    {evex} vmovdqa64 1001(%rcx), %zmm25{%k6}{z}
     {evex} vmovdqa64 0(%r12), %zmm9{%k7}{z}
     {evex} vmovdqa64 -8192(%rsp), %zmm31{%k1}{z}
     {evex} vmovdqa64 -2147483648(%r12), %zmm20{%k2}{z}
-    {evex} vmovdqa64 0(%r15,%r9,2), %zmm12{%k3}{z}
-    {evex} vmovdqa64 8128(%rdi,%rbp,4), %zmm17{%k4}{z}
-    {evex} vmovdqa64 2147483647(%r15,%r12,8), %zmm16{%k5}{z}
+    {evex} vmovdqa64 0(%r8,%rcx,8), %zmm12{%k3}{z}
+    {evex} vmovdqa64 8128(%rsp,%r9,1), %zmm17{%k4}{z}
+    {evex} vmovdqa64 2147483647(%r13,%rbp,2), %zmm16{%k5}{z}
     {evex} vmovdqa64 gnu_fwd(%rip), %zmm3{%k6}{z}
     {evex} {store} vmovdqa64 %xmm25, %xmm9
     {evex} {store} vmovdqa64 %xmm31, %xmm20{%k7}
     {evex} {store} vmovdqa64 %xmm12, %xmm17{%k1}{z}
     {evex} {store} vmovdqa64 %ymm16, %ymm3
     {evex} {store} vmovdqa64 %ymm25, %ymm9{%k2}
-g59:
     {evex} {store} vmovdqa64 %ymm31, %ymm20{%k3}{z}
     {evex} {store} vmovdqa64 %zmm12, %zmm17
     {evex} {store} vmovdqa64 %zmm16, %zmm3{%k4}
     {evex} {store} vmovdqa64 %zmm25, %zmm9{%k5}{z}
-    {evex} vmovdqa64 %xmm31, 0(%r14)
-    {evex} vmovdqa64 %xmm20, -16(%rdi)
-    {evex} vmovdqa64 %xmm12, 4660(%r14)
+    {evex} vmovdqa64 %xmm31, 0(%rcx)
+    {evex} vmovdqa64 %xmm20, -16(%r8)
+    {evex} vmovdqa64 %xmm12, 4660(%rbp)
     {evex} vmovdqa64 %xmm17, 0(%rsp)
     {evex} vmovdqa64 %xmm16, 32(%r12)
     {evex} vmovdqa64 %xmm3, -129(%rsp)
-    {evex} vmovdqa64 %xmm25, 0(%rax,%rax,1)
-    {evex} vmovdqa64 %xmm9, -2048(%rax,%r15,2)
-    {evex} vmovdqa64 %xmm31, 1001(%r9,%rsi,4)
+    {evex} vmovdqa64 %xmm25, 0(%rcx,%r12,4)
+    {evex} vmovdqa64 %xmm9, -2048(%rbp,%rax,8)
+    {evex} vmovdqa64 %xmm31, 1001(%r12,%r15,1)
     {evex} vmovdqa64 %xmm20, gnu_back(%rip)
-    {evex} vmovdqa64 %xmm12, 0(%r15){%k6}
-    {evex} vmovdqa64 %xmm17, 2032(%r15){%k7}
-    {evex} vmovdqa64 %xmm16, -2147483648(%rcx){%k1}
+    {evex} vmovdqa64 %xmm12, 0(%r8){%k6}
+    {evex} vmovdqa64 %xmm17, 2032(%r13){%k7}
+    {evex} vmovdqa64 %xmm16, -2147483648(%rdx){%k1}
     {evex} vmovdqa64 %xmm3, 0(%r12){%k2}
     {evex} vmovdqa64 %xmm25, -16(%rsp){%k3}
     {evex} vmovdqa64 %xmm9, 2147483647(%r12){%k4}
-    {evex} vmovdqa64 %xmm31, 0(%r8,%rcx,8){%k5}
-    {evex} vmovdqa64 %xmm20, 32(%rsp,%r9,1){%k6}
-    {evex} vmovdqa64 %xmm12, 4660(%r13,%rbp,2){%k7}
+    {evex} vmovdqa64 %xmm31, 0(%r12,%rsi,2){%k5}
+    {evex} vmovdqa64 %xmm20, 32(%rdi,%rcx,4){%k6}
+    {evex} vmovdqa64 %xmm12, 4660(%r15,%r9,8){%k7}
     {evex} vmovdqa64 %xmm17, gnu_fwd(%rip){%k1}
-    {evex} vmovdqa64 %ymm16, 0(%rcx)
-    {evex} vmovdqa64 %ymm3, -32(%r8)
-    {evex} vmovdqa64 %ymm25, -129(%rbp)
+    {evex} vmovdqa64 %ymm16, 0(%rdx)
+    {evex} vmovdqa64 %ymm3, -32(%r9)
+    {evex} vmovdqa64 %ymm25, -129(%rbx)
     {evex} vmovdqa64 %ymm9, 0(%rsp)
     {evex} vmovdqa64 %ymm31, 64(%r12)
     {evex} vmovdqa64 %ymm20, 1001(%rsp)
-    {evex} vmovdqa64 %ymm12, 0(%rcx,%r12,4)
-    {evex} vmovdqa64 %ymm17, -4096(%rbp,%rax,8)
-    {evex} vmovdqa64 %ymm16, -2147483648(%r12,%r15,1)
+    {evex} vmovdqa64 %ymm12, 0(%rdx,%rbp,1)
+    {evex} vmovdqa64 %ymm17, -4096(%rax,%r12,2)
+    {evex} vmovdqa64 %ymm16, -2147483648(%r9,%rax,4)
     {evex} vmovdqa64 %ymm3, gnu_back(%rip)
-    {evex} vmovdqa64 %ymm25, 0(%r8){%k2}
-    {evex} vmovdqa64 %ymm9, 4064(%r13){%k3}
-    {evex} vmovdqa64 %ymm31, 2147483647(%rdx){%k4}
+    {evex} vmovdqa64 %ymm25, 0(%r9){%k2}
+    {evex} vmovdqa64 %ymm9, 4064(%r10){%k3}
+    {evex} vmovdqa64 %ymm31, 2147483647(%rsi){%k4}
     {evex} vmovdqa64 %ymm20, 0(%r12){%k5}
     {evex} vmovdqa64 %ymm12, -32(%rsp){%k6}
     {evex} vmovdqa64 %ymm17, 4660(%r12){%k7}
-    {evex} vmovdqa64 %ymm16, 0(%r12,%rsi,2){%k1}
-    {evex} vmovdqa64 %ymm3, 64(%rdi,%rcx,4){%k2}
-    {evex} vmovdqa64 %ymm25, -129(%r15,%r9,8){%k3}
+    {evex} vmovdqa64 %ymm16, 0(%r9,%r15,8){%k1}
+    {evex} vmovdqa64 %ymm3, 64(%rsp,%rsi,1){%k2}
+    {evex} vmovdqa64 %ymm25, -129(%r13,%rcx,2){%k3}
     {evex} vmovdqa64 %ymm9, gnu_fwd(%rip){%k4}
-    {evex} vmovdqa64 %zmm31, 0(%rdx)
-    {evex} vmovdqa64 %zmm20, -64(%r9)
-    {evex} vmovdqa64 %zmm12, 1001(%rbx)
+    {evex} vmovdqa64 %zmm31, 0(%rbx)
+    {evex} vmovdqa64 %zmm20, -64(%r11)
+    {evex} vmovdqa64 %zmm12, 1001(%rdi)
     {evex} vmovdqa64 %zmm17, 0(%rsp)
     {evex} vmovdqa64 %zmm16, 128(%r12)
     {evex} vmovdqa64 %zmm3, -2147483648(%rsp)
-    {evex} vmovdqa64 %zmm25, 0(%rdx,%rbp,1)
-    {evex} vmovdqa64 %zmm9, -8192(%rax,%r12,2)
-    {evex} vmovdqa64 %zmm31, 2147483647(%r9,%rax,4)
+    {evex} vmovdqa64 %zmm25, 0(%rsp,%r9,4)
+    {evex} vmovdqa64 %zmm9, -8192(%rbp,%rbp,8)
+    {evex} vmovdqa64 %zmm31, 2147483647(%r12,%r12,1)
     {evex} vmovdqa64 %zmm20, gnu_back(%rip)
-    {evex} vmovdqa64 %zmm12, 0(%r9){%k5}
-    {evex} vmovdqa64 %zmm17, 8128(%r10){%k6}
-    {evex} vmovdqa64 %zmm16, 4660(%rsi){%k7}
+    {evex} vmovdqa64 %zmm12, 0(%r10){%k5}
+    {evex} vmovdqa64 %zmm17, 8128(%r14){%k6}
+    {evex} vmovdqa64 %zmm16, 4660(%r15){%k7}
     {evex} vmovdqa64 %zmm3, 0(%r12){%k1}
     {evex} vmovdqa64 %zmm25, -64(%rsp){%k2}
     {evex} vmovdqa64 %zmm9, -129(%r12){%k3}
-    {evex} vmovdqa64 %zmm31, 0(%r9,%r15,8){%k4}
-    {evex} vmovdqa64 %zmm20, 128(%rsp,%rsi,1){%k5}
-    {evex} vmovdqa64 %zmm12, 1001(%r13,%rcx,2){%k6}
+    {evex} vmovdqa64 %zmm31, 0(%r14,%rax,2){%k4}
+    {evex} vmovdqa64 %zmm20, 128(%rdi,%r15,4){%k5}
+    {evex} vmovdqa64 %zmm12, 1001(%r15,%rsi,8){%k6}
     {evex} vmovdqa64 %zmm17, gnu_fwd(%rip){%k7}
     {evex} vmovdqa32 %xmm16, %xmm3
-    {evex} vmovdqa32 0(%rbx), %xmm25
-    {evex} vmovdqa32 -2048(%r11), %xmm9
-    {evex} vmovdqa32 -2147483648(%rdi), %xmm31
+    {evex} vmovdqa32 0(%rsi), %xmm25
+    {evex} vmovdqa32 -2048(%rcx), %xmm9
+    {evex} vmovdqa32 -2147483648(%r8), %xmm31
     {evex} vmovdqa32 0(%rsp), %xmm20
     {evex} vmovdqa32 2032(%r12), %xmm12
     {evex} vmovdqa32 2147483647(%rsp), %xmm17
-    {evex} vmovdqa32 0(%rsp,%r9,4), %xmm16
-    {evex} vmovdqa32 -16(%rbp,%rbp,8), %xmm3
-    {evex} vmovdqa32 4660(%r12,%r12,1), %xmm25
+    {evex} vmovdqa32 0(%rsi,%rcx,1), %xmm16
+    {evex} vmovdqa32 -16(%rax,%r9,2), %xmm3
+    {evex} vmovdqa32 4660(%r9,%rbp,4), %xmm25
     {evex} vmovdqa32 gnu_back(%rip), %xmm9
     {evex} vmovdqa32 %xmm31, %xmm20{%k1}
-    {evex} vmovdqa32 0(%r10), %xmm12{%k2}
-    {evex} vmovdqa32 32(%r14), %xmm17{%k3}
-    {evex} vmovdqa32 -129(%r15), %xmm16{%k4}
+    {evex} vmovdqa32 0(%r11), %xmm12{%k2}
+    {evex} vmovdqa32 32(%rbp), %xmm17{%k3}
+    {evex} vmovdqa32 -129(%r13), %xmm16{%k4}
     {evex} vmovdqa32 0(%r12), %xmm3{%k5}
     {evex} vmovdqa32 -2048(%rsp), %xmm25{%k6}
     {evex} vmovdqa32 1001(%r12), %xmm9{%k7}
-    {evex} vmovdqa32 0(%r14,%rax,2), %xmm31{%k1}
-    {evex} vmovdqa32 2032(%rdi,%r15,4), %xmm20{%k2}
-    {evex} vmovdqa32 -2147483648(%r15,%rsi,8), %xmm12{%k3}
+    {evex} vmovdqa32 0(%r15,%r12,8), %xmm31{%k1}
+    {evex} vmovdqa32 2032(%rsp,%rax,1), %xmm20{%k2}
+    {evex} vmovdqa32 -2147483648(%r13,%r15,2), %xmm12{%k3}
     {evex} vmovdqa32 gnu_fwd(%rip), %xmm17{%k4}
     {evex} vmovdqa32 %xmm16, %xmm3{%k5}{z}
-    {evex} vmovdqa32 0(%rsi), %xmm25{%k6}{z}
-    {evex} vmovdqa32 -16(%rcx), %xmm9{%k7}{z}
-    {evex} vmovdqa32 2147483647(%r8), %xmm31{%k1}{z}
+    {evex} vmovdqa32 0(%rdi), %xmm25{%k6}{z}
+    {evex} vmovdqa32 -16(%rdx), %xmm9{%k7}{z}
+    {evex} vmovdqa32 2147483647(%r9), %xmm31{%k1}{z}
     {evex} vmovdqa32 0(%rsp), %xmm20{%k2}{z}
     {evex} vmovdqa32 32(%r12), %xmm12{%k3}{z}
     {evex} vmovdqa32 4660(%rsp), %xmm17{%k4}{z}
-    {evex} vmovdqa32 0(%rsi,%rcx,1), %xmm16{%k5}{z}
-    {evex} vmovdqa32 -2048(%rax,%r9,2), %xmm3{%k6}{z}
-    {evex} vmovdqa32 -129(%r9,%rbp,4), %xmm25{%k7}{z}
+    {evex} vmovdqa32 0(%rax,%rsi,4), %xmm16{%k5}{z}
+    {evex} vmovdqa32 -2048(%rbp,%rcx,8), %xmm3{%k6}{z}
+    {evex} vmovdqa32 -129(%r12,%r9,1), %xmm25{%k7}{z}
     {evex} vmovdqa32 gnu_back(%rip), %xmm9{%k1}{z}
     {evex} vmovdqa32 %ymm31, %ymm20
-    {evex} vmovdqa32 0(%r11), %ymm12
-    {evex} vmovdqa32 -4096(%rbp), %ymm17
-    {evex} vmovdqa32 1001(%r13), %ymm16
+    {evex} vmovdqa32 0(%r14), %ymm12
+    {evex} vmovdqa32 -4096(%rbx), %ymm17
+    {evex} vmovdqa32 1001(%r10), %ymm16
     {evex} vmovdqa32 0(%r12), %ymm3
     {evex} vmovdqa32 4064(%rsp), %ymm25
     {evex} vmovdqa32 -2147483648(%r12), %ymm9
-    {evex} vmovdqa32 0(%r15,%r12,8), %ymm31
-    {evex} vmovdqa32 -32(%rsp,%rax,1), %ymm20
-    {evex} vmovdqa32 2147483647(%r13,%r15,2), %ymm12
+    {evex} vmovdqa32 0(%r8,%rbp,2), %ymm31
+    {evex} vmovdqa32 -32(%rdi,%r12,4), %ymm20
+    {evex} vmovdqa32 2147483647(%r15,%rax,8), %ymm12
     {evex} vmovdqa32 gnu_fwd(%rip), %ymm17
     {evex} vmovdqa32 %ymm16, %ymm3{%k2}
-    {evex} vmovdqa32 0(%rdi), %ymm25{%k3}
-    {evex} vmovdqa32 64(%rdx), %ymm9{%k4}
-    {evex} vmovdqa32 4660(%r9), %ymm31{%k5}
+    {evex} vmovdqa32 0(%r15), %ymm25{%k3}
+    {evex} vmovdqa32 64(%rsi), %ymm9{%k4}
+    {evex} vmovdqa32 4660(%r11), %ymm31{%k5}
     {evex} vmovdqa32 0(%rsp), %ymm20{%k6}
     {evex} vmovdqa32 -4096(%r12), %ymm12{%k7}
     {evex} vmovdqa32 -129(%rsp), %ymm17{%k1}
-    {evex} vmovdqa32 0(%rax,%rsi,4), %ymm16{%k2}
-    {evex} vmovdqa32 4064(%rbp,%rcx,8), %ymm3{%k3}
-    {evex} vmovdqa32 1001(%r12,%r9,1), %ymm25{%k4}
+    {evex} vmovdqa32 0(%rcx,%r15,1), %ymm16{%k2}
+    {evex} vmovdqa32 4064(%rax,%rsi,2), %ymm3{%k3}
+    {evex} vmovdqa32 1001(%r9,%rcx,4), %ymm25{%k4}
     {evex} vmovdqa32 gnu_back(%rip), %ymm9{%k5}
     {evex} vmovdqa32 %ymm31, %ymm20{%k6}{z}
-    {evex} vmovdqa32 0(%r14), %ymm12{%k7}{z}
-    {evex} vmovdqa32 -32(%rbx), %ymm17{%k1}{z}
-    {evex} vmovdqa32 -2147483648(%r10), %ymm16{%k2}{z}
+    {evex} vmovdqa32 0(%rcx), %ymm12{%k7}{z}
+    {evex} vmovdqa32 -32(%rdi), %ymm17{%k1}{z}
+    {evex} vmovdqa32 -2147483648(%r14), %ymm16{%k2}{z}
     {evex} vmovdqa32 0(%r12), %ymm3{%k3}{z}
     {evex} vmovdqa32 64(%rsp), %ymm25{%k4}{z}
     {evex} vmovdqa32 2147483647(%r12), %ymm9{%k5}{z}
-    {evex} vmovdqa32 0(%r8,%rbp,2), %ymm31{%k6}{z}
-    {evex} vmovdqa32 -4096(%rdi,%r12,4), %ymm20{%k7}{z}
-    {evex} vmovdqa32 4660(%r15,%rax,8), %ymm12{%k1}{z}
+    {evex} vmovdqa32 0(%r12,%r9,8), %ymm31{%k6}{z}
+    {evex} vmovdqa32 -4096(%rsp,%rbp,1), %ymm20{%k7}{z}
+    {evex} vmovdqa32 4660(%r13,%r12,2), %ymm12{%k1}{z}
     {evex} vmovdqa32 gnu_fwd(%rip), %ymm17{%k2}{z}
     {evex} vmovdqa32 %zmm16, %zmm3
-    {evex} vmovdqa32 0(%r15), %zmm25
-    {evex} vmovdqa32 -8192(%rsi), %zmm9
-    {evex} vmovdqa32 -129(%r11), %zmm31
+    {evex} vmovdqa32 0(%r8), %zmm25
+    {evex} vmovdqa32 -8192(%r15), %zmm9
+    {evex} vmovdqa32 -129(%rcx), %zmm31
     {evex} vmovdqa32 0(%rsp), %zmm20
     {evex} vmovdqa32 8128(%r12), %zmm12
     {evex} vmovdqa32 1001(%rsp), %zmm17
-    {evex} vmovdqa32 0(%rcx,%r15,1), %zmm16
-    {evex} vmovdqa32 -64(%rax,%rsi,2), %zmm3
-    {evex} vmovdqa32 -2147483648(%r9,%rcx,4), %zmm25
+    {evex} vmovdqa32 0(%rdx,%rax,4), %zmm16
+    {evex} vmovdqa32 -64(%rbp,%r15,8), %zmm3
+    {evex} vmovdqa32 -2147483648(%r12,%rsi,1), %zmm25
     {evex} vmovdqa32 gnu_back(%rip), %zmm9
     {evex} vmovdqa32 %zmm31, %zmm20{%k3}
-    {evex} vmovdqa32 0(%rcx), %zmm12{%k4}
-    {evex} vmovdqa32 128(%rdi), %zmm17{%k5}
-    {evex} vmovdqa32 2147483647(%r14), %zmm16{%k6}
+    {evex} vmovdqa32 0(%rdx), %zmm12{%k4}
+    {evex} vmovdqa32 128(%r8), %zmm17{%k5}
+    {evex} vmovdqa32 2147483647(%rbp), %zmm16{%k6}
     {evex} vmovdqa32 0(%r12), %zmm3{%k7}
     {evex} vmovdqa32 -8192(%rsp), %zmm25{%k1}
     {evex} vmovdqa32 4660(%r12), %zmm9{%k2}
-    {evex} vmovdqa32 0(%r12,%r9,8), %zmm31{%k3}
-    {evex} vmovdqa32 8128(%rsp,%rbp,1), %zmm20{%k4}
-    {evex} vmovdqa32 -129(%r13,%r12,2), %zmm12{%k5}
+    {evex} vmovdqa32 0(%r9,%rcx,2), %zmm31{%k3}
+    {evex} vmovdqa32 8128(%rdi,%r9,4), %zmm20{%k4}
+    {evex} vmovdqa32 -129(%r15,%rbp,8), %zmm12{%k5}
     {evex} vmovdqa32 gnu_fwd(%rip), %zmm17{%k6}
     {evex} vmovdqa32 %zmm16, %zmm3{%k7}{z}
-    {evex} vmovdqa32 0(%r8), %zmm25{%k1}{z}
-    {evex} vmovdqa32 -64(%r15), %zmm9{%k2}{z}
-    {evex} vmovdqa32 1001(%rcx), %zmm31{%k3}{z}
+    {evex} vmovdqa32 0(%r9), %zmm25{%k1}{z}
+    {evex} vmovdqa32 -64(%r13), %zmm9{%k2}{z}
+    {evex} vmovdqa32 1001(%rdx), %zmm31{%k3}{z}
     {evex} vmovdqa32 0(%rsp), %zmm20{%k4}{z}
     {evex} vmovdqa32 128(%r12), %zmm12{%k5}{z}
     {evex} vmovdqa32 -2147483648(%rsp), %zmm17{%k6}{z}
-    {evex} vmovdqa32 0(%rdx,%rax,4), %zmm16{%k7}{z}
-    {evex} vmovdqa32 -8192(%rbp,%r15,8), %zmm3{%k1}{z}
-    {evex} vmovdqa32 2147483647(%r12,%rsi,1), %zmm25{%k2}{z}
+    {evex} vmovdqa32 0(%rsp,%r12,1), %zmm16{%k7}{z}
+    {evex} vmovdqa32 -8192(%rax,%rax,2), %zmm3{%k1}{z}
+    {evex} vmovdqa32 2147483647(%r9,%r15,4), %zmm25{%k2}{z}
     {evex} vmovdqa32 gnu_back(%rip), %zmm9{%k3}{z}
     {evex} {store} vmovdqa32 %xmm31, %xmm20
     {evex} {store} vmovdqa32 %xmm12, %xmm17{%k4}
@@ -12041,165 +12065,165 @@ g59:
     {evex} {store} vmovdqa32 %zmm16, %zmm3
     {evex} {store} vmovdqa32 %zmm25, %zmm9{%k1}
     {evex} {store} vmovdqa32 %zmm31, %zmm20{%k2}{z}
-    {evex} vmovdqa32 %xmm12, 0(%rdx)
-    {evex} vmovdqa32 %xmm17, 2032(%r8)
-    {evex} vmovdqa32 %xmm16, 4660(%rbp)
+    {evex} vmovdqa32 %xmm12, 0(%rbx)
+    {evex} vmovdqa32 %xmm17, 2032(%r9)
+    {evex} vmovdqa32 %xmm16, 4660(%rbx)
     {evex} vmovdqa32 %xmm3, 0(%r12)
+g60:
     {evex} vmovdqa32 %xmm25, -16(%rsp)
     {evex} vmovdqa32 %xmm9, -129(%r12)
-    {evex} vmovdqa32 %xmm31, 0(%r9,%rcx,2)
-    {evex} vmovdqa32 %xmm20, 32(%rdi,%r9,4)
-    {evex} vmovdqa32 %xmm12, 1001(%r15,%rbp,8)
+    {evex} vmovdqa32 %xmm31, 0(%r14,%rsi,8)
+    {evex} vmovdqa32 %xmm20, 32(%rsp,%rcx,1)
+    {evex} vmovdqa32 %xmm12, 1001(%r13,%r9,2)
     {evex} vmovdqa32 %xmm17, gnu_fwd(%rip)
-    {evex} vmovdqa32 %xmm16, 0(%r9){%k3}
-    {evex} vmovdqa32 %xmm3, -2048(%r13){%k4}
-    {evex} vmovdqa32 %xmm25, -2147483648(%rdx){%k5}
+    {evex} vmovdqa32 %xmm16, 0(%r10){%k3}
+    {evex} vmovdqa32 %xmm3, -2048(%r10){%k4}
+    {evex} vmovdqa32 %xmm25, -2147483648(%rsi){%k5}
     {evex} vmovdqa32 %xmm9, 0(%rsp){%k6}
     {evex} vmovdqa32 %xmm31, 2032(%r12){%k7}
     {evex} vmovdqa32 %xmm20, 2147483647(%rsp){%k1}
-    {evex} vmovdqa32 %xmm12, 0(%rsp,%r12,1){%k2}
-    {evex} vmovdqa32 %xmm17, -16(%rax,%rax,2){%k3}
-    {evex} vmovdqa32 %xmm16, 4660(%r9,%r15,4){%k4}
+    {evex} vmovdqa32 %xmm12, 0(%rsi,%rbp,4){%k2}
+    {evex} vmovdqa32 %xmm17, -16(%rbp,%r12,8){%k3}
+    {evex} vmovdqa32 %xmm16, 4660(%r12,%rax,1){%k4}
     {evex} vmovdqa32 %xmm3, gnu_back(%rip){%k5}
-    {evex} vmovdqa32 %ymm25, 0(%rbx)
-    {evex} vmovdqa32 %ymm9, 4064(%r9)
-    {evex} vmovdqa32 %ymm31, -129(%rbx)
+    {evex} vmovdqa32 %ymm25, 0(%rsi)
+    {evex} vmovdqa32 %ymm9, 4064(%r11)
+    {evex} vmovdqa32 %ymm31, -129(%rdi)
     {evex} vmovdqa32 %ymm20, 0(%r12)
     {evex} vmovdqa32 %ymm12, -32(%rsp)
     {evex} vmovdqa32 %ymm17, 1001(%r12)
-    {evex} vmovdqa32 %ymm16, 0(%r14,%rsi,8)
-    {evex} vmovdqa32 %ymm3, 64(%rsp,%rcx,1)
-g60:
-    {evex} vmovdqa32 %ymm25, -2147483648(%r13,%r9,2)
+    {evex} vmovdqa32 %ymm16, 0(%r15,%r15,2)
+    {evex} vmovdqa32 %ymm3, 64(%rdi,%rsi,4)
+    {evex} vmovdqa32 %ymm25, -2147483648(%r15,%rcx,8)
     {evex} vmovdqa32 %ymm9, gnu_fwd(%rip)
-    {evex} vmovdqa32 %ymm31, 0(%r10){%k6}
-    {evex} vmovdqa32 %ymm20, -4096(%r10){%k7}
-    {evex} vmovdqa32 %ymm12, 2147483647(%rsi){%k1}
+    {evex} vmovdqa32 %ymm31, 0(%r11){%k6}
+    {evex} vmovdqa32 %ymm20, -4096(%r14){%k7}
+    {evex} vmovdqa32 %ymm12, 2147483647(%r15){%k1}
     {evex} vmovdqa32 %ymm17, 0(%rsp){%k2}
     {evex} vmovdqa32 %ymm16, 4064(%r12){%k3}
     {evex} vmovdqa32 %ymm3, 4660(%rsp){%k4}
-    {evex} vmovdqa32 %ymm25, 0(%rsi,%rbp,4){%k5}
-    {evex} vmovdqa32 %ymm9, -32(%rbp,%r12,8){%k6}
-    {evex} vmovdqa32 %ymm31, -129(%r12,%rax,1){%k7}
+    {evex} vmovdqa32 %ymm25, 0(%rax,%r9,1){%k5}
+    {evex} vmovdqa32 %ymm9, -32(%rax,%rbp,2){%k6}
+    {evex} vmovdqa32 %ymm31, -129(%r9,%r12,4){%k7}
     {evex} vmovdqa32 %ymm20, gnu_back(%rip){%k1}
-    {evex} vmovdqa32 %zmm12, 0(%rsi)
-    {evex} vmovdqa32 %zmm17, 8128(%r11)
-    {evex} vmovdqa32 %zmm16, 1001(%rdi)
+    {evex} vmovdqa32 %zmm12, 0(%rdi)
+    {evex} vmovdqa32 %zmm17, 8128(%rcx)
+    {evex} vmovdqa32 %zmm16, 1001(%r8)
     {evex} vmovdqa32 %zmm3, 0(%r12)
     {evex} vmovdqa32 %zmm25, -64(%rsp)
     {evex} vmovdqa32 %zmm9, -2147483648(%r12)
-    {evex} vmovdqa32 %zmm31, 0(%r15,%r15,2)
-    {evex} vmovdqa32 %zmm20, 128(%rdi,%rsi,4)
-    {evex} vmovdqa32 %zmm12, 2147483647(%r15,%rcx,8)
+    {evex} vmovdqa32 %zmm31, 0(%r8,%rax,8)
+    {evex} vmovdqa32 %zmm20, 128(%rsp,%r15,1)
+    {evex} vmovdqa32 %zmm12, 2147483647(%r13,%rsi,2)
     {evex} vmovdqa32 %zmm17, gnu_fwd(%rip)
-    {evex} vmovdqa32 %zmm16, 0(%r11){%k2}
-    {evex} vmovdqa32 %zmm3, -8192(%r14){%k3}
-    {evex} vmovdqa32 %zmm25, 4660(%r15){%k4}
+    {evex} vmovdqa32 %zmm16, 0(%r14){%k2}
+    {evex} vmovdqa32 %zmm3, -8192(%rbp){%k3}
+    {evex} vmovdqa32 %zmm25, 4660(%r13){%k4}
     {evex} vmovdqa32 %zmm9, 0(%rsp){%k5}
     {evex} vmovdqa32 %zmm31, 8128(%r12){%k6}
     {evex} vmovdqa32 %zmm20, -129(%rsp){%k7}
-    {evex} vmovdqa32 %zmm12, 0(%rax,%r9,1){%k1}
-    {evex} vmovdqa32 %zmm17, -64(%rax,%rbp,2){%k2}
-    {evex} vmovdqa32 %zmm16, 1001(%r9,%r12,4){%k3}
+    {evex} vmovdqa32 %zmm12, 0(%rcx,%rcx,4){%k1}
+    {evex} vmovdqa32 %zmm17, -64(%rbp,%r9,8){%k2}
+    {evex} vmovdqa32 %zmm16, 1001(%r12,%rbp,1){%k3}
     {evex} vmovdqa32 %zmm3, gnu_back(%rip){%k4}
     {evex} vmovups %xmm25, %xmm9
-    {evex} vmovups 0(%rdi), %xmm31
-    {evex} vmovups 32(%rcx), %xmm20
-    {evex} vmovups -2147483648(%r8), %xmm12
+    {evex} vmovups 0(%r15), %xmm31
+    {evex} vmovups 32(%rdx), %xmm20
+    {evex} vmovups -2147483648(%r9), %xmm12
     {evex} vmovups 0(%r12), %xmm17
     {evex} vmovups -2048(%rsp), %xmm16
     {evex} vmovups 2147483647(%r12), %xmm3
-    {evex} vmovups 0(%r8,%rax,8), %xmm25
-    {evex} vmovups 2032(%rsp,%r15,1), %xmm9
-    {evex} vmovups 4660(%r13,%rsi,2), %xmm31
+    {evex} vmovups 0(%r12,%r12,2), %xmm25
+    {evex} vmovups 2032(%rdi,%rax,4), %xmm9
+    {evex} vmovups 4660(%r15,%r15,8), %xmm31
     {evex} vmovups gnu_fwd(%rip), %xmm20
     {evex} vmovups %xmm12, %xmm17{%k5}
-    {evex} vmovups 0(%r14), %xmm16{%k6}
-    {evex} vmovups -16(%rbp), %xmm3{%k7}
-    {evex} vmovups -129(%r13), %xmm25{%k1}
+    {evex} vmovups 0(%rcx), %xmm16{%k6}
+    {evex} vmovups -16(%rbx), %xmm3{%k7}
+    {evex} vmovups -129(%r10), %xmm25{%k1}
     {evex} vmovups 0(%rsp), %xmm9{%k2}
     {evex} vmovups 32(%r12), %xmm31{%k3}
     {evex} vmovups 1001(%rsp), %xmm20{%k4}
-    {evex} vmovups 0(%rcx,%rcx,4), %xmm12{%k5}
-    {evex} vmovups -2048(%rbp,%r9,8), %xmm17{%k6}
-    {evex} vmovups -2147483648(%r12,%rbp,1), %xmm16{%k7}
+    {evex} vmovups 0(%rdx,%rsi,1), %xmm12{%k5}
+    {evex} vmovups -2048(%rax,%rcx,2), %xmm17{%k6}
+    {evex} vmovups -2147483648(%r9,%r9,4), %xmm16{%k7}
     {evex} vmovups gnu_back(%rip), %xmm3{%k1}
     {evex} vmovups %xmm25, %xmm9{%k2}{z}
-    {evex} vmovups 0(%r15), %xmm31{%k3}{z}
-    {evex} vmovups 2032(%rdx), %xmm20{%k4}{z}
-    {evex} vmovups 2147483647(%r9), %xmm12{%k5}{z}
+    {evex} vmovups 0(%r8), %xmm31{%k3}{z}
+    {evex} vmovups 2032(%rsi), %xmm20{%k4}{z}
+    {evex} vmovups 2147483647(%r11), %xmm12{%k5}{z}
     {evex} vmovups 0(%r12), %xmm17{%k6}{z}
     {evex} vmovups -16(%rsp), %xmm16{%k7}{z}
     {evex} vmovups 4660(%r12), %xmm3{%k1}{z}
-    {evex} vmovups 0(%r12,%r12,2), %xmm25{%k2}{z}
-    {evex} vmovups 32(%rdi,%rax,4), %xmm9{%k3}{z}
-    {evex} vmovups -129(%r15,%r15,8), %xmm31{%k4}{z}
+    {evex} vmovups 0(%r9,%rbp,8), %xmm25{%k2}{z}
+    {evex} vmovups 32(%rsp,%r12,1), %xmm9{%k3}{z}
+    {evex} vmovups -129(%r13,%rax,2), %xmm31{%k4}{z}
     {evex} vmovups gnu_fwd(%rip), %xmm20{%k5}{z}
     {evex} vmovups %ymm12, %ymm17
-    {evex} vmovups 0(%rcx), %ymm16
-    {evex} vmovups 64(%rbx), %ymm3
-    {evex} vmovups 1001(%r10), %ymm25
+    {evex} vmovups 0(%rdx), %ymm16
+    {evex} vmovups 64(%rdi), %ymm3
+    {evex} vmovups 1001(%r14), %ymm25
     {evex} vmovups 0(%rsp), %ymm9
     {evex} vmovups -4096(%r12), %ymm31
     {evex} vmovups -2147483648(%rsp), %ymm20
-    {evex} vmovups 0(%rdx,%rsi,1), %ymm12
-    {evex} vmovups 4064(%rax,%rcx,2), %ymm17
-    {evex} vmovups 2147483647(%r9,%r9,4), %ymm16
+    {evex} vmovups 0(%rsp,%r15,4), %ymm12
+    {evex} vmovups 4064(%rbp,%rsi,8), %ymm17
+    {evex} vmovups 2147483647(%r12,%rcx,1), %ymm16
     {evex} vmovups gnu_back(%rip), %ymm3
     {evex} vmovups %ymm25, %ymm9{%k6}
-    {evex} vmovups 0(%r8), %ymm31{%k7}
-    {evex} vmovups -32(%rsi), %ymm20{%k1}
-    {evex} vmovups 4660(%r11), %ymm12{%k2}
+    {evex} vmovups 0(%r9), %ymm31{%k7}
+    {evex} vmovups -32(%r15), %ymm20{%k1}
+    {evex} vmovups 4660(%rcx), %ymm12{%k2}
     {evex} vmovups 0(%r12), %ymm17{%k3}
     {evex} vmovups 64(%rsp), %ymm16{%k4}
     {evex} vmovups -129(%r12), %ymm3{%k5}
-    {evex} vmovups 0(%r9,%rbp,8), %ymm25{%k6}
-    {evex} vmovups -4096(%rsp,%r12,1), %ymm9{%k7}
-    {evex} vmovups 1001(%r13,%rax,2), %ymm31{%k1}
+    {evex} vmovups 0(%r14,%r9,2), %ymm25{%k6}
+    {evex} vmovups -4096(%rdi,%rbp,4), %ymm9{%k7}
+    {evex} vmovups 1001(%r15,%r12,8), %ymm31{%k1}
     {evex} vmovups gnu_fwd(%rip), %ymm20{%k2}
     {evex} vmovups %ymm12, %ymm17{%k3}{z}
-    {evex} vmovups 0(%rdx), %ymm16{%k4}{z}
-    {evex} vmovups 4064(%rdi), %ymm3{%k5}{z}
-    {evex} vmovups -2147483648(%r14), %ymm25{%k6}{z}
+    {evex} vmovups 0(%rbx), %ymm16{%k4}{z}
+    {evex} vmovups 4064(%r8), %ymm3{%k5}{z}
+    {evex} vmovups -2147483648(%rbp), %ymm25{%k6}{z}
     {evex} vmovups 0(%rsp), %ymm9{%k7}{z}
     {evex} vmovups -32(%r12), %ymm31{%k1}{z}
     {evex} vmovups 2147483647(%rsp), %ymm20{%k2}{z}
-    {evex} vmovups 0(%rsp,%r15,4), %ymm12{%k3}{z}
-    {evex} vmovups 64(%rbp,%rsi,8), %ymm17{%k4}{z}
-    {evex} vmovups 4660(%r12,%rcx,1), %ymm16{%k5}{z}
+    {evex} vmovups 0(%rsi,%rax,1), %ymm12{%k3}{z}
+    {evex} vmovups 64(%rax,%r15,2), %ymm17{%k4}{z}
+    {evex} vmovups 4660(%r9,%rsi,4), %ymm16{%k5}{z}
     {evex} vmovups gnu_back(%rip), %ymm3{%k6}{z}
     {evex} vmovups %zmm25, %zmm9
-    {evex} vmovups 0(%r9), %zmm31
-    {evex} vmovups 128(%r15), %zmm20
-    {evex} vmovups -129(%rcx), %zmm12
+    {evex} vmovups 0(%r10), %zmm31
+    {evex} vmovups 128(%r13), %zmm20
+    {evex} vmovups -129(%rdx), %zmm12
     {evex} vmovups 0(%r12), %zmm17
     {evex} vmovups -8192(%rsp), %zmm16
     {evex} vmovups 1001(%r12), %zmm3
-    {evex} vmovups 0(%r14,%r9,2), %zmm25
-    {evex} vmovups 8128(%rdi,%rbp,4), %zmm9
-    {evex} vmovups -2147483648(%r15,%r12,8), %zmm31
+    {evex} vmovups 0(%r15,%rcx,8), %zmm25
+    {evex} vmovups 8128(%rsp,%r9,1), %zmm9
+    {evex} vmovups -2147483648(%r13,%rbp,2), %zmm31
     {evex} vmovups gnu_fwd(%rip), %zmm20
     {evex} vmovups %zmm12, %zmm17{%k7}
-    {evex} vmovups 0(%rbx), %zmm16{%k1}
-    {evex} vmovups -64(%r8), %zmm3{%k2}
-    {evex} vmovups 2147483647(%rbp), %zmm25{%k3}
+    {evex} vmovups 0(%rsi), %zmm16{%k1}
+    {evex} vmovups -64(%r9), %zmm3{%k2}
+    {evex} vmovups 2147483647(%rbx), %zmm25{%k3}
     {evex} vmovups 0(%rsp), %zmm9{%k4}
     {evex} vmovups 128(%r12), %zmm31{%k5}
     {evex} vmovups 4660(%rsp), %zmm20{%k6}
-    {evex} vmovups 0(%rsi,%rax,1), %zmm12{%k7}
-    {evex} vmovups -8192(%rax,%r15,2), %zmm17{%k1}
-    {evex} vmovups -129(%r9,%rsi,4), %zmm16{%k2}
+    {evex} vmovups 0(%rax,%r12,4), %zmm12{%k7}
+    {evex} vmovups -8192(%rbp,%rax,8), %zmm17{%k1}
+    {evex} vmovups -129(%r12,%r15,1), %zmm16{%k2}
     {evex} vmovups gnu_back(%rip), %zmm3{%k3}
     {evex} vmovups %zmm25, %zmm9{%k4}{z}
-    {evex} vmovups 0(%r10), %zmm31{%k5}{z}
-    {evex} vmovups 8128(%r13), %zmm20{%k6}{z}
-    {evex} vmovups 1001(%rdx), %zmm12{%k7}{z}
+    {evex} vmovups 0(%r11), %zmm31{%k5}{z}
+    {evex} vmovups 8128(%r10), %zmm20{%k6}{z}
+    {evex} vmovups 1001(%rsi), %zmm12{%k7}{z}
     {evex} vmovups 0(%r12), %zmm17{%k1}{z}
     {evex} vmovups -64(%rsp), %zmm16{%k2}{z}
     {evex} vmovups -2147483648(%r12), %zmm3{%k3}{z}
-    {evex} vmovups 0(%r15,%rcx,8), %zmm25{%k4}{z}
-    {evex} vmovups 128(%rsp,%r9,1), %zmm9{%k5}{z}
-    {evex} vmovups 2147483647(%r13,%rbp,2), %zmm31{%k6}{z}
+    {evex} vmovups 0(%r8,%rsi,2), %zmm25{%k4}{z}
+    {evex} vmovups 128(%rdi,%rcx,4), %zmm9{%k5}{z}
+    {evex} vmovups 2147483647(%r15,%r9,8), %zmm31{%k6}{z}
     {evex} vmovups gnu_fwd(%rip), %zmm20{%k7}{z}
     {evex} {store} vmovups %xmm12, %xmm17
     {evex} {store} vmovups %xmm16, %xmm3{%k1}
@@ -12210,165 +12234,165 @@ g60:
     {evex} {store} vmovups %zmm25, %zmm9
     {evex} {store} vmovups %zmm31, %zmm20{%k5}
     {evex} {store} vmovups %zmm12, %zmm17{%k6}{z}
-    {evex} vmovups %xmm16, 0(%rsi)
-    {evex} vmovups %xmm3, -2048(%r9)
-    {evex} vmovups %xmm25, 4660(%rbx)
+    {evex} vmovups %xmm16, 0(%rdi)
+    {evex} vmovups %xmm3, -2048(%r11)
+    {evex} vmovups %xmm25, 4660(%rdi)
     {evex} vmovups %xmm9, 0(%rsp)
     {evex} vmovups %xmm31, 2032(%r12)
     {evex} vmovups %xmm20, -129(%rsp)
-    {evex} vmovups %xmm12, 0(%rax,%r12,4)
-    {evex} vmovups %xmm17, -16(%rbp,%rax,8)
-    {evex} vmovups %xmm16, 1001(%r12,%r15,1)
+    {evex} vmovups %xmm12, 0(%rcx,%rbp,1)
+    {evex} vmovups %xmm17, -16(%rax,%r12,2)
+    {evex} vmovups %xmm16, 1001(%r9,%rax,4)
     {evex} vmovups %xmm3, gnu_back(%rip)
-    {evex} vmovups %xmm25, 0(%r11){%k7}
-    {evex} vmovups %xmm9, 32(%r10){%k1}
-    {evex} vmovups %xmm31, -2147483648(%rsi){%k2}
+    {evex} vmovups %xmm25, 0(%r14){%k7}
+    {evex} vmovups %xmm9, 32(%r14){%k1}
+    {evex} vmovups %xmm31, -2147483648(%r15){%k2}
     {evex} vmovups %xmm20, 0(%r12){%k3}
     {evex} vmovups %xmm12, -2048(%rsp){%k4}
     {evex} vmovups %xmm17, 2147483647(%r12){%k5}
-    {evex} vmovups %xmm16, 0(%r8,%rsi,2){%k6}
-    {evex} vmovups %xmm3, 2032(%rdi,%rcx,4){%k7}
-    {evex} vmovups %xmm25, 4660(%r15,%r9,8){%k1}
+    {evex} vmovups %xmm16, 0(%r12,%r15,8){%k6}
+    {evex} vmovups %xmm3, 2032(%rsp,%rsi,1){%k7}
+    {evex} vmovups %xmm25, 4660(%r13,%rcx,2){%k1}
     {evex} vmovups %xmm9, gnu_fwd(%rip){%k2}
-    {evex} vmovups %ymm31, 0(%rdi)
-    {evex} vmovups %ymm20, -4096(%r11)
-    {evex} vmovups %ymm12, -129(%rdi)
+    {evex} vmovups %ymm31, 0(%r15)
+    {evex} vmovups %ymm20, -4096(%rcx)
+    {evex} vmovups %ymm12, -129(%r8)
     {evex} vmovups %ymm17, 0(%rsp)
     {evex} vmovups %ymm16, 4064(%r12)
     {evex} vmovups %ymm3, 1001(%rsp)
-    {evex} vmovups %ymm25, 0(%rcx,%rbp,1)
-    {evex} vmovups %ymm9, -32(%rax,%r12,2)
-    {evex} vmovups %ymm31, -2147483648(%r9,%rax,4)
+    {evex} vmovups %ymm25, 0(%rdx,%r9,4)
+    {evex} vmovups %ymm9, -32(%rbp,%rbp,8)
+    {evex} vmovups %ymm31, -2147483648(%r12,%r12,1)
     {evex} vmovups %ymm20, gnu_back(%rip)
-    {evex} vmovups %ymm12, 0(%r14){%k3}
-    {evex} vmovups %ymm17, 64(%r14){%k4}
-    {evex} vmovups %ymm16, 2147483647(%r15){%k5}
+    {evex} vmovups %ymm12, 0(%rcx){%k3}
+    {evex} vmovups %ymm17, 64(%rbp){%k4}
+    {evex} vmovups %ymm16, 2147483647(%r13){%k5}
     {evex} vmovups %ymm3, 0(%r12){%k6}
     {evex} vmovups %ymm25, -4096(%rsp){%k7}
     {evex} vmovups %ymm9, 4660(%r12){%k1}
-    {evex} vmovups %ymm31, 0(%r12,%r15,8){%k2}
-    {evex} vmovups %ymm20, 4064(%rsp,%rsi,1){%k3}
-    {evex} vmovups %ymm12, -129(%r13,%rcx,2){%k4}
+g61:
+    {evex} vmovups %ymm31, 0(%r9,%rax,2){%k2}
+    {evex} vmovups %ymm20, 4064(%rdi,%r15,4){%k3}
+    {evex} vmovups %ymm12, -129(%r15,%rsi,8){%k4}
     {evex} vmovups %ymm17, gnu_fwd(%rip){%k5}
-    {evex} vmovups %zmm16, 0(%r15)
-    {evex} vmovups %zmm3, -8192(%rcx)
-    {evex} vmovups %zmm25, 1001(%r8)
+    {evex} vmovups %zmm16, 0(%r8)
+    {evex} vmovups %zmm3, -8192(%rdx)
+    {evex} vmovups %zmm25, 1001(%r9)
     {evex} vmovups %zmm9, 0(%rsp)
     {evex} vmovups %zmm31, 8128(%r12)
     {evex} vmovups %zmm20, -2147483648(%rsp)
-    {evex} vmovups %zmm12, 0(%rdx,%r9,4)
-    {evex} vmovups %zmm17, -64(%rbp,%rbp,8)
-    {evex} vmovups %zmm16, 2147483647(%r12,%r12,1)
+    {evex} vmovups %zmm12, 0(%rsp,%rcx,1)
+    {evex} vmovups %zmm17, -64(%rax,%r9,2)
+    {evex} vmovups %zmm16, 2147483647(%r9,%rbp,4)
     {evex} vmovups %zmm3, gnu_back(%rip)
-    {evex} vmovups %zmm25, 0(%rcx){%k6}
-    {evex} vmovups %zmm9, 128(%rbp){%k7}
-    {evex} vmovups %zmm31, 4660(%r13){%k1}
+    {evex} vmovups %zmm25, 0(%rdx){%k6}
+    {evex} vmovups %zmm9, 128(%rbx){%k7}
+    {evex} vmovups %zmm31, 4660(%r10){%k1}
     {evex} vmovups %zmm20, 0(%r12){%k2}
     {evex} vmovups %zmm12, -8192(%rsp){%k3}
     {evex} vmovups %zmm17, -129(%r12){%k4}
-    {evex} vmovups %zmm16, 0(%r9,%rax,2){%k5}
-    {evex} vmovups %zmm3, 8128(%rdi,%r15,4){%k6}
-    {evex} vmovups %zmm25, 1001(%r15,%rsi,8){%k7}
+    {evex} vmovups %zmm16, 0(%r14,%r12,8){%k5}
+    {evex} vmovups %zmm3, 8128(%rsp,%rax,1){%k6}
+    {evex} vmovups %zmm25, 1001(%r13,%r15,2){%k7}
     {evex} vmovups %zmm9, gnu_fwd(%rip){%k1}
-g61:
     {evex} vmovaps %xmm31, %xmm20
-    {evex} vmovaps 0(%r8), %xmm12
-    {evex} vmovaps -16(%rdx), %xmm17
-    {evex} vmovaps -2147483648(%r9), %xmm16
+    {evex} vmovaps 0(%r9), %xmm12
+    {evex} vmovaps -16(%rsi), %xmm17
+    {evex} vmovaps -2147483648(%r11), %xmm16
     {evex} vmovaps 0(%rsp), %xmm3
     {evex} vmovaps 32(%r12), %xmm25
     {evex} vmovaps 2147483647(%rsp), %xmm9
-    {evex} vmovaps 0(%rsp,%rcx,1), %xmm31
-    {evex} vmovaps -2048(%rax,%r9,2), %xmm20
-    {evex} vmovaps 4660(%r9,%rbp,4), %xmm12
+    {evex} vmovaps 0(%rsi,%rsi,4), %xmm31
+    {evex} vmovaps -2048(%rbp,%rcx,8), %xmm20
+    {evex} vmovaps 4660(%r12,%r9,1), %xmm12
     {evex} vmovaps gnu_back(%rip), %xmm17
     {evex} vmovaps %xmm16, %xmm3{%k2}
-    {evex} vmovaps 0(%rdx), %xmm25{%k3}
-    {evex} vmovaps 2032(%rbx), %xmm9{%k4}
-    {evex} vmovaps -129(%r10), %xmm31{%k5}
+    {evex} vmovaps 0(%rbx), %xmm25{%k3}
+    {evex} vmovaps 2032(%rdi), %xmm9{%k4}
+    {evex} vmovaps -129(%r14), %xmm31{%k5}
     {evex} vmovaps 0(%r12), %xmm20{%k6}
     {evex} vmovaps -16(%rsp), %xmm12{%k7}
     {evex} vmovaps 1001(%r12), %xmm17{%k1}
-    {evex} vmovaps 0(%r14,%r12,8), %xmm16{%k2}
-    {evex} vmovaps 32(%rsp,%rax,1), %xmm3{%k3}
-    {evex} vmovaps -2147483648(%r13,%r15,2), %xmm25{%k4}
+    {evex} vmovaps 0(%r15,%rbp,2), %xmm16{%k2}
+    {evex} vmovaps 32(%rdi,%r12,4), %xmm3{%k3}
+    {evex} vmovaps -2147483648(%r15,%rax,8), %xmm25{%k4}
     {evex} vmovaps gnu_fwd(%rip), %xmm9{%k5}
     {evex} vmovaps %xmm31, %xmm20{%k6}{z}
-    {evex} vmovaps 0(%r9), %xmm12{%k7}{z}
-    {evex} vmovaps -2048(%rsi), %xmm17{%k1}{z}
-    {evex} vmovaps 2147483647(%r11), %xmm16{%k2}{z}
+    {evex} vmovaps 0(%r10), %xmm12{%k7}{z}
+    {evex} vmovaps -2048(%r15), %xmm17{%k1}{z}
+    {evex} vmovaps 2147483647(%rcx), %xmm16{%k2}{z}
     {evex} vmovaps 0(%rsp), %xmm3{%k3}{z}
     {evex} vmovaps 2032(%r12), %xmm25{%k4}{z}
     {evex} vmovaps 4660(%rsp), %xmm9{%k5}{z}
-    {evex} vmovaps 0(%rsi,%rsi,4), %xmm31{%k6}{z}
-    {evex} vmovaps -16(%rbp,%rcx,8), %xmm20{%k7}{z}
-    {evex} vmovaps -129(%r12,%r9,1), %xmm12{%k1}{z}
+    {evex} vmovaps 0(%rax,%r15,1), %xmm31{%k6}{z}
+    {evex} vmovaps -16(%rax,%rsi,2), %xmm20{%k7}{z}
+    {evex} vmovaps -129(%r9,%rcx,4), %xmm12{%k1}{z}
     {evex} vmovaps gnu_back(%rip), %xmm17{%k2}{z}
     {evex} vmovaps %ymm16, %ymm3
-    {evex} vmovaps 0(%rbx), %ymm25
-    {evex} vmovaps -32(%rdi), %ymm9
-    {evex} vmovaps 1001(%r14), %ymm31
+    {evex} vmovaps 0(%rsi), %ymm25
+    {evex} vmovaps -32(%r8), %ymm9
+    {evex} vmovaps 1001(%rbp), %ymm31
     {evex} vmovaps 0(%r12), %ymm20
     {evex} vmovaps 64(%rsp), %ymm12
     {evex} vmovaps -2147483648(%r12), %ymm17
-    {evex} vmovaps 0(%r15,%rbp,2), %ymm16
-    {evex} vmovaps -4096(%rdi,%r12,4), %ymm3
-    {evex} vmovaps 2147483647(%r15,%rax,8), %ymm25
+    {evex} vmovaps 0(%r8,%r9,8), %ymm16
+    {evex} vmovaps -4096(%rsp,%rbp,1), %ymm3
+    {evex} vmovaps 2147483647(%r13,%r12,2), %ymm25
     {evex} vmovaps gnu_fwd(%rip), %ymm9
     {evex} vmovaps %ymm31, %ymm20{%k3}
-    {evex} vmovaps 0(%r10), %ymm12{%k4}
-    {evex} vmovaps 4064(%r15), %ymm17{%k5}
-    {evex} vmovaps 4660(%rcx), %ymm16{%k6}
+    {evex} vmovaps 0(%r11), %ymm12{%k4}
+    {evex} vmovaps 4064(%r13), %ymm17{%k5}
+    {evex} vmovaps 4660(%rdx), %ymm16{%k6}
     {evex} vmovaps 0(%rsp), %ymm3{%k7}
     {evex} vmovaps -32(%r12), %ymm25{%k1}
     {evex} vmovaps -129(%rsp), %ymm9{%k2}
-    {evex} vmovaps 0(%rax,%r15,1), %ymm31{%k3}
-    {evex} vmovaps 64(%rax,%rsi,2), %ymm20{%k4}
-    {evex} vmovaps 1001(%r9,%rcx,4), %ymm12{%k5}
+    {evex} vmovaps 0(%rcx,%rax,4), %ymm31{%k3}
+    {evex} vmovaps 64(%rbp,%r15,8), %ymm20{%k4}
+    {evex} vmovaps 1001(%r12,%rsi,1), %ymm12{%k5}
     {evex} vmovaps gnu_back(%rip), %ymm17{%k6}
     {evex} vmovaps %ymm16, %ymm3{%k7}{z}
-    {evex} vmovaps 0(%rsi), %ymm25{%k1}{z}
-    {evex} vmovaps -4096(%r8), %ymm9{%k2}{z}
-    {evex} vmovaps -2147483648(%rbp), %ymm31{%k3}{z}
+    {evex} vmovaps 0(%rdi), %ymm25{%k1}{z}
+    {evex} vmovaps -4096(%r9), %ymm9{%k2}{z}
+    {evex} vmovaps -2147483648(%rbx), %ymm31{%k3}{z}
     {evex} vmovaps 0(%r12), %ymm20{%k4}{z}
     {evex} vmovaps 4064(%rsp), %ymm12{%k5}{z}
     {evex} vmovaps 2147483647(%r12), %ymm17{%k6}{z}
-    {evex} vmovaps 0(%r8,%r9,8), %ymm16{%k7}{z}
-    {evex} vmovaps -32(%rsp,%rbp,1), %ymm3{%k1}{z}
-    {evex} vmovaps 4660(%r13,%r12,2), %ymm25{%k2}{z}
+    {evex} vmovaps 0(%r12,%rcx,2), %ymm16{%k7}{z}
+    {evex} vmovaps -32(%rdi,%r9,4), %ymm3{%k1}{z}
+    {evex} vmovaps 4660(%r15,%rbp,8), %ymm25{%k2}{z}
     {evex} vmovaps gnu_fwd(%rip), %ymm9{%k3}{z}
     {evex} vmovaps %zmm31, %zmm20
-    {evex} vmovaps 0(%r11), %zmm12
-    {evex} vmovaps -64(%r13), %zmm17
-    {evex} vmovaps -129(%rdx), %zmm16
+    {evex} vmovaps 0(%r14), %zmm12
+    {evex} vmovaps -64(%r10), %zmm17
+    {evex} vmovaps -129(%rsi), %zmm16
     {evex} vmovaps 0(%rsp), %zmm3
     {evex} vmovaps 128(%r12), %zmm25
     {evex} vmovaps 1001(%rsp), %zmm9
-    {evex} vmovaps 0(%rcx,%rax,4), %zmm31
-    {evex} vmovaps -8192(%rbp,%r15,8), %zmm20
-    {evex} vmovaps -2147483648(%r12,%rsi,1), %zmm12
+    {evex} vmovaps 0(%rdx,%r12,1), %zmm31
+    {evex} vmovaps -8192(%rax,%rax,2), %zmm20
+    {evex} vmovaps -2147483648(%r9,%r15,4), %zmm12
     {evex} vmovaps gnu_back(%rip), %zmm17
     {evex} vmovaps %zmm16, %zmm3{%k4}
-    {evex} vmovaps 0(%rdi), %zmm25{%k5}
-    {evex} vmovaps 8128(%r9), %zmm9{%k6}
-    {evex} vmovaps 2147483647(%rbx), %zmm31{%k7}
+    {evex} vmovaps 0(%r15), %zmm25{%k5}
+    {evex} vmovaps 8128(%r11), %zmm9{%k6}
+    {evex} vmovaps 2147483647(%rdi), %zmm31{%k7}
     {evex} vmovaps 0(%r12), %zmm20{%k1}
     {evex} vmovaps -64(%rsp), %zmm12{%k2}
     {evex} vmovaps 4660(%r12), %zmm17{%k3}
-    {evex} vmovaps 0(%r12,%rcx,2), %zmm16{%k4}
-    {evex} vmovaps 128(%rdi,%r9,4), %zmm3{%k5}
-    {evex} vmovaps -129(%r15,%rbp,8), %zmm25{%k6}
+    {evex} vmovaps 0(%r9,%rsi,8), %zmm16{%k4}
+    {evex} vmovaps 128(%rsp,%rcx,1), %zmm3{%k5}
+    {evex} vmovaps -129(%r13,%r9,2), %zmm25{%k6}
     {evex} vmovaps gnu_fwd(%rip), %zmm9{%k7}
     {evex} vmovaps %zmm31, %zmm20{%k1}{z}
-    {evex} vmovaps 0(%r14), %zmm12{%k2}{z}
-    {evex} vmovaps -8192(%r10), %zmm17{%k3}{z}
-    {evex} vmovaps 1001(%rsi), %zmm16{%k4}{z}
+    {evex} vmovaps 0(%rcx), %zmm12{%k2}{z}
+    {evex} vmovaps -8192(%r14), %zmm17{%k3}{z}
+    {evex} vmovaps 1001(%r15), %zmm16{%k4}{z}
     {evex} vmovaps 0(%rsp), %zmm3{%k5}{z}
     {evex} vmovaps 8128(%r12), %zmm25{%k6}{z}
     {evex} vmovaps -2147483648(%rsp), %zmm9{%k7}{z}
-    {evex} vmovaps 0(%rdx,%r12,1), %zmm31{%k1}{z}
-    {evex} vmovaps -64(%rax,%rax,2), %zmm20{%k2}{z}
-    {evex} vmovaps 2147483647(%r9,%r15,4), %zmm12{%k3}{z}
+    {evex} vmovaps 0(%rsp,%rbp,4), %zmm31{%k1}{z}
+    {evex} vmovaps -64(%rbp,%r12,8), %zmm20{%k2}{z}
+    {evex} vmovaps 2147483647(%r12,%rax,1), %zmm12{%k3}{z}
     {evex} vmovaps gnu_back(%rip), %zmm17{%k4}{z}
     {evex} {store} vmovaps %xmm16, %xmm3
     {evex} {store} vmovaps %xmm25, %xmm9{%k5}
@@ -12379,4279 +12403,4279 @@ g61:
     {evex} {store} vmovaps %zmm31, %zmm20
     {evex} {store} vmovaps %zmm12, %zmm17{%k2}
     {evex} {store} vmovaps %zmm16, %zmm3{%k3}{z}
-    {evex} vmovaps %xmm25, 0(%r15)
-    {evex} vmovaps %xmm9, 32(%r11)
-    {evex} vmovaps %xmm31, 4660(%rdi)
+    {evex} vmovaps %xmm25, 0(%r8)
+    {evex} vmovaps %xmm9, 32(%rcx)
+    {evex} vmovaps %xmm31, 4660(%r8)
     {evex} vmovaps %xmm20, 0(%r12)
     {evex} vmovaps %xmm12, -2048(%rsp)
     {evex} vmovaps %xmm17, -129(%r12)
-    {evex} vmovaps %xmm16, 0(%r9,%rsi,8)
-    {evex} vmovaps %xmm3, 2032(%rsp,%rcx,1)
-    {evex} vmovaps %xmm25, 1001(%r13,%r9,2)
+    {evex} vmovaps %xmm16, 0(%r14,%r15,2)
+    {evex} vmovaps %xmm3, 2032(%rdi,%rsi,4)
+    {evex} vmovaps %xmm25, 1001(%r15,%rcx,8)
     {evex} vmovaps %xmm9, gnu_fwd(%rip)
-    {evex} vmovaps %xmm31, 0(%rcx){%k4}
-    {evex} vmovaps %xmm20, -16(%r14){%k5}
-    {evex} vmovaps %xmm12, -2147483648(%r15){%k6}
+    {evex} vmovaps %xmm31, 0(%rdx){%k4}
+    {evex} vmovaps %xmm20, -16(%rbp){%k5}
+    {evex} vmovaps %xmm12, -2147483648(%r13){%k6}
     {evex} vmovaps %xmm17, 0(%rsp){%k7}
     {evex} vmovaps %xmm16, 32(%r12){%k1}
     {evex} vmovaps %xmm3, 2147483647(%rsp){%k2}
-    {evex} vmovaps %xmm25, 0(%rsp,%rbp,4){%k3}
-    {evex} vmovaps %xmm9, -2048(%rbp,%r12,8){%k4}
-    {evex} vmovaps %xmm31, 4660(%r12,%rax,1){%k5}
+    {evex} vmovaps %xmm25, 0(%rsi,%r9,1){%k3}
+    {evex} vmovaps %xmm9, -2048(%rax,%rbp,2){%k4}
+    {evex} vmovaps %xmm31, 4660(%r9,%r12,4){%k5}
     {evex} vmovaps %xmm20, gnu_back(%rip){%k6}
-    {evex} vmovaps %ymm12, 0(%r8)
-    {evex} vmovaps %ymm17, 64(%rcx)
-    {evex} vmovaps %ymm16, -129(%r8)
+    {evex} vmovaps %ymm12, 0(%r9)
+    {evex} vmovaps %ymm17, 64(%rdx)
+    {evex} vmovaps %ymm16, -129(%r9)
     {evex} vmovaps %ymm3, 0(%r12)
     {evex} vmovaps %ymm25, -4096(%rsp)
     {evex} vmovaps %ymm9, 1001(%r12)
-    {evex} vmovaps %ymm31, 0(%r14,%r15,2)
-    {evex} vmovaps %ymm20, 4064(%rdi,%rsi,4)
-    {evex} vmovaps %ymm12, -2147483648(%r15,%rcx,8)
+    {evex} vmovaps %ymm31, 0(%r15,%rax,8)
+    {evex} vmovaps %ymm20, 4064(%rsp,%r15,1)
+    {evex} vmovaps %ymm12, -2147483648(%r13,%rsi,2)
     {evex} vmovaps %ymm17, gnu_fwd(%rip)
-    {evex} vmovaps %ymm16, 0(%rdx){%k7}
-    {evex} vmovaps %ymm3, -32(%rbp){%k1}
-    {evex} vmovaps %ymm25, 2147483647(%r13){%k2}
+    {evex} vmovaps %ymm16, 0(%rbx){%k7}
+    {evex} vmovaps %ymm3, -32(%rbx){%k1}
+    {evex} vmovaps %ymm25, 2147483647(%r10){%k2}
     {evex} vmovaps %ymm9, 0(%rsp){%k3}
     {evex} vmovaps %ymm31, 64(%r12){%k4}
     {evex} vmovaps %ymm20, 4660(%rsp){%k5}
-    {evex} vmovaps %ymm12, 0(%rsi,%r9,1){%k6}
-    {evex} vmovaps %ymm17, -4096(%rax,%rbp,2){%k7}
-    {evex} vmovaps %ymm16, -129(%r9,%r12,4){%k1}
+    {evex} vmovaps %ymm12, 0(%rax,%rcx,4){%k6}
+    {evex} vmovaps %ymm17, -4096(%rbp,%r9,8){%k7}
+    {evex} vmovaps %ymm16, -129(%r12,%rbp,1){%k1}
     {evex} vmovaps %ymm3, gnu_back(%rip){%k2}
-    {evex} vmovaps %zmm25, 0(%r9)
-    {evex} vmovaps %zmm9, 128(%rdx)
-    {evex} vmovaps %zmm31, 1001(%r9)
+    {evex} vmovaps %zmm25, 0(%r10)
+    {evex} vmovaps %zmm9, 128(%rsi)
+    {evex} vmovaps %zmm31, 1001(%r11)
     {evex} vmovaps %zmm20, 0(%r12)
     {evex} vmovaps %zmm12, -8192(%rsp)
     {evex} vmovaps %zmm17, -2147483648(%r12)
-    {evex} vmovaps %zmm16, 0(%r15,%rax,8)
-    {evex} vmovaps %zmm3, 8128(%rsp,%r15,1)
-    {evex} vmovaps %zmm25, 2147483647(%r13,%rsi,2)
+    {evex} vmovaps %zmm16, 0(%r8,%r12,2)
+    {evex} vmovaps %zmm3, 8128(%rdi,%rax,4)
+    {evex} vmovaps %zmm25, 2147483647(%r15,%r15,8)
     {evex} vmovaps %zmm9, gnu_fwd(%rip)
-    {evex} vmovaps %zmm31, 0(%rbx){%k3}
-    {evex} vmovaps %zmm20, -64(%rbx){%k4}
-    {evex} vmovaps %zmm12, 4660(%r10){%k5}
+    {evex} vmovaps %zmm31, 0(%rsi){%k3}
+    {evex} vmovaps %zmm20, -64(%rdi){%k4}
+    {evex} vmovaps %zmm12, 4660(%r14){%k5}
     {evex} vmovaps %zmm17, 0(%rsp){%k6}
     {evex} vmovaps %zmm16, 128(%r12){%k7}
     {evex} vmovaps %zmm3, -129(%rsp){%k1}
-    {evex} vmovaps %zmm25, 0(%rax,%rcx,4){%k2}
-    {evex} vmovaps %zmm9, -8192(%rbp,%r9,8){%k3}
-    {evex} vmovaps %zmm31, 1001(%r12,%rbp,1){%k4}
+    {evex} vmovaps %zmm25, 0(%rcx,%rsi,1){%k2}
+    {evex} vmovaps %zmm9, -8192(%rax,%rcx,2){%k3}
+    {evex} vmovaps %zmm31, 1001(%r9,%r9,4){%k4}
     {evex} vmovaps %zmm20, gnu_back(%rip){%k5}
-    {evex} vmovd %r15d, %xmm12
-    {evex} vmovd 0(%r10), %xmm17
-    {evex} vmovd -512(%rsi), %xmm16
-    {evex} vmovd -2147483648(%r11), %xmm3
+    {evex} vmovd %r12d, %xmm12
+    {evex} vmovd 0(%r11), %xmm17
+    {evex} vmovd -512(%r15), %xmm16
+    {evex} vmovd -2147483648(%rcx), %xmm3
     {evex} vmovd 0(%r12), %xmm25
     {evex} vmovd 508(%rsp), %xmm9
     {evex} vmovd 2147483647(%r12), %xmm31
-    {evex} vmovd 0(%r8,%r12,2), %xmm20
-    {evex} vmovd -4(%rdi,%rax,4), %xmm12
-    {evex} vmovd 4660(%r15,%r15,8), %xmm17
+    {evex} vmovd 0(%r12,%rbp,8), %xmm20
+g62:
+    {evex} vmovd -4(%rsp,%r12,1), %xmm12
+    {evex} vmovd 4660(%r13,%rax,2), %xmm17
     {evex} vmovd gnu_fwd(%rip), %xmm16
-    {evex} vmovd %xmm3, %ebp
-    {evex} vmovd %xmm25, 0(%rsi)
-    {evex} vmovd %xmm9, 8(%rdi)
-    {evex} vmovd %xmm31, -129(%r14)
+    {evex} vmovd %xmm3, %ebx
+    {evex} vmovd %xmm25, 0(%rdi)
+    {evex} vmovd %xmm9, 8(%r8)
+    {evex} vmovd %xmm31, -129(%rbp)
     {evex} vmovd %xmm20, 0(%rsp)
     {evex} vmovd %xmm12, -512(%r12)
     {evex} vmovd %xmm17, 1001(%rsp)
-    {evex} vmovd %xmm16, 0(%rcx,%rsi,1)
-    {evex} vmovd %xmm3, 508(%rax,%rcx,2)
-    {evex} vmovd %xmm25, -2147483648(%r9,%r9,4)
+    {evex} vmovd %xmm16, 0(%rdx,%r15,4)
+    {evex} vmovd %xmm3, 508(%rbp,%rsi,8)
+    {evex} vmovd %xmm25, -2147483648(%r12,%rcx,1)
     {evex} vmovd %xmm9, gnu_back(%rip)
-    {evex} vmovq %r8, %xmm31
-    {evex} vmovq 0(%r11), %xmm20
-    {evex} vmovq -1024(%r15), %xmm12
-    {evex} vmovq 2147483647(%rcx), %xmm17
+    {evex} vmovq %r13, %xmm31
+    {evex} vmovq 0(%r14), %xmm20
+    {evex} vmovq -1024(%r13), %xmm12
+    {evex} vmovq 2147483647(%rdx), %xmm17
     {evex} vmovq 0(%r12), %xmm16
     {evex} vmovq 1016(%rsp), %xmm3
     {evex} vmovq 4660(%r12), %xmm25
-    {evex} vmovq 0(%r12,%rbp,8), %xmm9
-    {evex} vmovq -8(%rsp,%r12,1), %xmm31
-    {evex} vmovq -129(%r13,%rax,2), %xmm20
-g62:
+    {evex} vmovq 0(%r9,%r9,2), %xmm9
+    {evex} vmovq -8(%rdi,%rbp,4), %xmm31
+    {evex} vmovq -129(%r15,%r12,8), %xmm20
     {evex} vmovq gnu_fwd(%rip), %xmm12
-    {evex} vmovq %xmm17, %rcx
-    {evex} vmovq %xmm16, 0(%rdi)
-    {evex} vmovq %xmm3, 16(%r8)
-    {evex} vmovq %xmm25, 1001(%rbp)
+    {evex} vmovq %xmm17, %rsi
+    {evex} vmovq %xmm16, 0(%r15)
+    {evex} vmovq %xmm3, 16(%r9)
+    {evex} vmovq %xmm25, 1001(%rbx)
     {evex} vmovq %xmm9, 0(%rsp)
     {evex} vmovq %xmm31, -1024(%r12)
     {evex} vmovq %xmm20, -2147483648(%rsp)
-    {evex} vmovq %xmm12, 0(%rdx,%r15,4)
-    {evex} vmovq %xmm17, 1016(%rbp,%rsi,8)
-    {evex} vmovq %xmm16, 2147483647(%r12,%rcx,1)
+    {evex} vmovq %xmm12, 0(%rsp,%rax,1)
+    {evex} vmovq %xmm17, 1016(%rax,%r15,2)
+    {evex} vmovq %xmm16, 2147483647(%r9,%rsi,4)
     {evex} vmovq %xmm3, gnu_back(%rip)
-    {evex} vmovntdq %xmm25, 0(%r14)
-    {evex} vmovntdq %xmm9, 2032(%r13)
-    {evex} vmovntdq %xmm31, 4660(%rdx)
+    {evex} vmovntdq %xmm25, 0(%rcx)
+    {evex} vmovntdq %xmm9, 2032(%r10)
+    {evex} vmovntdq %xmm31, 4660(%rsi)
     {evex} vmovntdq %xmm20, 0(%r12)
     {evex} vmovntdq %xmm12, -16(%rsp)
     {evex} vmovntdq %xmm17, -129(%r12)
-    {evex} vmovntdq %xmm16, 0(%r9,%r9,2)
-    {evex} vmovntdq %xmm3, 32(%rdi,%rbp,4)
-    {evex} vmovntdq %xmm25, 1001(%r15,%r12,8)
+    {evex} vmovntdq %xmm16, 0(%r14,%rcx,8)
+    {evex} vmovntdq %xmm3, 32(%rsp,%r9,1)
+    {evex} vmovntdq %xmm25, 1001(%r13,%rbp,2)
     {evex} vmovntdq %xmm9, gnu_fwd(%rip)
-    {evex} vmovntdq %ymm31, 0(%r15)
-    {evex} vmovntdq %ymm20, 4064(%r9)
-    {evex} vmovntdq %ymm12, -2147483648(%rbx)
+    {evex} vmovntdq %ymm31, 0(%r8)
+    {evex} vmovntdq %ymm20, 4064(%r11)
+    {evex} vmovntdq %ymm12, -2147483648(%rdi)
     {evex} vmovntdq %ymm17, 0(%rsp)
     {evex} vmovntdq %ymm16, -32(%r12)
     {evex} vmovntdq %ymm3, 2147483647(%rsp)
-    {evex} vmovntdq %ymm25, 0(%rsp,%rax,1)
-    {evex} vmovntdq %ymm9, 64(%rax,%r15,2)
-    {evex} vmovntdq %ymm31, 4660(%r9,%rsi,4)
+    {evex} vmovntdq %ymm25, 0(%rsi,%r12,4)
+    {evex} vmovntdq %ymm9, 64(%rbp,%rax,8)
+    {evex} vmovntdq %ymm31, 4660(%r12,%r15,1)
     {evex} vmovntdq %ymm20, gnu_back(%rip)
-    {evex} vmovntdq %zmm12, 0(%rcx)
-    {evex} vmovntdq %zmm17, 8128(%r10)
-    {evex} vmovntdq %zmm16, -129(%rsi)
+    {evex} vmovntdq %zmm12, 0(%rdx)
+    {evex} vmovntdq %zmm17, 8128(%r14)
+    {evex} vmovntdq %zmm16, -129(%r15)
     {evex} vmovntdq %zmm3, 0(%r12)
     {evex} vmovntdq %zmm25, -64(%rsp)
     {evex} vmovntdq %zmm9, 1001(%r12)
-    {evex} vmovntdq %zmm31, 0(%r14,%rcx,8)
-    {evex} vmovntdq %zmm20, 128(%rsp,%r9,1)
-    {evex} vmovntdq %zmm12, -2147483648(%r13,%rbp,2)
+    {evex} vmovntdq %zmm31, 0(%r15,%rsi,2)
+    {evex} vmovntdq %zmm20, 128(%rdi,%rcx,4)
+    {evex} vmovntdq %zmm12, -2147483648(%r15,%r9,8)
     {evex} vmovntdq %zmm17, gnu_fwd(%rip)
     {evex} vpcmpeqb %xmm16, %xmm3, %k6
-    {evex} vpcmpeqb 0(%r8), %xmm25, %k7
-    {evex} vpcmpeqb -2048(%r11), %xmm9, %k1
-    {evex} vpcmpeqb 2147483647(%rdi), %xmm31, %k2
+    {evex} vpcmpeqb 0(%r9), %xmm25, %k7
+    {evex} vpcmpeqb -2048(%rcx), %xmm9, %k1
+    {evex} vpcmpeqb 2147483647(%r8), %xmm31, %k2
     {evex} vpcmpeqb 0(%rsp), %xmm20, %k3
     {evex} vpcmpeqb 2032(%r12), %xmm12, %k4
     {evex} vpcmpeqb 4660(%rsp), %xmm17, %k5
-    {evex} vpcmpeqb 0(%rsi,%r12,4), %xmm16, %k6
-    {evex} vpcmpeqb -16(%rbp,%rax,8), %xmm3, %k7
-    {evex} vpcmpeqb -129(%r12,%r15,1), %xmm25, %k1
+    {evex} vpcmpeqb 0(%rax,%rbp,1), %xmm16, %k6
+    {evex} vpcmpeqb -16(%rax,%r12,2), %xmm3, %k7
+    {evex} vpcmpeqb -129(%r9,%rax,4), %xmm25, %k1
     {evex} vpcmpeqb gnu_back(%rip), %xmm9, %k2
     {evex} vpcmpeqb %xmm31, %xmm20, %k3{%k4}
-    {evex} vpcmpeqb 0(%rdx), %xmm12, %k5{%k6}
-    {evex} vpcmpeqb 32(%r14), %xmm17, %k7{%k1}
-    {evex} vpcmpeqb 1001(%r15), %xmm16, %k2{%k3}
+    {evex} vpcmpeqb 0(%rbx), %xmm12, %k5{%k6}
+    {evex} vpcmpeqb 32(%rbp), %xmm17, %k7{%k1}
+    {evex} vpcmpeqb 1001(%r13), %xmm16, %k2{%k3}
     {evex} vpcmpeqb 0(%r12), %xmm3, %k4{%k5}
     {evex} vpcmpeqb -2048(%rsp), %xmm25, %k6{%k7}
     {evex} vpcmpeqb -2147483648(%r12), %xmm9, %k1{%k2}
-    {evex} vpcmpeqb 0(%r15,%rsi,2), %xmm31, %k3{%k4}
-    {evex} vpcmpeqb 2032(%rdi,%rcx,4), %xmm20, %k5{%k6}
-    {evex} vpcmpeqb 2147483647(%r15,%r9,8), %xmm12, %k7{%k1}
+    {evex} vpcmpeqb 0(%r8,%r15,8), %xmm31, %k3{%k4}
+    {evex} vpcmpeqb 2032(%rsp,%rsi,1), %xmm20, %k5{%k6}
+    {evex} vpcmpeqb 2147483647(%r13,%rcx,2), %xmm12, %k7{%k1}
     {evex} vpcmpeqb gnu_fwd(%rip), %xmm17, %k2{%k3}
     {evex} vpcmpeqb %ymm16, %ymm3, %k4
-    {evex} vpcmpeqb 0(%r9), %ymm25, %k5
-    {evex} vpcmpeqb -4096(%rcx), %ymm9, %k6
-    {evex} vpcmpeqb 4660(%r8), %ymm31, %k7
+    {evex} vpcmpeqb 0(%r10), %ymm25, %k5
+    {evex} vpcmpeqb -4096(%rdx), %ymm9, %k6
+    {evex} vpcmpeqb 4660(%r9), %ymm31, %k7
     {evex} vpcmpeqb 0(%rsp), %ymm20, %k1
     {evex} vpcmpeqb 4064(%r12), %ymm12, %k2
     {evex} vpcmpeqb -129(%rsp), %ymm17, %k3
-    {evex} vpcmpeqb 0(%rax,%rbp,1), %ymm16, %k4
-    {evex} vpcmpeqb -32(%rax,%r12,2), %ymm3, %k5
-    {evex} vpcmpeqb 1001(%r9,%rax,4), %ymm25, %k6
+    {evex} vpcmpeqb 0(%rcx,%r9,4), %ymm16, %k4
+    {evex} vpcmpeqb -32(%rbp,%rbp,8), %ymm3, %k5
+    {evex} vpcmpeqb 1001(%r12,%r12,1), %ymm25, %k6
     {evex} vpcmpeqb gnu_back(%rip), %ymm9, %k7
     {evex} vpcmpeqb %ymm31, %ymm20, %k1{%k2}
-    {evex} vpcmpeqb 0(%rbx), %ymm12, %k3{%k4}
-    {evex} vpcmpeqb 64(%rbp), %ymm17, %k5{%k6}
-    {evex} vpcmpeqb -2147483648(%r13), %ymm16, %k7{%k1}
+    {evex} vpcmpeqb 0(%rsi), %ymm12, %k3{%k4}
+    {evex} vpcmpeqb 64(%rbx), %ymm17, %k5{%k6}
+    {evex} vpcmpeqb -2147483648(%r10), %ymm16, %k7{%k1}
     {evex} vpcmpeqb 0(%r12), %ymm3, %k2{%k3}
     {evex} vpcmpeqb -4096(%rsp), %ymm25, %k4{%k5}
     {evex} vpcmpeqb 2147483647(%r12), %ymm9, %k6{%k7}
-    {evex} vpcmpeqb 0(%r8,%r15,8), %ymm31, %k1{%k2}
-    {evex} vpcmpeqb 4064(%rsp,%rsi,1), %ymm20, %k3{%k4}
-    {evex} vpcmpeqb 4660(%r13,%rcx,2), %ymm12, %k5{%k6}
+    {evex} vpcmpeqb 0(%r12,%rax,2), %ymm31, %k1{%k2}
+    {evex} vpcmpeqb 4064(%rdi,%r15,4), %ymm20, %k3{%k4}
+    {evex} vpcmpeqb 4660(%r15,%rsi,8), %ymm12, %k5{%k6}
     {evex} vpcmpeqb gnu_fwd(%rip), %ymm17, %k7{%k1}
     {evex} vpcmpeqb %zmm16, %zmm3, %k2
-    {evex} vpcmpeqb 0(%r10), %zmm25, %k3
-    {evex} vpcmpeqb -8192(%rdx), %zmm9, %k4
-    {evex} vpcmpeqb -129(%r9), %zmm31, %k5
+    {evex} vpcmpeqb 0(%r11), %zmm25, %k3
+    {evex} vpcmpeqb -8192(%rsi), %zmm9, %k4
+    {evex} vpcmpeqb -129(%r11), %zmm31, %k5
     {evex} vpcmpeqb 0(%rsp), %zmm20, %k6
     {evex} vpcmpeqb 8128(%r12), %zmm12, %k7
     {evex} vpcmpeqb 1001(%rsp), %zmm17, %k1
-    {evex} vpcmpeqb 0(%rcx,%r9,4), %zmm16, %k2
-    {evex} vpcmpeqb -64(%rbp,%rbp,8), %zmm3, %k3
-    {evex} vpcmpeqb -2147483648(%r12,%r12,1), %zmm25, %k4
+    {evex} vpcmpeqb 0(%rdx,%rcx,1), %zmm16, %k2
+    {evex} vpcmpeqb -64(%rax,%r9,2), %zmm3, %k3
+    {evex} vpcmpeqb -2147483648(%r9,%rbp,4), %zmm25, %k4
     {evex} vpcmpeqb gnu_back(%rip), %zmm9, %k5
     {evex} vpcmpeqb %zmm31, %zmm20, %k6{%k7}
-    {evex} vpcmpeqb 0(%rsi), %zmm12, %k1{%k2}
-    {evex} vpcmpeqb 128(%rbx), %zmm17, %k3{%k4}
-    {evex} vpcmpeqb 2147483647(%r10), %zmm16, %k5{%k6}
+    {evex} vpcmpeqb 0(%rdi), %zmm12, %k1{%k2}
+    {evex} vpcmpeqb 128(%rdi), %zmm17, %k3{%k4}
+    {evex} vpcmpeqb 2147483647(%r14), %zmm16, %k5{%k6}
     {evex} vpcmpeqb 0(%r12), %zmm3, %k7{%k1}
     {evex} vpcmpeqb -8192(%rsp), %zmm25, %k2{%k3}
     {evex} vpcmpeqb 4660(%r12), %zmm9, %k4{%k5}
-    {evex} vpcmpeqb 0(%r12,%rax,2), %zmm31, %k6{%k7}
-    {evex} vpcmpeqb 8128(%rdi,%r15,4), %zmm20, %k1{%k2}
-    {evex} vpcmpeqb -129(%r15,%rsi,8), %zmm12, %k3{%k4}
+    {evex} vpcmpeqb 0(%r9,%r12,8), %zmm31, %k6{%k7}
+    {evex} vpcmpeqb 8128(%rsp,%rax,1), %zmm20, %k1{%k2}
+    {evex} vpcmpeqb -129(%r13,%r15,2), %zmm12, %k3{%k4}
     {evex} vpcmpeqb gnu_fwd(%rip), %zmm17, %k5{%k6}
     {evex} vpcmpeqd %xmm16, %xmm3, %k7
-    {evex} vpcmpeqd 0(%r11), %xmm25, %k1
-    {evex} vpcmpeqd -16(%rsi), %xmm9, %k2
-    {evex} vpcmpeqd 1001(%r11), %xmm31, %k3
+    {evex} vpcmpeqd 0(%r14), %xmm25, %k1
+    {evex} vpcmpeqd -16(%r15), %xmm9, %k2
+    {evex} vpcmpeqd 1001(%rcx), %xmm31, %k3
     {evex} vpcmpeqd 0(%rsp), %xmm20, %k4
     {evex} vpcmpeqd 32(%r12), %xmm12, %k5
     {evex} vpcmpeqd -2147483648(%rsp), %xmm17, %k6
-    {evex} vpcmpeqd 0(%rdx,%rcx,1), %xmm16, %k7
-    {evex} vpcmpeqd -2048(%rax,%r9,2), %xmm3, %k1
-    {evex} vpcmpeqd 2147483647(%r9,%rbp,4), %xmm25, %k2
+    {evex} vpcmpeqd 0(%rsp,%rsi,4), %xmm16, %k7
+    {evex} vpcmpeqd -2048(%rbp,%rcx,8), %xmm3, %k1
+    {evex} vpcmpeqd 2147483647(%r12,%r9,1), %xmm25, %k2
     {evex} vpcmpeqd gnu_back(%rip), %xmm9, %k3
     {evex} vpcmpeqd %xmm31, %xmm20, %k4{%k5}
-    {evex} vpcmpeqd 0(%rdi), %xmm12, %k6{%k7}
-    {evex} vpcmpeqd 2032(%rdi), %xmm17, %k1{%k2}
-    {evex} vpcmpeqd 4660(%r14), %xmm16, %k3{%k4}
+    {evex} vpcmpeqd 0(%r15), %xmm12, %k6{%k7}
+    {evex} vpcmpeqd 2032(%r8), %xmm17, %k1{%k2}
+    {evex} vpcmpeqd 4660(%rbp), %xmm16, %k3{%k4}
     {evex} vpcmpeqd 0(%r12), %xmm3, %k5{%k6}
     {evex} vpcmpeqd -16(%rsp), %xmm25, %k7{%k1}
     {evex} vpcmpeqd -129(%r12), %xmm9, %k2{%k3}
-    {evex} vpcmpeqd 0(%r9,%r12,8), %xmm31, %k4{%k5}
-    {evex} vpcmpeqd 32(%rsp,%rax,1), %xmm20, %k6{%k7}
-    {evex} vpcmpeqd 1001(%r13,%r15,2), %xmm12, %k1{%k2}
+    {evex} vpcmpeqd 0(%r14,%rbp,2), %xmm31, %k4{%k5}
+    {evex} vpcmpeqd 32(%rdi,%r12,4), %xmm20, %k6{%k7}
+    {evex} vpcmpeqd 1001(%r15,%rax,8), %xmm12, %k1{%k2}
     {evex} vpcmpeqd gnu_fwd(%rip), %xmm17, %k3{%k4}
     {evex} vpcmpeqd %ymm16, %ymm3, %k5
-    {evex} vpcmpeqd 0(%r14), %ymm25, %k6
-    {evex} vpcmpeqd -32(%r15), %ymm9, %k7
-    {evex} vpcmpeqd -2147483648(%rcx), %ymm31, %k1
+    {evex} vpcmpeqd 0(%rcx), %ymm25, %k6
+    {evex} vpcmpeqd -32(%r13), %ymm9, %k7
+    {evex} vpcmpeqd -2147483648(%rdx), %ymm31, %k1
     {evex} vpcmpeqd 0(%rsp), %ymm20, %k2
     {evex} vpcmpeqd 64(%r12), %ymm12, %k3
     {evex} vpcmpeqd 2147483647(%rsp), %ymm17, %k4
-    {evex} vpcmpeqd 0(%rsp,%rsi,4), %ymm16, %k5
-    {evex} vpcmpeqd -4096(%rbp,%rcx,8), %ymm3, %k6
-    {evex} vpcmpeqd 4660(%r12,%r9,1), %ymm25, %k7
+    {evex} vpcmpeqd 0(%rsi,%r15,1), %ymm16, %k5
+    {evex} vpcmpeqd -4096(%rax,%rsi,2), %ymm3, %k6
+    {evex} vpcmpeqd 4660(%r9,%rcx,4), %ymm25, %k7
     {evex} vpcmpeqd gnu_back(%rip), %ymm9, %k1
     {evex} vpcmpeqd %ymm31, %ymm20, %k2{%k3}
-    {evex} vpcmpeqd 0(%r15), %ymm12, %k4{%k5}
-    {evex} vpcmpeqd 4064(%r8), %ymm17, %k6{%k7}
-    {evex} vpcmpeqd -129(%rbp), %ymm16, %k1{%k2}
+    {evex} vpcmpeqd 0(%r8), %ymm12, %k4{%k5}
+    {evex} vpcmpeqd 4064(%r9), %ymm17, %k6{%k7}
+    {evex} vpcmpeqd -129(%rbx), %ymm16, %k1{%k2}
     {evex} vpcmpeqd 0(%r12), %ymm3, %k3{%k4}
     {evex} vpcmpeqd -32(%rsp), %ymm25, %k5{%k6}
     {evex} vpcmpeqd 1001(%r12), %ymm9, %k7{%k1}
-    {evex} vpcmpeqd 0(%r14,%rbp,2), %ymm31, %k2{%k3}
-    {evex} vpcmpeqd 64(%rdi,%r12,4), %ymm20, %k4{%k5}
-    {evex} vpcmpeqd -2147483648(%r15,%rax,8), %ymm12, %k6{%k7}
+    {evex} vpcmpeqd 0(%r15,%r9,8), %ymm31, %k2{%k3}
+    {evex} vpcmpeqd 64(%rsp,%rbp,1), %ymm20, %k4{%k5}
+    {evex} vpcmpeqd -2147483648(%r13,%r12,2), %ymm12, %k6{%k7}
     {evex} vpcmpeqd gnu_fwd(%rip), %ymm17, %k1{%k2}
     {evex} vpcmpeqd %zmm16, %zmm3, %k3
-    {evex} vpcmpeqd 0(%rcx), %zmm25, %k4
-    {evex} vpcmpeqd -64(%r13), %zmm9, %k5
-    {evex} vpcmpeqd 2147483647(%rdx), %zmm31, %k6
+    {evex} vpcmpeqd 0(%rdx), %zmm25, %k4
+    {evex} vpcmpeqd -64(%r10), %zmm9, %k5
+    {evex} vpcmpeqd 2147483647(%rsi), %zmm31, %k6
     {evex} vpcmpeqd 0(%rsp), %zmm20, %k7
     {evex} vpcmpeqd 128(%r12), %zmm12, %k1
     {evex} vpcmpeqd 4660(%rsp), %zmm17, %k2
-    {evex} vpcmpeqd 0(%rsi,%r15,1), %zmm16, %k3
-    {evex} vpcmpeqd -8192(%rax,%rsi,2), %zmm3, %k4
-    {evex} vpcmpeqd -129(%r9,%rcx,4), %zmm25, %k5
+    {evex} vpcmpeqd 0(%rax,%rax,4), %zmm16, %k3
+    {evex} vpcmpeqd -8192(%rbp,%r15,8), %zmm3, %k4
+    {evex} vpcmpeqd -129(%r12,%rsi,1), %zmm25, %k5
     {evex} vpcmpeqd gnu_back(%rip), %zmm9, %k6
     {evex} vpcmpeqd %zmm31, %zmm20, %k7{%k1}
-    {evex} vpcmpeqd 0(%r8), %zmm12, %k2{%k3}
-    {evex} vpcmpeqd 8128(%r9), %zmm17, %k4{%k5}
-    {evex} vpcmpeqd 1001(%rbx), %zmm16, %k6{%k7}
+    {evex} vpcmpeqd 0(%r9), %zmm12, %k2{%k3}
+    {evex} vpcmpeqd 8128(%r11), %zmm17, %k4{%k5}
+    {evex} vpcmpeqd 1001(%rdi), %zmm16, %k6{%k7}
     {evex} vpcmpeqd 0(%r12), %zmm3, %k1{%k2}
     {evex} vpcmpeqd -64(%rsp), %zmm25, %k3{%k4}
     {evex} vpcmpeqd -2147483648(%r12), %zmm9, %k5{%k6}
-    {evex} vpcmpeqd 0(%r15,%r9,8), %zmm31, %k7{%k1}
-    {evex} vpcmpeqd 128(%rsp,%rbp,1), %zmm20, %k2{%k3}
-    {evex} vpcmpeqd 2147483647(%r13,%r12,2), %zmm12, %k4{%k5}
+    {evex} vpcmpeqd 0(%r8,%rcx,2), %zmm31, %k7{%k1}
+    {evex} vpcmpeqd 128(%rdi,%r9,4), %zmm20, %k2{%k3}
+    {evex} vpcmpeqd 2147483647(%r15,%rbp,8), %zmm12, %k4{%k5}
     {evex} vpcmpeqd gnu_fwd(%rip), %zmm17, %k6{%k7}
     {evex} vptestmb %xmm16, %xmm3, %k1
-    {evex} vptestmb 0(%rdx), %xmm25, %k2
-    {evex} vptestmb -2048(%r10), %xmm9, %k3
-    {evex} vptestmb 4660(%rsi), %xmm31, %k4
+    {evex} vptestmb 0(%rbx), %xmm25, %k2
+g63:
+    {evex} vptestmb -2048(%r14), %xmm9, %k3
+    {evex} vptestmb 4660(%r15), %xmm31, %k4
     {evex} vptestmb 0(%rsp), %xmm20, %k5
     {evex} vptestmb 2032(%r12), %xmm12, %k6
     {evex} vptestmb -129(%rsp), %xmm17, %k7
-    {evex} vptestmb 0(%rax,%rax,4), %xmm16, %k1
-    {evex} vptestmb -16(%rbp,%r15,8), %xmm3, %k2
-    {evex} vptestmb 1001(%r12,%rsi,1), %xmm25, %k3
+    {evex} vptestmb 0(%rcx,%r12,1), %xmm16, %k1
+    {evex} vptestmb -16(%rax,%rax,2), %xmm3, %k2
+    {evex} vptestmb 1001(%r9,%r15,4), %xmm25, %k3
     {evex} vptestmb gnu_back(%rip), %xmm9, %k4
     {evex} vptestmb %xmm31, %xmm20, %k5{%k6}
-    {evex} vptestmb 0(%r9), %xmm12, %k7{%k1}
-    {evex} vptestmb 32(%r11), %xmm17, %k2{%k3}
-    {evex} vptestmb -2147483648(%rdi), %xmm16, %k4{%k5}
+    {evex} vptestmb 0(%r10), %xmm12, %k7{%k1}
+    {evex} vptestmb 32(%rcx), %xmm17, %k2{%k3}
+    {evex} vptestmb -2147483648(%r8), %xmm16, %k4{%k5}
     {evex} vptestmb 0(%r12), %xmm3, %k6{%k7}
     {evex} vptestmb -2048(%rsp), %xmm25, %k1{%k2}
     {evex} vptestmb 2147483647(%r12), %xmm9, %k3{%k4}
-    {evex} vptestmb 0(%r8,%rcx,2), %xmm31, %k5{%k6}
-    {evex} vptestmb 2032(%rdi,%r9,4), %xmm20, %k7{%k1}
-    {evex} vptestmb 4660(%r15,%rbp,8), %xmm12, %k2{%k3}
+    {evex} vptestmb 0(%r12,%rsi,8), %xmm31, %k5{%k6}
+    {evex} vptestmb 2032(%rsp,%rcx,1), %xmm20, %k7{%k1}
+    {evex} vptestmb 4660(%r13,%r9,2), %xmm12, %k2{%k3}
     {evex} vptestmb gnu_fwd(%rip), %xmm17, %k4{%k5}
     {evex} vptestmb %ymm16, %ymm3, %k6
-    {evex} vptestmb 0(%rbx), %ymm25, %k7
-    {evex} vptestmb -4096(%r14), %ymm9, %k1
-    {evex} vptestmb -129(%r15), %ymm31, %k2
-g63:
+    {evex} vptestmb 0(%rsi), %ymm25, %k7
+    {evex} vptestmb -4096(%rbp), %ymm9, %k1
+    {evex} vptestmb -129(%r13), %ymm31, %k2
     {evex} vptestmb 0(%rsp), %ymm20, %k3
     {evex} vptestmb 4064(%r12), %ymm12, %k4
     {evex} vptestmb 1001(%rsp), %ymm17, %k5
-    {evex} vptestmb 0(%rcx,%r12,1), %ymm16, %k6
-    {evex} vptestmb -32(%rax,%rax,2), %ymm3, %k7
-    {evex} vptestmb -2147483648(%r9,%r15,4), %ymm25, %k1
+    {evex} vptestmb 0(%rdx,%rbp,4), %ymm16, %k6
+    {evex} vptestmb -32(%rbp,%r12,8), %ymm3, %k7
+    {evex} vptestmb -2147483648(%r12,%rax,1), %ymm25, %k1
     {evex} vptestmb gnu_back(%rip), %ymm9, %k2
     {evex} vptestmb %ymm31, %ymm20, %k3{%k4}
-    {evex} vptestmb 0(%r10), %ymm12, %k5{%k6}
-    {evex} vptestmb 64(%rcx), %ymm17, %k7{%k1}
-    {evex} vptestmb 2147483647(%r8), %ymm16, %k2{%k3}
+    {evex} vptestmb 0(%r11), %ymm12, %k5{%k6}
+    {evex} vptestmb 64(%rdx), %ymm17, %k7{%k1}
+    {evex} vptestmb 2147483647(%r9), %ymm16, %k2{%k3}
     {evex} vptestmb 0(%r12), %ymm3, %k4{%k5}
     {evex} vptestmb -4096(%rsp), %ymm25, %k6{%k7}
     {evex} vptestmb 4660(%r12), %ymm9, %k1{%k2}
-    {evex} vptestmb 0(%r12,%rsi,8), %ymm31, %k3{%k4}
-    {evex} vptestmb 4064(%rsp,%rcx,1), %ymm20, %k5{%k6}
-    {evex} vptestmb -129(%r13,%r9,2), %ymm12, %k7{%k1}
+    {evex} vptestmb 0(%r9,%r15,2), %ymm31, %k3{%k4}
+    {evex} vptestmb 4064(%rdi,%rsi,4), %ymm20, %k5{%k6}
+    {evex} vptestmb -129(%r15,%rcx,8), %ymm12, %k7{%k1}
     {evex} vptestmb gnu_fwd(%rip), %ymm17, %k2{%k3}
     {evex} vptestmb %zmm16, %zmm3, %k4
-    {evex} vptestmb 0(%rsi), %zmm25, %k5
-    {evex} vptestmb -8192(%rbp), %zmm9, %k6
-    {evex} vptestmb 1001(%r13), %zmm31, %k7
+    {evex} vptestmb 0(%rdi), %zmm25, %k5
+    {evex} vptestmb -8192(%rbx), %zmm9, %k6
+    {evex} vptestmb 1001(%r10), %zmm31, %k7
     {evex} vptestmb 0(%rsp), %zmm20, %k1
     {evex} vptestmb 8128(%r12), %zmm12, %k2
     {evex} vptestmb -2147483648(%rsp), %zmm17, %k3
-    {evex} vptestmb 0(%rdx,%rbp,4), %zmm16, %k4
-    {evex} vptestmb -64(%rbp,%r12,8), %zmm3, %k5
-    {evex} vptestmb 2147483647(%r12,%rax,1), %zmm25, %k6
+    {evex} vptestmb 0(%rsp,%r9,1), %zmm16, %k4
+    {evex} vptestmb -64(%rax,%rbp,2), %zmm3, %k5
+    {evex} vptestmb 2147483647(%r9,%r12,4), %zmm25, %k6
     {evex} vptestmb gnu_back(%rip), %zmm9, %k7
     {evex} vptestmb %zmm31, %zmm20, %k1{%k2}
-    {evex} vptestmb 0(%r11), %zmm12, %k3{%k4}
-    {evex} vptestmb 128(%rdx), %zmm17, %k5{%k6}
-    {evex} vptestmb 4660(%r9), %zmm16, %k7{%k1}
+    {evex} vptestmb 0(%r14), %zmm12, %k3{%k4}
+    {evex} vptestmb 128(%rsi), %zmm17, %k5{%k6}
+    {evex} vptestmb 4660(%r11), %zmm16, %k7{%k1}
     {evex} vptestmb 0(%r12), %zmm3, %k2{%k3}
     {evex} vptestmb -8192(%rsp), %zmm25, %k4{%k5}
     {evex} vptestmb -129(%r12), %zmm9, %k6{%k7}
-    {evex} vptestmb 0(%r9,%r15,2), %zmm31, %k1{%k2}
-    {evex} vptestmb 8128(%rdi,%rsi,4), %zmm20, %k3{%k4}
-    {evex} vptestmb 1001(%r15,%rcx,8), %zmm12, %k5{%k6}
+    {evex} vptestmb 0(%r14,%rax,8), %zmm31, %k1{%k2}
+    {evex} vptestmb 8128(%rsp,%r15,1), %zmm20, %k3{%k4}
+    {evex} vptestmb 1001(%r13,%rsi,2), %zmm12, %k5{%k6}
     {evex} vptestmb gnu_fwd(%rip), %zmm17, %k7{%k1}
     {evex} vptestmd %xmm16, %xmm3, %k2
-    {evex} vptestmd 0(%rdi), %xmm25, %k3
-    {evex} vptestmd -16(%rbx), %xmm9, %k4
-    {evex} vptestmd -2147483648(%r10), %xmm31, %k5
+    {evex} vptestmd 0(%r15), %xmm25, %k3
+    {evex} vptestmd -16(%rdi), %xmm9, %k4
+    {evex} vptestmd -2147483648(%r14), %xmm31, %k5
     {evex} vptestmd 0(%rsp), %xmm20, %k6
     {evex} vptestmd 32(%r12), %xmm12, %k7
     {evex} vptestmd 2147483647(%rsp), %xmm17, %k1
-    {evex} vptestmd 0(%rsp,%r9,1), %xmm16, %k2
-    {evex} vptestmd -2048(%rax,%rbp,2), %xmm3, %k3
-    {evex} vptestmd 4660(%r9,%r12,4), %xmm25, %k4
+    {evex} vptestmd 0(%rsi,%rcx,4), %xmm16, %k2
+    {evex} vptestmd -2048(%rbp,%r9,8), %xmm3, %k3
+    {evex} vptestmd 4660(%r12,%rbp,1), %xmm25, %k4
     {evex} vptestmd gnu_back(%rip), %xmm9, %k5
     {evex} vptestmd %xmm31, %xmm20, %k6{%k7}
-    {evex} vptestmd 0(%r14), %xmm12, %k1{%k2}
-    {evex} vptestmd 2032(%rsi), %xmm17, %k3{%k4}
-    {evex} vptestmd -129(%r11), %xmm16, %k5{%k6}
+    {evex} vptestmd 0(%rcx), %xmm12, %k1{%k2}
+    {evex} vptestmd 2032(%r15), %xmm17, %k3{%k4}
+    {evex} vptestmd -129(%rcx), %xmm16, %k5{%k6}
     {evex} vptestmd 0(%r12), %xmm3, %k7{%k1}
     {evex} vptestmd -16(%rsp), %xmm25, %k2{%k3}
     {evex} vptestmd 1001(%r12), %xmm9, %k4{%k5}
-    {evex} vptestmd 0(%r14,%rax,8), %xmm31, %k6{%k7}
-    {evex} vptestmd 32(%rsp,%r15,1), %xmm20, %k1{%k2}
-    {evex} vptestmd -2147483648(%r13,%rsi,2), %xmm12, %k3{%k4}
+    {evex} vptestmd 0(%r15,%r12,2), %xmm31, %k6{%k7}
+    {evex} vptestmd 32(%rdi,%rax,4), %xmm20, %k1{%k2}
+    {evex} vptestmd -2147483648(%r15,%r15,8), %xmm12, %k3{%k4}
     {evex} vptestmd gnu_fwd(%rip), %xmm17, %k5{%k6}
     {evex} vptestmd %ymm16, %ymm3, %k7
-    {evex} vptestmd 0(%r15), %ymm25, %k1
-    {evex} vptestmd -32(%rdi), %ymm9, %k2
-    {evex} vptestmd 2147483647(%r14), %ymm31, %k3
+    {evex} vptestmd 0(%r8), %ymm25, %k1
+    {evex} vptestmd -32(%r8), %ymm9, %k2
+    {evex} vptestmd 2147483647(%rbp), %ymm31, %k3
     {evex} vptestmd 0(%rsp), %ymm20, %k4
     {evex} vptestmd 64(%r12), %ymm12, %k5
     {evex} vptestmd 4660(%rsp), %ymm17, %k6
-    {evex} vptestmd 0(%rsi,%rcx,4), %ymm16, %k7
-    {evex} vptestmd -4096(%rbp,%r9,8), %ymm3, %k1
-    {evex} vptestmd -129(%r12,%rbp,1), %ymm25, %k2
+    {evex} vptestmd 0(%rax,%rsi,1), %ymm16, %k7
+    {evex} vptestmd -4096(%rax,%rcx,2), %ymm3, %k1
+    {evex} vptestmd -129(%r9,%r9,4), %ymm25, %k2
     {evex} vptestmd gnu_back(%rip), %ymm9, %k3
     {evex} vptestmd %ymm31, %ymm20, %k4{%k5}
-    {evex} vptestmd 0(%rcx), %ymm12, %k6{%k7}
-    {evex} vptestmd 4064(%r15), %ymm17, %k1{%k2}
-    {evex} vptestmd 1001(%rcx), %ymm16, %k3{%k4}
+    {evex} vptestmd 0(%rdx), %ymm12, %k6{%k7}
+    {evex} vptestmd 4064(%r13), %ymm17, %k1{%k2}
+    {evex} vptestmd 1001(%rdx), %ymm16, %k3{%k4}
     {evex} vptestmd 0(%r12), %ymm3, %k5{%k6}
     {evex} vptestmd -32(%rsp), %ymm25, %k7{%k1}
     {evex} vptestmd -2147483648(%r12), %ymm9, %k2{%k3}
-    {evex} vptestmd 0(%r15,%r12,2), %ymm31, %k4{%k5}
-    {evex} vptestmd 64(%rdi,%rax,4), %ymm20, %k6{%k7}
-    {evex} vptestmd 2147483647(%r15,%r15,8), %ymm12, %k1{%k2}
+    {evex} vptestmd 0(%r8,%rbp,8), %ymm31, %k4{%k5}
+    {evex} vptestmd 64(%rsp,%r12,1), %ymm20, %k6{%k7}
+    {evex} vptestmd 2147483647(%r13,%rax,2), %ymm12, %k1{%k2}
     {evex} vptestmd gnu_fwd(%rip), %ymm17, %k3{%k4}
     {evex} vptestmd %zmm16, %zmm3, %k5
-    {evex} vptestmd 0(%r8), %zmm25, %k6
-    {evex} vptestmd -64(%r8), %zmm9, %k7
-    {evex} vptestmd 4660(%rbp), %zmm31, %k1
+    {evex} vptestmd 0(%r9), %zmm25, %k6
+    {evex} vptestmd -64(%r9), %zmm9, %k7
+    {evex} vptestmd 4660(%rbx), %zmm31, %k1
     {evex} vptestmd 0(%rsp), %zmm20, %k2
     {evex} vptestmd 128(%r12), %zmm12, %k3
     {evex} vptestmd -129(%rsp), %zmm17, %k4
-    {evex} vptestmd 0(%rax,%rsi,1), %zmm16, %k5
-    {evex} vptestmd -8192(%rax,%rcx,2), %zmm3, %k6
-    {evex} vptestmd 1001(%r9,%r9,4), %zmm25, %k7
+    {evex} vptestmd 0(%rcx,%r15,4), %zmm16, %k5
+    {evex} vptestmd -8192(%rbp,%rsi,8), %zmm3, %k6
+    {evex} vptestmd 1001(%r12,%rcx,1), %zmm25, %k7
     {evex} vptestmd gnu_back(%rip), %zmm9, %k1
     {evex} vptestmd %zmm31, %zmm20, %k2{%k3}
-    {evex} vptestmd 0(%rdx), %zmm12, %k4{%k5}
-    {evex} vptestmd 8128(%r13), %zmm17, %k6{%k7}
-    {evex} vptestmd -2147483648(%rdx), %zmm16, %k1{%k2}
+    {evex} vptestmd 0(%rbx), %zmm12, %k4{%k5}
+    {evex} vptestmd 8128(%r10), %zmm17, %k6{%k7}
+    {evex} vptestmd -2147483648(%rsi), %zmm16, %k1{%k2}
     {evex} vptestmd 0(%r12), %zmm3, %k3{%k4}
     {evex} vptestmd -64(%rsp), %zmm25, %k5{%k6}
     {evex} vptestmd 2147483647(%r12), %zmm9, %k7{%k1}
-    {evex} vptestmd 0(%r8,%rbp,8), %zmm31, %k2{%k3}
-    {evex} vptestmd 128(%rsp,%r12,1), %zmm20, %k4{%k5}
-    {evex} vptestmd 4660(%r13,%rax,2), %zmm12, %k6{%k7}
+    {evex} vptestmd 0(%r12,%r9,2), %zmm31, %k2{%k3}
+    {evex} vptestmd 128(%rdi,%rbp,4), %zmm20, %k4{%k5}
+    {evex} vptestmd 4660(%r15,%r12,8), %zmm12, %k6{%k7}
     {evex} vptestmd gnu_fwd(%rip), %zmm17, %k1{%k2}
     {evex} vptestnmb %xmm16, %xmm3, %k3
-    {evex} vptestnmb 0(%r9), %xmm25, %k4
-    {evex} vptestnmb -2048(%r9), %xmm9, %k5
-    {evex} vptestnmb -129(%rbx), %xmm31, %k6
+    {evex} vptestnmb 0(%r10), %xmm25, %k4
+    {evex} vptestnmb -2048(%r11), %xmm9, %k5
+    {evex} vptestnmb -129(%rdi), %xmm31, %k6
     {evex} vptestnmb 0(%rsp), %xmm20, %k7
     {evex} vptestnmb 2032(%r12), %xmm12, %k1
     {evex} vptestnmb 1001(%rsp), %xmm17, %k2
-    {evex} vptestnmb 0(%rcx,%r15,4), %xmm16, %k3
-    {evex} vptestnmb -16(%rbp,%rsi,8), %xmm3, %k4
-    {evex} vptestnmb -2147483648(%r12,%rcx,1), %xmm25, %k5
+    {evex} vptestnmb 0(%rdx,%rax,1), %xmm16, %k3
+    {evex} vptestnmb -16(%rax,%r15,2), %xmm3, %k4
+    {evex} vptestnmb -2147483648(%r9,%rsi,4), %xmm25, %k5
     {evex} vptestnmb gnu_back(%rip), %xmm9, %k6
     {evex} vptestnmb %xmm31, %xmm20, %k7{%k1}
-    {evex} vptestnmb 0(%rbx), %xmm12, %k2{%k3}
-    {evex} vptestnmb 32(%r10), %xmm17, %k4{%k5}
-    {evex} vptestnmb 2147483647(%rsi), %xmm16, %k6{%k7}
+    {evex} vptestnmb 0(%rsi), %xmm12, %k2{%k3}
+    {evex} vptestnmb 32(%r14), %xmm17, %k4{%k5}
+    {evex} vptestnmb 2147483647(%r15), %xmm16, %k6{%k7}
     {evex} vptestnmb 0(%r12), %xmm3, %k1{%k2}
     {evex} vptestnmb -2048(%rsp), %xmm25, %k3{%k4}
     {evex} vptestnmb 4660(%r12), %xmm9, %k5{%k6}
-    {evex} vptestnmb 0(%r12,%r9,2), %xmm31, %k7{%k1}
-    {evex} vptestnmb 2032(%rdi,%rbp,4), %xmm20, %k2{%k3}
-    {evex} vptestnmb -129(%r15,%r12,8), %xmm12, %k4{%k5}
+    {evex} vptestnmb 0(%r9,%rcx,8), %xmm31, %k7{%k1}
+    {evex} vptestnmb 2032(%rsp,%r9,1), %xmm20, %k2{%k3}
+    {evex} vptestnmb -129(%r13,%rbp,2), %xmm12, %k4{%k5}
     {evex} vptestnmb gnu_fwd(%rip), %xmm17, %k6{%k7}
     {evex} vptestnmb %ymm16, %ymm3, %k1
-    {evex} vptestnmb 0(%r10), %ymm25, %k2
-    {evex} vptestnmb -4096(%r11), %ymm9, %k3
-    {evex} vptestnmb 1001(%rdi), %ymm31, %k4
+    {evex} vptestnmb 0(%r11), %ymm25, %k2
+    {evex} vptestnmb -4096(%rcx), %ymm9, %k3
+    {evex} vptestnmb 1001(%r8), %ymm31, %k4
     {evex} vptestnmb 0(%rsp), %ymm20, %k5
     {evex} vptestnmb 4064(%r12), %ymm12, %k6
     {evex} vptestnmb -2147483648(%rsp), %ymm17, %k7
-    {evex} vptestnmb 0(%rdx,%rax,1), %ymm16, %k1
-    {evex} vptestnmb -32(%rax,%r15,2), %ymm3, %k2
-    {evex} vptestnmb 2147483647(%r9,%rsi,4), %ymm25, %k3
+    {evex} vptestnmb 0(%rsp,%r12,4), %ymm16, %k1
+    {evex} vptestnmb -32(%rbp,%rax,8), %ymm3, %k2
+    {evex} vptestnmb 2147483647(%r12,%r15,1), %ymm25, %k3
     {evex} vptestnmb gnu_back(%rip), %ymm9, %k4
     {evex} vptestnmb %ymm31, %ymm20, %k5{%k6}
-    {evex} vptestnmb 0(%rsi), %ymm12, %k7{%k1}
-    {evex} vptestnmb 64(%r14), %ymm17, %k2{%k3}
-    {evex} vptestnmb 4660(%r15), %ymm16, %k4{%k5}
+    {evex} vptestnmb 0(%rdi), %ymm12, %k7{%k1}
+    {evex} vptestnmb 64(%rbp), %ymm17, %k2{%k3}
+    {evex} vptestnmb 4660(%r13), %ymm16, %k4{%k5}
     {evex} vptestnmb 0(%r12), %ymm3, %k6{%k7}
     {evex} vptestnmb -4096(%rsp), %ymm25, %k1{%k2}
     {evex} vptestnmb -129(%r12), %ymm9, %k3{%k4}
-    {evex} vptestnmb 0(%r9,%rcx,8), %ymm31, %k5{%k6}
-    {evex} vptestnmb 4064(%rsp,%r9,1), %ymm20, %k7{%k1}
-    {evex} vptestnmb 1001(%r13,%rbp,2), %ymm12, %k2{%k3}
+    {evex} vptestnmb 0(%r14,%rsi,2), %ymm31, %k5{%k6}
+    {evex} vptestnmb 4064(%rdi,%rcx,4), %ymm20, %k7{%k1}
+    {evex} vptestnmb 1001(%r15,%r9,8), %ymm12, %k2{%k3}
     {evex} vptestnmb gnu_fwd(%rip), %ymm17, %k4{%k5}
     {evex} vptestnmb %zmm16, %zmm3, %k6
-    {evex} vptestnmb 0(%r11), %zmm25, %k7
-    {evex} vptestnmb -8192(%rcx), %zmm9, %k1
-    {evex} vptestnmb -2147483648(%r8), %zmm31, %k2
+    {evex} vptestnmb 0(%r14), %zmm25, %k7
+    {evex} vptestnmb -8192(%rdx), %zmm9, %k1
+    {evex} vptestnmb -2147483648(%r9), %zmm31, %k2
     {evex} vptestnmb 0(%rsp), %zmm20, %k3
     {evex} vptestnmb 8128(%r12), %zmm12, %k4
     {evex} vptestnmb 2147483647(%rsp), %zmm17, %k5
-    {evex} vptestnmb 0(%rsp,%r12,4), %zmm16, %k6
-    {evex} vptestnmb -64(%rbp,%rax,8), %zmm3, %k7
-    {evex} vptestnmb 4660(%r12,%r15,1), %zmm25, %k1
+    {evex} vptestnmb 0(%rsi,%rbp,1), %zmm16, %k6
+    {evex} vptestnmb -64(%rax,%r12,2), %zmm3, %k7
+    {evex} vptestnmb 4660(%r9,%rax,4), %zmm25, %k1
     {evex} vptestnmb gnu_back(%rip), %zmm9, %k2
     {evex} vptestnmb %zmm31, %zmm20, %k3{%k4}
-    {evex} vptestnmb 0(%rdi), %zmm12, %k5{%k6}
-    {evex} vptestnmb 128(%rbp), %zmm17, %k7{%k1}
-    {evex} vptestnmb -129(%r13), %zmm16, %k2{%k3}
+    {evex} vptestnmb 0(%r15), %zmm12, %k5{%k6}
+    {evex} vptestnmb 128(%rbx), %zmm17, %k7{%k1}
+    {evex} vptestnmb -129(%r10), %zmm16, %k2{%k3}
     {evex} vptestnmb 0(%r12), %zmm3, %k4{%k5}
     {evex} vptestnmb -8192(%rsp), %zmm25, %k6{%k7}
     {evex} vptestnmb 1001(%r12), %zmm9, %k1{%k2}
-    {evex} vptestnmb 0(%r14,%rsi,2), %zmm31, %k3{%k4}
-    {evex} vptestnmb 8128(%rdi,%rcx,4), %zmm20, %k5{%k6}
-    {evex} vptestnmb -2147483648(%r15,%r9,8), %zmm12, %k7{%k1}
+    {evex} vptestnmb 0(%r15,%r15,8), %zmm31, %k3{%k4}
+    {evex} vptestnmb 8128(%rsp,%rsi,1), %zmm20, %k5{%k6}
+    {evex} vptestnmb -2147483648(%r13,%rcx,2), %zmm12, %k7{%k1}
     {evex} vptestnmb gnu_fwd(%rip), %zmm17, %k2{%k3}
     {evex} vptestnmd %xmm16, %xmm3, %k4
-    {evex} vptestnmd 0(%r14), %xmm25, %k5
-    {evex} vptestnmd -16(%rdx), %xmm9, %k6
-    {evex} vptestnmd 2147483647(%r9), %xmm31, %k7
+    {evex} vptestnmd 0(%rcx), %xmm25, %k5
+    {evex} vptestnmd -16(%rsi), %xmm9, %k6
+    {evex} vptestnmd 2147483647(%r11), %xmm31, %k7
+g64:
     {evex} vptestnmd 0(%rsp), %xmm20, %k1
     {evex} vptestnmd 32(%r12), %xmm12, %k2
     {evex} vptestnmd 4660(%rsp), %xmm17, %k3
-    {evex} vptestnmd 0(%rsi,%rbp,1), %xmm16, %k4
-    {evex} vptestnmd -2048(%rax,%r12,2), %xmm3, %k5
-    {evex} vptestnmd -129(%r9,%rax,4), %xmm25, %k6
+    {evex} vptestnmd 0(%rax,%r9,4), %xmm16, %k4
+    {evex} vptestnmd -2048(%rbp,%rbp,8), %xmm3, %k5
+    {evex} vptestnmd -129(%r12,%r12,1), %xmm25, %k6
     {evex} vptestnmd gnu_back(%rip), %xmm9, %k7
     {evex} vptestnmd %xmm31, %xmm20, %k1{%k2}
-    {evex} vptestnmd 0(%r15), %xmm12, %k3{%k4}
-    {evex} vptestnmd 2032(%rbx), %xmm17, %k5{%k6}
-    {evex} vptestnmd 1001(%r10), %xmm16, %k7{%k1}
+    {evex} vptestnmd 0(%r8), %xmm12, %k3{%k4}
+    {evex} vptestnmd 2032(%rdi), %xmm17, %k5{%k6}
+    {evex} vptestnmd 1001(%r14), %xmm16, %k7{%k1}
     {evex} vptestnmd 0(%r12), %xmm3, %k2{%k3}
     {evex} vptestnmd -16(%rsp), %xmm25, %k4{%k5}
     {evex} vptestnmd -2147483648(%r12), %xmm9, %k6{%k7}
-    {evex} vptestnmd 0(%r15,%r15,8), %xmm31, %k1{%k2}
-    {evex} vptestnmd 32(%rsp,%rsi,1), %xmm20, %k3{%k4}
-    {evex} vptestnmd 2147483647(%r13,%rcx,2), %xmm12, %k5{%k6}
+    {evex} vptestnmd 0(%r8,%rax,2), %xmm31, %k1{%k2}
+    {evex} vptestnmd 32(%rdi,%r15,4), %xmm20, %k3{%k4}
+    {evex} vptestnmd 2147483647(%r15,%rsi,8), %xmm12, %k5{%k6}
     {evex} vptestnmd gnu_fwd(%rip), %xmm17, %k7{%k1}
     {evex} vptestnmd %ymm16, %ymm3, %k2
-    {evex} vptestnmd 0(%rcx), %ymm25, %k3
-    {evex} vptestnmd -32(%rsi), %ymm9, %k4
-    {evex} vptestnmd 4660(%r11), %ymm31, %k5
+    {evex} vptestnmd 0(%rdx), %ymm25, %k3
+    {evex} vptestnmd -32(%r15), %ymm9, %k4
+    {evex} vptestnmd 4660(%rcx), %ymm31, %k5
     {evex} vptestnmd 0(%rsp), %ymm20, %k6
     {evex} vptestnmd 64(%r12), %ymm12, %k7
-g64:
     {evex} vptestnmd -129(%rsp), %ymm17, %k1
-    {evex} vptestnmd 0(%rax,%r9,4), %ymm16, %k2
-    {evex} vptestnmd -4096(%rbp,%rbp,8), %ymm3, %k3
-    {evex} vptestnmd 1001(%r12,%r12,1), %ymm25, %k4
+    {evex} vptestnmd 0(%rcx,%rcx,1), %ymm16, %k2
+    {evex} vptestnmd -4096(%rax,%r9,2), %ymm3, %k3
+    {evex} vptestnmd 1001(%r9,%rbp,4), %ymm25, %k4
     {evex} vptestnmd gnu_back(%rip), %ymm9, %k5
     {evex} vptestnmd %ymm31, %ymm20, %k6{%k7}
-    {evex} vptestnmd 0(%r8), %ymm12, %k1{%k2}
-    {evex} vptestnmd 4064(%rdi), %ymm17, %k3{%k4}
-    {evex} vptestnmd -2147483648(%r14), %ymm16, %k5{%k6}
+    {evex} vptestnmd 0(%r9), %ymm12, %k1{%k2}
+    {evex} vptestnmd 4064(%r8), %ymm17, %k3{%k4}
+    {evex} vptestnmd -2147483648(%rbp), %ymm16, %k5{%k6}
     {evex} vptestnmd 0(%r12), %ymm3, %k7{%k1}
     {evex} vptestnmd -32(%rsp), %ymm25, %k2{%k3}
     {evex} vptestnmd 2147483647(%r12), %ymm9, %k4{%k5}
-    {evex} vptestnmd 0(%r8,%rax,2), %ymm31, %k6{%k7}
-    {evex} vptestnmd 64(%rdi,%r15,4), %ymm20, %k1{%k2}
-    {evex} vptestnmd 4660(%r15,%rsi,8), %ymm12, %k3{%k4}
+    {evex} vptestnmd 0(%r12,%r12,8), %ymm31, %k6{%k7}
+    {evex} vptestnmd 64(%rsp,%rax,1), %ymm20, %k1{%k2}
+    {evex} vptestnmd 4660(%r13,%r15,2), %ymm12, %k3{%k4}
     {evex} vptestnmd gnu_fwd(%rip), %ymm17, %k5{%k6}
     {evex} vptestnmd %zmm16, %zmm3, %k7
-    {evex} vptestnmd 0(%rdx), %zmm25, %k1
-    {evex} vptestnmd -64(%r15), %zmm9, %k2
-    {evex} vptestnmd -129(%rcx), %zmm31, %k3
+    {evex} vptestnmd 0(%rbx), %zmm25, %k1
+    {evex} vptestnmd -64(%r13), %zmm9, %k2
+    {evex} vptestnmd -129(%rdx), %zmm31, %k3
     {evex} vptestnmd 0(%rsp), %zmm20, %k4
     {evex} vptestnmd 128(%r12), %zmm12, %k5
     {evex} vptestnmd 1001(%rsp), %zmm17, %k6
-    {evex} vptestnmd 0(%rcx,%rcx,1), %zmm16, %k7
-    {evex} vptestnmd -8192(%rax,%r9,2), %zmm3, %k1
-    {evex} vptestnmd -2147483648(%r9,%rbp,4), %zmm25, %k2
+    {evex} vptestnmd 0(%rdx,%rsi,4), %zmm16, %k7
+    {evex} vptestnmd -8192(%rbp,%rcx,8), %zmm3, %k1
+    {evex} vptestnmd -2147483648(%r12,%r9,1), %zmm25, %k2
     {evex} vptestnmd gnu_back(%rip), %zmm9, %k3
     {evex} vptestnmd %zmm31, %zmm20, %k4{%k5}
-    {evex} vptestnmd 0(%r9), %zmm12, %k6{%k7}
-    {evex} vptestnmd 8128(%r8), %zmm17, %k1{%k2}
-    {evex} vptestnmd 2147483647(%rbp), %zmm16, %k3{%k4}
+    {evex} vptestnmd 0(%r10), %zmm12, %k6{%k7}
+    {evex} vptestnmd 8128(%r9), %zmm17, %k1{%k2}
+    {evex} vptestnmd 2147483647(%rbx), %zmm16, %k3{%k4}
     {evex} vptestnmd 0(%r12), %zmm3, %k5{%k6}
     {evex} vptestnmd -64(%rsp), %zmm25, %k7{%k1}
     {evex} vptestnmd 4660(%r12), %zmm9, %k2{%k3}
-    {evex} vptestnmd 0(%r12,%r12,8), %zmm31, %k4{%k5}
-    {evex} vptestnmd 128(%rsp,%rax,1), %zmm20, %k6{%k7}
-    {evex} vptestnmd -129(%r13,%r15,2), %zmm12, %k1{%k2}
+    {evex} vptestnmd 0(%r9,%rbp,2), %zmm31, %k4{%k5}
+    {evex} vptestnmd 128(%rdi,%r12,4), %zmm20, %k6{%k7}
+    {evex} vptestnmd -129(%r15,%rax,8), %zmm12, %k1{%k2}
     {evex} vptestnmd gnu_fwd(%rip), %zmm17, %k3{%k4}
     {evex} vpcmpltb %xmm16, %xmm3, %k5
-    {evex} vpcmpltb 0(%rbx), %xmm25, %k6
-    {evex} vpcmpltb -2048(%r13), %xmm9, %k7
-    {evex} vpcmpltb 1001(%rdx), %xmm31, %k1
+    {evex} vpcmpltb 0(%rsi), %xmm25, %k6
+    {evex} vpcmpltb -2048(%r10), %xmm9, %k7
+    {evex} vpcmpltb 1001(%rsi), %xmm31, %k1
     {evex} vpcmpltb 0(%rsp), %xmm20, %k2
     {evex} vpcmpltb 2032(%r12), %xmm12, %k3
     {evex} vpcmpltb -2147483648(%rsp), %xmm17, %k4
-    {evex} vpcmpltb 0(%rdx,%rsi,4), %xmm16, %k5
-    {evex} vpcmpltb -16(%rbp,%rcx,8), %xmm3, %k6
-    {evex} vpcmpltb 2147483647(%r12,%r9,1), %xmm25, %k7
+    {evex} vpcmpltb 0(%rsp,%r15,1), %xmm16, %k5
+    {evex} vpcmpltb -16(%rax,%rsi,2), %xmm3, %k6
+    {evex} vpcmpltb 2147483647(%r9,%rcx,4), %xmm25, %k7
     {evex} vpcmpltb gnu_back(%rip), %xmm9, %k1
     {evex} vpcmpltb %xmm31, %xmm20, %k2{%k3}
-    {evex} vpcmpltb 0(%r10), %xmm12, %k4{%k5}
-    {evex} vpcmpltb 32(%r9), %xmm17, %k6{%k7}
-    {evex} vpcmpltb 4660(%rbx), %xmm16, %k1{%k2}
+    {evex} vpcmpltb 0(%r11), %xmm12, %k4{%k5}
+    {evex} vpcmpltb 32(%r11), %xmm17, %k6{%k7}
+    {evex} vpcmpltb 4660(%rdi), %xmm16, %k1{%k2}
     {evex} vpcmpltb 0(%r12), %xmm3, %k3{%k4}
     {evex} vpcmpltb -2048(%rsp), %xmm25, %k5{%k6}
     {evex} vpcmpltb -129(%r12), %xmm9, %k7{%k1}
-    {evex} vpcmpltb 0(%r9,%rbp,2), %xmm31, %k2{%k3}
-    {evex} vpcmpltb 2032(%rdi,%r12,4), %xmm20, %k4{%k5}
-    {evex} vpcmpltb 1001(%r15,%rax,8), %xmm12, %k6{%k7}
+    {evex} vpcmpltb 0(%r14,%r9,8), %xmm31, %k2{%k3}
+    {evex} vpcmpltb 2032(%rsp,%rbp,1), %xmm20, %k4{%k5}
+    {evex} vpcmpltb 1001(%r13,%r12,2), %xmm12, %k6{%k7}
     {evex} vpcmpltb gnu_fwd(%rip), %xmm17, %k1{%k2}
     {evex} vpcmpltb %ymm16, %ymm3, %k3
-    {evex} vpcmpltb 0(%rsi), %ymm25, %k4
-    {evex} vpcmpltb -4096(%r10), %ymm9, %k5
-    {evex} vpcmpltb -2147483648(%rsi), %ymm31, %k6
+    {evex} vpcmpltb 0(%rdi), %ymm25, %k4
+    {evex} vpcmpltb -4096(%r14), %ymm9, %k5
+    {evex} vpcmpltb -2147483648(%r15), %ymm31, %k6
     {evex} vpcmpltb 0(%rsp), %ymm20, %k7
     {evex} vpcmpltb 4064(%r12), %ymm12, %k1
     {evex} vpcmpltb 2147483647(%rsp), %ymm17, %k2
-    {evex} vpcmpltb 0(%rsp,%r15,1), %ymm16, %k3
-    {evex} vpcmpltb -32(%rax,%rsi,2), %ymm3, %k4
-    {evex} vpcmpltb 4660(%r9,%rcx,4), %ymm25, %k5
+    {evex} vpcmpltb 0(%rsi,%rax,4), %ymm16, %k3
+    {evex} vpcmpltb -32(%rbp,%r15,8), %ymm3, %k4
+    {evex} vpcmpltb 4660(%r12,%rsi,1), %ymm25, %k5
     {evex} vpcmpltb gnu_back(%rip), %ymm9, %k6
     {evex} vpcmpltb %ymm31, %ymm20, %k7{%k1}
-    {evex} vpcmpltb 0(%r11), %ymm12, %k2{%k3}
-    {evex} vpcmpltb 64(%r11), %ymm17, %k4{%k5}
-    {evex} vpcmpltb -129(%rdi), %ymm16, %k6{%k7}
+    {evex} vpcmpltb 0(%r14), %ymm12, %k2{%k3}
+    {evex} vpcmpltb 64(%rcx), %ymm17, %k4{%k5}
+    {evex} vpcmpltb -129(%r8), %ymm16, %k6{%k7}
     {evex} vpcmpltb 0(%r12), %ymm3, %k1{%k2}
     {evex} vpcmpltb -4096(%rsp), %ymm25, %k3{%k4}
     {evex} vpcmpltb 1001(%r12), %ymm9, %k5{%k6}
-    {evex} vpcmpltb 0(%r14,%r9,8), %ymm31, %k7{%k1}
-    {evex} vpcmpltb 4064(%rsp,%rbp,1), %ymm20, %k2{%k3}
-    {evex} vpcmpltb -2147483648(%r13,%r12,2), %ymm12, %k4{%k5}
+    {evex} vpcmpltb 0(%r15,%rcx,2), %ymm31, %k7{%k1}
+    {evex} vpcmpltb 4064(%rdi,%r9,4), %ymm20, %k2{%k3}
+    {evex} vpcmpltb -2147483648(%r15,%rbp,8), %ymm12, %k4{%k5}
     {evex} vpcmpltb gnu_fwd(%rip), %ymm17, %k6{%k7}
     {evex} vpcmpltb %zmm16, %zmm3, %k1
-    {evex} vpcmpltb 0(%rdi), %zmm25, %k2
-    {evex} vpcmpltb -8192(%r14), %zmm9, %k3
-    {evex} vpcmpltb 2147483647(%r15), %zmm31, %k4
+    {evex} vpcmpltb 0(%r15), %zmm25, %k2
+    {evex} vpcmpltb -8192(%rbp), %zmm9, %k3
+    {evex} vpcmpltb 2147483647(%r13), %zmm31, %k4
     {evex} vpcmpltb 0(%rsp), %zmm20, %k5
     {evex} vpcmpltb 8128(%r12), %zmm12, %k6
     {evex} vpcmpltb 4660(%rsp), %zmm17, %k7
-    {evex} vpcmpltb 0(%rsi,%rax,4), %zmm16, %k1
-    {evex} vpcmpltb -64(%rbp,%r15,8), %zmm3, %k2
-    {evex} vpcmpltb -129(%r12,%rsi,1), %zmm25, %k3
+    {evex} vpcmpltb 0(%rax,%r12,1), %zmm16, %k1
+    {evex} vpcmpltb -64(%rax,%rax,2), %zmm3, %k2
+    {evex} vpcmpltb -129(%r9,%r15,4), %zmm25, %k3
     {evex} vpcmpltb gnu_back(%rip), %zmm9, %k4
     {evex} vpcmpltb %zmm31, %zmm20, %k5{%k6}
-    {evex} vpcmpltb 0(%r14), %zmm12, %k7{%k1}
-    {evex} vpcmpltb 128(%rcx), %zmm17, %k2{%k3}
-    {evex} vpcmpltb 1001(%r8), %zmm16, %k4{%k5}
+    {evex} vpcmpltb 0(%rcx), %zmm12, %k7{%k1}
+    {evex} vpcmpltb 128(%rdx), %zmm17, %k2{%k3}
+    {evex} vpcmpltb 1001(%r9), %zmm16, %k4{%k5}
     {evex} vpcmpltb 0(%r12), %zmm3, %k6{%k7}
     {evex} vpcmpltb -8192(%rsp), %zmm25, %k1{%k2}
     {evex} vpcmpltb -2147483648(%r12), %zmm9, %k3{%k4}
-    {evex} vpcmpltb 0(%r15,%rcx,2), %zmm31, %k5{%k6}
-    {evex} vpcmpltb 8128(%rdi,%r9,4), %zmm20, %k7{%k1}
-    {evex} vpcmpltb 2147483647(%r15,%rbp,8), %zmm12, %k2{%k3}
+    {evex} vpcmpltb 0(%r8,%rsi,8), %zmm31, %k5{%k6}
+    {evex} vpcmpltb 8128(%rsp,%rcx,1), %zmm20, %k7{%k1}
+    {evex} vpcmpltb 2147483647(%r13,%r9,2), %zmm12, %k2{%k3}
     {evex} vpcmpltb gnu_fwd(%rip), %zmm17, %k4{%k5}
     {evex} vpcmpleb %xmm16, %xmm3, %k6
-    {evex} vpcmpleb 0(%r15), %xmm25, %k7
-    {evex} vpcmpleb -16(%rbp), %xmm9, %k1
-    {evex} vpcmpleb 4660(%r13), %xmm31, %k2
+    {evex} vpcmpleb 0(%r8), %xmm25, %k7
+    {evex} vpcmpleb -16(%rbx), %xmm9, %k1
+    {evex} vpcmpleb 4660(%r10), %xmm31, %k2
     {evex} vpcmpleb 0(%rsp), %xmm20, %k3
     {evex} vpcmpleb 32(%r12), %xmm12, %k4
     {evex} vpcmpleb -129(%rsp), %xmm17, %k5
-    {evex} vpcmpleb 0(%rax,%r12,1), %xmm16, %k6
-    {evex} vpcmpleb -2048(%rax,%rax,2), %xmm3, %k7
-    {evex} vpcmpleb 1001(%r9,%r15,4), %xmm25, %k1
+    {evex} vpcmpleb 0(%rcx,%rbp,4), %xmm16, %k6
+    {evex} vpcmpleb -2048(%rbp,%r12,8), %xmm3, %k7
+    {evex} vpcmpleb 1001(%r12,%rax,1), %xmm25, %k1
     {evex} vpcmpleb gnu_back(%rip), %xmm9, %k2
     {evex} vpcmpleb %xmm31, %xmm20, %k3{%k4}
-    {evex} vpcmpleb 0(%rcx), %xmm12, %k5{%k6}
-    {evex} vpcmpleb 2032(%rdx), %xmm17, %k7{%k1}
-    {evex} vpcmpleb -2147483648(%r9), %xmm16, %k2{%k3}
+    {evex} vpcmpleb 0(%rdx), %xmm12, %k5{%k6}
+    {evex} vpcmpleb 2032(%rsi), %xmm17, %k7{%k1}
+    {evex} vpcmpleb -2147483648(%r11), %xmm16, %k2{%k3}
     {evex} vpcmpleb 0(%r12), %xmm3, %k4{%k5}
     {evex} vpcmpleb -16(%rsp), %xmm25, %k6{%k7}
     {evex} vpcmpleb 2147483647(%r12), %xmm9, %k1{%k2}
-    {evex} vpcmpleb 0(%r8,%rsi,8), %xmm31, %k3{%k4}
-    {evex} vpcmpleb 32(%rsp,%rcx,1), %xmm20, %k5{%k6}
-    {evex} vpcmpleb 4660(%r13,%r9,2), %xmm12, %k7{%k1}
+    {evex} vpcmpleb 0(%r12,%r15,2), %xmm31, %k3{%k4}
+    {evex} vpcmpleb 32(%rdi,%rsi,4), %xmm20, %k5{%k6}
+    {evex} vpcmpleb 4660(%r15,%rcx,8), %xmm12, %k7{%k1}
     {evex} vpcmpleb gnu_fwd(%rip), %xmm17, %k2{%k3}
     {evex} vpcmpleb %ymm16, %ymm3, %k4
-    {evex} vpcmpleb 0(%r8), %ymm25, %k5
-    {evex} vpcmpleb -32(%rbx), %ymm9, %k6
-    {evex} vpcmpleb -129(%r10), %ymm31, %k7
+    {evex} vpcmpleb 0(%r9), %ymm25, %k5
+    {evex} vpcmpleb -32(%rdi), %ymm9, %k6
+    {evex} vpcmpleb -129(%r14), %ymm31, %k7
     {evex} vpcmpleb 0(%rsp), %ymm20, %k1
     {evex} vpcmpleb 64(%r12), %ymm12, %k2
     {evex} vpcmpleb 1001(%rsp), %ymm17, %k3
-    {evex} vpcmpleb 0(%rcx,%rbp,4), %ymm16, %k4
-    {evex} vpcmpleb -4096(%rbp,%r12,8), %ymm3, %k5
-    {evex} vpcmpleb -2147483648(%r12,%rax,1), %ymm25, %k6
+    {evex} vpcmpleb 0(%rdx,%r9,1), %ymm16, %k4
+    {evex} vpcmpleb -4096(%rax,%rbp,2), %ymm3, %k5
+    {evex} vpcmpleb -2147483648(%r9,%r12,4), %ymm25, %k6
     {evex} vpcmpleb gnu_back(%rip), %ymm9, %k7
     {evex} vpcmpleb %ymm31, %ymm20, %k1{%k2}
-    {evex} vpcmpleb 0(%rdx), %ymm12, %k3{%k4}
-    {evex} vpcmpleb 4064(%rsi), %ymm17, %k5{%k6}
-    {evex} vpcmpleb 2147483647(%r11), %ymm16, %k7{%k1}
+    {evex} vpcmpleb 0(%rbx), %ymm12, %k3{%k4}
+    {evex} vpcmpleb 4064(%r15), %ymm17, %k5{%k6}
+    {evex} vpcmpleb 2147483647(%rcx), %ymm16, %k7{%k1}
     {evex} vpcmpleb 0(%r12), %ymm3, %k2{%k3}
     {evex} vpcmpleb -32(%rsp), %ymm25, %k4{%k5}
     {evex} vpcmpleb 4660(%r12), %ymm9, %k6{%k7}
-    {evex} vpcmpleb 0(%r12,%r15,2), %ymm31, %k1{%k2}
-    {evex} vpcmpleb 64(%rdi,%rsi,4), %ymm20, %k3{%k4}
-    {evex} vpcmpleb -129(%r15,%rcx,8), %ymm12, %k5{%k6}
+    {evex} vpcmpleb 0(%r9,%rax,8), %ymm31, %k1{%k2}
+    {evex} vpcmpleb 64(%rsp,%r15,1), %ymm20, %k3{%k4}
+    {evex} vpcmpleb -129(%r13,%rsi,2), %ymm12, %k5{%k6}
     {evex} vpcmpleb gnu_fwd(%rip), %ymm17, %k7{%k1}
     {evex} vpcmpleb %zmm16, %zmm3, %k2
-    {evex} vpcmpleb 0(%r9), %zmm25, %k3
-    {evex} vpcmpleb -64(%rdi), %zmm9, %k4
-    {evex} vpcmpleb 1001(%r14), %zmm31, %k5
+    {evex} vpcmpleb 0(%r10), %zmm25, %k3
+    {evex} vpcmpleb -64(%r8), %zmm9, %k4
+    {evex} vpcmpleb 1001(%rbp), %zmm31, %k5
     {evex} vpcmpleb 0(%rsp), %zmm20, %k6
     {evex} vpcmpleb 128(%r12), %zmm12, %k7
     {evex} vpcmpleb -2147483648(%rsp), %zmm17, %k1
-    {evex} vpcmpleb 0(%rdx,%r9,1), %zmm16, %k2
-    {evex} vpcmpleb -8192(%rax,%rbp,2), %zmm3, %k3
-    {evex} vpcmpleb 2147483647(%r9,%r12,4), %zmm25, %k4
+    {evex} vpcmpleb 0(%rsp,%rcx,4), %zmm16, %k2
+    {evex} vpcmpleb -8192(%rbp,%r9,8), %zmm3, %k3
+    {evex} vpcmpleb 2147483647(%r12,%rbp,1), %zmm25, %k4
     {evex} vpcmpleb gnu_back(%rip), %zmm9, %k5
     {evex} vpcmpleb %zmm31, %zmm20, %k6{%k7}
-    {evex} vpcmpleb 0(%rbx), %zmm12, %k1{%k2}
-    {evex} vpcmpleb 8128(%r15), %zmm17, %k3{%k4}
-    {evex} vpcmpleb 4660(%rcx), %zmm16, %k5{%k6}
+    {evex} vpcmpleb 0(%rsi), %zmm12, %k1{%k2}
+    {evex} vpcmpleb 8128(%r13), %zmm17, %k3{%k4}
+    {evex} vpcmpleb 4660(%rdx), %zmm16, %k5{%k6}
     {evex} vpcmpleb 0(%r12), %zmm3, %k7{%k1}
     {evex} vpcmpleb -64(%rsp), %zmm25, %k2{%k3}
     {evex} vpcmpleb -129(%r12), %zmm9, %k4{%k5}
-    {evex} vpcmpleb 0(%r9,%rax,8), %zmm31, %k6{%k7}
-    {evex} vpcmpleb 128(%rsp,%r15,1), %zmm20, %k1{%k2}
-    {evex} vpcmpleb 1001(%r13,%rsi,2), %zmm12, %k3{%k4}
+    {evex} vpcmpleb 0(%r14,%r12,2), %zmm31, %k6{%k7}
+    {evex} vpcmpleb 128(%rdi,%rax,4), %zmm20, %k1{%k2}
+    {evex} vpcmpleb 1001(%r15,%r15,8), %zmm12, %k3{%k4}
     {evex} vpcmpleb gnu_fwd(%rip), %zmm17, %k5{%k6}
     {evex} vpcmpneqb %xmm16, %xmm3, %k7
-    {evex} vpcmpneqb 0(%r10), %xmm25, %k1
-    {evex} vpcmpneqb -2048(%r8), %xmm9, %k2
-    {evex} vpcmpneqb -2147483648(%rbp), %xmm31, %k3
+    {evex} vpcmpneqb 0(%r11), %xmm25, %k1
+    {evex} vpcmpneqb -2048(%r9), %xmm9, %k2
+    {evex} vpcmpneqb -2147483648(%rbx), %xmm31, %k3
     {evex} vpcmpneqb 0(%rsp), %xmm20, %k4
     {evex} vpcmpneqb 2032(%r12), %xmm12, %k5
+g65:
     {evex} vpcmpneqb 2147483647(%rsp), %xmm17, %k6
-    {evex} vpcmpneqb 0(%rsp,%rcx,4), %xmm16, %k7
-    {evex} vpcmpneqb -16(%rbp,%r9,8), %xmm3, %k1
-    {evex} vpcmpneqb 4660(%r12,%rbp,1), %xmm25, %k2
+    {evex} vpcmpneqb 0(%rsi,%rsi,1), %xmm16, %k7
+    {evex} vpcmpneqb -16(%rax,%rcx,2), %xmm3, %k1
+    {evex} vpcmpneqb 4660(%r9,%r9,4), %xmm25, %k2
     {evex} vpcmpneqb gnu_back(%rip), %xmm9, %k3
     {evex} vpcmpneqb %xmm31, %xmm20, %k4{%k5}
-    {evex} vpcmpneqb 0(%rsi), %xmm12, %k6{%k7}
-    {evex} vpcmpneqb 32(%r13), %xmm17, %k1{%k2}
-    {evex} vpcmpneqb -129(%rdx), %xmm16, %k3{%k4}
+    {evex} vpcmpneqb 0(%rdi), %xmm12, %k6{%k7}
+    {evex} vpcmpneqb 32(%r10), %xmm17, %k1{%k2}
+    {evex} vpcmpneqb -129(%rsi), %xmm16, %k3{%k4}
     {evex} vpcmpneqb 0(%r12), %xmm3, %k5{%k6}
     {evex} vpcmpneqb -2048(%rsp), %xmm25, %k7{%k1}
     {evex} vpcmpneqb 1001(%r12), %xmm9, %k2{%k3}
-    {evex} vpcmpneqb 0(%r14,%r12,2), %xmm31, %k4{%k5}
-    {evex} vpcmpneqb 2032(%rdi,%rax,4), %xmm20, %k6{%k7}
-    {evex} vpcmpneqb -2147483648(%r15,%r15,8), %xmm12, %k1{%k2}
+    {evex} vpcmpneqb 0(%r15,%rbp,8), %xmm31, %k4{%k5}
+    {evex} vpcmpneqb 2032(%rsp,%r12,1), %xmm20, %k6{%k7}
+    {evex} vpcmpneqb -2147483648(%r13,%rax,2), %xmm12, %k1{%k2}
     {evex} vpcmpneqb gnu_fwd(%rip), %xmm17, %k3{%k4}
     {evex} vpcmpneqb %ymm16, %ymm3, %k5
-    {evex} vpcmpneqb 0(%r11), %ymm25, %k6
-    {evex} vpcmpneqb -4096(%r9), %ymm9, %k7
-    {evex} vpcmpneqb 2147483647(%rbx), %ymm31, %k1
+    {evex} vpcmpneqb 0(%r14), %ymm25, %k6
+    {evex} vpcmpneqb -4096(%r11), %ymm9, %k7
+    {evex} vpcmpneqb 2147483647(%rdi), %ymm31, %k1
     {evex} vpcmpneqb 0(%rsp), %ymm20, %k2
     {evex} vpcmpneqb 4064(%r12), %ymm12, %k3
     {evex} vpcmpneqb 4660(%rsp), %ymm17, %k4
-    {evex} vpcmpneqb 0(%rsi,%rsi,1), %ymm16, %k5
-g65:
-    {evex} vpcmpneqb -32(%rax,%rcx,2), %ymm3, %k6
-    {evex} vpcmpneqb -129(%r9,%r9,4), %ymm25, %k7
+    {evex} vpcmpneqb 0(%rax,%r15,4), %ymm16, %k5
+    {evex} vpcmpneqb -32(%rbp,%rsi,8), %ymm3, %k6
+    {evex} vpcmpneqb -129(%r12,%rcx,1), %ymm25, %k7
     {evex} vpcmpneqb gnu_back(%rip), %ymm9, %k1
     {evex} vpcmpneqb %ymm31, %ymm20, %k2{%k3}
-    {evex} vpcmpneqb 0(%rdi), %ymm12, %k4{%k5}
-    {evex} vpcmpneqb 64(%r10), %ymm17, %k6{%k7}
-    {evex} vpcmpneqb 1001(%rsi), %ymm16, %k1{%k2}
+    {evex} vpcmpneqb 0(%r15), %ymm12, %k4{%k5}
+    {evex} vpcmpneqb 64(%r14), %ymm17, %k6{%k7}
+    {evex} vpcmpneqb 1001(%r15), %ymm16, %k1{%k2}
     {evex} vpcmpneqb 0(%r12), %ymm3, %k3{%k4}
     {evex} vpcmpneqb -4096(%rsp), %ymm25, %k5{%k6}
     {evex} vpcmpneqb -2147483648(%r12), %ymm9, %k7{%k1}
-    {evex} vpcmpneqb 0(%r15,%rbp,8), %ymm31, %k2{%k3}
-    {evex} vpcmpneqb 4064(%rsp,%r12,1), %ymm20, %k4{%k5}
-    {evex} vpcmpneqb 2147483647(%r13,%rax,2), %ymm12, %k6{%k7}
+    {evex} vpcmpneqb 0(%r8,%r9,2), %ymm31, %k2{%k3}
+    {evex} vpcmpneqb 4064(%rdi,%rbp,4), %ymm20, %k4{%k5}
+    {evex} vpcmpneqb 2147483647(%r15,%r12,8), %ymm12, %k6{%k7}
     {evex} vpcmpneqb gnu_fwd(%rip), %ymm17, %k1{%k2}
     {evex} vpcmpneqb %zmm16, %zmm3, %k3
-    {evex} vpcmpneqb 0(%r14), %zmm25, %k4
-    {evex} vpcmpneqb -8192(%r11), %zmm9, %k5
-    {evex} vpcmpneqb 4660(%rdi), %zmm31, %k6
+    {evex} vpcmpneqb 0(%rcx), %zmm25, %k4
+    {evex} vpcmpneqb -8192(%rcx), %zmm9, %k5
+    {evex} vpcmpneqb 4660(%r8), %zmm31, %k6
     {evex} vpcmpneqb 0(%rsp), %zmm20, %k7
     {evex} vpcmpneqb 8128(%r12), %zmm12, %k1
     {evex} vpcmpneqb -129(%rsp), %zmm17, %k2
-    {evex} vpcmpneqb 0(%rax,%r15,4), %zmm16, %k3
-    {evex} vpcmpneqb -64(%rbp,%rsi,8), %zmm3, %k4
-    {evex} vpcmpneqb 1001(%r12,%rcx,1), %zmm25, %k5
+    {evex} vpcmpneqb 0(%rcx,%rax,1), %zmm16, %k3
+    {evex} vpcmpneqb -64(%rax,%r15,2), %zmm3, %k4
+    {evex} vpcmpneqb 1001(%r9,%rsi,4), %zmm25, %k5
     {evex} vpcmpneqb gnu_back(%rip), %zmm9, %k6
     {evex} vpcmpneqb %zmm31, %zmm20, %k7{%k1}
-    {evex} vpcmpneqb 0(%r15), %zmm12, %k2{%k3}
-    {evex} vpcmpneqb 128(%r14), %zmm17, %k4{%k5}
-    {evex} vpcmpneqb -2147483648(%r15), %zmm16, %k6{%k7}
+    {evex} vpcmpneqb 0(%r8), %zmm12, %k2{%k3}
+    {evex} vpcmpneqb 128(%rbp), %zmm17, %k4{%k5}
+    {evex} vpcmpneqb -2147483648(%r13), %zmm16, %k6{%k7}
     {evex} vpcmpneqb 0(%r12), %zmm3, %k1{%k2}
     {evex} vpcmpneqb -8192(%rsp), %zmm25, %k3{%k4}
     {evex} vpcmpneqb 2147483647(%r12), %zmm9, %k5{%k6}
-    {evex} vpcmpneqb 0(%r8,%r9,2), %zmm31, %k7{%k1}
-    {evex} vpcmpneqb 8128(%rdi,%rbp,4), %zmm20, %k2{%k3}
-    {evex} vpcmpneqb 4660(%r15,%r12,8), %zmm12, %k4{%k5}
+    {evex} vpcmpneqb 0(%r12,%rcx,8), %zmm31, %k7{%k1}
+    {evex} vpcmpneqb 8128(%rsp,%r9,1), %zmm20, %k2{%k3}
+    {evex} vpcmpneqb 4660(%r13,%rbp,2), %zmm12, %k4{%k5}
     {evex} vpcmpneqb gnu_fwd(%rip), %zmm17, %k6{%k7}
     {evex} vpcmpnltb %xmm16, %xmm3, %k1
-    {evex} vpcmpnltb 0(%rcx), %xmm25, %k2
-    {evex} vpcmpnltb -16(%rcx), %xmm9, %k3
-    {evex} vpcmpnltb -129(%r8), %xmm31, %k4
+    {evex} vpcmpnltb 0(%rdx), %xmm25, %k2
+    {evex} vpcmpnltb -16(%rdx), %xmm9, %k3
+    {evex} vpcmpnltb -129(%r9), %xmm31, %k4
     {evex} vpcmpnltb 0(%rsp), %xmm20, %k5
     {evex} vpcmpnltb 32(%r12), %xmm12, %k6
     {evex} vpcmpnltb 1001(%rsp), %xmm17, %k7
-    {evex} vpcmpnltb 0(%rcx,%rax,1), %xmm16, %k1
-    {evex} vpcmpnltb -2048(%rax,%r15,2), %xmm3, %k2
-    {evex} vpcmpnltb -2147483648(%r9,%rsi,4), %xmm25, %k3
+    {evex} vpcmpnltb 0(%rdx,%r12,4), %xmm16, %k1
+    {evex} vpcmpnltb -2048(%rbp,%rax,8), %xmm3, %k2
+    {evex} vpcmpnltb -2147483648(%r12,%r15,1), %xmm25, %k3
     {evex} vpcmpnltb gnu_back(%rip), %xmm9, %k4
     {evex} vpcmpnltb %xmm31, %xmm20, %k5{%k6}
-    {evex} vpcmpnltb 0(%r8), %xmm12, %k7{%k1}
-    {evex} vpcmpnltb 2032(%rbp), %xmm17, %k2{%k3}
-    {evex} vpcmpnltb 2147483647(%r13), %xmm16, %k4{%k5}
+    {evex} vpcmpnltb 0(%r9), %xmm12, %k7{%k1}
+    {evex} vpcmpnltb 2032(%rbx), %xmm17, %k2{%k3}
+    {evex} vpcmpnltb 2147483647(%r10), %xmm16, %k4{%k5}
     {evex} vpcmpnltb 0(%r12), %xmm3, %k6{%k7}
     {evex} vpcmpnltb -16(%rsp), %xmm25, %k1{%k2}
     {evex} vpcmpnltb 4660(%r12), %xmm9, %k3{%k4}
-    {evex} vpcmpnltb 0(%r12,%rcx,8), %xmm31, %k5{%k6}
-    {evex} vpcmpnltb 32(%rsp,%r9,1), %xmm20, %k7{%k1}
-    {evex} vpcmpnltb -129(%r13,%rbp,2), %xmm12, %k2{%k3}
+    {evex} vpcmpnltb 0(%r9,%rsi,2), %xmm31, %k5{%k6}
+    {evex} vpcmpnltb 32(%rdi,%rcx,4), %xmm20, %k7{%k1}
+    {evex} vpcmpnltb -129(%r15,%r9,8), %xmm12, %k2{%k3}
     {evex} vpcmpnltb gnu_fwd(%rip), %xmm17, %k4{%k5}
     {evex} vpcmpnltb %ymm16, %ymm3, %k6
-    {evex} vpcmpnltb 0(%rdx), %ymm25, %k7
-    {evex} vpcmpnltb -32(%rdx), %ymm9, %k1
-    {evex} vpcmpnltb 1001(%r9), %ymm31, %k2
+    {evex} vpcmpnltb 0(%rbx), %ymm25, %k7
+    {evex} vpcmpnltb -32(%rsi), %ymm9, %k1
+    {evex} vpcmpnltb 1001(%r11), %ymm31, %k2
     {evex} vpcmpnltb 0(%rsp), %ymm20, %k3
     {evex} vpcmpnltb 64(%r12), %ymm12, %k4
     {evex} vpcmpnltb -2147483648(%rsp), %ymm17, %k5
-    {evex} vpcmpnltb 0(%rdx,%r12,4), %ymm16, %k6
-    {evex} vpcmpnltb -4096(%rbp,%rax,8), %ymm3, %k7
-    {evex} vpcmpnltb 2147483647(%r12,%r15,1), %ymm25, %k1
+    {evex} vpcmpnltb 0(%rsp,%rbp,1), %ymm16, %k6
+    {evex} vpcmpnltb -4096(%rax,%r12,2), %ymm3, %k7
+    {evex} vpcmpnltb 2147483647(%r9,%rax,4), %ymm25, %k1
     {evex} vpcmpnltb gnu_back(%rip), %ymm9, %k2
     {evex} vpcmpnltb %ymm31, %ymm20, %k3{%k4}
-    {evex} vpcmpnltb 0(%r9), %ymm12, %k5{%k6}
-    {evex} vpcmpnltb 4064(%rbx), %ymm17, %k7{%k1}
-    {evex} vpcmpnltb 4660(%r10), %ymm16, %k2{%k3}
+    {evex} vpcmpnltb 0(%r10), %ymm12, %k5{%k6}
+    {evex} vpcmpnltb 4064(%rdi), %ymm17, %k7{%k1}
+    {evex} vpcmpnltb 4660(%r14), %ymm16, %k2{%k3}
     {evex} vpcmpnltb 0(%r12), %ymm3, %k4{%k5}
     {evex} vpcmpnltb -32(%rsp), %ymm25, %k6{%k7}
     {evex} vpcmpnltb -129(%r12), %ymm9, %k1{%k2}
-    {evex} vpcmpnltb 0(%r9,%rsi,2), %ymm31, %k3{%k4}
-    {evex} vpcmpnltb 64(%rdi,%rcx,4), %ymm20, %k5{%k6}
-    {evex} vpcmpnltb 1001(%r15,%r9,8), %ymm12, %k7{%k1}
+    {evex} vpcmpnltb 0(%r14,%r15,8), %ymm31, %k3{%k4}
+    {evex} vpcmpnltb 64(%rsp,%rsi,1), %ymm20, %k5{%k6}
+    {evex} vpcmpnltb 1001(%r13,%rcx,2), %ymm12, %k7{%k1}
     {evex} vpcmpnltb gnu_fwd(%rip), %ymm17, %k2{%k3}
     {evex} vpcmpnltb %zmm16, %zmm3, %k4
-    {evex} vpcmpnltb 0(%rbx), %zmm25, %k5
-    {evex} vpcmpnltb -64(%rsi), %zmm9, %k6
-    {evex} vpcmpnltb -2147483648(%r11), %zmm31, %k7
+    {evex} vpcmpnltb 0(%rsi), %zmm25, %k5
+    {evex} vpcmpnltb -64(%r15), %zmm9, %k6
+    {evex} vpcmpnltb -2147483648(%rcx), %zmm31, %k7
     {evex} vpcmpnltb 0(%rsp), %zmm20, %k1
     {evex} vpcmpnltb 128(%r12), %zmm12, %k2
     {evex} vpcmpnltb 2147483647(%rsp), %zmm17, %k3
-    {evex} vpcmpnltb 0(%rsp,%rbp,1), %zmm16, %k4
-    {evex} vpcmpnltb -8192(%rax,%r12,2), %zmm3, %k5
-    {evex} vpcmpnltb 4660(%r9,%rax,4), %zmm25, %k6
+    {evex} vpcmpnltb 0(%rsi,%r9,4), %zmm16, %k4
+    {evex} vpcmpnltb -8192(%rbp,%rbp,8), %zmm3, %k5
+    {evex} vpcmpnltb 4660(%r12,%r12,1), %zmm25, %k6
     {evex} vpcmpnltb gnu_back(%rip), %zmm9, %k7
     {evex} vpcmpnltb %zmm31, %zmm20, %k1{%k2}
-    {evex} vpcmpnltb 0(%r10), %zmm12, %k3{%k4}
-    {evex} vpcmpnltb 8128(%rdi), %zmm17, %k5{%k6}
-    {evex} vpcmpnltb -129(%r14), %zmm16, %k7{%k1}
+    {evex} vpcmpnltb 0(%r11), %zmm12, %k3{%k4}
+    {evex} vpcmpnltb 8128(%r8), %zmm17, %k5{%k6}
+    {evex} vpcmpnltb -129(%rbp), %zmm16, %k7{%k1}
     {evex} vpcmpnltb 0(%r12), %zmm3, %k2{%k3}
     {evex} vpcmpnltb -64(%rsp), %zmm25, %k4{%k5}
     {evex} vpcmpnltb 1001(%r12), %zmm9, %k6{%k7}
-    {evex} vpcmpnltb 0(%r14,%r15,8), %zmm31, %k1{%k2}
-    {evex} vpcmpnltb 128(%rsp,%rsi,1), %zmm20, %k3{%k4}
-    {evex} vpcmpnltb -2147483648(%r13,%rcx,2), %zmm12, %k5{%k6}
+    {evex} vpcmpnltb 0(%r15,%rax,2), %zmm31, %k1{%k2}
+    {evex} vpcmpnltb 128(%rdi,%r15,4), %zmm20, %k3{%k4}
+    {evex} vpcmpnltb -2147483648(%r15,%rsi,8), %zmm12, %k5{%k6}
     {evex} vpcmpnltb gnu_fwd(%rip), %zmm17, %k7{%k1}
     {evex} vpcmpnleb %xmm16, %xmm3, %k2
-    {evex} vpcmpnleb 0(%rsi), %xmm25, %k3
-    {evex} vpcmpnleb -2048(%r15), %xmm9, %k4
-    {evex} vpcmpnleb 2147483647(%rcx), %xmm31, %k5
+    {evex} vpcmpnleb 0(%rdi), %xmm25, %k3
+    {evex} vpcmpnleb -2048(%r13), %xmm9, %k4
+    {evex} vpcmpnleb 2147483647(%rdx), %xmm31, %k5
     {evex} vpcmpnleb 0(%rsp), %xmm20, %k6
     {evex} vpcmpnleb 2032(%r12), %xmm12, %k7
     {evex} vpcmpnleb 4660(%rsp), %xmm17, %k1
-    {evex} vpcmpnleb 0(%rsi,%r9,4), %xmm16, %k2
-    {evex} vpcmpnleb -16(%rbp,%rbp,8), %xmm3, %k3
-    {evex} vpcmpnleb -129(%r12,%r12,1), %xmm25, %k4
+    {evex} vpcmpnleb 0(%rax,%rcx,1), %xmm16, %k2
+    {evex} vpcmpnleb -16(%rax,%r9,2), %xmm3, %k3
+    {evex} vpcmpnleb -129(%r9,%rbp,4), %xmm25, %k4
     {evex} vpcmpnleb gnu_back(%rip), %xmm9, %k5
     {evex} vpcmpnleb %xmm31, %xmm20, %k6{%k7}
-    {evex} vpcmpnleb 0(%r11), %xmm12, %k1{%k2}
-    {evex} vpcmpnleb 32(%r8), %xmm17, %k3{%k4}
-    {evex} vpcmpnleb 1001(%rbp), %xmm16, %k5{%k6}
+    {evex} vpcmpnleb 0(%r14), %xmm12, %k1{%k2}
+    {evex} vpcmpnleb 32(%r9), %xmm17, %k3{%k4}
+    {evex} vpcmpnleb 1001(%rbx), %xmm16, %k5{%k6}
     {evex} vpcmpnleb 0(%r12), %xmm3, %k7{%k1}
     {evex} vpcmpnleb -2048(%rsp), %xmm25, %k2{%k3}
     {evex} vpcmpnleb -2147483648(%r12), %xmm9, %k4{%k5}
-    {evex} vpcmpnleb 0(%r15,%rax,2), %xmm31, %k6{%k7}
-    {evex} vpcmpnleb 2032(%rdi,%r15,4), %xmm20, %k1{%k2}
-    {evex} vpcmpnleb 2147483647(%r15,%rsi,8), %xmm12, %k3{%k4}
+    {evex} vpcmpnleb 0(%r8,%r12,8), %xmm31, %k6{%k7}
+    {evex} vpcmpnleb 2032(%rsp,%rax,1), %xmm20, %k1{%k2}
+    {evex} vpcmpnleb 2147483647(%r13,%r15,2), %xmm12, %k3{%k4}
     {evex} vpcmpnleb gnu_fwd(%rip), %xmm17, %k5{%k6}
     {evex} vpcmpnleb %ymm16, %ymm3, %k7
-    {evex} vpcmpnleb 0(%rdi), %ymm25, %k1
-    {evex} vpcmpnleb -4096(%r13), %ymm9, %k2
-    {evex} vpcmpnleb 4660(%rdx), %ymm31, %k3
+    {evex} vpcmpnleb 0(%r15), %ymm25, %k1
+    {evex} vpcmpnleb -4096(%r10), %ymm9, %k2
+    {evex} vpcmpnleb 4660(%rsi), %ymm31, %k3
     {evex} vpcmpnleb 0(%rsp), %ymm20, %k4
     {evex} vpcmpnleb 4064(%r12), %ymm12, %k5
     {evex} vpcmpnleb -129(%rsp), %ymm17, %k6
-    {evex} vpcmpnleb 0(%rax,%rcx,1), %ymm16, %k7
-    {evex} vpcmpnleb -32(%rax,%r9,2), %ymm3, %k1
-    {evex} vpcmpnleb 1001(%r9,%rbp,4), %ymm25, %k2
+    {evex} vpcmpnleb 0(%rcx,%rsi,4), %ymm16, %k7
+    {evex} vpcmpnleb -32(%rbp,%rcx,8), %ymm3, %k1
+    {evex} vpcmpnleb 1001(%r12,%r9,1), %ymm25, %k2
     {evex} vpcmpnleb gnu_back(%rip), %ymm9, %k3
     {evex} vpcmpnleb %ymm31, %ymm20, %k4{%k5}
-    {evex} vpcmpnleb 0(%r14), %ymm12, %k6{%k7}
-    {evex} vpcmpnleb 64(%r9), %ymm17, %k1{%k2}
-    {evex} vpcmpnleb -2147483648(%rbx), %ymm16, %k3{%k4}
+    {evex} vpcmpnleb 0(%rcx), %ymm12, %k6{%k7}
+    {evex} vpcmpnleb 64(%r11), %ymm17, %k1{%k2}
+    {evex} vpcmpnleb -2147483648(%rdi), %ymm16, %k3{%k4}
     {evex} vpcmpnleb 0(%r12), %ymm3, %k5{%k6}
     {evex} vpcmpnleb -4096(%rsp), %ymm25, %k7{%k1}
     {evex} vpcmpnleb 2147483647(%r12), %ymm9, %k2{%k3}
-    {evex} vpcmpnleb 0(%r8,%r12,8), %ymm31, %k4{%k5}
-    {evex} vpcmpnleb 4064(%rsp,%rax,1), %ymm20, %k6{%k7}
-    {evex} vpcmpnleb 4660(%r13,%r15,2), %ymm12, %k1{%k2}
+    {evex} vpcmpnleb 0(%r12,%rbp,2), %ymm31, %k4{%k5}
+    {evex} vpcmpnleb 4064(%rdi,%r12,4), %ymm20, %k6{%k7}
+    {evex} vpcmpnleb 4660(%r15,%rax,8), %ymm12, %k1{%k2}
     {evex} vpcmpnleb gnu_fwd(%rip), %ymm17, %k3{%k4}
     {evex} vpcmpnleb %zmm16, %zmm3, %k5
-    {evex} vpcmpnleb 0(%r15), %zmm25, %k6
-    {evex} vpcmpnleb -8192(%r10), %zmm9, %k7
-    {evex} vpcmpnleb -129(%rsi), %zmm31, %k1
+    {evex} vpcmpnleb 0(%r8), %zmm25, %k6
+    {evex} vpcmpnleb -8192(%r14), %zmm9, %k7
+    {evex} vpcmpnleb -129(%r15), %zmm31, %k1
     {evex} vpcmpnleb 0(%rsp), %zmm20, %k2
     {evex} vpcmpnleb 8128(%r12), %zmm12, %k3
     {evex} vpcmpnleb 1001(%rsp), %zmm17, %k4
-    {evex} vpcmpnleb 0(%rcx,%rsi,4), %zmm16, %k5
-    {evex} vpcmpnleb -64(%rbp,%rcx,8), %zmm3, %k6
-    {evex} vpcmpnleb -2147483648(%r12,%r9,1), %zmm25, %k7
+    {evex} vpcmpnleb 0(%rdx,%r15,1), %zmm16, %k5
+    {evex} vpcmpnleb -64(%rax,%rsi,2), %zmm3, %k6
+    {evex} vpcmpnleb -2147483648(%r9,%rcx,4), %zmm25, %k7
     {evex} vpcmpnleb gnu_back(%rip), %zmm9, %k1
     {evex} vpcmpnleb %zmm31, %zmm20, %k2{%k3}
-    {evex} vpcmpnleb 0(%rcx), %zmm12, %k4{%k5}
-    {evex} vpcmpnleb 128(%r11), %zmm17, %k6{%k7}
-    {evex} vpcmpnleb 2147483647(%rdi), %zmm16, %k1{%k2}
+    {evex} vpcmpnleb 0(%rdx), %zmm12, %k4{%k5}
+    {evex} vpcmpnleb 128(%rcx), %zmm17, %k6{%k7}
+    {evex} vpcmpnleb 2147483647(%r8), %zmm16, %k1{%k2}
     {evex} vpcmpnleb 0(%r12), %zmm3, %k3{%k4}
     {evex} vpcmpnleb -8192(%rsp), %zmm25, %k5{%k6}
     {evex} vpcmpnleb 4660(%r12), %zmm9, %k7{%k1}
-    {evex} vpcmpnleb 0(%r12,%rbp,2), %zmm31, %k2{%k3}
-    {evex} vpcmpnleb 8128(%rdi,%r12,4), %zmm20, %k4{%k5}
-    {evex} vpcmpnleb -129(%r15,%rax,8), %zmm12, %k6{%k7}
+    {evex} vpcmpnleb 0(%r9,%r9,8), %zmm31, %k2{%k3}
+    {evex} vpcmpnleb 8128(%rsp,%rbp,1), %zmm20, %k4{%k5}
+    {evex} vpcmpnleb -129(%r13,%r12,2), %zmm12, %k6{%k7}
     {evex} vpcmpnleb gnu_fwd(%rip), %zmm17, %k1{%k2}
     {evex} vpcmpequb %xmm16, %xmm3, %k3
-    {evex} vpcmpequb 0(%r8), %xmm25, %k4
-    {evex} vpcmpequb -16(%r14), %xmm9, %k5
-    {evex} vpcmpequb 1001(%r15), %xmm31, %k6
+    {evex} vpcmpequb 0(%r9), %xmm25, %k4
+    {evex} vpcmpequb -16(%rbp), %xmm9, %k5
+    {evex} vpcmpequb 1001(%r13), %xmm31, %k6
     {evex} vpcmpequb 0(%rsp), %xmm20, %k7
     {evex} vpcmpequb 32(%r12), %xmm12, %k1
     {evex} vpcmpequb -2147483648(%rsp), %xmm17, %k2
-    {evex} vpcmpequb 0(%rdx,%r15,1), %xmm16, %k3
-    {evex} vpcmpequb -2048(%rax,%rsi,2), %xmm3, %k4
-    {evex} vpcmpequb 2147483647(%r9,%rcx,4), %xmm25, %k5
+    {evex} vpcmpequb 0(%rsp,%rax,4), %xmm16, %k3
+g66:
+    {evex} vpcmpequb -2048(%rbp,%r15,8), %xmm3, %k4
+    {evex} vpcmpequb 2147483647(%r12,%rsi,1), %xmm25, %k5
     {evex} vpcmpequb gnu_back(%rip), %xmm9, %k6
     {evex} vpcmpequb %xmm31, %xmm20, %k7{%k1}
-    {evex} vpcmpequb 0(%rdx), %xmm12, %k2{%k3}
-    {evex} vpcmpequb 2032(%rcx), %xmm17, %k4{%k5}
-    {evex} vpcmpequb 4660(%r8), %xmm16, %k6{%k7}
+    {evex} vpcmpequb 0(%rbx), %xmm12, %k2{%k3}
+    {evex} vpcmpequb 2032(%rdx), %xmm17, %k4{%k5}
+    {evex} vpcmpequb 4660(%r9), %xmm16, %k6{%k7}
     {evex} vpcmpequb 0(%r12), %xmm3, %k1{%k2}
     {evex} vpcmpequb -16(%rsp), %xmm25, %k3{%k4}
     {evex} vpcmpequb -129(%r12), %xmm9, %k5{%k6}
-    {evex} vpcmpequb 0(%r9,%r9,8), %xmm31, %k7{%k1}
-    {evex} vpcmpequb 32(%rsp,%rbp,1), %xmm20, %k2{%k3}
-    {evex} vpcmpequb 1001(%r13,%r12,2), %xmm12, %k4{%k5}
+    {evex} vpcmpequb 0(%r14,%rcx,2), %xmm31, %k7{%k1}
+    {evex} vpcmpequb 32(%rdi,%r9,4), %xmm20, %k2{%k3}
+    {evex} vpcmpequb 1001(%r15,%rbp,8), %xmm12, %k4{%k5}
     {evex} vpcmpequb gnu_fwd(%rip), %xmm17, %k6{%k7}
     {evex} vpcmpequb %ymm16, %ymm3, %k1
-    {evex} vpcmpequb 0(%r9), %ymm25, %k2
-    {evex} vpcmpequb -32(%rbp), %ymm9, %k3
-    {evex} vpcmpequb -2147483648(%r13), %ymm31, %k4
+    {evex} vpcmpequb 0(%r10), %ymm25, %k2
+    {evex} vpcmpequb -32(%rbx), %ymm9, %k3
+    {evex} vpcmpequb -2147483648(%r10), %ymm31, %k4
     {evex} vpcmpequb 0(%rsp), %ymm20, %k5
     {evex} vpcmpequb 64(%r12), %ymm12, %k6
     {evex} vpcmpequb 2147483647(%rsp), %ymm17, %k7
-    {evex} vpcmpequb 0(%rsp,%rax,4), %ymm16, %k1
-    {evex} vpcmpequb -4096(%rbp,%r15,8), %ymm3, %k2
-    {evex} vpcmpequb 4660(%r12,%rsi,1), %ymm25, %k3
-g66:
+    {evex} vpcmpequb 0(%rsi,%r12,1), %ymm16, %k1
+    {evex} vpcmpequb -4096(%rax,%rax,2), %ymm3, %k2
+    {evex} vpcmpequb 4660(%r9,%r15,4), %ymm25, %k3
     {evex} vpcmpequb gnu_back(%rip), %ymm9, %k4
     {evex} vpcmpequb %ymm31, %ymm20, %k5{%k6}
-    {evex} vpcmpequb 0(%rbx), %ymm12, %k7{%k1}
-    {evex} vpcmpequb 4064(%rdx), %ymm17, %k2{%k3}
-    {evex} vpcmpequb -129(%r9), %ymm16, %k4{%k5}
+    {evex} vpcmpequb 0(%rsi), %ymm12, %k7{%k1}
+    {evex} vpcmpequb 4064(%rsi), %ymm17, %k2{%k3}
+    {evex} vpcmpequb -129(%r11), %ymm16, %k4{%k5}
     {evex} vpcmpequb 0(%r12), %ymm3, %k6{%k7}
     {evex} vpcmpequb -32(%rsp), %ymm25, %k1{%k2}
     {evex} vpcmpequb 1001(%r12), %ymm9, %k3{%k4}
-    {evex} vpcmpequb 0(%r14,%rcx,2), %ymm31, %k5{%k6}
-    {evex} vpcmpequb 64(%rdi,%r9,4), %ymm20, %k7{%k1}
-    {evex} vpcmpequb -2147483648(%r15,%rbp,8), %ymm12, %k2{%k3}
+    {evex} vpcmpequb 0(%r15,%rsi,8), %ymm31, %k5{%k6}
+    {evex} vpcmpequb 64(%rsp,%rcx,1), %ymm20, %k7{%k1}
+    {evex} vpcmpequb -2147483648(%r13,%r9,2), %ymm12, %k2{%k3}
     {evex} vpcmpequb gnu_fwd(%rip), %ymm17, %k4{%k5}
     {evex} vpcmpequb %zmm16, %zmm3, %k6
-    {evex} vpcmpequb 0(%r10), %zmm25, %k7
-    {evex} vpcmpequb -64(%rbx), %zmm9, %k1
-    {evex} vpcmpequb 2147483647(%r10), %zmm31, %k2
+    {evex} vpcmpequb 0(%r11), %zmm25, %k7
+    {evex} vpcmpequb -64(%rdi), %zmm9, %k1
+    {evex} vpcmpequb 2147483647(%r14), %zmm31, %k2
     {evex} vpcmpequb 0(%rsp), %zmm20, %k3
     {evex} vpcmpequb 128(%r12), %zmm12, %k4
     {evex} vpcmpequb 4660(%rsp), %zmm17, %k5
-    {evex} vpcmpequb 0(%rsi,%r12,1), %zmm16, %k6
-    {evex} vpcmpequb -8192(%rax,%rax,2), %zmm3, %k7
-    {evex} vpcmpequb -129(%r9,%r15,4), %zmm25, %k1
+    {evex} vpcmpequb 0(%rax,%rbp,4), %zmm16, %k6
+    {evex} vpcmpequb -8192(%rbp,%r12,8), %zmm3, %k7
+    {evex} vpcmpequb -129(%r12,%rax,1), %zmm25, %k1
     {evex} vpcmpequb gnu_back(%rip), %zmm9, %k2
     {evex} vpcmpequb %zmm31, %zmm20, %k3{%k4}
-    {evex} vpcmpequb 0(%rsi), %zmm12, %k5{%k6}
-    {evex} vpcmpequb 8128(%rsi), %zmm17, %k7{%k1}
-    {evex} vpcmpequb 1001(%r11), %zmm16, %k2{%k3}
+    {evex} vpcmpequb 0(%rdi), %zmm12, %k5{%k6}
+    {evex} vpcmpequb 8128(%r15), %zmm17, %k7{%k1}
+    {evex} vpcmpequb 1001(%rcx), %zmm16, %k2{%k3}
     {evex} vpcmpequb 0(%r12), %zmm3, %k4{%k5}
     {evex} vpcmpequb -64(%rsp), %zmm25, %k6{%k7}
     {evex} vpcmpequb -2147483648(%r12), %zmm9, %k1{%k2}
-    {evex} vpcmpequb 0(%r15,%rsi,8), %zmm31, %k3{%k4}
-    {evex} vpcmpequb 128(%rsp,%rcx,1), %zmm20, %k5{%k6}
-    {evex} vpcmpequb 2147483647(%r13,%r9,2), %zmm12, %k7{%k1}
+    {evex} vpcmpequb 0(%r8,%r15,2), %zmm31, %k3{%k4}
+    {evex} vpcmpequb 128(%rdi,%rsi,4), %zmm20, %k5{%k6}
+    {evex} vpcmpequb 2147483647(%r15,%rcx,8), %zmm12, %k7{%k1}
     {evex} vpcmpequb gnu_fwd(%rip), %zmm17, %k2{%k3}
     {evex} vpcmpltub %xmm16, %xmm3, %k4
-    {evex} vpcmpltub 0(%r11), %xmm25, %k5
-    {evex} vpcmpltub -2048(%rdi), %xmm9, %k6
-    {evex} vpcmpltub 4660(%r14), %xmm31, %k7
+    {evex} vpcmpltub 0(%r14), %xmm25, %k5
+    {evex} vpcmpltub -2048(%r8), %xmm9, %k6
+    {evex} vpcmpltub 4660(%rbp), %xmm31, %k7
     {evex} vpcmpltub 0(%rsp), %xmm20, %k1
     {evex} vpcmpltub 2032(%r12), %xmm12, %k2
     {evex} vpcmpltub -129(%rsp), %xmm17, %k3
-    {evex} vpcmpltub 0(%rax,%rbp,4), %xmm16, %k4
-    {evex} vpcmpltub -16(%rbp,%r12,8), %xmm3, %k5
-    {evex} vpcmpltub 1001(%r12,%rax,1), %xmm25, %k6
+    {evex} vpcmpltub 0(%rcx,%r9,1), %xmm16, %k4
+    {evex} vpcmpltub -16(%rax,%rbp,2), %xmm3, %k5
+    {evex} vpcmpltub 1001(%r9,%r12,4), %xmm25, %k6
     {evex} vpcmpltub gnu_back(%rip), %xmm9, %k7
     {evex} vpcmpltub %xmm31, %xmm20, %k1{%k2}
-    {evex} vpcmpltub 0(%rdi), %xmm12, %k3{%k4}
-    {evex} vpcmpltub 32(%r15), %xmm17, %k5{%k6}
-    {evex} vpcmpltub -2147483648(%rcx), %xmm16, %k7{%k1}
+    {evex} vpcmpltub 0(%r15), %xmm12, %k3{%k4}
+    {evex} vpcmpltub 32(%r13), %xmm17, %k5{%k6}
+    {evex} vpcmpltub -2147483648(%rdx), %xmm16, %k7{%k1}
     {evex} vpcmpltub 0(%r12), %xmm3, %k2{%k3}
     {evex} vpcmpltub -2048(%rsp), %xmm25, %k4{%k5}
     {evex} vpcmpltub 2147483647(%r12), %xmm9, %k6{%k7}
-    {evex} vpcmpltub 0(%r8,%r15,2), %xmm31, %k1{%k2}
-    {evex} vpcmpltub 2032(%rdi,%rsi,4), %xmm20, %k3{%k4}
-    {evex} vpcmpltub 4660(%r15,%rcx,8), %xmm12, %k5{%k6}
+    {evex} vpcmpltub 0(%r12,%rax,8), %xmm31, %k1{%k2}
+    {evex} vpcmpltub 2032(%rsp,%r15,1), %xmm20, %k3{%k4}
+    {evex} vpcmpltub 4660(%r13,%rsi,2), %xmm12, %k5{%k6}
     {evex} vpcmpltub gnu_fwd(%rip), %xmm17, %k7{%k1}
     {evex} vpcmpltub %ymm16, %ymm3, %k2
-    {evex} vpcmpltub 0(%r14), %ymm25, %k3
-    {evex} vpcmpltub -4096(%r8), %ymm9, %k4
-    {evex} vpcmpltub -129(%rbp), %ymm31, %k5
+    {evex} vpcmpltub 0(%rcx), %ymm25, %k3
+    {evex} vpcmpltub -4096(%r9), %ymm9, %k4
+    {evex} vpcmpltub -129(%rbx), %ymm31, %k5
     {evex} vpcmpltub 0(%rsp), %ymm20, %k6
     {evex} vpcmpltub 4064(%r12), %ymm12, %k7
     {evex} vpcmpltub 1001(%rsp), %ymm17, %k1
-    {evex} vpcmpltub 0(%rcx,%r9,1), %ymm16, %k2
-    {evex} vpcmpltub -32(%rax,%rbp,2), %ymm3, %k3
-    {evex} vpcmpltub -2147483648(%r9,%r12,4), %ymm25, %k4
+    {evex} vpcmpltub 0(%rdx,%rcx,4), %ymm16, %k2
+    {evex} vpcmpltub -32(%rbp,%r9,8), %ymm3, %k3
+    {evex} vpcmpltub -2147483648(%r12,%rbp,1), %ymm25, %k4
     {evex} vpcmpltub gnu_back(%rip), %ymm9, %k5
     {evex} vpcmpltub %ymm31, %ymm20, %k6{%k7}
-    {evex} vpcmpltub 0(%r15), %ymm12, %k1{%k2}
-    {evex} vpcmpltub 64(%r13), %ymm17, %k3{%k4}
-    {evex} vpcmpltub 2147483647(%rdx), %ymm16, %k5{%k6}
+    {evex} vpcmpltub 0(%r8), %ymm12, %k1{%k2}
+    {evex} vpcmpltub 64(%r10), %ymm17, %k3{%k4}
+    {evex} vpcmpltub 2147483647(%rsi), %ymm16, %k5{%k6}
     {evex} vpcmpltub 0(%r12), %ymm3, %k7{%k1}
     {evex} vpcmpltub -4096(%rsp), %ymm25, %k2{%k3}
     {evex} vpcmpltub 4660(%r12), %ymm9, %k4{%k5}
-    {evex} vpcmpltub 0(%r12,%rax,8), %ymm31, %k6{%k7}
-    {evex} vpcmpltub 4064(%rsp,%r15,1), %ymm20, %k1{%k2}
-    {evex} vpcmpltub -129(%r13,%rsi,2), %ymm12, %k3{%k4}
+    {evex} vpcmpltub 0(%r9,%r12,2), %ymm31, %k6{%k7}
+    {evex} vpcmpltub 4064(%rdi,%rax,4), %ymm20, %k1{%k2}
+    {evex} vpcmpltub -129(%r15,%r15,8), %ymm12, %k3{%k4}
     {evex} vpcmpltub gnu_fwd(%rip), %ymm17, %k5{%k6}
     {evex} vpcmpltub %zmm16, %zmm3, %k7
-    {evex} vpcmpltub 0(%rcx), %zmm25, %k1
-    {evex} vpcmpltub -8192(%r9), %zmm9, %k2
-    {evex} vpcmpltub 1001(%rbx), %zmm31, %k3
+    {evex} vpcmpltub 0(%rdx), %zmm25, %k1
+    {evex} vpcmpltub -8192(%r11), %zmm9, %k2
+    {evex} vpcmpltub 1001(%rdi), %zmm31, %k3
     {evex} vpcmpltub 0(%rsp), %zmm20, %k4
     {evex} vpcmpltub 8128(%r12), %zmm12, %k5
     {evex} vpcmpltub -2147483648(%rsp), %zmm17, %k6
-    {evex} vpcmpltub 0(%rdx,%rcx,4), %zmm16, %k7
-    {evex} vpcmpltub -64(%rbp,%r9,8), %zmm3, %k1
-    {evex} vpcmpltub 2147483647(%r12,%rbp,1), %zmm25, %k2
+    {evex} vpcmpltub 0(%rsp,%rsi,1), %zmm16, %k7
+    {evex} vpcmpltub -64(%rax,%rcx,2), %zmm3, %k1
+    {evex} vpcmpltub 2147483647(%r9,%r9,4), %zmm25, %k2
     {evex} vpcmpltub gnu_back(%rip), %zmm9, %k3
     {evex} vpcmpltub %zmm31, %zmm20, %k4{%k5}
-    {evex} vpcmpltub 0(%r8), %zmm12, %k6{%k7}
-    {evex} vpcmpltub 128(%r10), %zmm17, %k1{%k2}
-    {evex} vpcmpltub 4660(%rsi), %zmm16, %k3{%k4}
+    {evex} vpcmpltub 0(%r9), %zmm12, %k6{%k7}
+    {evex} vpcmpltub 128(%r14), %zmm17, %k1{%k2}
+    {evex} vpcmpltub 4660(%r15), %zmm16, %k3{%k4}
     {evex} vpcmpltub 0(%r12), %zmm3, %k5{%k6}
     {evex} vpcmpltub -8192(%rsp), %zmm25, %k7{%k1}
     {evex} vpcmpltub -129(%r12), %zmm9, %k2{%k3}
-    {evex} vpcmpltub 0(%r9,%r12,2), %zmm31, %k4{%k5}
-    {evex} vpcmpltub 8128(%rdi,%rax,4), %zmm20, %k6{%k7}
-    {evex} vpcmpltub 1001(%r15,%r15,8), %zmm12, %k1{%k2}
+    {evex} vpcmpltub 0(%r14,%rbp,8), %zmm31, %k4{%k5}
+    {evex} vpcmpltub 8128(%rsp,%r12,1), %zmm20, %k6{%k7}
+    {evex} vpcmpltub 1001(%r13,%rax,2), %zmm12, %k1{%k2}
     {evex} vpcmpltub gnu_fwd(%rip), %zmm17, %k3{%k4}
     {evex} vpcmpleub %xmm16, %xmm3, %k5
-    {evex} vpcmpleub 0(%rdx), %xmm25, %k6
-    {evex} vpcmpleub -16(%r11), %xmm9, %k7
-    {evex} vpcmpleub -2147483648(%rdi), %xmm31, %k1
+    {evex} vpcmpleub 0(%rbx), %xmm25, %k6
+    {evex} vpcmpleub -16(%rcx), %xmm9, %k7
+    {evex} vpcmpleub -2147483648(%r8), %xmm31, %k1
     {evex} vpcmpleub 0(%rsp), %xmm20, %k2
     {evex} vpcmpleub 32(%r12), %xmm12, %k3
     {evex} vpcmpleub 2147483647(%rsp), %xmm17, %k4
-    {evex} vpcmpleub 0(%rsp,%rsi,1), %xmm16, %k5
-    {evex} vpcmpleub -2048(%rax,%rcx,2), %xmm3, %k6
-    {evex} vpcmpleub 4660(%r9,%r9,4), %xmm25, %k7
+    {evex} vpcmpleub 0(%rsi,%r15,4), %xmm16, %k5
+    {evex} vpcmpleub -2048(%rbp,%rsi,8), %xmm3, %k6
+    {evex} vpcmpleub 4660(%r12,%rcx,1), %xmm25, %k7
     {evex} vpcmpleub gnu_back(%rip), %xmm9, %k1
     {evex} vpcmpleub %xmm31, %xmm20, %k2{%k3}
-    {evex} vpcmpleub 0(%r9), %xmm12, %k4{%k5}
-    {evex} vpcmpleub 2032(%r14), %xmm17, %k6{%k7}
-    {evex} vpcmpleub -129(%r15), %xmm16, %k1{%k2}
+    {evex} vpcmpleub 0(%r10), %xmm12, %k4{%k5}
+    {evex} vpcmpleub 2032(%rbp), %xmm17, %k6{%k7}
+    {evex} vpcmpleub -129(%r13), %xmm16, %k1{%k2}
     {evex} vpcmpleub 0(%r12), %xmm3, %k3{%k4}
     {evex} vpcmpleub -16(%rsp), %xmm25, %k5{%k6}
     {evex} vpcmpleub 1001(%r12), %xmm9, %k7{%k1}
-    {evex} vpcmpleub 0(%r14,%rbp,8), %xmm31, %k2{%k3}
-    {evex} vpcmpleub 32(%rsp,%r12,1), %xmm20, %k4{%k5}
-    {evex} vpcmpleub -2147483648(%r13,%rax,2), %xmm12, %k6{%k7}
+    {evex} vpcmpleub 0(%r15,%r9,2), %xmm31, %k2{%k3}
+    {evex} vpcmpleub 32(%rdi,%rbp,4), %xmm20, %k4{%k5}
+    {evex} vpcmpleub -2147483648(%r15,%r12,8), %xmm12, %k6{%k7}
     {evex} vpcmpleub gnu_fwd(%rip), %xmm17, %k1{%k2}
     {evex} vpcmpleub %ymm16, %ymm3, %k3
-    {evex} vpcmpleub 0(%rbx), %ymm25, %k4
-    {evex} vpcmpleub -32(%rcx), %ymm9, %k5
-    {evex} vpcmpleub 2147483647(%r8), %ymm31, %k6
+    {evex} vpcmpleub 0(%rsi), %ymm25, %k4
+    {evex} vpcmpleub -32(%rdx), %ymm9, %k5
+    {evex} vpcmpleub 2147483647(%r9), %ymm31, %k6
     {evex} vpcmpleub 0(%rsp), %ymm20, %k7
     {evex} vpcmpleub 64(%r12), %ymm12, %k1
     {evex} vpcmpleub 4660(%rsp), %ymm17, %k2
-    {evex} vpcmpleub 0(%rsi,%r15,4), %ymm16, %k3
-    {evex} vpcmpleub -4096(%rbp,%rsi,8), %ymm3, %k4
-    {evex} vpcmpleub -129(%r12,%rcx,1), %ymm25, %k5
+    {evex} vpcmpleub 0(%rax,%rax,1), %ymm16, %k3
+    {evex} vpcmpleub -4096(%rax,%r15,2), %ymm3, %k4
+    {evex} vpcmpleub -129(%r9,%rsi,4), %ymm25, %k5
     {evex} vpcmpleub gnu_back(%rip), %ymm9, %k6
     {evex} vpcmpleub %ymm31, %ymm20, %k7{%k1}
-    {evex} vpcmpleub 0(%r10), %ymm12, %k2{%k3}
-    {evex} vpcmpleub 4064(%rbp), %ymm17, %k4{%k5}
-    {evex} vpcmpleub 1001(%r13), %ymm16, %k6{%k7}
+    {evex} vpcmpleub 0(%r11), %ymm12, %k2{%k3}
+    {evex} vpcmpleub 4064(%rbx), %ymm17, %k4{%k5}
+    {evex} vpcmpleub 1001(%r10), %ymm16, %k6{%k7}
     {evex} vpcmpleub 0(%r12), %ymm3, %k1{%k2}
     {evex} vpcmpleub -32(%rsp), %ymm25, %k3{%k4}
     {evex} vpcmpleub -2147483648(%r12), %ymm9, %k5{%k6}
-    {evex} vpcmpleub 0(%r15,%r9,2), %ymm31, %k7{%k1}
-    {evex} vpcmpleub 64(%rdi,%rbp,4), %ymm20, %k2{%k3}
-    {evex} vpcmpleub 2147483647(%r15,%r12,8), %ymm12, %k4{%k5}
+    {evex} vpcmpleub 0(%r8,%rcx,8), %ymm31, %k7{%k1}
+    {evex} vpcmpleub 64(%rsp,%r9,1), %ymm20, %k2{%k3}
+    {evex} vpcmpleub 2147483647(%r13,%rbp,2), %ymm12, %k4{%k5}
     {evex} vpcmpleub gnu_fwd(%rip), %ymm17, %k6{%k7}
     {evex} vpcmpleub %zmm16, %zmm3, %k1
-    {evex} vpcmpleub 0(%rsi), %zmm25, %k2
-    {evex} vpcmpleub -64(%rdx), %zmm9, %k3
-    {evex} vpcmpleub 4660(%r9), %zmm31, %k4
+    {evex} vpcmpleub 0(%rdi), %zmm25, %k2
+    {evex} vpcmpleub -64(%rsi), %zmm9, %k3
+    {evex} vpcmpleub 4660(%r11), %zmm31, %k4
     {evex} vpcmpleub 0(%rsp), %zmm20, %k5
     {evex} vpcmpleub 128(%r12), %zmm12, %k6
     {evex} vpcmpleub -129(%rsp), %zmm17, %k7
-    {evex} vpcmpleub 0(%rax,%rax,1), %zmm16, %k1
-    {evex} vpcmpleub -8192(%rax,%r15,2), %zmm3, %k2
-    {evex} vpcmpleub 1001(%r9,%rsi,4), %zmm25, %k3
+    {evex} vpcmpleub 0(%rcx,%r12,4), %zmm16, %k1
+    {evex} vpcmpleub -8192(%rbp,%rax,8), %zmm3, %k2
+    {evex} vpcmpleub 1001(%r12,%r15,1), %zmm25, %k3
     {evex} vpcmpleub gnu_back(%rip), %zmm9, %k4
     {evex} vpcmpleub %zmm31, %zmm20, %k5{%k6}
-    {evex} vpcmpleub 0(%r11), %zmm12, %k7{%k1}
-    {evex} vpcmpleub 8128(%rbx), %zmm17, %k2{%k3}
-    {evex} vpcmpleub -2147483648(%r10), %zmm16, %k4{%k5}
+    {evex} vpcmpleub 0(%r14), %zmm12, %k7{%k1}
+    {evex} vpcmpleub 8128(%rdi), %zmm17, %k2{%k3}
+    {evex} vpcmpleub -2147483648(%r14), %zmm16, %k4{%k5}
     {evex} vpcmpleub 0(%r12), %zmm3, %k6{%k7}
     {evex} vpcmpleub -64(%rsp), %zmm25, %k1{%k2}
     {evex} vpcmpleub 2147483647(%r12), %zmm9, %k3{%k4}
-    {evex} vpcmpleub 0(%r8,%rcx,8), %zmm31, %k5{%k6}
-    {evex} vpcmpleub 128(%rsp,%r9,1), %zmm20, %k7{%k1}
-    {evex} vpcmpleub 4660(%r13,%rbp,2), %zmm12, %k2{%k3}
+    {evex} vpcmpleub 0(%r12,%rsi,2), %zmm31, %k5{%k6}
+    {evex} vpcmpleub 128(%rdi,%rcx,4), %zmm20, %k7{%k1}
+    {evex} vpcmpleub 4660(%r15,%r9,8), %zmm12, %k2{%k3}
     {evex} vpcmpleub gnu_fwd(%rip), %zmm17, %k4{%k5}
     {evex} vpcmpnequb %xmm16, %xmm3, %k6
-    {evex} vpcmpnequb 0(%rdi), %xmm25, %k7
-    {evex} vpcmpnequb -2048(%rsi), %xmm9, %k1
-    {evex} vpcmpnequb -129(%r11), %xmm31, %k2
+    {evex} vpcmpnequb 0(%r15), %xmm25, %k7
+    {evex} vpcmpnequb -2048(%r15), %xmm9, %k1
+    {evex} vpcmpnequb -129(%rcx), %xmm31, %k2
     {evex} vpcmpnequb 0(%rsp), %xmm20, %k3
     {evex} vpcmpnequb 2032(%r12), %xmm12, %k4
     {evex} vpcmpnequb 1001(%rsp), %xmm17, %k5
-    {evex} vpcmpnequb 0(%rcx,%r12,4), %xmm16, %k6
-    {evex} vpcmpnequb -16(%rbp,%rax,8), %xmm3, %k7
-    {evex} vpcmpnequb -2147483648(%r12,%r15,1), %xmm25, %k1
+    {evex} vpcmpnequb 0(%rdx,%rbp,1), %xmm16, %k6
+    {evex} vpcmpnequb -16(%rax,%r12,2), %xmm3, %k7
+    {evex} vpcmpnequb -2147483648(%r9,%rax,4), %xmm25, %k1
+g67:
     {evex} vpcmpnequb gnu_back(%rip), %xmm9, %k2
     {evex} vpcmpnequb %xmm31, %xmm20, %k3{%k4}
-    {evex} vpcmpnequb 0(%r14), %xmm12, %k5{%k6}
-    {evex} vpcmpnequb 32(%rdi), %xmm17, %k7{%k1}
-    {evex} vpcmpnequb 2147483647(%r14), %xmm16, %k2{%k3}
+    {evex} vpcmpnequb 0(%rcx), %xmm12, %k5{%k6}
+    {evex} vpcmpnequb 32(%r8), %xmm17, %k7{%k1}
+    {evex} vpcmpnequb 2147483647(%rbp), %xmm16, %k2{%k3}
     {evex} vpcmpnequb 0(%r12), %xmm3, %k4{%k5}
     {evex} vpcmpnequb -2048(%rsp), %xmm25, %k6{%k7}
     {evex} vpcmpnequb 4660(%r12), %xmm9, %k1{%k2}
-    {evex} vpcmpnequb 0(%r12,%rsi,2), %xmm31, %k3{%k4}
-    {evex} vpcmpnequb 2032(%rdi,%rcx,4), %xmm20, %k5{%k6}
-    {evex} vpcmpnequb -129(%r15,%r9,8), %xmm12, %k7{%k1}
+    {evex} vpcmpnequb 0(%r9,%r15,8), %xmm31, %k3{%k4}
+    {evex} vpcmpnequb 2032(%rsp,%rsi,1), %xmm20, %k5{%k6}
+    {evex} vpcmpnequb -129(%r13,%rcx,2), %xmm12, %k7{%k1}
     {evex} vpcmpnequb gnu_fwd(%rip), %xmm17, %k2{%k3}
     {evex} vpcmpnequb %ymm16, %ymm3, %k4
-    {evex} vpcmpnequb 0(%r15), %ymm25, %k5
-    {evex} vpcmpnequb -4096(%r15), %ymm9, %k6
-    {evex} vpcmpnequb 1001(%rcx), %ymm31, %k7
+    {evex} vpcmpnequb 0(%r8), %ymm25, %k5
+    {evex} vpcmpnequb -4096(%r13), %ymm9, %k6
+    {evex} vpcmpnequb 1001(%rdx), %ymm31, %k7
     {evex} vpcmpnequb 0(%rsp), %ymm20, %k1
     {evex} vpcmpnequb 4064(%r12), %ymm12, %k2
     {evex} vpcmpnequb -2147483648(%rsp), %ymm17, %k3
-    {evex} vpcmpnequb 0(%rdx,%rbp,1), %ymm16, %k4
-    {evex} vpcmpnequb -32(%rax,%r12,2), %ymm3, %k5
-    {evex} vpcmpnequb 2147483647(%r9,%rax,4), %ymm25, %k6
+    {evex} vpcmpnequb 0(%rsp,%r9,4), %ymm16, %k4
+    {evex} vpcmpnequb -32(%rbp,%rbp,8), %ymm3, %k5
+    {evex} vpcmpnequb 2147483647(%r12,%r12,1), %ymm25, %k6
     {evex} vpcmpnequb gnu_back(%rip), %ymm9, %k7
     {evex} vpcmpnequb %ymm31, %ymm20, %k1{%k2}
-g67:
-    {evex} vpcmpnequb 0(%rcx), %ymm12, %k3{%k4}
-    {evex} vpcmpnequb 64(%r8), %ymm17, %k5{%k6}
-    {evex} vpcmpnequb 4660(%rbp), %ymm16, %k7{%k1}
+    {evex} vpcmpnequb 0(%rdx), %ymm12, %k3{%k4}
+    {evex} vpcmpnequb 64(%r9), %ymm17, %k5{%k6}
+    {evex} vpcmpnequb 4660(%rbx), %ymm16, %k7{%k1}
     {evex} vpcmpnequb 0(%r12), %ymm3, %k2{%k3}
     {evex} vpcmpnequb -4096(%rsp), %ymm25, %k4{%k5}
     {evex} vpcmpnequb -129(%r12), %ymm9, %k6{%k7}
-    {evex} vpcmpnequb 0(%r9,%r15,8), %ymm31, %k1{%k2}
-    {evex} vpcmpnequb 4064(%rsp,%rsi,1), %ymm20, %k3{%k4}
-    {evex} vpcmpnequb 1001(%r13,%rcx,2), %ymm12, %k5{%k6}
+    {evex} vpcmpnequb 0(%r14,%rax,2), %ymm31, %k1{%k2}
+    {evex} vpcmpnequb 4064(%rdi,%r15,4), %ymm20, %k3{%k4}
+    {evex} vpcmpnequb 1001(%r15,%rsi,8), %ymm12, %k5{%k6}
     {evex} vpcmpnequb gnu_fwd(%rip), %ymm17, %k7{%k1}
     {evex} vpcmpnequb %zmm16, %zmm3, %k2
-    {evex} vpcmpnequb 0(%r8), %zmm25, %k3
-    {evex} vpcmpnequb -8192(%r13), %zmm9, %k4
-    {evex} vpcmpnequb -2147483648(%rdx), %zmm31, %k5
+    {evex} vpcmpnequb 0(%r9), %zmm25, %k3
+    {evex} vpcmpnequb -8192(%r10), %zmm9, %k4
+    {evex} vpcmpnequb -2147483648(%rsi), %zmm31, %k5
     {evex} vpcmpnequb 0(%rsp), %zmm20, %k6
     {evex} vpcmpnequb 8128(%r12), %zmm12, %k7
     {evex} vpcmpnequb 2147483647(%rsp), %zmm17, %k1
-    {evex} vpcmpnequb 0(%rsp,%r9,4), %zmm16, %k2
-    {evex} vpcmpnequb -64(%rbp,%rbp,8), %zmm3, %k3
-    {evex} vpcmpnequb 4660(%r12,%r12,1), %zmm25, %k4
+    {evex} vpcmpnequb 0(%rsi,%rcx,1), %zmm16, %k2
+    {evex} vpcmpnequb -64(%rax,%r9,2), %zmm3, %k3
+    {evex} vpcmpnequb 4660(%r9,%rbp,4), %zmm25, %k4
     {evex} vpcmpnequb gnu_back(%rip), %zmm9, %k5
     {evex} vpcmpnequb %zmm31, %zmm20, %k6{%k7}
-    {evex} vpcmpnequb 0(%rdx), %zmm12, %k1{%k2}
-    {evex} vpcmpnequb 128(%r9), %zmm17, %k3{%k4}
-    {evex} vpcmpnequb -129(%rbx), %zmm16, %k5{%k6}
+    {evex} vpcmpnequb 0(%rbx), %zmm12, %k1{%k2}
+    {evex} vpcmpnequb 128(%r11), %zmm17, %k3{%k4}
+    {evex} vpcmpnequb -129(%rdi), %zmm16, %k5{%k6}
     {evex} vpcmpnequb 0(%r12), %zmm3, %k7{%k1}
     {evex} vpcmpnequb -8192(%rsp), %zmm25, %k2{%k3}
     {evex} vpcmpnequb 1001(%r12), %zmm9, %k4{%k5}
-    {evex} vpcmpnequb 0(%r14,%rax,2), %zmm31, %k6{%k7}
-    {evex} vpcmpnequb 8128(%rdi,%r15,4), %zmm20, %k1{%k2}
-    {evex} vpcmpnequb -2147483648(%r15,%rsi,8), %zmm12, %k3{%k4}
+    {evex} vpcmpnequb 0(%r15,%r12,8), %zmm31, %k6{%k7}
+    {evex} vpcmpnequb 8128(%rsp,%rax,1), %zmm20, %k1{%k2}
+    {evex} vpcmpnequb -2147483648(%r13,%r15,2), %zmm12, %k3{%k4}
     {evex} vpcmpnequb gnu_fwd(%rip), %zmm17, %k5{%k6}
     {evex} vpcmpnltub %xmm16, %xmm3, %k7
-    {evex} vpcmpnltub 0(%r9), %xmm25, %k1
-    {evex} vpcmpnltub -16(%r10), %xmm9, %k2
-    {evex} vpcmpnltub 2147483647(%rsi), %xmm31, %k3
+    {evex} vpcmpnltub 0(%r10), %xmm25, %k1
+    {evex} vpcmpnltub -16(%r14), %xmm9, %k2
+    {evex} vpcmpnltub 2147483647(%r15), %xmm31, %k3
     {evex} vpcmpnltub 0(%rsp), %xmm20, %k4
     {evex} vpcmpnltub 32(%r12), %xmm12, %k5
     {evex} vpcmpnltub 4660(%rsp), %xmm17, %k6
-    {evex} vpcmpnltub 0(%rsi,%rcx,1), %xmm16, %k7
-    {evex} vpcmpnltub -2048(%rax,%r9,2), %xmm3, %k1
-    {evex} vpcmpnltub -129(%r9,%rbp,4), %xmm25, %k2
+    {evex} vpcmpnltub 0(%rax,%rsi,4), %xmm16, %k7
+    {evex} vpcmpnltub -2048(%rbp,%rcx,8), %xmm3, %k1
+    {evex} vpcmpnltub -129(%r12,%r9,1), %xmm25, %k2
     {evex} vpcmpnltub gnu_back(%rip), %xmm9, %k3
     {evex} vpcmpnltub %xmm31, %xmm20, %k4{%k5}
-    {evex} vpcmpnltub 0(%rbx), %xmm12, %k6{%k7}
-    {evex} vpcmpnltub 2032(%r11), %xmm17, %k1{%k2}
-    {evex} vpcmpnltub 1001(%rdi), %xmm16, %k3{%k4}
+    {evex} vpcmpnltub 0(%rsi), %xmm12, %k6{%k7}
+    {evex} vpcmpnltub 2032(%rcx), %xmm17, %k1{%k2}
+    {evex} vpcmpnltub 1001(%r8), %xmm16, %k3{%k4}
     {evex} vpcmpnltub 0(%r12), %xmm3, %k5{%k6}
     {evex} vpcmpnltub -16(%rsp), %xmm25, %k7{%k1}
     {evex} vpcmpnltub -2147483648(%r12), %xmm9, %k2{%k3}
-    {evex} vpcmpnltub 0(%r15,%r12,8), %xmm31, %k4{%k5}
-    {evex} vpcmpnltub 32(%rsp,%rax,1), %xmm20, %k6{%k7}
-    {evex} vpcmpnltub 2147483647(%r13,%r15,2), %xmm12, %k1{%k2}
+    {evex} vpcmpnltub 0(%r8,%rbp,2), %xmm31, %k4{%k5}
+    {evex} vpcmpnltub 32(%rdi,%r12,4), %xmm20, %k6{%k7}
+    {evex} vpcmpnltub 2147483647(%r15,%rax,8), %xmm12, %k1{%k2}
     {evex} vpcmpnltub gnu_fwd(%rip), %xmm17, %k3{%k4}
     {evex} vpcmpnltub %ymm16, %ymm3, %k5
-    {evex} vpcmpnltub 0(%r10), %ymm25, %k6
-    {evex} vpcmpnltub -32(%r14), %ymm9, %k7
-    {evex} vpcmpnltub 4660(%r15), %ymm31, %k1
+    {evex} vpcmpnltub 0(%r11), %ymm25, %k6
+    {evex} vpcmpnltub -32(%rbp), %ymm9, %k7
+    {evex} vpcmpnltub 4660(%r13), %ymm31, %k1
     {evex} vpcmpnltub 0(%rsp), %ymm20, %k2
     {evex} vpcmpnltub 64(%r12), %ymm12, %k3
     {evex} vpcmpnltub -129(%rsp), %ymm17, %k4
-    {evex} vpcmpnltub 0(%rax,%rsi,4), %ymm16, %k5
-    {evex} vpcmpnltub -4096(%rbp,%rcx,8), %ymm3, %k6
-    {evex} vpcmpnltub 1001(%r12,%r9,1), %ymm25, %k7
+    {evex} vpcmpnltub 0(%rcx,%r15,1), %ymm16, %k5
+    {evex} vpcmpnltub -4096(%rax,%rsi,2), %ymm3, %k6
+    {evex} vpcmpnltub 1001(%r9,%rcx,4), %ymm25, %k7
     {evex} vpcmpnltub gnu_back(%rip), %ymm9, %k1
     {evex} vpcmpnltub %ymm31, %ymm20, %k2{%k3}
-    {evex} vpcmpnltub 0(%rsi), %ymm12, %k4{%k5}
-    {evex} vpcmpnltub 4064(%rcx), %ymm17, %k6{%k7}
-    {evex} vpcmpnltub -2147483648(%r8), %ymm16, %k1{%k2}
+    {evex} vpcmpnltub 0(%rdi), %ymm12, %k4{%k5}
+    {evex} vpcmpnltub 4064(%rdx), %ymm17, %k6{%k7}
+    {evex} vpcmpnltub -2147483648(%r9), %ymm16, %k1{%k2}
     {evex} vpcmpnltub 0(%r12), %ymm3, %k3{%k4}
     {evex} vpcmpnltub -32(%rsp), %ymm25, %k5{%k6}
     {evex} vpcmpnltub 2147483647(%r12), %ymm9, %k7{%k1}
-    {evex} vpcmpnltub 0(%r8,%rbp,2), %ymm31, %k2{%k3}
-    {evex} vpcmpnltub 64(%rdi,%r12,4), %ymm20, %k4{%k5}
-    {evex} vpcmpnltub 4660(%r15,%rax,8), %ymm12, %k6{%k7}
+    {evex} vpcmpnltub 0(%r12,%r9,8), %ymm31, %k2{%k3}
+    {evex} vpcmpnltub 64(%rsp,%rbp,1), %ymm20, %k4{%k5}
+    {evex} vpcmpnltub 4660(%r13,%r12,2), %ymm12, %k6{%k7}
     {evex} vpcmpnltub gnu_fwd(%rip), %ymm17, %k1{%k2}
     {evex} vpcmpnltub %zmm16, %zmm3, %k3
-    {evex} vpcmpnltub 0(%r11), %zmm25, %k4
-    {evex} vpcmpnltub -64(%rbp), %zmm9, %k5
-    {evex} vpcmpnltub -129(%r13), %zmm31, %k6
+    {evex} vpcmpnltub 0(%r14), %zmm25, %k4
+    {evex} vpcmpnltub -64(%rbx), %zmm9, %k5
+    {evex} vpcmpnltub -129(%r10), %zmm31, %k6
     {evex} vpcmpnltub 0(%rsp), %zmm20, %k7
     {evex} vpcmpnltub 128(%r12), %zmm12, %k1
     {evex} vpcmpnltub 1001(%rsp), %zmm17, %k2
-    {evex} vpcmpnltub 0(%rcx,%r15,1), %zmm16, %k3
-    {evex} vpcmpnltub -8192(%rax,%rsi,2), %zmm3, %k4
-    {evex} vpcmpnltub -2147483648(%r9,%rcx,4), %zmm25, %k5
+    {evex} vpcmpnltub 0(%rdx,%rax,4), %zmm16, %k3
+    {evex} vpcmpnltub -8192(%rbp,%r15,8), %zmm3, %k4
+    {evex} vpcmpnltub -2147483648(%r12,%rsi,1), %zmm25, %k5
     {evex} vpcmpnltub gnu_back(%rip), %zmm9, %k6
     {evex} vpcmpnltub %zmm31, %zmm20, %k7{%k1}
-    {evex} vpcmpnltub 0(%rdi), %zmm12, %k2{%k3}
-    {evex} vpcmpnltub 8128(%rdx), %zmm17, %k4{%k5}
-    {evex} vpcmpnltub 2147483647(%r9), %zmm16, %k6{%k7}
+    {evex} vpcmpnltub 0(%r15), %zmm12, %k2{%k3}
+    {evex} vpcmpnltub 8128(%rsi), %zmm17, %k4{%k5}
+    {evex} vpcmpnltub 2147483647(%r11), %zmm16, %k6{%k7}
     {evex} vpcmpnltub 0(%r12), %zmm3, %k1{%k2}
     {evex} vpcmpnltub -64(%rsp), %zmm25, %k3{%k4}
     {evex} vpcmpnltub 4660(%r12), %zmm9, %k5{%k6}
-    {evex} vpcmpnltub 0(%r12,%r9,8), %zmm31, %k7{%k1}
-    {evex} vpcmpnltub 128(%rsp,%rbp,1), %zmm20, %k2{%k3}
-    {evex} vpcmpnltub -129(%r13,%r12,2), %zmm12, %k4{%k5}
+    {evex} vpcmpnltub 0(%r9,%rcx,2), %zmm31, %k7{%k1}
+    {evex} vpcmpnltub 128(%rdi,%r9,4), %zmm20, %k2{%k3}
+    {evex} vpcmpnltub -129(%r15,%rbp,8), %zmm12, %k4{%k5}
     {evex} vpcmpnltub gnu_fwd(%rip), %zmm17, %k6{%k7}
     {evex} vpcmpnleub %xmm16, %xmm3, %k1
-    {evex} vpcmpnleub 0(%r14), %xmm25, %k2
-    {evex} vpcmpnleub -2048(%rbx), %xmm9, %k3
-    {evex} vpcmpnleub 1001(%r10), %xmm31, %k4
+    {evex} vpcmpnleub 0(%rcx), %xmm25, %k2
+    {evex} vpcmpnleub -2048(%rdi), %xmm9, %k3
+    {evex} vpcmpnleub 1001(%r14), %xmm31, %k4
     {evex} vpcmpnleub 0(%rsp), %xmm20, %k5
     {evex} vpcmpnleub 2032(%r12), %xmm12, %k6
     {evex} vpcmpnleub -2147483648(%rsp), %xmm17, %k7
-    {evex} vpcmpnleub 0(%rdx,%rax,4), %xmm16, %k1
-    {evex} vpcmpnleub -16(%rbp,%r15,8), %xmm3, %k2
-    {evex} vpcmpnleub 2147483647(%r12,%rsi,1), %xmm25, %k3
+    {evex} vpcmpnleub 0(%rsp,%r12,1), %xmm16, %k1
+    {evex} vpcmpnleub -16(%rax,%rax,2), %xmm3, %k2
+    {evex} vpcmpnleub 2147483647(%r9,%r15,4), %xmm25, %k3
     {evex} vpcmpnleub gnu_back(%rip), %xmm9, %k4
     {evex} vpcmpnleub %xmm31, %xmm20, %k5{%k6}
-    {evex} vpcmpnleub 0(%r15), %xmm12, %k7{%k1}
-    {evex} vpcmpnleub 32(%rsi), %xmm17, %k2{%k3}
-    {evex} vpcmpnleub 4660(%r11), %xmm16, %k4{%k5}
+    {evex} vpcmpnleub 0(%r8), %xmm12, %k7{%k1}
+    {evex} vpcmpnleub 32(%r15), %xmm17, %k2{%k3}
+    {evex} vpcmpnleub 4660(%rcx), %xmm16, %k4{%k5}
     {evex} vpcmpnleub 0(%r12), %xmm3, %k6{%k7}
     {evex} vpcmpnleub -2048(%rsp), %xmm25, %k1{%k2}
     {evex} vpcmpnleub -129(%r12), %xmm9, %k3{%k4}
-    {evex} vpcmpnleub 0(%r9,%rcx,2), %xmm31, %k5{%k6}
-    {evex} vpcmpnleub 2032(%rdi,%r9,4), %xmm20, %k7{%k1}
-    {evex} vpcmpnleub 1001(%r15,%rbp,8), %xmm12, %k2{%k3}
+    {evex} vpcmpnleub 0(%r14,%rsi,8), %xmm31, %k5{%k6}
+    {evex} vpcmpnleub 2032(%rsp,%rcx,1), %xmm20, %k7{%k1}
+    {evex} vpcmpnleub 1001(%r13,%r9,2), %xmm12, %k2{%k3}
     {evex} vpcmpnleub gnu_fwd(%rip), %xmm17, %k4{%k5}
     {evex} vpcmpnleub %ymm16, %ymm3, %k6
-    {evex} vpcmpnleub 0(%rcx), %ymm25, %k7
-    {evex} vpcmpnleub -4096(%rdi), %ymm9, %k1
-    {evex} vpcmpnleub -2147483648(%r14), %ymm31, %k2
+    {evex} vpcmpnleub 0(%rdx), %ymm25, %k7
+    {evex} vpcmpnleub -4096(%r8), %ymm9, %k1
+    {evex} vpcmpnleub -2147483648(%rbp), %ymm31, %k2
     {evex} vpcmpnleub 0(%rsp), %ymm20, %k3
     {evex} vpcmpnleub 4064(%r12), %ymm12, %k4
     {evex} vpcmpnleub 2147483647(%rsp), %ymm17, %k5
-    {evex} vpcmpnleub 0(%rsp,%r12,1), %ymm16, %k6
-    {evex} vpcmpnleub -32(%rax,%rax,2), %ymm3, %k7
-    {evex} vpcmpnleub 4660(%r9,%r15,4), %ymm25, %k1
+    {evex} vpcmpnleub 0(%rsi,%rbp,4), %ymm16, %k6
+    {evex} vpcmpnleub -32(%rbp,%r12,8), %ymm3, %k7
+    {evex} vpcmpnleub 4660(%r12,%rax,1), %ymm25, %k1
     {evex} vpcmpnleub gnu_back(%rip), %ymm9, %k2
     {evex} vpcmpnleub %ymm31, %ymm20, %k3{%k4}
-    {evex} vpcmpnleub 0(%r8), %ymm12, %k5{%k6}
-    {evex} vpcmpnleub 64(%r15), %ymm17, %k7{%k1}
-    {evex} vpcmpnleub -129(%rcx), %ymm16, %k2{%k3}
+    {evex} vpcmpnleub 0(%r9), %ymm12, %k5{%k6}
+    {evex} vpcmpnleub 64(%r13), %ymm17, %k7{%k1}
+    {evex} vpcmpnleub -129(%rdx), %ymm16, %k2{%k3}
     {evex} vpcmpnleub 0(%r12), %ymm3, %k4{%k5}
     {evex} vpcmpnleub -4096(%rsp), %ymm25, %k6{%k7}
     {evex} vpcmpnleub 1001(%r12), %ymm9, %k1{%k2}
-    {evex} vpcmpnleub 0(%r14,%rsi,8), %ymm31, %k3{%k4}
-    {evex} vpcmpnleub 4064(%rsp,%rcx,1), %ymm20, %k5{%k6}
-    {evex} vpcmpnleub -2147483648(%r13,%r9,2), %ymm12, %k7{%k1}
+    {evex} vpcmpnleub 0(%r15,%r15,2), %ymm31, %k3{%k4}
+    {evex} vpcmpnleub 4064(%rdi,%rsi,4), %ymm20, %k5{%k6}
+    {evex} vpcmpnleub -2147483648(%r15,%rcx,8), %ymm12, %k7{%k1}
     {evex} vpcmpnleub gnu_fwd(%rip), %ymm17, %k2{%k3}
     {evex} vpcmpnleub %zmm16, %zmm3, %k4
-    {evex} vpcmpnleub 0(%rdx), %zmm25, %k5
-    {evex} vpcmpnleub -8192(%r8), %zmm9, %k6
-    {evex} vpcmpnleub 2147483647(%rbp), %zmm31, %k7
+    {evex} vpcmpnleub 0(%rbx), %zmm25, %k5
+    {evex} vpcmpnleub -8192(%r9), %zmm9, %k6
+    {evex} vpcmpnleub 2147483647(%rbx), %zmm31, %k7
     {evex} vpcmpnleub 0(%rsp), %zmm20, %k1
     {evex} vpcmpnleub 8128(%r12), %zmm12, %k2
     {evex} vpcmpnleub 4660(%rsp), %zmm17, %k3
-    {evex} vpcmpnleub 0(%rsi,%rbp,4), %zmm16, %k4
-    {evex} vpcmpnleub -64(%rbp,%r12,8), %zmm3, %k5
-    {evex} vpcmpnleub -129(%r12,%rax,1), %zmm25, %k6
+    {evex} vpcmpnleub 0(%rax,%r9,1), %zmm16, %k4
+    {evex} vpcmpnleub -64(%rax,%rbp,2), %zmm3, %k5
+    {evex} vpcmpnleub -129(%r9,%r12,4), %zmm25, %k6
     {evex} vpcmpnleub gnu_back(%rip), %zmm9, %k7
     {evex} vpcmpnleub %zmm31, %zmm20, %k1{%k2}
-    {evex} vpcmpnleub 0(%r9), %zmm12, %k3{%k4}
-    {evex} vpcmpnleub 128(%r13), %zmm17, %k5{%k6}
-    {evex} vpcmpnleub 1001(%rdx), %zmm16, %k7{%k1}
+    {evex} vpcmpnleub 0(%r10), %zmm12, %k3{%k4}
+    {evex} vpcmpnleub 128(%r10), %zmm17, %k5{%k6}
+    {evex} vpcmpnleub 1001(%rsi), %zmm16, %k7{%k1}
     {evex} vpcmpnleub 0(%r12), %zmm3, %k2{%k3}
     {evex} vpcmpnleub -8192(%rsp), %zmm25, %k4{%k5}
     {evex} vpcmpnleub -2147483648(%r12), %zmm9, %k6{%k7}
-    {evex} vpcmpnleub 0(%r15,%r15,2), %zmm31, %k1{%k2}
-    {evex} vpcmpnleub 8128(%rdi,%rsi,4), %zmm20, %k3{%k4}
-    {evex} vpcmpnleub 2147483647(%r15,%rcx,8), %zmm12, %k5{%k6}
+    {evex} vpcmpnleub 0(%r8,%rax,8), %zmm31, %k1{%k2}
+    {evex} vpcmpnleub 8128(%rsp,%r15,1), %zmm20, %k3{%k4}
+    {evex} vpcmpnleub 2147483647(%r13,%rsi,2), %zmm12, %k5{%k6}
     {evex} vpcmpnleub gnu_fwd(%rip), %zmm17, %k7{%k1}
     {evex} vpcmpltd %xmm16, %xmm3, %k2
-    {evex} vpcmpltd 0(%rbx), %xmm25, %k3
-    {evex} vpcmpltd -16(%r9), %xmm9, %k4
-    {evex} vpcmpltd 4660(%rbx), %xmm31, %k5
+    {evex} vpcmpltd 0(%rsi), %xmm25, %k3
+    {evex} vpcmpltd -16(%r11), %xmm9, %k4
+    {evex} vpcmpltd 4660(%rdi), %xmm31, %k5
     {evex} vpcmpltd 0(%rsp), %xmm20, %k6
     {evex} vpcmpltd 32(%r12), %xmm12, %k7
     {evex} vpcmpltd -129(%rsp), %xmm17, %k1
-    {evex} vpcmpltd 0(%rax,%r9,1), %xmm16, %k2
-    {evex} vpcmpltd -2048(%rax,%rbp,2), %xmm3, %k3
-    {evex} vpcmpltd 1001(%r9,%r12,4), %xmm25, %k4
+    {evex} vpcmpltd 0(%rcx,%rcx,4), %xmm16, %k2
+    {evex} vpcmpltd -2048(%rbp,%r9,8), %xmm3, %k3
+    {evex} vpcmpltd 1001(%r12,%rbp,1), %xmm25, %k4
     {evex} vpcmpltd gnu_back(%rip), %xmm9, %k5
     {evex} vpcmpltd %xmm31, %xmm20, %k6{%k7}
-    {evex} vpcmpltd 0(%r10), %xmm12, %k1{%k2}
-    {evex} vpcmpltd 2032(%r10), %xmm17, %k3{%k4}
-    {evex} vpcmpltd -2147483648(%rsi), %xmm16, %k5{%k6}
+g68:
+    {evex} vpcmpltd 0(%r11), %xmm12, %k1{%k2}
+    {evex} vpcmpltd 2032(%r14), %xmm17, %k3{%k4}
+    {evex} vpcmpltd -2147483648(%r15), %xmm16, %k5{%k6}
     {evex} vpcmpltd 0(%r12), %xmm3, %k7{%k1}
     {evex} vpcmpltd -16(%rsp), %xmm25, %k2{%k3}
     {evex} vpcmpltd 2147483647(%r12), %xmm9, %k4{%k5}
-    {evex} vpcmpltd 0(%r8,%rax,8), %xmm31, %k6{%k7}
-    {evex} vpcmpltd 32(%rsp,%r15,1), %xmm20, %k1{%k2}
-    {evex} vpcmpltd 4660(%r13,%rsi,2), %xmm12, %k3{%k4}
+    {evex} vpcmpltd 0(%r12,%r12,2), %xmm31, %k6{%k7}
+    {evex} vpcmpltd 32(%rdi,%rax,4), %xmm20, %k1{%k2}
+    {evex} vpcmpltd 4660(%r15,%r15,8), %xmm12, %k3{%k4}
     {evex} vpcmpltd gnu_fwd(%rip), %xmm17, %k5{%k6}
     {evex} vpcmpltd %ymm16, %ymm3, %k7
-    {evex} vpcmpltd 0(%rsi), %ymm25, %k1
-    {evex} vpcmpltd -32(%r11), %ymm9, %k2
-    {evex} vpcmpltd -129(%rdi), %ymm31, %k3
+    {evex} vpcmpltd 0(%rdi), %ymm25, %k1
+    {evex} vpcmpltd -32(%rcx), %ymm9, %k2
+    {evex} vpcmpltd -129(%r8), %ymm31, %k3
     {evex} vpcmpltd 0(%rsp), %ymm20, %k4
     {evex} vpcmpltd 64(%r12), %ymm12, %k5
     {evex} vpcmpltd 1001(%rsp), %ymm17, %k6
-    {evex} vpcmpltd 0(%rcx,%rcx,4), %ymm16, %k7
-    {evex} vpcmpltd -4096(%rbp,%r9,8), %ymm3, %k1
-    {evex} vpcmpltd -2147483648(%r12,%rbp,1), %ymm25, %k2
+    {evex} vpcmpltd 0(%rdx,%rsi,1), %ymm16, %k7
+    {evex} vpcmpltd -4096(%rax,%rcx,2), %ymm3, %k1
+    {evex} vpcmpltd -2147483648(%r9,%r9,4), %ymm25, %k2
     {evex} vpcmpltd gnu_back(%rip), %ymm9, %k3
     {evex} vpcmpltd %ymm31, %ymm20, %k4{%k5}
-    {evex} vpcmpltd 0(%r11), %ymm12, %k6{%k7}
-    {evex} vpcmpltd 4064(%r14), %ymm17, %k1{%k2}
-g68:
-    {evex} vpcmpltd 2147483647(%r15), %ymm16, %k3{%k4}
+    {evex} vpcmpltd 0(%r14), %ymm12, %k6{%k7}
+    {evex} vpcmpltd 4064(%rbp), %ymm17, %k1{%k2}
+    {evex} vpcmpltd 2147483647(%r13), %ymm16, %k3{%k4}
     {evex} vpcmpltd 0(%r12), %ymm3, %k5{%k6}
     {evex} vpcmpltd -32(%rsp), %ymm25, %k7{%k1}
     {evex} vpcmpltd 4660(%r12), %ymm9, %k2{%k3}
-    {evex} vpcmpltd 0(%r12,%r12,2), %ymm31, %k4{%k5}
-    {evex} vpcmpltd 64(%rdi,%rax,4), %ymm20, %k6{%k7}
-    {evex} vpcmpltd -129(%r15,%r15,8), %ymm12, %k1{%k2}
+    {evex} vpcmpltd 0(%r9,%rbp,8), %ymm31, %k4{%k5}
+    {evex} vpcmpltd 64(%rsp,%r12,1), %ymm20, %k6{%k7}
+    {evex} vpcmpltd -129(%r13,%rax,2), %ymm12, %k1{%k2}
     {evex} vpcmpltd gnu_fwd(%rip), %ymm17, %k3{%k4}
     {evex} vpcmpltd %zmm16, %zmm3, %k5
-    {evex} vpcmpltd 0(%rdi), %zmm25, %k6
-    {evex} vpcmpltd -64(%rcx), %zmm9, %k7
-    {evex} vpcmpltd 1001(%r8), %zmm31, %k1
+    {evex} vpcmpltd 0(%r15), %zmm25, %k6
+    {evex} vpcmpltd -64(%rdx), %zmm9, %k7
+    {evex} vpcmpltd 1001(%r9), %zmm31, %k1
     {evex} vpcmpltd 0(%rsp), %zmm20, %k2
     {evex} vpcmpltd 128(%r12), %zmm12, %k3
     {evex} vpcmpltd -2147483648(%rsp), %zmm17, %k4
-    {evex} vpcmpltd 0(%rdx,%rsi,1), %zmm16, %k5
-    {evex} vpcmpltd -8192(%rax,%rcx,2), %zmm3, %k6
-    {evex} vpcmpltd 2147483647(%r9,%r9,4), %zmm25, %k7
+    {evex} vpcmpltd 0(%rsp,%r15,4), %zmm16, %k5
+    {evex} vpcmpltd -8192(%rbp,%rsi,8), %zmm3, %k6
+    {evex} vpcmpltd 2147483647(%r12,%rcx,1), %zmm25, %k7
     {evex} vpcmpltd gnu_back(%rip), %zmm9, %k1
     {evex} vpcmpltd %zmm31, %zmm20, %k2{%k3}
-    {evex} vpcmpltd 0(%r14), %zmm12, %k4{%k5}
-    {evex} vpcmpltd 8128(%rbp), %zmm17, %k6{%k7}
-    {evex} vpcmpltd 4660(%r13), %zmm16, %k1{%k2}
+    {evex} vpcmpltd 0(%rcx), %zmm12, %k4{%k5}
+    {evex} vpcmpltd 8128(%rbx), %zmm17, %k6{%k7}
+    {evex} vpcmpltd 4660(%r10), %zmm16, %k1{%k2}
     {evex} vpcmpltd 0(%r12), %zmm3, %k3{%k4}
     {evex} vpcmpltd -64(%rsp), %zmm25, %k5{%k6}
     {evex} vpcmpltd -129(%r12), %zmm9, %k7{%k1}
-    {evex} vpcmpltd 0(%r9,%rbp,8), %zmm31, %k2{%k3}
-    {evex} vpcmpltd 128(%rsp,%r12,1), %zmm20, %k4{%k5}
-    {evex} vpcmpltd 1001(%r13,%rax,2), %zmm12, %k6{%k7}
+    {evex} vpcmpltd 0(%r14,%r9,2), %zmm31, %k2{%k3}
+    {evex} vpcmpltd 128(%rdi,%rbp,4), %zmm20, %k4{%k5}
+    {evex} vpcmpltd 1001(%r15,%r12,8), %zmm12, %k6{%k7}
     {evex} vpcmpltd gnu_fwd(%rip), %zmm17, %k1{%k2}
     {evex} vpcmpled %xmm16, %xmm3, %k3
-    {evex} vpcmpled 0(%r15), %xmm25, %k4
-    {evex} vpcmpled -2048(%rdx), %xmm9, %k5
-    {evex} vpcmpled -2147483648(%r9), %xmm31, %k6
+    {evex} vpcmpled 0(%r8), %xmm25, %k4
+    {evex} vpcmpled -2048(%rsi), %xmm9, %k5
+    {evex} vpcmpled -2147483648(%r11), %xmm31, %k6
     {evex} vpcmpled 0(%rsp), %xmm20, %k7
     {evex} vpcmpled 2032(%r12), %xmm12, %k1
     {evex} vpcmpled 2147483647(%rsp), %xmm17, %k2
-    {evex} vpcmpled 0(%rsp,%r15,4), %xmm16, %k3
-    {evex} vpcmpled -16(%rbp,%rsi,8), %xmm3, %k4
-    {evex} vpcmpled 4660(%r12,%rcx,1), %xmm25, %k5
+    {evex} vpcmpled 0(%rsi,%rax,1), %xmm16, %k3
+    {evex} vpcmpled -16(%rax,%r15,2), %xmm3, %k4
+    {evex} vpcmpled 4660(%r9,%rsi,4), %xmm25, %k5
     {evex} vpcmpled gnu_back(%rip), %xmm9, %k6
     {evex} vpcmpled %xmm31, %xmm20, %k7{%k1}
-    {evex} vpcmpled 0(%rcx), %xmm12, %k2{%k3}
-    {evex} vpcmpled 32(%rbx), %xmm17, %k4{%k5}
-    {evex} vpcmpled -129(%r10), %xmm16, %k6{%k7}
+    {evex} vpcmpled 0(%rdx), %xmm12, %k2{%k3}
+    {evex} vpcmpled 32(%rdi), %xmm17, %k4{%k5}
+    {evex} vpcmpled -129(%r14), %xmm16, %k6{%k7}
     {evex} vpcmpled 0(%r12), %xmm3, %k1{%k2}
     {evex} vpcmpled -2048(%rsp), %xmm25, %k3{%k4}
     {evex} vpcmpled 1001(%r12), %xmm9, %k5{%k6}
-    {evex} vpcmpled 0(%r14,%r9,2), %xmm31, %k7{%k1}
-    {evex} vpcmpled 2032(%rdi,%rbp,4), %xmm20, %k2{%k3}
-    {evex} vpcmpled -2147483648(%r15,%r12,8), %xmm12, %k4{%k5}
+    {evex} vpcmpled 0(%r15,%rcx,8), %xmm31, %k7{%k1}
+    {evex} vpcmpled 2032(%rsp,%r9,1), %xmm20, %k2{%k3}
+    {evex} vpcmpled -2147483648(%r13,%rbp,2), %xmm12, %k4{%k5}
     {evex} vpcmpled gnu_fwd(%rip), %xmm17, %k6{%k7}
     {evex} vpcmpled %ymm16, %ymm3, %k1
-    {evex} vpcmpled 0(%r8), %ymm25, %k2
-    {evex} vpcmpled -4096(%rsi), %ymm9, %k3
-    {evex} vpcmpled 2147483647(%r11), %ymm31, %k4
+    {evex} vpcmpled 0(%r9), %ymm25, %k2
+    {evex} vpcmpled -4096(%r15), %ymm9, %k3
+    {evex} vpcmpled 2147483647(%rcx), %ymm31, %k4
     {evex} vpcmpled 0(%rsp), %ymm20, %k5
     {evex} vpcmpled 4064(%r12), %ymm12, %k6
     {evex} vpcmpled 4660(%rsp), %ymm17, %k7
-    {evex} vpcmpled 0(%rsi,%rax,1), %ymm16, %k1
-    {evex} vpcmpled -32(%rax,%r15,2), %ymm3, %k2
-    {evex} vpcmpled -129(%r9,%rsi,4), %ymm25, %k3
+    {evex} vpcmpled 0(%rax,%r12,4), %ymm16, %k1
+    {evex} vpcmpled -32(%rbp,%rax,8), %ymm3, %k2
+    {evex} vpcmpled -129(%r12,%r15,1), %ymm25, %k3
     {evex} vpcmpled gnu_back(%rip), %ymm9, %k4
     {evex} vpcmpled %ymm31, %ymm20, %k5{%k6}
-    {evex} vpcmpled 0(%rdx), %ymm12, %k7{%k1}
-    {evex} vpcmpled 64(%rdi), %ymm17, %k2{%k3}
-    {evex} vpcmpled 1001(%r14), %ymm16, %k4{%k5}
+    {evex} vpcmpled 0(%rbx), %ymm12, %k7{%k1}
+    {evex} vpcmpled 64(%r8), %ymm17, %k2{%k3}
+    {evex} vpcmpled 1001(%rbp), %ymm16, %k4{%k5}
     {evex} vpcmpled 0(%r12), %ymm3, %k6{%k7}
     {evex} vpcmpled -4096(%rsp), %ymm25, %k1{%k2}
     {evex} vpcmpled -2147483648(%r12), %ymm9, %k3{%k4}
-    {evex} vpcmpled 0(%r15,%rcx,8), %ymm31, %k5{%k6}
-    {evex} vpcmpled 4064(%rsp,%r9,1), %ymm20, %k7{%k1}
-    {evex} vpcmpled 2147483647(%r13,%rbp,2), %ymm12, %k2{%k3}
+    {evex} vpcmpled 0(%r8,%rsi,2), %ymm31, %k5{%k6}
+    {evex} vpcmpled 4064(%rdi,%rcx,4), %ymm20, %k7{%k1}
+    {evex} vpcmpled 2147483647(%r15,%r9,8), %ymm12, %k2{%k3}
     {evex} vpcmpled gnu_fwd(%rip), %ymm17, %k4{%k5}
     {evex} vpcmpled %zmm16, %zmm3, %k6
-    {evex} vpcmpled 0(%r9), %zmm25, %k7
-    {evex} vpcmpled -8192(%r15), %zmm9, %k1
-    {evex} vpcmpled 4660(%rcx), %zmm31, %k2
+    {evex} vpcmpled 0(%r10), %zmm25, %k7
+    {evex} vpcmpled -8192(%r13), %zmm9, %k1
+    {evex} vpcmpled 4660(%rdx), %zmm31, %k2
     {evex} vpcmpled 0(%rsp), %zmm20, %k3
     {evex} vpcmpled 8128(%r12), %zmm12, %k4
     {evex} vpcmpled -129(%rsp), %zmm17, %k5
-    {evex} vpcmpled 0(%rax,%r12,4), %zmm16, %k6
-    {evex} vpcmpled -64(%rbp,%rax,8), %zmm3, %k7
-    {evex} vpcmpled 1001(%r12,%r15,1), %zmm25, %k1
+    {evex} vpcmpled 0(%rcx,%rbp,1), %zmm16, %k6
+    {evex} vpcmpled -64(%rax,%r12,2), %zmm3, %k7
+    {evex} vpcmpled 1001(%r9,%rax,4), %zmm25, %k1
     {evex} vpcmpled gnu_back(%rip), %zmm9, %k2
     {evex} vpcmpled %zmm31, %zmm20, %k3{%k4}
-    {evex} vpcmpled 0(%rbx), %zmm12, %k5{%k6}
-    {evex} vpcmpled 128(%r8), %zmm17, %k7{%k1}
-    {evex} vpcmpled -2147483648(%rbp), %zmm16, %k2{%k3}
+    {evex} vpcmpled 0(%rsi), %zmm12, %k5{%k6}
+    {evex} vpcmpled 128(%r9), %zmm17, %k7{%k1}
+    {evex} vpcmpled -2147483648(%rbx), %zmm16, %k2{%k3}
     {evex} vpcmpled 0(%r12), %zmm3, %k4{%k5}
     {evex} vpcmpled -8192(%rsp), %zmm25, %k6{%k7}
     {evex} vpcmpled 2147483647(%r12), %zmm9, %k1{%k2}
-    {evex} vpcmpled 0(%r8,%rsi,2), %zmm31, %k3{%k4}
-    {evex} vpcmpled 8128(%rdi,%rcx,4), %zmm20, %k5{%k6}
-    {evex} vpcmpled 4660(%r15,%r9,8), %zmm12, %k7{%k1}
+    {evex} vpcmpled 0(%r12,%r15,8), %zmm31, %k3{%k4}
+    {evex} vpcmpled 8128(%rsp,%rsi,1), %zmm20, %k5{%k6}
+    {evex} vpcmpled 4660(%r13,%rcx,2), %zmm12, %k7{%k1}
     {evex} vpcmpled gnu_fwd(%rip), %zmm17, %k2{%k3}
     {evex} vpcmpneqd %xmm16, %xmm3, %k4
-    {evex} vpcmpneqd 0(%r10), %xmm25, %k5
-    {evex} vpcmpneqd -16(%r13), %xmm9, %k6
-    {evex} vpcmpneqd -129(%rdx), %xmm31, %k7
+    {evex} vpcmpneqd 0(%r11), %xmm25, %k5
+    {evex} vpcmpneqd -16(%r10), %xmm9, %k6
+    {evex} vpcmpneqd -129(%rsi), %xmm31, %k7
     {evex} vpcmpneqd 0(%rsp), %xmm20, %k1
     {evex} vpcmpneqd 32(%r12), %xmm12, %k2
     {evex} vpcmpneqd 1001(%rsp), %xmm17, %k3
-    {evex} vpcmpneqd 0(%rcx,%rbp,1), %xmm16, %k4
-    {evex} vpcmpneqd -2048(%rax,%r12,2), %xmm3, %k5
-    {evex} vpcmpneqd -2147483648(%r9,%rax,4), %xmm25, %k6
+    {evex} vpcmpneqd 0(%rdx,%r9,4), %xmm16, %k4
+    {evex} vpcmpneqd -2048(%rbp,%rbp,8), %xmm3, %k5
+    {evex} vpcmpneqd -2147483648(%r12,%r12,1), %xmm25, %k6
     {evex} vpcmpneqd gnu_back(%rip), %xmm9, %k7
     {evex} vpcmpneqd %xmm31, %xmm20, %k1{%k2}
-    {evex} vpcmpneqd 0(%rsi), %xmm12, %k3{%k4}
-    {evex} vpcmpneqd 2032(%r9), %xmm17, %k5{%k6}
-    {evex} vpcmpneqd 2147483647(%rbx), %xmm16, %k7{%k1}
+    {evex} vpcmpneqd 0(%rdi), %xmm12, %k3{%k4}
+    {evex} vpcmpneqd 2032(%r11), %xmm17, %k5{%k6}
+    {evex} vpcmpneqd 2147483647(%rdi), %xmm16, %k7{%k1}
     {evex} vpcmpneqd 0(%r12), %xmm3, %k2{%k3}
     {evex} vpcmpneqd -16(%rsp), %xmm25, %k4{%k5}
     {evex} vpcmpneqd 4660(%r12), %xmm9, %k6{%k7}
-    {evex} vpcmpneqd 0(%r12,%r15,8), %xmm31, %k1{%k2}
-    {evex} vpcmpneqd 32(%rsp,%rsi,1), %xmm20, %k3{%k4}
-    {evex} vpcmpneqd -129(%r13,%rcx,2), %xmm12, %k5{%k6}
+    {evex} vpcmpneqd 0(%r9,%rax,2), %xmm31, %k1{%k2}
+    {evex} vpcmpneqd 32(%rdi,%r15,4), %xmm20, %k3{%k4}
+    {evex} vpcmpneqd -129(%r15,%rsi,8), %xmm12, %k5{%k6}
     {evex} vpcmpneqd gnu_fwd(%rip), %xmm17, %k7{%k1}
     {evex} vpcmpneqd %ymm16, %ymm3, %k2
-    {evex} vpcmpneqd 0(%r11), %ymm25, %k3
-    {evex} vpcmpneqd -32(%r10), %ymm9, %k4
-    {evex} vpcmpneqd 1001(%rsi), %ymm31, %k5
+    {evex} vpcmpneqd 0(%r14), %ymm25, %k3
+    {evex} vpcmpneqd -32(%r14), %ymm9, %k4
+    {evex} vpcmpneqd 1001(%r15), %ymm31, %k5
     {evex} vpcmpneqd 0(%rsp), %ymm20, %k6
     {evex} vpcmpneqd 64(%r12), %ymm12, %k7
     {evex} vpcmpneqd -2147483648(%rsp), %ymm17, %k1
-    {evex} vpcmpneqd 0(%rdx,%r9,4), %ymm16, %k2
-    {evex} vpcmpneqd -4096(%rbp,%rbp,8), %ymm3, %k3
-    {evex} vpcmpneqd 2147483647(%r12,%r12,1), %ymm25, %k4
+    {evex} vpcmpneqd 0(%rsp,%rcx,1), %ymm16, %k2
+    {evex} vpcmpneqd -4096(%rax,%r9,2), %ymm3, %k3
+    {evex} vpcmpneqd 2147483647(%r9,%rbp,4), %ymm25, %k4
     {evex} vpcmpneqd gnu_back(%rip), %ymm9, %k5
     {evex} vpcmpneqd %ymm31, %ymm20, %k6{%k7}
-    {evex} vpcmpneqd 0(%rdi), %ymm12, %k1{%k2}
-    {evex} vpcmpneqd 4064(%r11), %ymm17, %k3{%k4}
-    {evex} vpcmpneqd 4660(%rdi), %ymm16, %k5{%k6}
+    {evex} vpcmpneqd 0(%r15), %ymm12, %k1{%k2}
+    {evex} vpcmpneqd 4064(%rcx), %ymm17, %k3{%k4}
+    {evex} vpcmpneqd 4660(%r8), %ymm16, %k5{%k6}
     {evex} vpcmpneqd 0(%r12), %ymm3, %k7{%k1}
     {evex} vpcmpneqd -32(%rsp), %ymm25, %k2{%k3}
     {evex} vpcmpneqd -129(%r12), %ymm9, %k4{%k5}
-    {evex} vpcmpneqd 0(%r9,%rax,2), %ymm31, %k6{%k7}
-    {evex} vpcmpneqd 64(%rdi,%r15,4), %ymm20, %k1{%k2}
-    {evex} vpcmpneqd 1001(%r15,%rsi,8), %ymm12, %k3{%k4}
+    {evex} vpcmpneqd 0(%r14,%r12,8), %ymm31, %k6{%k7}
+    {evex} vpcmpneqd 64(%rsp,%rax,1), %ymm20, %k1{%k2}
+    {evex} vpcmpneqd 1001(%r13,%r15,2), %ymm12, %k3{%k4}
     {evex} vpcmpneqd gnu_fwd(%rip), %ymm17, %k5{%k6}
     {evex} vpcmpneqd %zmm16, %zmm3, %k7
-    {evex} vpcmpneqd 0(%r14), %zmm25, %k1
-    {evex} vpcmpneqd -64(%r14), %zmm9, %k2
-    {evex} vpcmpneqd -2147483648(%r15), %zmm31, %k3
+    {evex} vpcmpneqd 0(%rcx), %zmm25, %k1
+    {evex} vpcmpneqd -64(%rbp), %zmm9, %k2
+    {evex} vpcmpneqd -2147483648(%r13), %zmm31, %k3
     {evex} vpcmpneqd 0(%rsp), %zmm20, %k4
     {evex} vpcmpneqd 128(%r12), %zmm12, %k5
     {evex} vpcmpneqd 2147483647(%rsp), %zmm17, %k6
-    {evex} vpcmpneqd 0(%rsp,%rcx,1), %zmm16, %k7
-    {evex} vpcmpneqd -8192(%rax,%r9,2), %zmm3, %k1
-    {evex} vpcmpneqd 4660(%r9,%rbp,4), %zmm25, %k2
+    {evex} vpcmpneqd 0(%rsi,%rsi,4), %zmm16, %k7
+    {evex} vpcmpneqd -8192(%rbp,%rcx,8), %zmm3, %k1
+    {evex} vpcmpneqd 4660(%r12,%r9,1), %zmm25, %k2
     {evex} vpcmpneqd gnu_back(%rip), %zmm9, %k3
     {evex} vpcmpneqd %zmm31, %zmm20, %k4{%k5}
-    {evex} vpcmpneqd 0(%r15), %zmm12, %k6{%k7}
-    {evex} vpcmpneqd 8128(%rcx), %zmm17, %k1{%k2}
-    {evex} vpcmpneqd -129(%r8), %zmm16, %k3{%k4}
+    {evex} vpcmpneqd 0(%r8), %zmm12, %k6{%k7}
+    {evex} vpcmpneqd 8128(%rdx), %zmm17, %k1{%k2}
+    {evex} vpcmpneqd -129(%r9), %zmm16, %k3{%k4}
     {evex} vpcmpneqd 0(%r12), %zmm3, %k5{%k6}
     {evex} vpcmpneqd -64(%rsp), %zmm25, %k7{%k1}
     {evex} vpcmpneqd 1001(%r12), %zmm9, %k2{%k3}
-    {evex} vpcmpneqd 0(%r14,%r12,8), %zmm31, %k4{%k5}
-    {evex} vpcmpneqd 128(%rsp,%rax,1), %zmm20, %k6{%k7}
-    {evex} vpcmpneqd -2147483648(%r13,%r15,2), %zmm12, %k1{%k2}
+    {evex} vpcmpneqd 0(%r15,%rbp,2), %zmm31, %k4{%k5}
+    {evex} vpcmpneqd 128(%rdi,%r12,4), %zmm20, %k6{%k7}
+    {evex} vpcmpneqd -2147483648(%r15,%rax,8), %zmm12, %k1{%k2}
     {evex} vpcmpneqd gnu_fwd(%rip), %zmm17, %k3{%k4}
     {evex} vpcmpnltd %xmm16, %xmm3, %k5
-    {evex} vpcmpnltd 0(%rcx), %xmm25, %k6
-    {evex} vpcmpnltd -2048(%rbp), %xmm9, %k7
-    {evex} vpcmpnltd 2147483647(%r13), %xmm31, %k1
+    {evex} vpcmpnltd 0(%rdx), %xmm25, %k6
+    {evex} vpcmpnltd -2048(%rbx), %xmm9, %k7
+    {evex} vpcmpnltd 2147483647(%r10), %xmm31, %k1
     {evex} vpcmpnltd 0(%rsp), %xmm20, %k2
     {evex} vpcmpnltd 2032(%r12), %xmm12, %k3
     {evex} vpcmpnltd 4660(%rsp), %xmm17, %k4
-    {evex} vpcmpnltd 0(%rsi,%rsi,4), %xmm16, %k5
-    {evex} vpcmpnltd -16(%rbp,%rcx,8), %xmm3, %k6
-    {evex} vpcmpnltd -129(%r12,%r9,1), %xmm25, %k7
+    {evex} vpcmpnltd 0(%rax,%r15,1), %xmm16, %k5
+    {evex} vpcmpnltd -16(%rax,%rsi,2), %xmm3, %k6
+    {evex} vpcmpnltd -129(%r9,%rcx,4), %xmm25, %k7
     {evex} vpcmpnltd gnu_back(%rip), %xmm9, %k1
     {evex} vpcmpnltd %xmm31, %xmm20, %k2{%k3}
-    {evex} vpcmpnltd 0(%r8), %xmm12, %k4{%k5}
-    {evex} vpcmpnltd 32(%rdx), %xmm17, %k6{%k7}
-    {evex} vpcmpnltd 1001(%r9), %xmm16, %k1{%k2}
+    {evex} vpcmpnltd 0(%r9), %xmm12, %k4{%k5}
+    {evex} vpcmpnltd 32(%rsi), %xmm17, %k6{%k7}
+g69:
+    {evex} vpcmpnltd 1001(%r11), %xmm16, %k1{%k2}
     {evex} vpcmpnltd 0(%r12), %xmm3, %k3{%k4}
     {evex} vpcmpnltd -2048(%rsp), %xmm25, %k5{%k6}
     {evex} vpcmpnltd -2147483648(%r12), %xmm9, %k7{%k1}
-    {evex} vpcmpnltd 0(%r15,%rbp,2), %xmm31, %k2{%k3}
-    {evex} vpcmpnltd 2032(%rdi,%r12,4), %xmm20, %k4{%k5}
-    {evex} vpcmpnltd 2147483647(%r15,%rax,8), %xmm12, %k6{%k7}
+    {evex} vpcmpnltd 0(%r8,%r9,8), %xmm31, %k2{%k3}
+    {evex} vpcmpnltd 2032(%rsp,%rbp,1), %xmm20, %k4{%k5}
+    {evex} vpcmpnltd 2147483647(%r13,%r12,2), %xmm12, %k6{%k7}
     {evex} vpcmpnltd gnu_fwd(%rip), %xmm17, %k1{%k2}
     {evex} vpcmpnltd %ymm16, %ymm3, %k3
-    {evex} vpcmpnltd 0(%rdx), %ymm25, %k4
-    {evex} vpcmpnltd -4096(%rbx), %ymm9, %k5
-    {evex} vpcmpnltd 4660(%r10), %ymm31, %k6
+    {evex} vpcmpnltd 0(%rbx), %ymm25, %k4
+    {evex} vpcmpnltd -4096(%rdi), %ymm9, %k5
+    {evex} vpcmpnltd 4660(%r14), %ymm31, %k6
     {evex} vpcmpnltd 0(%rsp), %ymm20, %k7
     {evex} vpcmpnltd 4064(%r12), %ymm12, %k1
     {evex} vpcmpnltd -129(%rsp), %ymm17, %k2
-    {evex} vpcmpnltd 0(%rax,%r15,1), %ymm16, %k3
-    {evex} vpcmpnltd -32(%rax,%rsi,2), %ymm3, %k4
-    {evex} vpcmpnltd 1001(%r9,%rcx,4), %ymm25, %k5
+    {evex} vpcmpnltd 0(%rcx,%rax,4), %ymm16, %k3
+    {evex} vpcmpnltd -32(%rbp,%r15,8), %ymm3, %k4
+    {evex} vpcmpnltd 1001(%r12,%rsi,1), %ymm25, %k5
     {evex} vpcmpnltd gnu_back(%rip), %ymm9, %k6
     {evex} vpcmpnltd %ymm31, %ymm20, %k7{%k1}
-    {evex} vpcmpnltd 0(%r9), %ymm12, %k2{%k3}
-    {evex} vpcmpnltd 64(%rsi), %ymm17, %k4{%k5}
-    {evex} vpcmpnltd -2147483648(%r11), %ymm16, %k6{%k7}
+    {evex} vpcmpnltd 0(%r10), %ymm12, %k2{%k3}
+    {evex} vpcmpnltd 64(%r15), %ymm17, %k4{%k5}
+    {evex} vpcmpnltd -2147483648(%rcx), %ymm16, %k6{%k7}
     {evex} vpcmpnltd 0(%r12), %ymm3, %k1{%k2}
-g69:
     {evex} vpcmpnltd -4096(%rsp), %ymm25, %k3{%k4}
     {evex} vpcmpnltd 2147483647(%r12), %ymm9, %k5{%k6}
-    {evex} vpcmpnltd 0(%r8,%r9,8), %ymm31, %k7{%k1}
-    {evex} vpcmpnltd 4064(%rsp,%rbp,1), %ymm20, %k2{%k3}
-    {evex} vpcmpnltd 4660(%r13,%r12,2), %ymm12, %k4{%k5}
+    {evex} vpcmpnltd 0(%r12,%rcx,2), %ymm31, %k7{%k1}
+    {evex} vpcmpnltd 4064(%rdi,%r9,4), %ymm20, %k2{%k3}
+    {evex} vpcmpnltd 4660(%r15,%rbp,8), %ymm12, %k4{%k5}
     {evex} vpcmpnltd gnu_fwd(%rip), %ymm17, %k6{%k7}
     {evex} vpcmpnltd %zmm16, %zmm3, %k1
-    {evex} vpcmpnltd 0(%rbx), %zmm25, %k2
-    {evex} vpcmpnltd -8192(%rdi), %zmm9, %k3
-    {evex} vpcmpnltd -129(%r14), %zmm31, %k4
+    {evex} vpcmpnltd 0(%rsi), %zmm25, %k2
+    {evex} vpcmpnltd -8192(%r8), %zmm9, %k3
+    {evex} vpcmpnltd -129(%rbp), %zmm31, %k4
     {evex} vpcmpnltd 0(%rsp), %zmm20, %k5
     {evex} vpcmpnltd 8128(%r12), %zmm12, %k6
     {evex} vpcmpnltd 1001(%rsp), %zmm17, %k7
-    {evex} vpcmpnltd 0(%rcx,%rax,4), %zmm16, %k1
-    {evex} vpcmpnltd -64(%rbp,%r15,8), %zmm3, %k2
-    {evex} vpcmpnltd -2147483648(%r12,%rsi,1), %zmm25, %k3
+    {evex} vpcmpnltd 0(%rdx,%r12,1), %zmm16, %k1
+    {evex} vpcmpnltd -64(%rax,%rax,2), %zmm3, %k2
+    {evex} vpcmpnltd -2147483648(%r9,%r15,4), %zmm25, %k3
     {evex} vpcmpnltd gnu_back(%rip), %zmm9, %k4
     {evex} vpcmpnltd %zmm31, %zmm20, %k5{%k6}
-    {evex} vpcmpnltd 0(%r10), %zmm12, %k7{%k1}
-    {evex} vpcmpnltd 128(%r15), %zmm17, %k2{%k3}
-    {evex} vpcmpnltd 2147483647(%rcx), %zmm16, %k4{%k5}
+    {evex} vpcmpnltd 0(%r11), %zmm12, %k7{%k1}
+    {evex} vpcmpnltd 128(%r13), %zmm17, %k2{%k3}
+    {evex} vpcmpnltd 2147483647(%rdx), %zmm16, %k4{%k5}
     {evex} vpcmpnltd 0(%r12), %zmm3, %k6{%k7}
     {evex} vpcmpnltd -8192(%rsp), %zmm25, %k1{%k2}
     {evex} vpcmpnltd 4660(%r12), %zmm9, %k3{%k4}
-    {evex} vpcmpnltd 0(%r12,%rcx,2), %zmm31, %k5{%k6}
-    {evex} vpcmpnltd 8128(%rdi,%r9,4), %zmm20, %k7{%k1}
-    {evex} vpcmpnltd -129(%r15,%rbp,8), %zmm12, %k2{%k3}
+    {evex} vpcmpnltd 0(%r9,%rsi,8), %zmm31, %k5{%k6}
+    {evex} vpcmpnltd 8128(%rsp,%rcx,1), %zmm20, %k7{%k1}
+    {evex} vpcmpnltd -129(%r13,%r9,2), %zmm12, %k2{%k3}
     {evex} vpcmpnltd gnu_fwd(%rip), %zmm17, %k4{%k5}
     {evex} vpcmpnled %xmm16, %xmm3, %k6
-    {evex} vpcmpnled 0(%rsi), %xmm25, %k7
-    {evex} vpcmpnled -16(%r8), %xmm9, %k1
-    {evex} vpcmpnled 1001(%rbp), %xmm31, %k2
+    {evex} vpcmpnled 0(%rdi), %xmm25, %k7
+    {evex} vpcmpnled -16(%r9), %xmm9, %k1
+    {evex} vpcmpnled 1001(%rbx), %xmm31, %k2
     {evex} vpcmpnled 0(%rsp), %xmm20, %k3
     {evex} vpcmpnled 32(%r12), %xmm12, %k4
     {evex} vpcmpnled -2147483648(%rsp), %xmm17, %k5
-    {evex} vpcmpnled 0(%rdx,%r12,1), %xmm16, %k6
-    {evex} vpcmpnled -2048(%rax,%rax,2), %xmm3, %k7
-    {evex} vpcmpnled 2147483647(%r9,%r15,4), %xmm25, %k1
+    {evex} vpcmpnled 0(%rsp,%rbp,4), %xmm16, %k6
+    {evex} vpcmpnled -2048(%rbp,%r12,8), %xmm3, %k7
+    {evex} vpcmpnled 2147483647(%r12,%rax,1), %xmm25, %k1
     {evex} vpcmpnled gnu_back(%rip), %xmm9, %k2
     {evex} vpcmpnled %xmm31, %xmm20, %k3{%k4}
-    {evex} vpcmpnled 0(%r11), %xmm12, %k5{%k6}
-    {evex} vpcmpnled 2032(%r13), %xmm17, %k7{%k1}
-    {evex} vpcmpnled 4660(%rdx), %xmm16, %k2{%k3}
+    {evex} vpcmpnled 0(%r14), %xmm12, %k5{%k6}
+    {evex} vpcmpnled 2032(%r10), %xmm17, %k7{%k1}
+    {evex} vpcmpnled 4660(%rsi), %xmm16, %k2{%k3}
     {evex} vpcmpnled 0(%r12), %xmm3, %k4{%k5}
     {evex} vpcmpnled -16(%rsp), %xmm25, %k6{%k7}
     {evex} vpcmpnled -129(%r12), %xmm9, %k1{%k2}
-    {evex} vpcmpnled 0(%r9,%rsi,8), %xmm31, %k3{%k4}
-    {evex} vpcmpnled 32(%rsp,%rcx,1), %xmm20, %k5{%k6}
-    {evex} vpcmpnled 1001(%r13,%r9,2), %xmm12, %k7{%k1}
+    {evex} vpcmpnled 0(%r14,%r15,2), %xmm31, %k3{%k4}
+    {evex} vpcmpnled 32(%rdi,%rsi,4), %xmm20, %k5{%k6}
+    {evex} vpcmpnled 1001(%r15,%rcx,8), %xmm12, %k7{%k1}
     {evex} vpcmpnled gnu_fwd(%rip), %xmm17, %k2{%k3}
     {evex} vpcmpnled %ymm16, %ymm3, %k4
-    {evex} vpcmpnled 0(%rdi), %ymm25, %k5
-    {evex} vpcmpnled -32(%r9), %ymm9, %k6
-    {evex} vpcmpnled -2147483648(%rbx), %ymm31, %k7
+    {evex} vpcmpnled 0(%r15), %ymm25, %k5
+    {evex} vpcmpnled -32(%r11), %ymm9, %k6
+    {evex} vpcmpnled -2147483648(%rdi), %ymm31, %k7
     {evex} vpcmpnled 0(%rsp), %ymm20, %k1
     {evex} vpcmpnled 64(%r12), %ymm12, %k2
     {evex} vpcmpnled 2147483647(%rsp), %ymm17, %k3
-    {evex} vpcmpnled 0(%rsp,%rbp,4), %ymm16, %k4
-    {evex} vpcmpnled -4096(%rbp,%r12,8), %ymm3, %k5
-    {evex} vpcmpnled 4660(%r12,%rax,1), %ymm25, %k6
+    {evex} vpcmpnled 0(%rsi,%r9,1), %ymm16, %k4
+    {evex} vpcmpnled -4096(%rax,%rbp,2), %ymm3, %k5
+    {evex} vpcmpnled 4660(%r9,%r12,4), %ymm25, %k6
     {evex} vpcmpnled gnu_back(%rip), %ymm9, %k7
     {evex} vpcmpnled %ymm31, %ymm20, %k1{%k2}
-    {evex} vpcmpnled 0(%r14), %ymm12, %k3{%k4}
-    {evex} vpcmpnled 4064(%r10), %ymm17, %k5{%k6}
-    {evex} vpcmpnled -129(%rsi), %ymm16, %k7{%k1}
+    {evex} vpcmpnled 0(%rcx), %ymm12, %k3{%k4}
+    {evex} vpcmpnled 4064(%r14), %ymm17, %k5{%k6}
+    {evex} vpcmpnled -129(%r15), %ymm16, %k7{%k1}
     {evex} vpcmpnled 0(%r12), %ymm3, %k2{%k3}
     {evex} vpcmpnled -32(%rsp), %ymm25, %k4{%k5}
     {evex} vpcmpnled 1001(%r12), %ymm9, %k6{%k7}
-    {evex} vpcmpnled 0(%r14,%r15,2), %ymm31, %k1{%k2}
-    {evex} vpcmpnled 64(%rdi,%rsi,4), %ymm20, %k3{%k4}
-    {evex} vpcmpnled -2147483648(%r15,%rcx,8), %ymm12, %k5{%k6}
+    {evex} vpcmpnled 0(%r15,%rax,8), %ymm31, %k1{%k2}
+    {evex} vpcmpnled 64(%rsp,%r15,1), %ymm20, %k3{%k4}
+    {evex} vpcmpnled -2147483648(%r13,%rsi,2), %ymm12, %k5{%k6}
     {evex} vpcmpnled gnu_fwd(%rip), %ymm17, %k7{%k1}
     {evex} vpcmpnled %zmm16, %zmm3, %k2
-    {evex} vpcmpnled 0(%r15), %zmm25, %k3
-    {evex} vpcmpnled -64(%r11), %zmm9, %k4
-    {evex} vpcmpnled 2147483647(%rdi), %zmm31, %k5
+    {evex} vpcmpnled 0(%r8), %zmm25, %k3
+    {evex} vpcmpnled -64(%rcx), %zmm9, %k4
+    {evex} vpcmpnled 2147483647(%r8), %zmm31, %k5
     {evex} vpcmpnled 0(%rsp), %zmm20, %k6
     {evex} vpcmpnled 128(%r12), %zmm12, %k7
     {evex} vpcmpnled 4660(%rsp), %zmm17, %k1
-    {evex} vpcmpnled 0(%rsi,%r9,1), %zmm16, %k2
-    {evex} vpcmpnled -8192(%rax,%rbp,2), %zmm3, %k3
-    {evex} vpcmpnled -129(%r9,%r12,4), %zmm25, %k4
+    {evex} vpcmpnled 0(%rax,%rcx,4), %zmm16, %k2
+    {evex} vpcmpnled -8192(%rbp,%r9,8), %zmm3, %k3
+    {evex} vpcmpnled -129(%r12,%rbp,1), %zmm25, %k4
     {evex} vpcmpnled gnu_back(%rip), %zmm9, %k5
     {evex} vpcmpnled %zmm31, %zmm20, %k6{%k7}
-    {evex} vpcmpnled 0(%rcx), %zmm12, %k1{%k2}
-    {evex} vpcmpnled 8128(%r14), %zmm17, %k3{%k4}
-    {evex} vpcmpnled 1001(%r15), %zmm16, %k5{%k6}
+    {evex} vpcmpnled 0(%rdx), %zmm12, %k1{%k2}
+    {evex} vpcmpnled 8128(%rbp), %zmm17, %k3{%k4}
+    {evex} vpcmpnled 1001(%r13), %zmm16, %k5{%k6}
     {evex} vpcmpnled 0(%r12), %zmm3, %k7{%k1}
     {evex} vpcmpnled -64(%rsp), %zmm25, %k2{%k3}
     {evex} vpcmpnled -2147483648(%r12), %zmm9, %k4{%k5}
-    {evex} vpcmpnled 0(%r15,%rax,8), %zmm31, %k6{%k7}
-    {evex} vpcmpnled 128(%rsp,%r15,1), %zmm20, %k1{%k2}
-    {evex} vpcmpnled 2147483647(%r13,%rsi,2), %zmm12, %k3{%k4}
+    {evex} vpcmpnled 0(%r8,%r12,2), %zmm31, %k6{%k7}
+    {evex} vpcmpnled 128(%rdi,%rax,4), %zmm20, %k1{%k2}
+    {evex} vpcmpnled 2147483647(%r15,%r15,8), %zmm12, %k3{%k4}
     {evex} vpcmpnled gnu_fwd(%rip), %zmm17, %k5{%k6}
     {evex} vpcmpequd %xmm16, %xmm3, %k7
-    {evex} vpcmpequd 0(%r8), %xmm25, %k1
-    {evex} vpcmpequd -2048(%rcx), %xmm9, %k2
-    {evex} vpcmpequd 4660(%r8), %xmm31, %k3
+    {evex} vpcmpequd 0(%r9), %xmm25, %k1
+    {evex} vpcmpequd -2048(%rdx), %xmm9, %k2
+    {evex} vpcmpequd 4660(%r9), %xmm31, %k3
     {evex} vpcmpequd 0(%rsp), %xmm20, %k4
     {evex} vpcmpequd 2032(%r12), %xmm12, %k5
     {evex} vpcmpequd -129(%rsp), %xmm17, %k6
-    {evex} vpcmpequd 0(%rax,%rcx,4), %xmm16, %k7
-    {evex} vpcmpequd -16(%rbp,%r9,8), %xmm3, %k1
-    {evex} vpcmpequd 1001(%r12,%rbp,1), %xmm25, %k2
+    {evex} vpcmpequd 0(%rcx,%rsi,1), %xmm16, %k7
+    {evex} vpcmpequd -16(%rax,%rcx,2), %xmm3, %k1
+    {evex} vpcmpequd 1001(%r9,%r9,4), %xmm25, %k2
     {evex} vpcmpequd gnu_back(%rip), %xmm9, %k3
     {evex} vpcmpequd %xmm31, %xmm20, %k4{%k5}
-    {evex} vpcmpequd 0(%rdx), %xmm12, %k6{%k7}
-    {evex} vpcmpequd 32(%rbp), %xmm17, %k1{%k2}
-    {evex} vpcmpequd -2147483648(%r13), %xmm16, %k3{%k4}
+    {evex} vpcmpequd 0(%rbx), %xmm12, %k6{%k7}
+    {evex} vpcmpequd 32(%rbx), %xmm17, %k1{%k2}
+    {evex} vpcmpequd -2147483648(%r10), %xmm16, %k3{%k4}
     {evex} vpcmpequd 0(%r12), %xmm3, %k5{%k6}
     {evex} vpcmpequd -2048(%rsp), %xmm25, %k7{%k1}
     {evex} vpcmpequd 2147483647(%r12), %xmm9, %k2{%k3}
-    {evex} vpcmpequd 0(%r8,%r12,2), %xmm31, %k4{%k5}
-    {evex} vpcmpequd 2032(%rdi,%rax,4), %xmm20, %k6{%k7}
-    {evex} vpcmpequd 4660(%r15,%r15,8), %xmm12, %k1{%k2}
+    {evex} vpcmpequd 0(%r12,%rbp,8), %xmm31, %k4{%k5}
+    {evex} vpcmpequd 2032(%rsp,%r12,1), %xmm20, %k6{%k7}
+    {evex} vpcmpequd 4660(%r13,%rax,2), %xmm12, %k1{%k2}
     {evex} vpcmpequd gnu_fwd(%rip), %xmm17, %k3{%k4}
     {evex} vpcmpequd %ymm16, %ymm3, %k5
-    {evex} vpcmpequd 0(%r9), %ymm25, %k6
-    {evex} vpcmpequd -4096(%rdx), %ymm9, %k7
-    {evex} vpcmpequd -129(%r9), %ymm31, %k1
+    {evex} vpcmpequd 0(%r10), %ymm25, %k6
+    {evex} vpcmpequd -4096(%rsi), %ymm9, %k7
+    {evex} vpcmpequd -129(%r11), %ymm31, %k1
     {evex} vpcmpequd 0(%rsp), %ymm20, %k2
     {evex} vpcmpequd 4064(%r12), %ymm12, %k3
     {evex} vpcmpequd 1001(%rsp), %ymm17, %k4
-    {evex} vpcmpequd 0(%rcx,%rsi,1), %ymm16, %k5
-    {evex} vpcmpequd -32(%rax,%rcx,2), %ymm3, %k6
-    {evex} vpcmpequd -2147483648(%r9,%r9,4), %ymm25, %k7
+    {evex} vpcmpequd 0(%rdx,%r15,4), %ymm16, %k5
+    {evex} vpcmpequd -32(%rbp,%rsi,8), %ymm3, %k6
+    {evex} vpcmpequd -2147483648(%r12,%rcx,1), %ymm25, %k7
     {evex} vpcmpequd gnu_back(%rip), %ymm9, %k1
     {evex} vpcmpequd %ymm31, %ymm20, %k2{%k3}
-    {evex} vpcmpequd 0(%rbx), %ymm12, %k4{%k5}
-    {evex} vpcmpequd 64(%rbx), %ymm17, %k6{%k7}
-    {evex} vpcmpequd 2147483647(%r10), %ymm16, %k1{%k2}
+    {evex} vpcmpequd 0(%rsi), %ymm12, %k4{%k5}
+    {evex} vpcmpequd 64(%rdi), %ymm17, %k6{%k7}
+    {evex} vpcmpequd 2147483647(%r14), %ymm16, %k1{%k2}
     {evex} vpcmpequd 0(%r12), %ymm3, %k3{%k4}
     {evex} vpcmpequd -4096(%rsp), %ymm25, %k5{%k6}
     {evex} vpcmpequd 4660(%r12), %ymm9, %k7{%k1}
-    {evex} vpcmpequd 0(%r12,%rbp,8), %ymm31, %k2{%k3}
-    {evex} vpcmpequd 4064(%rsp,%r12,1), %ymm20, %k4{%k5}
-    {evex} vpcmpequd -129(%r13,%rax,2), %ymm12, %k6{%k7}
+    {evex} vpcmpequd 0(%r9,%r9,2), %ymm31, %k2{%k3}
+    {evex} vpcmpequd 4064(%rdi,%rbp,4), %ymm20, %k4{%k5}
+    {evex} vpcmpequd -129(%r15,%r12,8), %ymm12, %k6{%k7}
     {evex} vpcmpequd gnu_fwd(%rip), %ymm17, %k1{%k2}
     {evex} vpcmpequd %zmm16, %zmm3, %k3
-    {evex} vpcmpequd 0(%r10), %zmm25, %k4
-    {evex} vpcmpequd -8192(%rsi), %zmm9, %k5
-    {evex} vpcmpequd 1001(%r11), %zmm31, %k6
+    {evex} vpcmpequd 0(%r11), %zmm25, %k4
+    {evex} vpcmpequd -8192(%r15), %zmm9, %k5
+    {evex} vpcmpequd 1001(%rcx), %zmm31, %k6
     {evex} vpcmpequd 0(%rsp), %zmm20, %k7
     {evex} vpcmpequd 8128(%r12), %zmm12, %k1
     {evex} vpcmpequd -2147483648(%rsp), %zmm17, %k2
-    {evex} vpcmpequd 0(%rdx,%r15,4), %zmm16, %k3
-    {evex} vpcmpequd -64(%rbp,%rsi,8), %zmm3, %k4
-    {evex} vpcmpequd 2147483647(%r12,%rcx,1), %zmm25, %k5
+    {evex} vpcmpequd 0(%rsp,%rax,1), %zmm16, %k3
+    {evex} vpcmpequd -64(%rax,%r15,2), %zmm3, %k4
+    {evex} vpcmpequd 2147483647(%r9,%rsi,4), %zmm25, %k5
     {evex} vpcmpequd gnu_back(%rip), %zmm9, %k6
     {evex} vpcmpequd %zmm31, %zmm20, %k7{%k1}
-    {evex} vpcmpequd 0(%rsi), %zmm12, %k2{%k3}
-    {evex} vpcmpequd 128(%rdi), %zmm17, %k4{%k5}
-    {evex} vpcmpequd 4660(%r14), %zmm16, %k6{%k7}
+    {evex} vpcmpequd 0(%rdi), %zmm12, %k2{%k3}
+    {evex} vpcmpequd 128(%r8), %zmm17, %k4{%k5}
+    {evex} vpcmpequd 4660(%rbp), %zmm16, %k6{%k7}
     {evex} vpcmpequd 0(%r12), %zmm3, %k1{%k2}
     {evex} vpcmpequd -8192(%rsp), %zmm25, %k3{%k4}
     {evex} vpcmpequd -129(%r12), %zmm9, %k5{%k6}
-    {evex} vpcmpequd 0(%r9,%r9,2), %zmm31, %k7{%k1}
-    {evex} vpcmpequd 8128(%rdi,%rbp,4), %zmm20, %k2{%k3}
-    {evex} vpcmpequd 1001(%r15,%r12,8), %zmm12, %k4{%k5}
+    {evex} vpcmpequd 0(%r14,%rcx,8), %zmm31, %k7{%k1}
+    {evex} vpcmpequd 8128(%rsp,%r9,1), %zmm20, %k2{%k3}
+    {evex} vpcmpequd 1001(%r13,%rbp,2), %zmm12, %k4{%k5}
     {evex} vpcmpequd gnu_fwd(%rip), %zmm17, %k6{%k7}
     {evex} vpcmpltud %xmm16, %xmm3, %k1
-    {evex} vpcmpltud 0(%r11), %xmm25, %k2
-    {evex} vpcmpltud -16(%r15), %xmm9, %k3
-    {evex} vpcmpltud -2147483648(%rcx), %xmm31, %k4
+    {evex} vpcmpltud 0(%r14), %xmm25, %k2
+    {evex} vpcmpltud -16(%r13), %xmm9, %k3
+    {evex} vpcmpltud -2147483648(%rdx), %xmm31, %k4
     {evex} vpcmpltud 0(%rsp), %xmm20, %k5
     {evex} vpcmpltud 32(%r12), %xmm12, %k6
     {evex} vpcmpltud 2147483647(%rsp), %xmm17, %k7
-    {evex} vpcmpltud 0(%rsp,%rax,1), %xmm16, %k1
-    {evex} vpcmpltud -2048(%rax,%r15,2), %xmm3, %k2
-    {evex} vpcmpltud 4660(%r9,%rsi,4), %xmm25, %k3
+    {evex} vpcmpltud 0(%rsi,%r12,4), %xmm16, %k1
+    {evex} vpcmpltud -2048(%rbp,%rax,8), %xmm3, %k2
+    {evex} vpcmpltud 4660(%r12,%r15,1), %xmm25, %k3
     {evex} vpcmpltud gnu_back(%rip), %xmm9, %k4
     {evex} vpcmpltud %xmm31, %xmm20, %k5{%k6}
-    {evex} vpcmpltud 0(%rdi), %xmm12, %k7{%k1}
-    {evex} vpcmpltud 2032(%r8), %xmm17, %k2{%k3}
-    {evex} vpcmpltud -129(%rbp), %xmm16, %k4{%k5}
+    {evex} vpcmpltud 0(%r15), %xmm12, %k7{%k1}
+    {evex} vpcmpltud 2032(%r9), %xmm17, %k2{%k3}
+    {evex} vpcmpltud -129(%rbx), %xmm16, %k4{%k5}
     {evex} vpcmpltud 0(%r12), %xmm3, %k6{%k7}
+g70:
     {evex} vpcmpltud -16(%rsp), %xmm25, %k1{%k2}
     {evex} vpcmpltud 1001(%r12), %xmm9, %k3{%k4}
-    {evex} vpcmpltud 0(%r14,%rcx,8), %xmm31, %k5{%k6}
-    {evex} vpcmpltud 32(%rsp,%r9,1), %xmm20, %k7{%k1}
-    {evex} vpcmpltud -2147483648(%r13,%rbp,2), %xmm12, %k2{%k3}
+    {evex} vpcmpltud 0(%r15,%rsi,2), %xmm31, %k5{%k6}
+    {evex} vpcmpltud 32(%rdi,%rcx,4), %xmm20, %k7{%k1}
+    {evex} vpcmpltud -2147483648(%r15,%r9,8), %xmm12, %k2{%k3}
     {evex} vpcmpltud gnu_fwd(%rip), %xmm17, %k4{%k5}
     {evex} vpcmpltud %ymm16, %ymm3, %k6
-    {evex} vpcmpltud 0(%r14), %ymm25, %k7
-    {evex} vpcmpltud -32(%r13), %ymm9, %k1
-    {evex} vpcmpltud 2147483647(%rdx), %ymm31, %k2
+    {evex} vpcmpltud 0(%rcx), %ymm25, %k7
+    {evex} vpcmpltud -32(%r10), %ymm9, %k1
+    {evex} vpcmpltud 2147483647(%rsi), %ymm31, %k2
     {evex} vpcmpltud 0(%rsp), %ymm20, %k3
     {evex} vpcmpltud 64(%r12), %ymm12, %k4
     {evex} vpcmpltud 4660(%rsp), %ymm17, %k5
-    {evex} vpcmpltud 0(%rsi,%r12,4), %ymm16, %k6
-    {evex} vpcmpltud -4096(%rbp,%rax,8), %ymm3, %k7
-    {evex} vpcmpltud -129(%r12,%r15,1), %ymm25, %k1
+    {evex} vpcmpltud 0(%rax,%rbp,1), %ymm16, %k6
+    {evex} vpcmpltud -4096(%rax,%r12,2), %ymm3, %k7
+    {evex} vpcmpltud -129(%r9,%rax,4), %ymm25, %k1
     {evex} vpcmpltud gnu_back(%rip), %ymm9, %k2
     {evex} vpcmpltud %ymm31, %ymm20, %k3{%k4}
-    {evex} vpcmpltud 0(%r15), %ymm12, %k5{%k6}
-    {evex} vpcmpltud 4064(%r9), %ymm17, %k7{%k1}
-    {evex} vpcmpltud 1001(%rbx), %ymm16, %k2{%k3}
+    {evex} vpcmpltud 0(%r8), %ymm12, %k5{%k6}
+    {evex} vpcmpltud 4064(%r11), %ymm17, %k7{%k1}
+    {evex} vpcmpltud 1001(%rdi), %ymm16, %k2{%k3}
     {evex} vpcmpltud 0(%r12), %ymm3, %k4{%k5}
     {evex} vpcmpltud -32(%rsp), %ymm25, %k6{%k7}
     {evex} vpcmpltud -2147483648(%r12), %ymm9, %k1{%k2}
-g70:
-    {evex} vpcmpltud 0(%r15,%rsi,2), %ymm31, %k3{%k4}
-    {evex} vpcmpltud 64(%rdi,%rcx,4), %ymm20, %k5{%k6}
-    {evex} vpcmpltud 2147483647(%r15,%r9,8), %ymm12, %k7{%k1}
+    {evex} vpcmpltud 0(%r8,%r15,8), %ymm31, %k3{%k4}
+    {evex} vpcmpltud 64(%rsp,%rsi,1), %ymm20, %k5{%k6}
+    {evex} vpcmpltud 2147483647(%r13,%rcx,2), %ymm12, %k7{%k1}
     {evex} vpcmpltud gnu_fwd(%rip), %ymm17, %k2{%k3}
     {evex} vpcmpltud %zmm16, %zmm3, %k4
-    {evex} vpcmpltud 0(%rcx), %zmm25, %k5
-    {evex} vpcmpltud -64(%r10), %zmm9, %k6
-    {evex} vpcmpltud 4660(%rsi), %zmm31, %k7
+    {evex} vpcmpltud 0(%rdx), %zmm25, %k5
+    {evex} vpcmpltud -64(%r14), %zmm9, %k6
+    {evex} vpcmpltud 4660(%r15), %zmm31, %k7
     {evex} vpcmpltud 0(%rsp), %zmm20, %k1
     {evex} vpcmpltud 128(%r12), %zmm12, %k2
     {evex} vpcmpltud -129(%rsp), %zmm17, %k3
-    {evex} vpcmpltud 0(%rax,%rbp,1), %zmm16, %k4
-    {evex} vpcmpltud -8192(%rax,%r12,2), %zmm3, %k5
-    {evex} vpcmpltud 1001(%r9,%rax,4), %zmm25, %k6
+    {evex} vpcmpltud 0(%rcx,%r9,4), %zmm16, %k4
+    {evex} vpcmpltud -8192(%rbp,%rbp,8), %zmm3, %k5
+    {evex} vpcmpltud 1001(%r12,%r12,1), %zmm25, %k6
     {evex} vpcmpltud gnu_back(%rip), %zmm9, %k7
     {evex} vpcmpltud %zmm31, %zmm20, %k1{%k2}
-    {evex} vpcmpltud 0(%r8), %zmm12, %k3{%k4}
-    {evex} vpcmpltud 8128(%r11), %zmm17, %k5{%k6}
-    {evex} vpcmpltud -2147483648(%rdi), %zmm16, %k7{%k1}
+    {evex} vpcmpltud 0(%r9), %zmm12, %k3{%k4}
+    {evex} vpcmpltud 8128(%rcx), %zmm17, %k5{%k6}
+    {evex} vpcmpltud -2147483648(%r8), %zmm16, %k7{%k1}
     {evex} vpcmpltud 0(%r12), %zmm3, %k2{%k3}
     {evex} vpcmpltud -64(%rsp), %zmm25, %k4{%k5}
     {evex} vpcmpltud 2147483647(%r12), %zmm9, %k6{%k7}
-    {evex} vpcmpltud 0(%r8,%r15,8), %zmm31, %k1{%k2}
-    {evex} vpcmpltud 128(%rsp,%rsi,1), %zmm20, %k3{%k4}
-    {evex} vpcmpltud 4660(%r13,%rcx,2), %zmm12, %k5{%k6}
+    {evex} vpcmpltud 0(%r12,%rax,2), %zmm31, %k1{%k2}
+    {evex} vpcmpltud 128(%rdi,%r15,4), %zmm20, %k3{%k4}
+    {evex} vpcmpltud 4660(%r15,%rsi,8), %zmm12, %k5{%k6}
     {evex} vpcmpltud gnu_fwd(%rip), %zmm17, %k7{%k1}
     {evex} vpcmpleud %xmm16, %xmm3, %k2
-    {evex} vpcmpleud 0(%rdx), %xmm25, %k3
-    {evex} vpcmpleud -2048(%r14), %xmm9, %k4
-    {evex} vpcmpleud -129(%r15), %xmm31, %k5
+    {evex} vpcmpleud 0(%rbx), %xmm25, %k3
+    {evex} vpcmpleud -2048(%rbp), %xmm9, %k4
+    {evex} vpcmpleud -129(%r13), %xmm31, %k5
     {evex} vpcmpleud 0(%rsp), %xmm20, %k6
     {evex} vpcmpleud 2032(%r12), %xmm12, %k7
     {evex} vpcmpleud 1001(%rsp), %xmm17, %k1
-    {evex} vpcmpleud 0(%rcx,%r9,4), %xmm16, %k2
-    {evex} vpcmpleud -16(%rbp,%rbp,8), %xmm3, %k3
-    {evex} vpcmpleud -2147483648(%r12,%r12,1), %xmm25, %k4
+    {evex} vpcmpleud 0(%rdx,%rcx,1), %xmm16, %k2
+    {evex} vpcmpleud -16(%rax,%r9,2), %xmm3, %k3
+    {evex} vpcmpleud -2147483648(%r9,%rbp,4), %xmm25, %k4
     {evex} vpcmpleud gnu_back(%rip), %xmm9, %k5
     {evex} vpcmpleud %xmm31, %xmm20, %k6{%k7}
-    {evex} vpcmpleud 0(%r9), %xmm12, %k1{%k2}
-    {evex} vpcmpleud 32(%rcx), %xmm17, %k3{%k4}
-    {evex} vpcmpleud 2147483647(%r8), %xmm16, %k5{%k6}
+    {evex} vpcmpleud 0(%r10), %xmm12, %k1{%k2}
+    {evex} vpcmpleud 32(%rdx), %xmm17, %k3{%k4}
+    {evex} vpcmpleud 2147483647(%r9), %xmm16, %k5{%k6}
     {evex} vpcmpleud 0(%r12), %xmm3, %k7{%k1}
     {evex} vpcmpleud -2048(%rsp), %xmm25, %k2{%k3}
     {evex} vpcmpleud 4660(%r12), %xmm9, %k4{%k5}
-    {evex} vpcmpleud 0(%r12,%rax,2), %xmm31, %k6{%k7}
-    {evex} vpcmpleud 2032(%rdi,%r15,4), %xmm20, %k1{%k2}
-    {evex} vpcmpleud -129(%r15,%rsi,8), %xmm12, %k3{%k4}
+    {evex} vpcmpleud 0(%r9,%r12,8), %xmm31, %k6{%k7}
+    {evex} vpcmpleud 2032(%rsp,%rax,1), %xmm20, %k1{%k2}
+    {evex} vpcmpleud -129(%r13,%r15,2), %xmm12, %k3{%k4}
     {evex} vpcmpleud gnu_fwd(%rip), %xmm17, %k5{%k6}
     {evex} vpcmpleud %ymm16, %ymm3, %k7
-    {evex} vpcmpleud 0(%rbx), %ymm25, %k1
-    {evex} vpcmpleud -4096(%rbp), %ymm9, %k2
-    {evex} vpcmpleud 1001(%r13), %ymm31, %k3
+    {evex} vpcmpleud 0(%rsi), %ymm25, %k1
+    {evex} vpcmpleud -4096(%rbx), %ymm9, %k2
+    {evex} vpcmpleud 1001(%r10), %ymm31, %k3
     {evex} vpcmpleud 0(%rsp), %ymm20, %k4
     {evex} vpcmpleud 4064(%r12), %ymm12, %k5
     {evex} vpcmpleud -2147483648(%rsp), %ymm17, %k6
-    {evex} vpcmpleud 0(%rdx,%rcx,1), %ymm16, %k7
-    {evex} vpcmpleud -32(%rax,%r9,2), %ymm3, %k1
-    {evex} vpcmpleud 2147483647(%r9,%rbp,4), %ymm25, %k2
+    {evex} vpcmpleud 0(%rsp,%rsi,4), %ymm16, %k7
+    {evex} vpcmpleud -32(%rbp,%rcx,8), %ymm3, %k1
+    {evex} vpcmpleud 2147483647(%r12,%r9,1), %ymm25, %k2
     {evex} vpcmpleud gnu_back(%rip), %ymm9, %k3
     {evex} vpcmpleud %ymm31, %ymm20, %k4{%k5}
-    {evex} vpcmpleud 0(%r10), %ymm12, %k6{%k7}
-    {evex} vpcmpleud 64(%rdx), %ymm17, %k1{%k2}
-    {evex} vpcmpleud 4660(%r9), %ymm16, %k3{%k4}
+    {evex} vpcmpleud 0(%r11), %ymm12, %k6{%k7}
+    {evex} vpcmpleud 64(%rsi), %ymm17, %k1{%k2}
+    {evex} vpcmpleud 4660(%r11), %ymm16, %k3{%k4}
     {evex} vpcmpleud 0(%r12), %ymm3, %k5{%k6}
     {evex} vpcmpleud -4096(%rsp), %ymm25, %k7{%k1}
     {evex} vpcmpleud -129(%r12), %ymm9, %k2{%k3}
-    {evex} vpcmpleud 0(%r9,%r12,8), %ymm31, %k4{%k5}
-    {evex} vpcmpleud 4064(%rsp,%rax,1), %ymm20, %k6{%k7}
-    {evex} vpcmpleud 1001(%r13,%r15,2), %ymm12, %k1{%k2}
+    {evex} vpcmpleud 0(%r14,%rbp,2), %ymm31, %k4{%k5}
+    {evex} vpcmpleud 4064(%rdi,%r12,4), %ymm20, %k6{%k7}
+    {evex} vpcmpleud 1001(%r15,%rax,8), %ymm12, %k1{%k2}
     {evex} vpcmpleud gnu_fwd(%rip), %ymm17, %k3{%k4}
     {evex} vpcmpleud %zmm16, %zmm3, %k5
-    {evex} vpcmpleud 0(%rsi), %zmm25, %k6
-    {evex} vpcmpleud -8192(%rbx), %zmm9, %k7
-    {evex} vpcmpleud -2147483648(%r10), %zmm31, %k1
+    {evex} vpcmpleud 0(%rdi), %zmm25, %k6
+    {evex} vpcmpleud -8192(%rdi), %zmm9, %k7
+    {evex} vpcmpleud -2147483648(%r14), %zmm31, %k1
     {evex} vpcmpleud 0(%rsp), %zmm20, %k2
     {evex} vpcmpleud 8128(%r12), %zmm12, %k3
     {evex} vpcmpleud 2147483647(%rsp), %zmm17, %k4
-    {evex} vpcmpleud 0(%rsp,%rsi,4), %zmm16, %k5
-    {evex} vpcmpleud -64(%rbp,%rcx,8), %zmm3, %k6
-    {evex} vpcmpleud 4660(%r12,%r9,1), %zmm25, %k7
+    {evex} vpcmpleud 0(%rsi,%r15,1), %zmm16, %k5
+    {evex} vpcmpleud -64(%rax,%rsi,2), %zmm3, %k6
+    {evex} vpcmpleud 4660(%r9,%rcx,4), %zmm25, %k7
     {evex} vpcmpleud gnu_back(%rip), %zmm9, %k1
     {evex} vpcmpleud %zmm31, %zmm20, %k2{%k3}
-    {evex} vpcmpleud 0(%r11), %zmm12, %k4{%k5}
-    {evex} vpcmpleud 128(%rsi), %zmm17, %k6{%k7}
-    {evex} vpcmpleud -129(%r11), %zmm16, %k1{%k2}
+    {evex} vpcmpleud 0(%r14), %zmm12, %k4{%k5}
+    {evex} vpcmpleud 128(%r15), %zmm17, %k6{%k7}
+    {evex} vpcmpleud -129(%rcx), %zmm16, %k1{%k2}
     {evex} vpcmpleud 0(%r12), %zmm3, %k3{%k4}
     {evex} vpcmpleud -8192(%rsp), %zmm25, %k5{%k6}
     {evex} vpcmpleud 1001(%r12), %zmm9, %k7{%k1}
-    {evex} vpcmpleud 0(%r14,%rbp,2), %zmm31, %k2{%k3}
-    {evex} vpcmpleud 8128(%rdi,%r12,4), %zmm20, %k4{%k5}
-    {evex} vpcmpleud -2147483648(%r15,%rax,8), %zmm12, %k6{%k7}
+    {evex} vpcmpleud 0(%r15,%r9,8), %zmm31, %k2{%k3}
+    {evex} vpcmpleud 8128(%rsp,%rbp,1), %zmm20, %k4{%k5}
+    {evex} vpcmpleud -2147483648(%r13,%r12,2), %zmm12, %k6{%k7}
     {evex} vpcmpleud gnu_fwd(%rip), %zmm17, %k1{%k2}
     {evex} vpcmpnequd %xmm16, %xmm3, %k3
-    {evex} vpcmpnequd 0(%rdi), %xmm25, %k4
-    {evex} vpcmpnequd -16(%rdi), %xmm9, %k5
-    {evex} vpcmpnequd 2147483647(%r14), %xmm31, %k6
+    {evex} vpcmpnequd 0(%r15), %xmm25, %k4
+    {evex} vpcmpnequd -16(%r8), %xmm9, %k5
+    {evex} vpcmpnequd 2147483647(%rbp), %xmm31, %k6
     {evex} vpcmpnequd 0(%rsp), %xmm20, %k7
     {evex} vpcmpnequd 32(%r12), %xmm12, %k1
     {evex} vpcmpnequd 4660(%rsp), %xmm17, %k2
-    {evex} vpcmpnequd 0(%rsi,%r15,1), %xmm16, %k3
-    {evex} vpcmpnequd -2048(%rax,%rsi,2), %xmm3, %k4
-    {evex} vpcmpnequd -129(%r9,%rcx,4), %xmm25, %k5
+    {evex} vpcmpnequd 0(%rax,%rax,4), %xmm16, %k3
+    {evex} vpcmpnequd -2048(%rbp,%r15,8), %xmm3, %k4
+    {evex} vpcmpnequd -129(%r12,%rsi,1), %xmm25, %k5
     {evex} vpcmpnequd gnu_back(%rip), %xmm9, %k6
     {evex} vpcmpnequd %xmm31, %xmm20, %k7{%k1}
-    {evex} vpcmpnequd 0(%r14), %xmm12, %k2{%k3}
-    {evex} vpcmpnequd 2032(%r15), %xmm17, %k4{%k5}
-    {evex} vpcmpnequd 1001(%rcx), %xmm16, %k6{%k7}
+    {evex} vpcmpnequd 0(%rcx), %xmm12, %k2{%k3}
+    {evex} vpcmpnequd 2032(%r13), %xmm17, %k4{%k5}
+    {evex} vpcmpnequd 1001(%rdx), %xmm16, %k6{%k7}
     {evex} vpcmpnequd 0(%r12), %xmm3, %k1{%k2}
     {evex} vpcmpnequd -16(%rsp), %xmm25, %k3{%k4}
     {evex} vpcmpnequd -2147483648(%r12), %xmm9, %k5{%k6}
-    {evex} vpcmpnequd 0(%r15,%r9,8), %xmm31, %k7{%k1}
-    {evex} vpcmpnequd 32(%rsp,%rbp,1), %xmm20, %k2{%k3}
-    {evex} vpcmpnequd 2147483647(%r13,%r12,2), %xmm12, %k4{%k5}
+    {evex} vpcmpnequd 0(%r8,%rcx,2), %xmm31, %k7{%k1}
+    {evex} vpcmpnequd 32(%rdi,%r9,4), %xmm20, %k2{%k3}
+    {evex} vpcmpnequd 2147483647(%r15,%rbp,8), %xmm12, %k4{%k5}
     {evex} vpcmpnequd gnu_fwd(%rip), %xmm17, %k6{%k7}
     {evex} vpcmpnequd %ymm16, %ymm3, %k1
-    {evex} vpcmpnequd 0(%r15), %ymm25, %k2
-    {evex} vpcmpnequd -32(%r8), %ymm9, %k3
-    {evex} vpcmpnequd 4660(%rbp), %ymm31, %k4
+    {evex} vpcmpnequd 0(%r8), %ymm25, %k2
+    {evex} vpcmpnequd -32(%r9), %ymm9, %k3
+    {evex} vpcmpnequd 4660(%rbx), %ymm31, %k4
     {evex} vpcmpnequd 0(%rsp), %ymm20, %k5
     {evex} vpcmpnequd 64(%r12), %ymm12, %k6
     {evex} vpcmpnequd -129(%rsp), %ymm17, %k7
-    {evex} vpcmpnequd 0(%rax,%rax,4), %ymm16, %k1
-    {evex} vpcmpnequd -4096(%rbp,%r15,8), %ymm3, %k2
-    {evex} vpcmpnequd 1001(%r12,%rsi,1), %ymm25, %k3
+    {evex} vpcmpnequd 0(%rcx,%r12,1), %ymm16, %k1
+    {evex} vpcmpnequd -4096(%rax,%rax,2), %ymm3, %k2
+    {evex} vpcmpnequd 1001(%r9,%r15,4), %ymm25, %k3
     {evex} vpcmpnequd gnu_back(%rip), %ymm9, %k4
     {evex} vpcmpnequd %ymm31, %ymm20, %k5{%k6}
-    {evex} vpcmpnequd 0(%rcx), %ymm12, %k7{%k1}
-    {evex} vpcmpnequd 4064(%r13), %ymm17, %k2{%k3}
-    {evex} vpcmpnequd -2147483648(%rdx), %ymm16, %k4{%k5}
+    {evex} vpcmpnequd 0(%rdx), %ymm12, %k7{%k1}
+    {evex} vpcmpnequd 4064(%r10), %ymm17, %k2{%k3}
+    {evex} vpcmpnequd -2147483648(%rsi), %ymm16, %k4{%k5}
     {evex} vpcmpnequd 0(%r12), %ymm3, %k6{%k7}
     {evex} vpcmpnequd -32(%rsp), %ymm25, %k1{%k2}
     {evex} vpcmpnequd 2147483647(%r12), %ymm9, %k3{%k4}
-    {evex} vpcmpnequd 0(%r8,%rcx,2), %ymm31, %k5{%k6}
-    {evex} vpcmpnequd 64(%rdi,%r9,4), %ymm20, %k7{%k1}
-    {evex} vpcmpnequd 4660(%r15,%rbp,8), %ymm12, %k2{%k3}
+    {evex} vpcmpnequd 0(%r12,%rsi,8), %ymm31, %k5{%k6}
+    {evex} vpcmpnequd 64(%rsp,%rcx,1), %ymm20, %k7{%k1}
+    {evex} vpcmpnequd 4660(%r13,%r9,2), %ymm12, %k2{%k3}
     {evex} vpcmpnequd gnu_fwd(%rip), %ymm17, %k4{%k5}
     {evex} vpcmpnequd %zmm16, %zmm3, %k6
-    {evex} vpcmpnequd 0(%r8), %zmm25, %k7
-    {evex} vpcmpnequd -64(%r9), %zmm9, %k1
-    {evex} vpcmpnequd -129(%rbx), %zmm31, %k2
+    {evex} vpcmpnequd 0(%r9), %zmm25, %k7
+    {evex} vpcmpnequd -64(%r11), %zmm9, %k1
+    {evex} vpcmpnequd -129(%rdi), %zmm31, %k2
     {evex} vpcmpnequd 0(%rsp), %zmm20, %k3
     {evex} vpcmpnequd 128(%r12), %zmm12, %k4
     {evex} vpcmpnequd 1001(%rsp), %zmm17, %k5
-    {evex} vpcmpnequd 0(%rcx,%r12,1), %zmm16, %k6
-    {evex} vpcmpnequd -8192(%rax,%rax,2), %zmm3, %k7
-    {evex} vpcmpnequd -2147483648(%r9,%r15,4), %zmm25, %k1
+    {evex} vpcmpnequd 0(%rdx,%rbp,4), %zmm16, %k6
+    {evex} vpcmpnequd -8192(%rbp,%r12,8), %zmm3, %k7
+    {evex} vpcmpnequd -2147483648(%r12,%rax,1), %zmm25, %k1
     {evex} vpcmpnequd gnu_back(%rip), %zmm9, %k2
     {evex} vpcmpnequd %zmm31, %zmm20, %k3{%k4}
-    {evex} vpcmpnequd 0(%rdx), %zmm12, %k5{%k6}
-    {evex} vpcmpnequd 8128(%r10), %zmm17, %k7{%k1}
-    {evex} vpcmpnequd 2147483647(%rsi), %zmm16, %k2{%k3}
+    {evex} vpcmpnequd 0(%rbx), %zmm12, %k5{%k6}
+    {evex} vpcmpnequd 8128(%r14), %zmm17, %k7{%k1}
+    {evex} vpcmpnequd 2147483647(%r15), %zmm16, %k2{%k3}
     {evex} vpcmpnequd 0(%r12), %zmm3, %k4{%k5}
     {evex} vpcmpnequd -64(%rsp), %zmm25, %k6{%k7}
     {evex} vpcmpnequd 4660(%r12), %zmm9, %k1{%k2}
-    {evex} vpcmpnequd 0(%r12,%rsi,8), %zmm31, %k3{%k4}
-    {evex} vpcmpnequd 128(%rsp,%rcx,1), %zmm20, %k5{%k6}
-    {evex} vpcmpnequd -129(%r13,%r9,2), %zmm12, %k7{%k1}
+    {evex} vpcmpnequd 0(%r9,%r15,2), %zmm31, %k3{%k4}
+    {evex} vpcmpnequd 128(%rdi,%rsi,4), %zmm20, %k5{%k6}
+    {evex} vpcmpnequd -129(%r15,%rcx,8), %zmm12, %k7{%k1}
     {evex} vpcmpnequd gnu_fwd(%rip), %zmm17, %k2{%k3}
     {evex} vpcmpnltud %xmm16, %xmm3, %k4
-    {evex} vpcmpnltud 0(%r9), %xmm25, %k5
-    {evex} vpcmpnltud -2048(%r11), %xmm9, %k6
-    {evex} vpcmpnltud 1001(%rdi), %xmm31, %k7
+    {evex} vpcmpnltud 0(%r10), %xmm25, %k5
+    {evex} vpcmpnltud -2048(%rcx), %xmm9, %k6
+    {evex} vpcmpnltud 1001(%r8), %xmm31, %k7
     {evex} vpcmpnltud 0(%rsp), %xmm20, %k1
     {evex} vpcmpnltud 2032(%r12), %xmm12, %k2
     {evex} vpcmpnltud -2147483648(%rsp), %xmm17, %k3
-    {evex} vpcmpnltud 0(%rdx,%rbp,4), %xmm16, %k4
-    {evex} vpcmpnltud -16(%rbp,%r12,8), %xmm3, %k5
-    {evex} vpcmpnltud 2147483647(%r12,%rax,1), %xmm25, %k6
+    {evex} vpcmpnltud 0(%rsp,%r9,1), %xmm16, %k4
+    {evex} vpcmpnltud -16(%rax,%rbp,2), %xmm3, %k5
+    {evex} vpcmpnltud 2147483647(%r9,%r12,4), %xmm25, %k6
     {evex} vpcmpnltud gnu_back(%rip), %xmm9, %k7
     {evex} vpcmpnltud %xmm31, %xmm20, %k1{%k2}
-    {evex} vpcmpnltud 0(%rbx), %xmm12, %k3{%k4}
-    {evex} vpcmpnltud 32(%r14), %xmm17, %k5{%k6}
-    {evex} vpcmpnltud 4660(%r15), %xmm16, %k7{%k1}
+    {evex} vpcmpnltud 0(%rsi), %xmm12, %k3{%k4}
+    {evex} vpcmpnltud 32(%rbp), %xmm17, %k5{%k6}
+    {evex} vpcmpnltud 4660(%r13), %xmm16, %k7{%k1}
     {evex} vpcmpnltud 0(%r12), %xmm3, %k2{%k3}
     {evex} vpcmpnltud -2048(%rsp), %xmm25, %k4{%k5}
     {evex} vpcmpnltud -129(%r12), %xmm9, %k6{%k7}
-    {evex} vpcmpnltud 0(%r9,%r15,2), %xmm31, %k1{%k2}
-    {evex} vpcmpnltud 2032(%rdi,%rsi,4), %xmm20, %k3{%k4}
-    {evex} vpcmpnltud 1001(%r15,%rcx,8), %xmm12, %k5{%k6}
+g71:
+    {evex} vpcmpnltud 0(%r14,%rax,8), %xmm31, %k1{%k2}
+    {evex} vpcmpnltud 2032(%rsp,%r15,1), %xmm20, %k3{%k4}
+    {evex} vpcmpnltud 1001(%r13,%rsi,2), %xmm12, %k5{%k6}
     {evex} vpcmpnltud gnu_fwd(%rip), %xmm17, %k7{%k1}
     {evex} vpcmpnltud %ymm16, %ymm3, %k2
-    {evex} vpcmpnltud 0(%r10), %ymm25, %k3
-    {evex} vpcmpnltud -4096(%rcx), %ymm9, %k4
-    {evex} vpcmpnltud -2147483648(%r8), %ymm31, %k5
+    {evex} vpcmpnltud 0(%r11), %ymm25, %k3
+    {evex} vpcmpnltud -4096(%rdx), %ymm9, %k4
+    {evex} vpcmpnltud -2147483648(%r9), %ymm31, %k5
     {evex} vpcmpnltud 0(%rsp), %ymm20, %k6
     {evex} vpcmpnltud 4064(%r12), %ymm12, %k7
     {evex} vpcmpnltud 2147483647(%rsp), %ymm17, %k1
-    {evex} vpcmpnltud 0(%rsp,%r9,1), %ymm16, %k2
-    {evex} vpcmpnltud -32(%rax,%rbp,2), %ymm3, %k3
-    {evex} vpcmpnltud 4660(%r9,%r12,4), %ymm25, %k4
+    {evex} vpcmpnltud 0(%rsi,%rcx,4), %ymm16, %k2
+    {evex} vpcmpnltud -32(%rbp,%r9,8), %ymm3, %k3
+    {evex} vpcmpnltud 4660(%r12,%rbp,1), %ymm25, %k4
     {evex} vpcmpnltud gnu_back(%rip), %ymm9, %k5
     {evex} vpcmpnltud %ymm31, %ymm20, %k6{%k7}
-    {evex} vpcmpnltud 0(%rsi), %ymm12, %k1{%k2}
-    {evex} vpcmpnltud 64(%rbp), %ymm17, %k3{%k4}
-    {evex} vpcmpnltud -129(%r13), %ymm16, %k5{%k6}
+    {evex} vpcmpnltud 0(%rdi), %ymm12, %k1{%k2}
+    {evex} vpcmpnltud 64(%rbx), %ymm17, %k3{%k4}
+    {evex} vpcmpnltud -129(%r10), %ymm16, %k5{%k6}
     {evex} vpcmpnltud 0(%r12), %ymm3, %k7{%k1}
     {evex} vpcmpnltud -4096(%rsp), %ymm25, %k2{%k3}
     {evex} vpcmpnltud 1001(%r12), %ymm9, %k4{%k5}
-    {evex} vpcmpnltud 0(%r14,%rax,8), %ymm31, %k6{%k7}
-    {evex} vpcmpnltud 4064(%rsp,%r15,1), %ymm20, %k1{%k2}
-g71:
-    {evex} vpcmpnltud -2147483648(%r13,%rsi,2), %ymm12, %k3{%k4}
+    {evex} vpcmpnltud 0(%r15,%r12,2), %ymm31, %k6{%k7}
+    {evex} vpcmpnltud 4064(%rdi,%rax,4), %ymm20, %k1{%k2}
+    {evex} vpcmpnltud -2147483648(%r15,%r15,8), %ymm12, %k3{%k4}
     {evex} vpcmpnltud gnu_fwd(%rip), %ymm17, %k5{%k6}
     {evex} vpcmpnltud %zmm16, %zmm3, %k7
-    {evex} vpcmpnltud 0(%r11), %zmm25, %k1
-    {evex} vpcmpnltud -8192(%rdx), %zmm9, %k2
-    {evex} vpcmpnltud 2147483647(%r9), %zmm31, %k3
+    {evex} vpcmpnltud 0(%r14), %zmm25, %k1
+    {evex} vpcmpnltud -8192(%rsi), %zmm9, %k2
+    {evex} vpcmpnltud 2147483647(%r11), %zmm31, %k3
     {evex} vpcmpnltud 0(%rsp), %zmm20, %k4
     {evex} vpcmpnltud 8128(%r12), %zmm12, %k5
     {evex} vpcmpnltud 4660(%rsp), %zmm17, %k6
-    {evex} vpcmpnltud 0(%rsi,%rcx,4), %zmm16, %k7
-    {evex} vpcmpnltud -64(%rbp,%r9,8), %zmm3, %k1
-    {evex} vpcmpnltud -129(%r12,%rbp,1), %zmm25, %k2
+    {evex} vpcmpnltud 0(%rax,%rsi,1), %zmm16, %k7
+    {evex} vpcmpnltud -64(%rax,%rcx,2), %zmm3, %k1
+    {evex} vpcmpnltud -129(%r9,%r9,4), %zmm25, %k2
     {evex} vpcmpnltud gnu_back(%rip), %zmm9, %k3
     {evex} vpcmpnltud %zmm31, %zmm20, %k4{%k5}
-    {evex} vpcmpnltud 0(%rdi), %zmm12, %k6{%k7}
-    {evex} vpcmpnltud 128(%rbx), %zmm17, %k1{%k2}
-    {evex} vpcmpnltud 1001(%r10), %zmm16, %k3{%k4}
+    {evex} vpcmpnltud 0(%r15), %zmm12, %k6{%k7}
+    {evex} vpcmpnltud 128(%rdi), %zmm17, %k1{%k2}
+    {evex} vpcmpnltud 1001(%r14), %zmm16, %k3{%k4}
     {evex} vpcmpnltud 0(%r12), %zmm3, %k5{%k6}
     {evex} vpcmpnltud -8192(%rsp), %zmm25, %k7{%k1}
     {evex} vpcmpnltud -2147483648(%r12), %zmm9, %k2{%k3}
-    {evex} vpcmpnltud 0(%r15,%r12,2), %zmm31, %k4{%k5}
-    {evex} vpcmpnltud 8128(%rdi,%rax,4), %zmm20, %k6{%k7}
-    {evex} vpcmpnltud 2147483647(%r15,%r15,8), %zmm12, %k1{%k2}
+    {evex} vpcmpnltud 0(%r8,%rbp,8), %zmm31, %k4{%k5}
+    {evex} vpcmpnltud 8128(%rsp,%r12,1), %zmm20, %k6{%k7}
+    {evex} vpcmpnltud 2147483647(%r13,%rax,2), %zmm12, %k1{%k2}
     {evex} vpcmpnltud gnu_fwd(%rip), %zmm17, %k3{%k4}
     {evex} vpcmpnleud %xmm16, %xmm3, %k5
-    {evex} vpcmpnleud 0(%r14), %xmm25, %k6
-    {evex} vpcmpnleud -16(%rsi), %xmm9, %k7
-    {evex} vpcmpnleud 4660(%r11), %xmm31, %k1
+    {evex} vpcmpnleud 0(%rcx), %xmm25, %k6
+    {evex} vpcmpnleud -16(%r15), %xmm9, %k7
+    {evex} vpcmpnleud 4660(%rcx), %xmm31, %k1
     {evex} vpcmpnleud 0(%rsp), %xmm20, %k2
     {evex} vpcmpnleud 32(%r12), %xmm12, %k3
     {evex} vpcmpnleud -129(%rsp), %xmm17, %k4
-    {evex} vpcmpnleud 0(%rax,%rsi,1), %xmm16, %k5
-    {evex} vpcmpnleud -2048(%rax,%rcx,2), %xmm3, %k6
-    {evex} vpcmpnleud 1001(%r9,%r9,4), %xmm25, %k7
+    {evex} vpcmpnleud 0(%rcx,%r15,4), %xmm16, %k5
+    {evex} vpcmpnleud -2048(%rbp,%rsi,8), %xmm3, %k6
+    {evex} vpcmpnleud 1001(%r12,%rcx,1), %xmm25, %k7
     {evex} vpcmpnleud gnu_back(%rip), %xmm9, %k1
     {evex} vpcmpnleud %xmm31, %xmm20, %k2{%k3}
-    {evex} vpcmpnleud 0(%r15), %xmm12, %k4{%k5}
-    {evex} vpcmpnleud 2032(%rdi), %xmm17, %k6{%k7}
-    {evex} vpcmpnleud -2147483648(%r14), %xmm16, %k1{%k2}
+    {evex} vpcmpnleud 0(%r8), %xmm12, %k4{%k5}
+    {evex} vpcmpnleud 2032(%r8), %xmm17, %k6{%k7}
+    {evex} vpcmpnleud -2147483648(%rbp), %xmm16, %k1{%k2}
     {evex} vpcmpnleud 0(%r12), %xmm3, %k3{%k4}
     {evex} vpcmpnleud -16(%rsp), %xmm25, %k5{%k6}
     {evex} vpcmpnleud 2147483647(%r12), %xmm9, %k7{%k1}
-    {evex} vpcmpnleud 0(%r8,%rbp,8), %xmm31, %k2{%k3}
-    {evex} vpcmpnleud 32(%rsp,%r12,1), %xmm20, %k4{%k5}
-    {evex} vpcmpnleud 4660(%r13,%rax,2), %xmm12, %k6{%k7}
+    {evex} vpcmpnleud 0(%r12,%r9,2), %xmm31, %k2{%k3}
+    {evex} vpcmpnleud 32(%rdi,%rbp,4), %xmm20, %k4{%k5}
+    {evex} vpcmpnleud 4660(%r15,%r12,8), %xmm12, %k6{%k7}
     {evex} vpcmpnleud gnu_fwd(%rip), %xmm17, %k1{%k2}
     {evex} vpcmpnleud %ymm16, %ymm3, %k3
-    {evex} vpcmpnleud 0(%rcx), %ymm25, %k4
-    {evex} vpcmpnleud -32(%r15), %ymm9, %k5
-    {evex} vpcmpnleud -129(%rcx), %ymm31, %k6
+    {evex} vpcmpnleud 0(%rdx), %ymm25, %k4
+    {evex} vpcmpnleud -32(%r13), %ymm9, %k5
+    {evex} vpcmpnleud -129(%rdx), %ymm31, %k6
     {evex} vpcmpnleud 0(%rsp), %ymm20, %k7
     {evex} vpcmpnleud 64(%r12), %ymm12, %k1
     {evex} vpcmpnleud 1001(%rsp), %ymm17, %k2
-    {evex} vpcmpnleud 0(%rcx,%r15,4), %ymm16, %k3
-    {evex} vpcmpnleud -4096(%rbp,%rsi,8), %ymm3, %k4
-    {evex} vpcmpnleud -2147483648(%r12,%rcx,1), %ymm25, %k5
+    {evex} vpcmpnleud 0(%rdx,%rax,1), %ymm16, %k3
+    {evex} vpcmpnleud -4096(%rax,%r15,2), %ymm3, %k4
+    {evex} vpcmpnleud -2147483648(%r9,%rsi,4), %ymm25, %k5
     {evex} vpcmpnleud gnu_back(%rip), %ymm9, %k6
     {evex} vpcmpnleud %ymm31, %ymm20, %k7{%k1}
-    {evex} vpcmpnleud 0(%r8), %ymm12, %k2{%k3}
-    {evex} vpcmpnleud 4064(%r8), %ymm17, %k4{%k5}
-    {evex} vpcmpnleud 2147483647(%rbp), %ymm16, %k6{%k7}
+    {evex} vpcmpnleud 0(%r9), %ymm12, %k2{%k3}
+    {evex} vpcmpnleud 4064(%r9), %ymm17, %k4{%k5}
+    {evex} vpcmpnleud 2147483647(%rbx), %ymm16, %k6{%k7}
     {evex} vpcmpnleud 0(%r12), %ymm3, %k1{%k2}
     {evex} vpcmpnleud -32(%rsp), %ymm25, %k3{%k4}
     {evex} vpcmpnleud 4660(%r12), %ymm9, %k5{%k6}
-    {evex} vpcmpnleud 0(%r12,%r9,2), %ymm31, %k7{%k1}
-    {evex} vpcmpnleud 64(%rdi,%rbp,4), %ymm20, %k2{%k3}
-    {evex} vpcmpnleud -129(%r15,%r12,8), %ymm12, %k4{%k5}
+    {evex} vpcmpnleud 0(%r9,%rcx,8), %ymm31, %k7{%k1}
+    {evex} vpcmpnleud 64(%rsp,%r9,1), %ymm20, %k2{%k3}
+    {evex} vpcmpnleud -129(%r13,%rbp,2), %ymm12, %k4{%k5}
     {evex} vpcmpnleud gnu_fwd(%rip), %ymm17, %k6{%k7}
     {evex} vpcmpnleud %zmm16, %zmm3, %k1
-    {evex} vpcmpnleud 0(%rdx), %zmm25, %k2
-    {evex} vpcmpnleud -64(%r13), %zmm9, %k3
-    {evex} vpcmpnleud 1001(%rdx), %zmm31, %k4
+    {evex} vpcmpnleud 0(%rbx), %zmm25, %k2
+    {evex} vpcmpnleud -64(%r10), %zmm9, %k3
+    {evex} vpcmpnleud 1001(%rsi), %zmm31, %k4
     {evex} vpcmpnleud 0(%rsp), %zmm20, %k5
     {evex} vpcmpnleud 128(%r12), %zmm12, %k6
     {evex} vpcmpnleud -2147483648(%rsp), %zmm17, %k7
-    {evex} vpcmpnleud 0(%rdx,%rax,1), %zmm16, %k1
-    {evex} vpcmpnleud -8192(%rax,%r15,2), %zmm3, %k2
-    {evex} vpcmpnleud 2147483647(%r9,%rsi,4), %zmm25, %k3
+    {evex} vpcmpnleud 0(%rsp,%r12,4), %zmm16, %k1
+    {evex} vpcmpnleud -8192(%rbp,%rax,8), %zmm3, %k2
+    {evex} vpcmpnleud 2147483647(%r12,%r15,1), %zmm25, %k3
     {evex} vpcmpnleud gnu_back(%rip), %zmm9, %k4
     {evex} vpcmpnleud %zmm31, %zmm20, %k5{%k6}
-    {evex} vpcmpnleud 0(%r9), %zmm12, %k7{%k1}
-    {evex} vpcmpnleud 8128(%r9), %zmm17, %k2{%k3}
-    {evex} vpcmpnleud 4660(%rbx), %zmm16, %k4{%k5}
+    {evex} vpcmpnleud 0(%r10), %zmm12, %k7{%k1}
+    {evex} vpcmpnleud 8128(%r11), %zmm17, %k2{%k3}
+    {evex} vpcmpnleud 4660(%rdi), %zmm16, %k4{%k5}
     {evex} vpcmpnleud 0(%r12), %zmm3, %k6{%k7}
     {evex} vpcmpnleud -64(%rsp), %zmm25, %k1{%k2}
     {evex} vpcmpnleud -129(%r12), %zmm9, %k3{%k4}
-    {evex} vpcmpnleud 0(%r9,%rcx,8), %zmm31, %k5{%k6}
-    {evex} vpcmpnleud 128(%rsp,%r9,1), %zmm20, %k7{%k1}
-    {evex} vpcmpnleud 1001(%r13,%rbp,2), %zmm12, %k2{%k3}
+    {evex} vpcmpnleud 0(%r14,%rsi,2), %zmm31, %k5{%k6}
+    {evex} vpcmpnleud 128(%rdi,%rcx,4), %zmm20, %k7{%k1}
+    {evex} vpcmpnleud 1001(%r15,%r9,8), %zmm12, %k2{%k3}
     {evex} vpcmpnleud gnu_fwd(%rip), %zmm17, %k4{%k5}
     {evex} vpminub %xmm16, %xmm3, %xmm25
-    {evex} vpminub 0(%rbx), %xmm9, %xmm31
-    {evex} vpminub -2048(%r10), %xmm20, %xmm12
-    {evex} vpminub -2147483648(%rsi), %xmm17, %xmm16
+    {evex} vpminub 0(%rsi), %xmm9, %xmm31
+    {evex} vpminub -2048(%r14), %xmm20, %xmm12
+    {evex} vpminub -2147483648(%r15), %xmm17, %xmm16
     {evex} vpminub 0(%rsp), %xmm3, %xmm25
     {evex} vpminub 2032(%r12), %xmm9, %xmm31
     {evex} vpminub 2147483647(%rsp), %xmm20, %xmm12
-    {evex} vpminub 0(%rsp,%r12,4), %xmm17, %xmm16
-    {evex} vpminub -16(%rbp,%rax,8), %xmm3, %xmm25
-    {evex} vpminub 4660(%r12,%r15,1), %xmm9, %xmm31
+    {evex} vpminub 0(%rsi,%rbp,1), %xmm17, %xmm16
+    {evex} vpminub -16(%rax,%r12,2), %xmm3, %xmm25
+    {evex} vpminub 4660(%r9,%rax,4), %xmm9, %xmm31
     {evex} vpminub gnu_back(%rip), %xmm20, %xmm12
     {evex} vpminub %xmm17, %xmm16, %xmm3{%k6}
-    {evex} vpminub 0(%r10), %xmm25, %xmm9{%k7}
-    {evex} vpminub 32(%r11), %xmm31, %xmm20{%k1}
-    {evex} vpminub -129(%rdi), %xmm12, %xmm17{%k2}
+    {evex} vpminub 0(%r11), %xmm25, %xmm9{%k7}
+    {evex} vpminub 32(%rcx), %xmm31, %xmm20{%k1}
+    {evex} vpminub -129(%r8), %xmm12, %xmm17{%k2}
     {evex} vpminub 0(%r12), %xmm16, %xmm3{%k3}
     {evex} vpminub -2048(%rsp), %xmm25, %xmm9{%k4}
     {evex} vpminub 1001(%r12), %xmm31, %xmm20{%k5}
-    {evex} vpminub 0(%r14,%rsi,2), %xmm12, %xmm17{%k6}
-    {evex} vpminub 2032(%rdi,%rcx,4), %xmm16, %xmm3{%k7}
-    {evex} vpminub -2147483648(%r15,%r9,8), %xmm25, %xmm9{%k1}
+    {evex} vpminub 0(%r15,%r15,8), %xmm12, %xmm17{%k6}
+    {evex} vpminub 2032(%rsp,%rsi,1), %xmm16, %xmm3{%k7}
+    {evex} vpminub -2147483648(%r13,%rcx,2), %xmm25, %xmm9{%k1}
     {evex} vpminub gnu_fwd(%rip), %xmm31, %xmm20{%k2}
     {evex} vpminub %xmm12, %xmm17, %xmm16{%k3}{z}
-    {evex} vpminub 0(%rsi), %xmm3, %xmm25{%k4}{z}
-    {evex} vpminub -16(%r14), %xmm9, %xmm31{%k5}{z}
-    {evex} vpminub 2147483647(%r15), %xmm20, %xmm12{%k6}{z}
+    {evex} vpminub 0(%rdi), %xmm3, %xmm25{%k4}{z}
+    {evex} vpminub -16(%rbp), %xmm9, %xmm31{%k5}{z}
+    {evex} vpminub 2147483647(%r13), %xmm20, %xmm12{%k6}{z}
     {evex} vpminub 0(%rsp), %xmm17, %xmm16{%k7}{z}
     {evex} vpminub 32(%r12), %xmm3, %xmm25{%k1}{z}
     {evex} vpminub 4660(%rsp), %xmm9, %xmm31{%k2}{z}
-    {evex} vpminub 0(%rsi,%rbp,1), %xmm20, %xmm12{%k3}{z}
-    {evex} vpminub -2048(%rax,%r12,2), %xmm17, %xmm16{%k4}{z}
-    {evex} vpminub -129(%r9,%rax,4), %xmm3, %xmm25{%k5}{z}
+    {evex} vpminub 0(%rax,%r9,4), %xmm20, %xmm12{%k3}{z}
+    {evex} vpminub -2048(%rbp,%rbp,8), %xmm17, %xmm16{%k4}{z}
+    {evex} vpminub -129(%r12,%r12,1), %xmm3, %xmm25{%k5}{z}
     {evex} vpminub gnu_back(%rip), %xmm9, %xmm31{%k6}{z}
     {evex} vpminub %ymm20, %ymm12, %ymm17
-    {evex} vpminub 0(%r11), %ymm16, %ymm3
-    {evex} vpminub -4096(%rcx), %ymm25, %ymm9
-    {evex} vpminub 1001(%r8), %ymm31, %ymm20
+    {evex} vpminub 0(%r14), %ymm16, %ymm3
+    {evex} vpminub -4096(%rdx), %ymm25, %ymm9
+    {evex} vpminub 1001(%r9), %ymm31, %ymm20
     {evex} vpminub 0(%r12), %ymm12, %ymm17
     {evex} vpminub 4064(%rsp), %ymm16, %ymm3
     {evex} vpminub -2147483648(%r12), %ymm25, %ymm9
-    {evex} vpminub 0(%r15,%r15,8), %ymm31, %ymm20
-    {evex} vpminub -32(%rsp,%rsi,1), %ymm12, %ymm17
-    {evex} vpminub 2147483647(%r13,%rcx,2), %ymm16, %ymm3
+    {evex} vpminub 0(%r8,%rax,2), %ymm31, %ymm20
+    {evex} vpminub -32(%rdi,%r15,4), %ymm12, %ymm17
+    {evex} vpminub 2147483647(%r15,%rsi,8), %ymm16, %ymm3
     {evex} vpminub gnu_fwd(%rip), %ymm25, %ymm9
     {evex} vpminub %ymm31, %ymm20, %ymm12{%k7}
-    {evex} vpminub 0(%rdi), %ymm17, %ymm16{%k1}
-    {evex} vpminub 64(%rbp), %ymm3, %ymm25{%k2}
-    {evex} vpminub 4660(%r13), %ymm9, %ymm31{%k3}
+    {evex} vpminub 0(%r15), %ymm17, %ymm16{%k1}
+    {evex} vpminub 64(%rbx), %ymm3, %ymm25{%k2}
+    {evex} vpminub 4660(%r10), %ymm9, %ymm31{%k3}
     {evex} vpminub 0(%rsp), %ymm20, %ymm12{%k4}
     {evex} vpminub -4096(%r12), %ymm17, %ymm16{%k5}
     {evex} vpminub -129(%rsp), %ymm3, %ymm25{%k6}
-    {evex} vpminub 0(%rax,%r9,4), %ymm9, %ymm31{%k7}
-    {evex} vpminub 4064(%rbp,%rbp,8), %ymm20, %ymm12{%k1}
-    {evex} vpminub 1001(%r12,%r12,1), %ymm17, %ymm16{%k2}
+    {evex} vpminub 0(%rcx,%rcx,1), %ymm9, %ymm31{%k7}
+    {evex} vpminub 4064(%rax,%r9,2), %ymm20, %ymm12{%k1}
+    {evex} vpminub 1001(%r9,%rbp,4), %ymm17, %ymm16{%k2}
     {evex} vpminub gnu_back(%rip), %ymm3, %ymm25{%k3}
     {evex} vpminub %ymm9, %ymm31, %ymm20{%k4}{z}
-    {evex} vpminub 0(%r14), %ymm12, %ymm17{%k5}{z}
-    {evex} vpminub -32(%rdx), %ymm16, %ymm3{%k6}{z}
-    {evex} vpminub -2147483648(%r9), %ymm25, %ymm9{%k7}{z}
+    {evex} vpminub 0(%rcx), %ymm12, %ymm17{%k5}{z}
+    {evex} vpminub -32(%rsi), %ymm16, %ymm3{%k6}{z}
+    {evex} vpminub -2147483648(%r11), %ymm25, %ymm9{%k7}{z}
     {evex} vpminub 0(%r12), %ymm31, %ymm20{%k1}{z}
     {evex} vpminub 64(%rsp), %ymm12, %ymm17{%k2}{z}
     {evex} vpminub 2147483647(%r12), %ymm16, %ymm3{%k3}{z}
-    {evex} vpminub 0(%r8,%rax,2), %ymm25, %ymm9{%k4}{z}
-    {evex} vpminub -4096(%rdi,%r15,4), %ymm31, %ymm20{%k5}{z}
-    {evex} vpminub 4660(%r15,%rsi,8), %ymm12, %ymm17{%k6}{z}
+    {evex} vpminub 0(%r12,%r12,8), %ymm25, %ymm9{%k4}{z}
+    {evex} vpminub -4096(%rsp,%rax,1), %ymm31, %ymm20{%k5}{z}
+    {evex} vpminub 4660(%r13,%r15,2), %ymm12, %ymm17{%k6}{z}
     {evex} vpminub gnu_fwd(%rip), %ymm16, %ymm3{%k7}{z}
     {evex} vpminub %zmm25, %zmm9, %zmm31
-    {evex} vpminub 0(%r15), %zmm20, %zmm12
-    {evex} vpminub -8192(%rbx), %zmm17, %zmm16
-    {evex} vpminub -129(%r10), %zmm3, %zmm25
+    {evex} vpminub 0(%r8), %zmm20, %zmm12
+    {evex} vpminub -8192(%rdi), %zmm17, %zmm16
+    {evex} vpminub -129(%r14), %zmm3, %zmm25
     {evex} vpminub 0(%rsp), %zmm9, %zmm31
     {evex} vpminub 8128(%r12), %zmm20, %zmm12
     {evex} vpminub 1001(%rsp), %zmm17, %zmm16
-    {evex} vpminub 0(%rcx,%rcx,1), %zmm3, %zmm25
-    {evex} vpminub -64(%rax,%r9,2), %zmm9, %zmm31
-    {evex} vpminub -2147483648(%r9,%rbp,4), %zmm20, %zmm12
+    {evex} vpminub 0(%rdx,%rsi,4), %zmm3, %zmm25
+    {evex} vpminub -64(%rbp,%rcx,8), %zmm9, %zmm31
+    {evex} vpminub -2147483648(%r12,%r9,1), %zmm20, %zmm12
     {evex} vpminub gnu_back(%rip), %zmm17, %zmm16
     {evex} vpminub %zmm3, %zmm25, %zmm9{%k1}
-    {evex} vpminub 0(%rcx), %zmm31, %zmm20{%k2}
-    {evex} vpminub 128(%rsi), %zmm12, %zmm17{%k3}
-    {evex} vpminub 2147483647(%r11), %zmm16, %zmm3{%k4}
+    {evex} vpminub 0(%rdx), %zmm31, %zmm20{%k2}
+    {evex} vpminub 128(%r15), %zmm12, %zmm17{%k3}
+    {evex} vpminub 2147483647(%rcx), %zmm16, %zmm3{%k4}
     {evex} vpminub 0(%r12), %zmm25, %zmm9{%k5}
     {evex} vpminub -8192(%rsp), %zmm31, %zmm20{%k6}
     {evex} vpminub 4660(%r12), %zmm12, %zmm17{%k7}
-    {evex} vpminub 0(%r12,%r12,8), %zmm16, %zmm3{%k1}
-    {evex} vpminub 8128(%rsp,%rax,1), %zmm25, %zmm9{%k2}
-    {evex} vpminub -129(%r13,%r15,2), %zmm31, %zmm20{%k3}
+    {evex} vpminub 0(%r9,%rbp,2), %zmm16, %zmm3{%k1}
+    {evex} vpminub 8128(%rdi,%r12,4), %zmm25, %zmm9{%k2}
+g72:
+    {evex} vpminub -129(%r15,%rax,8), %zmm31, %zmm20{%k3}
     {evex} vpminub gnu_fwd(%rip), %zmm12, %zmm17{%k4}
     {evex} vpminub %zmm16, %zmm3, %zmm25{%k5}{z}
-    {evex} vpminub 0(%r8), %zmm9, %zmm31{%k6}{z}
-    {evex} vpminub -64(%rdi), %zmm20, %zmm12{%k7}{z}
-    {evex} vpminub 1001(%r14), %zmm17, %zmm16{%k1}{z}
+    {evex} vpminub 0(%r9), %zmm9, %zmm31{%k6}{z}
+    {evex} vpminub -64(%r8), %zmm20, %zmm12{%k7}{z}
+    {evex} vpminub 1001(%rbp), %zmm17, %zmm16{%k1}{z}
     {evex} vpminub 0(%rsp), %zmm3, %zmm25{%k2}{z}
     {evex} vpminub 128(%r12), %zmm9, %zmm31{%k3}{z}
     {evex} vpminub -2147483648(%rsp), %zmm20, %zmm12{%k4}{z}
-    {evex} vpminub 0(%rdx,%rsi,4), %zmm17, %zmm16{%k5}{z}
-    {evex} vpminub -8192(%rbp,%rcx,8), %zmm3, %zmm25{%k6}{z}
-    {evex} vpminub 2147483647(%r12,%r9,1), %zmm9, %zmm31{%k7}{z}
+    {evex} vpminub 0(%rsp,%r15,1), %zmm17, %zmm16{%k5}{z}
+    {evex} vpminub -8192(%rax,%rsi,2), %zmm3, %zmm25{%k6}{z}
+    {evex} vpminub 2147483647(%r9,%rcx,4), %zmm9, %zmm31{%k7}{z}
     {evex} vpminub gnu_back(%rip), %zmm20, %zmm12{%k1}{z}
     {evex} vpmaxub %xmm17, %xmm16, %xmm3
-    {evex} vpmaxub 0(%rdx), %xmm25, %xmm9
-    {evex} vpmaxub 2032(%r15), %xmm31, %xmm20
-    {evex} vpmaxub 4660(%rcx), %xmm12, %xmm17
+    {evex} vpmaxub 0(%rbx), %xmm25, %xmm9
+    {evex} vpmaxub 2032(%r13), %xmm31, %xmm20
+    {evex} vpmaxub 4660(%rdx), %xmm12, %xmm17
     {evex} vpmaxub 0(%r12), %xmm16, %xmm3
     {evex} vpmaxub -16(%rsp), %xmm25, %xmm9
     {evex} vpmaxub -129(%r12), %xmm31, %xmm20
-    {evex} vpmaxub 0(%r9,%rbp,2), %xmm12, %xmm17
-    {evex} vpmaxub 32(%rdi,%r12,4), %xmm16, %xmm3
-    {evex} vpmaxub 1001(%r15,%rax,8), %xmm25, %xmm9
+    {evex} vpmaxub 0(%r14,%r9,8), %xmm12, %xmm17
+    {evex} vpmaxub 32(%rsp,%rbp,1), %xmm16, %xmm3
+    {evex} vpmaxub 1001(%r13,%r12,2), %xmm25, %xmm9
     {evex} vpmaxub gnu_fwd(%rip), %xmm31, %xmm20
-g72:
     {evex} vpmaxub %xmm12, %xmm17, %xmm16{%k2}
-    {evex} vpmaxub 0(%r9), %xmm3, %xmm25{%k3}
-    {evex} vpmaxub -2048(%r8), %xmm9, %xmm31{%k4}
-    {evex} vpmaxub -2147483648(%rbp), %xmm20, %xmm12{%k5}
+    {evex} vpmaxub 0(%r10), %xmm3, %xmm25{%k3}
+    {evex} vpmaxub -2048(%r9), %xmm9, %xmm31{%k4}
+    {evex} vpmaxub -2147483648(%rbx), %xmm20, %xmm12{%k5}
     {evex} vpmaxub 0(%rsp), %xmm17, %xmm16{%k6}
     {evex} vpmaxub 2032(%r12), %xmm3, %xmm25{%k7}
     {evex} vpmaxub 2147483647(%rsp), %xmm9, %xmm31{%k1}
-    {evex} vpmaxub 0(%rsp,%r15,1), %xmm20, %xmm12{%k2}
-    {evex} vpmaxub -16(%rax,%rsi,2), %xmm17, %xmm16{%k3}
-    {evex} vpmaxub 4660(%r9,%rcx,4), %xmm3, %xmm25{%k4}
+    {evex} vpmaxub 0(%rsi,%rax,4), %xmm20, %xmm12{%k2}
+    {evex} vpmaxub -16(%rbp,%r15,8), %xmm17, %xmm16{%k3}
+    {evex} vpmaxub 4660(%r12,%rsi,1), %xmm3, %xmm25{%k4}
     {evex} vpmaxub gnu_back(%rip), %xmm9, %xmm31{%k5}
     {evex} vpmaxub %xmm20, %xmm12, %xmm17{%k6}{z}
-    {evex} vpmaxub 0(%rbx), %xmm16, %xmm3{%k7}{z}
-    {evex} vpmaxub 32(%r13), %xmm25, %xmm9{%k1}{z}
-    {evex} vpmaxub -129(%rdx), %xmm31, %xmm20{%k2}{z}
+    {evex} vpmaxub 0(%rsi), %xmm16, %xmm3{%k7}{z}
+    {evex} vpmaxub 32(%r10), %xmm25, %xmm9{%k1}{z}
+    {evex} vpmaxub -129(%rsi), %xmm31, %xmm20{%k2}{z}
     {evex} vpmaxub 0(%r12), %xmm12, %xmm17{%k3}{z}
     {evex} vpmaxub -2048(%rsp), %xmm16, %xmm3{%k4}{z}
     {evex} vpmaxub 1001(%r12), %xmm25, %xmm9{%k5}{z}
-    {evex} vpmaxub 0(%r14,%r9,8), %xmm31, %xmm20{%k6}{z}
-    {evex} vpmaxub 2032(%rsp,%rbp,1), %xmm12, %xmm17{%k7}{z}
-    {evex} vpmaxub -2147483648(%r13,%r12,2), %xmm16, %xmm3{%k1}{z}
+    {evex} vpmaxub 0(%r15,%rcx,2), %xmm31, %xmm20{%k6}{z}
+    {evex} vpmaxub 2032(%rdi,%r9,4), %xmm12, %xmm17{%k7}{z}
+    {evex} vpmaxub -2147483648(%r15,%rbp,8), %xmm16, %xmm3{%k1}{z}
     {evex} vpmaxub gnu_fwd(%rip), %xmm25, %xmm9{%k2}{z}
     {evex} vpmaxub %ymm31, %ymm20, %ymm12
-    {evex} vpmaxub 0(%r10), %ymm17, %ymm16
-    {evex} vpmaxub 4064(%r9), %ymm3, %ymm25
-    {evex} vpmaxub 2147483647(%rbx), %ymm9, %ymm31
+    {evex} vpmaxub 0(%r11), %ymm17, %ymm16
+    {evex} vpmaxub 4064(%r11), %ymm3, %ymm25
+    {evex} vpmaxub 2147483647(%rdi), %ymm9, %ymm31
     {evex} vpmaxub 0(%rsp), %ymm20, %ymm12
     {evex} vpmaxub -32(%r12), %ymm17, %ymm16
     {evex} vpmaxub 4660(%rsp), %ymm3, %ymm25
-    {evex} vpmaxub 0(%rsi,%rax,4), %ymm9, %ymm31
-    {evex} vpmaxub 64(%rbp,%r15,8), %ymm20, %ymm12
-    {evex} vpmaxub -129(%r12,%rsi,1), %ymm17, %ymm16
+    {evex} vpmaxub 0(%rax,%r12,1), %ymm9, %ymm31
+    {evex} vpmaxub 64(%rax,%rax,2), %ymm20, %ymm12
+    {evex} vpmaxub -129(%r9,%r15,4), %ymm17, %ymm16
     {evex} vpmaxub gnu_back(%rip), %ymm3, %ymm25
     {evex} vpmaxub %ymm9, %ymm31, %ymm20{%k3}
-    {evex} vpmaxub 0(%rsi), %ymm12, %ymm17{%k4}
-    {evex} vpmaxub -4096(%r10), %ymm16, %ymm3{%k5}
-    {evex} vpmaxub 1001(%rsi), %ymm25, %ymm9{%k6}
+    {evex} vpmaxub 0(%rdi), %ymm12, %ymm17{%k4}
+    {evex} vpmaxub -4096(%r14), %ymm16, %ymm3{%k5}
+    {evex} vpmaxub 1001(%r15), %ymm25, %ymm9{%k6}
     {evex} vpmaxub 0(%r12), %ymm31, %ymm20{%k7}
     {evex} vpmaxub 4064(%rsp), %ymm12, %ymm17{%k1}
     {evex} vpmaxub -2147483648(%r12), %ymm16, %ymm3{%k2}
-    {evex} vpmaxub 0(%r15,%rcx,2), %ymm25, %ymm9{%k3}
-    {evex} vpmaxub -32(%rdi,%r9,4), %ymm31, %ymm20{%k4}
-    {evex} vpmaxub 2147483647(%r15,%rbp,8), %ymm12, %ymm17{%k5}
+    {evex} vpmaxub 0(%r8,%rsi,8), %ymm25, %ymm9{%k3}
+    {evex} vpmaxub -32(%rsp,%rcx,1), %ymm31, %ymm20{%k4}
+    {evex} vpmaxub 2147483647(%r13,%r9,2), %ymm12, %ymm17{%k5}
     {evex} vpmaxub gnu_fwd(%rip), %ymm16, %ymm3{%k6}
     {evex} vpmaxub %ymm25, %ymm9, %ymm31{%k7}{z}
-    {evex} vpmaxub 0(%r11), %ymm20, %ymm12{%k1}{z}
-    {evex} vpmaxub 64(%r11), %ymm17, %ymm16{%k2}{z}
-    {evex} vpmaxub 4660(%rdi), %ymm3, %ymm25{%k3}{z}
+    {evex} vpmaxub 0(%r14), %ymm20, %ymm12{%k1}{z}
+    {evex} vpmaxub 64(%rcx), %ymm17, %ymm16{%k2}{z}
+    {evex} vpmaxub 4660(%r8), %ymm3, %ymm25{%k3}{z}
     {evex} vpmaxub 0(%rsp), %ymm9, %ymm31{%k4}{z}
     {evex} vpmaxub -4096(%r12), %ymm20, %ymm12{%k5}{z}
     {evex} vpmaxub -129(%rsp), %ymm17, %ymm16{%k6}{z}
-    {evex} vpmaxub 0(%rax,%r12,1), %ymm3, %ymm25{%k7}{z}
-    {evex} vpmaxub 4064(%rax,%rax,2), %ymm9, %ymm31{%k1}{z}
-    {evex} vpmaxub 1001(%r9,%r15,4), %ymm20, %ymm12{%k2}{z}
+    {evex} vpmaxub 0(%rcx,%rbp,4), %ymm3, %ymm25{%k7}{z}
+    {evex} vpmaxub 4064(%rbp,%r12,8), %ymm9, %ymm31{%k1}{z}
+    {evex} vpmaxub 1001(%r12,%rax,1), %ymm20, %ymm12{%k2}{z}
     {evex} vpmaxub gnu_back(%rip), %ymm17, %ymm16{%k3}{z}
     {evex} vpmaxub %zmm3, %zmm25, %zmm9
-    {evex} vpmaxub 0(%rdi), %zmm31, %zmm20
-    {evex} vpmaxub 8128(%r14), %zmm12, %zmm17
-    {evex} vpmaxub -2147483648(%r15), %zmm16, %zmm3
+    {evex} vpmaxub 0(%r15), %zmm31, %zmm20
+    {evex} vpmaxub 8128(%rbp), %zmm12, %zmm17
+    {evex} vpmaxub -2147483648(%r13), %zmm16, %zmm3
     {evex} vpmaxub 0(%r12), %zmm25, %zmm9
     {evex} vpmaxub -64(%rsp), %zmm31, %zmm20
     {evex} vpmaxub 2147483647(%r12), %zmm12, %zmm17
-    {evex} vpmaxub 0(%r8,%rsi,8), %zmm16, %zmm3
-    {evex} vpmaxub 128(%rsp,%rcx,1), %zmm25, %zmm9
-    {evex} vpmaxub 4660(%r13,%r9,2), %zmm31, %zmm20
+    {evex} vpmaxub 0(%r12,%r15,2), %zmm16, %zmm3
+    {evex} vpmaxub 128(%rdi,%rsi,4), %zmm25, %zmm9
+    {evex} vpmaxub 4660(%r15,%rcx,8), %zmm31, %zmm20
     {evex} vpmaxub gnu_fwd(%rip), %zmm12, %zmm17
     {evex} vpmaxub %zmm16, %zmm3, %zmm25{%k4}
-    {evex} vpmaxub 0(%r14), %zmm9, %zmm31{%k5}
-    {evex} vpmaxub -8192(%rcx), %zmm20, %zmm12{%k6}
-    {evex} vpmaxub -129(%r8), %zmm17, %zmm16{%k7}
+    {evex} vpmaxub 0(%rcx), %zmm9, %zmm31{%k5}
+    {evex} vpmaxub -8192(%rdx), %zmm20, %zmm12{%k6}
+    {evex} vpmaxub -129(%r9), %zmm17, %zmm16{%k7}
     {evex} vpmaxub 0(%rsp), %zmm3, %zmm25{%k1}
     {evex} vpmaxub 8128(%r12), %zmm9, %zmm31{%k2}
     {evex} vpmaxub 1001(%rsp), %zmm20, %zmm12{%k3}
-    {evex} vpmaxub 0(%rcx,%rbp,4), %zmm17, %zmm16{%k4}
-    {evex} vpmaxub -64(%rbp,%r12,8), %zmm3, %zmm25{%k5}
-    {evex} vpmaxub -2147483648(%r12,%rax,1), %zmm9, %zmm31{%k6}
+    {evex} vpmaxub 0(%rdx,%r9,1), %zmm17, %zmm16{%k4}
+    {evex} vpmaxub -64(%rax,%rbp,2), %zmm3, %zmm25{%k5}
+    {evex} vpmaxub -2147483648(%r9,%r12,4), %zmm9, %zmm31{%k6}
     {evex} vpmaxub gnu_back(%rip), %zmm20, %zmm12{%k7}
     {evex} vpmaxub %zmm17, %zmm16, %zmm3{%k1}{z}
-    {evex} vpmaxub 0(%r15), %zmm25, %zmm9{%k2}{z}
-    {evex} vpmaxub 128(%rbp), %zmm31, %zmm20{%k3}{z}
-    {evex} vpmaxub 2147483647(%r13), %zmm12, %zmm17{%k4}{z}
+    {evex} vpmaxub 0(%r8), %zmm25, %zmm9{%k2}{z}
+    {evex} vpmaxub 128(%rbx), %zmm31, %zmm20{%k3}{z}
+    {evex} vpmaxub 2147483647(%r10), %zmm12, %zmm17{%k4}{z}
     {evex} vpmaxub 0(%r12), %zmm16, %zmm3{%k5}{z}
     {evex} vpmaxub -8192(%rsp), %zmm25, %zmm9{%k6}{z}
     {evex} vpmaxub 4660(%r12), %zmm31, %zmm20{%k7}{z}
-    {evex} vpmaxub 0(%r12,%r15,2), %zmm12, %zmm17{%k1}{z}
-    {evex} vpmaxub 8128(%rdi,%rsi,4), %zmm16, %zmm3{%k2}{z}
-    {evex} vpmaxub -129(%r15,%rcx,8), %zmm25, %zmm9{%k3}{z}
+    {evex} vpmaxub 0(%r9,%rax,8), %zmm12, %zmm17{%k1}{z}
+    {evex} vpmaxub 8128(%rsp,%r15,1), %zmm16, %zmm3{%k2}{z}
+    {evex} vpmaxub -129(%r13,%rsi,2), %zmm25, %zmm9{%k3}{z}
     {evex} vpmaxub gnu_fwd(%rip), %zmm31, %zmm20{%k4}{z}
     {evex} vpminud %xmm12, %xmm17, %xmm16
-    {evex} vpminud 0(%rcx), %xmm3, %xmm25
-    {evex} vpminud -16(%rdx), %xmm9, %xmm31
-    {evex} vpminud 1001(%r9), %xmm20, %xmm12
+    {evex} vpminud 0(%rdx), %xmm3, %xmm25
+    {evex} vpminud -16(%rsi), %xmm9, %xmm31
+    {evex} vpminud 1001(%r11), %xmm20, %xmm12
     {evex} vpminud 0(%rsp), %xmm17, %xmm16
     {evex} vpminud 32(%r12), %xmm3, %xmm25
     {evex} vpminud -2147483648(%rsp), %xmm9, %xmm31
-    {evex} vpminud 0(%rdx,%r9,1), %xmm20, %xmm12
-    {evex} vpminud -2048(%rax,%rbp,2), %xmm17, %xmm16
-    {evex} vpminud 2147483647(%r9,%r12,4), %xmm3, %xmm25
+    {evex} vpminud 0(%rsp,%rcx,4), %xmm20, %xmm12
+    {evex} vpminud -2048(%rbp,%r9,8), %xmm17, %xmm16
+    {evex} vpminud 2147483647(%r12,%rbp,1), %xmm3, %xmm25
     {evex} vpminud gnu_back(%rip), %xmm9, %xmm31
     {evex} vpminud %xmm20, %xmm12, %xmm17{%k5}
-    {evex} vpminud 0(%r8), %xmm16, %xmm3{%k6}
-    {evex} vpminud 2032(%rbx), %xmm25, %xmm9{%k7}
-    {evex} vpminud 4660(%r10), %xmm31, %xmm20{%k1}
+    {evex} vpminud 0(%r9), %xmm16, %xmm3{%k6}
+    {evex} vpminud 2032(%rdi), %xmm25, %xmm9{%k7}
+    {evex} vpminud 4660(%r14), %xmm31, %xmm20{%k1}
     {evex} vpminud 0(%r12), %xmm12, %xmm17{%k2}
     {evex} vpminud -16(%rsp), %xmm16, %xmm3{%k3}
     {evex} vpminud -129(%r12), %xmm25, %xmm9{%k4}
-    {evex} vpminud 0(%r9,%rax,8), %xmm31, %xmm20{%k5}
-    {evex} vpminud 32(%rsp,%r15,1), %xmm12, %xmm17{%k6}
-    {evex} vpminud 1001(%r13,%rsi,2), %xmm16, %xmm3{%k7}
+    {evex} vpminud 0(%r14,%r12,2), %xmm31, %xmm20{%k5}
+    {evex} vpminud 32(%rdi,%rax,4), %xmm12, %xmm17{%k6}
+    {evex} vpminud 1001(%r15,%r15,8), %xmm16, %xmm3{%k7}
     {evex} vpminud gnu_fwd(%rip), %xmm25, %xmm9{%k1}
     {evex} vpminud %xmm31, %xmm20, %xmm12{%k2}{z}
-    {evex} vpminud 0(%rdx), %xmm17, %xmm16{%k3}{z}
-    {evex} vpminud -2048(%rsi), %xmm3, %xmm25{%k4}{z}
-    {evex} vpminud -2147483648(%r11), %xmm9, %xmm31{%k5}{z}
+    {evex} vpminud 0(%rbx), %xmm17, %xmm16{%k3}{z}
+    {evex} vpminud -2048(%r15), %xmm3, %xmm25{%k4}{z}
+    {evex} vpminud -2147483648(%rcx), %xmm9, %xmm31{%k5}{z}
     {evex} vpminud 0(%rsp), %xmm20, %xmm12{%k6}{z}
     {evex} vpminud 2032(%r12), %xmm17, %xmm16{%k7}{z}
     {evex} vpminud 2147483647(%rsp), %xmm3, %xmm25{%k1}{z}
-    {evex} vpminud 0(%rsp,%rcx,4), %xmm9, %xmm31{%k2}{z}
-    {evex} vpminud -16(%rbp,%r9,8), %xmm20, %xmm12{%k3}{z}
-    {evex} vpminud 4660(%r12,%rbp,1), %xmm17, %xmm16{%k4}{z}
+    {evex} vpminud 0(%rsi,%rsi,1), %xmm9, %xmm31{%k2}{z}
+    {evex} vpminud -16(%rax,%rcx,2), %xmm20, %xmm12{%k3}{z}
+    {evex} vpminud 4660(%r9,%r9,4), %xmm17, %xmm16{%k4}{z}
     {evex} vpminud gnu_back(%rip), %xmm3, %xmm25{%k5}{z}
     {evex} vpminud %ymm9, %ymm31, %ymm20
-    {evex} vpminud 0(%r9), %ymm12, %ymm17
-    {evex} vpminud -32(%rdi), %ymm16, %ymm3
-    {evex} vpminud -129(%r14), %ymm25, %ymm9
+    {evex} vpminud 0(%r10), %ymm12, %ymm17
+    {evex} vpminud -32(%r8), %ymm16, %ymm3
+    {evex} vpminud -129(%rbp), %ymm25, %ymm9
     {evex} vpminud 0(%r12), %ymm31, %ymm20
     {evex} vpminud 64(%rsp), %ymm12, %ymm17
     {evex} vpminud 1001(%r12), %ymm16, %ymm3
-    {evex} vpminud 0(%r14,%r12,2), %ymm25, %ymm9
-    {evex} vpminud -4096(%rdi,%rax,4), %ymm31, %ymm20
-    {evex} vpminud -2147483648(%r15,%r15,8), %ymm12, %ymm17
+    {evex} vpminud 0(%r15,%rbp,8), %ymm25, %ymm9
+    {evex} vpminud -4096(%rsp,%r12,1), %ymm31, %ymm20
+    {evex} vpminud -2147483648(%r13,%rax,2), %ymm12, %ymm17
     {evex} vpminud gnu_fwd(%rip), %ymm16, %ymm3
     {evex} vpminud %ymm25, %ymm9, %ymm31{%k6}
-    {evex} vpminud 0(%rbx), %ymm20, %ymm12{%k7}
-    {evex} vpminud 4064(%r15), %ymm17, %ymm16{%k1}
-    {evex} vpminud 2147483647(%rcx), %ymm3, %ymm25{%k2}
+    {evex} vpminud 0(%rsi), %ymm20, %ymm12{%k7}
+    {evex} vpminud 4064(%r13), %ymm17, %ymm16{%k1}
+    {evex} vpminud 2147483647(%rdx), %ymm3, %ymm25{%k2}
     {evex} vpminud 0(%rsp), %ymm9, %ymm31{%k3}
     {evex} vpminud -32(%r12), %ymm20, %ymm12{%k4}
     {evex} vpminud 4660(%rsp), %ymm17, %ymm16{%k5}
-    {evex} vpminud 0(%rsi,%rsi,1), %ymm3, %ymm25{%k6}
-    {evex} vpminud 64(%rax,%rcx,2), %ymm9, %ymm31{%k7}
-    {evex} vpminud -129(%r9,%r9,4), %ymm20, %ymm12{%k1}
+    {evex} vpminud 0(%rax,%r15,4), %ymm3, %ymm25{%k6}
+    {evex} vpminud 64(%rbp,%rsi,8), %ymm9, %ymm31{%k7}
+    {evex} vpminud -129(%r12,%rcx,1), %ymm20, %ymm12{%k1}
     {evex} vpminud gnu_back(%rip), %ymm17, %ymm16{%k2}
     {evex} vpminud %ymm3, %ymm25, %ymm9{%k3}{z}
-    {evex} vpminud 0(%r10), %ymm31, %ymm20{%k4}{z}
-    {evex} vpminud -4096(%r8), %ymm12, %ymm17{%k5}{z}
-    {evex} vpminud 1001(%rbp), %ymm16, %ymm3{%k6}{z}
+    {evex} vpminud 0(%r11), %ymm31, %ymm20{%k4}{z}
+    {evex} vpminud -4096(%r9), %ymm12, %ymm17{%k5}{z}
+    {evex} vpminud 1001(%rbx), %ymm16, %ymm3{%k6}{z}
     {evex} vpminud 0(%r12), %ymm25, %ymm9{%k7}{z}
     {evex} vpminud 4064(%rsp), %ymm31, %ymm20{%k1}{z}
     {evex} vpminud -2147483648(%r12), %ymm12, %ymm17{%k2}{z}
-    {evex} vpminud 0(%r15,%rbp,8), %ymm16, %ymm3{%k3}{z}
-    {evex} vpminud -32(%rsp,%r12,1), %ymm25, %ymm9{%k4}{z}
-    {evex} vpminud 2147483647(%r13,%rax,2), %ymm31, %ymm20{%k5}{z}
+    {evex} vpminud 0(%r8,%r9,2), %ymm16, %ymm3{%k3}{z}
+    {evex} vpminud -32(%rdi,%rbp,4), %ymm25, %ymm9{%k4}{z}
+    {evex} vpminud 2147483647(%r15,%r12,8), %ymm31, %ymm20{%k5}{z}
     {evex} vpminud gnu_fwd(%rip), %ymm12, %ymm17{%k6}{z}
     {evex} vpminud %zmm16, %zmm3, %zmm25
-    {evex} vpminud 0(%rsi), %zmm9, %zmm31
-    {evex} vpminud -64(%r13), %zmm20, %zmm12
-    {evex} vpminud 4660(%rdx), %zmm17, %zmm16
+    {evex} vpminud 0(%rdi), %zmm9, %zmm31
+    {evex} vpminud -64(%r10), %zmm20, %zmm12
+    {evex} vpminud 4660(%rsi), %zmm17, %zmm16
     {evex} vpminud 0(%rsp), %zmm3, %zmm25
     {evex} vpminud 128(%r12), %zmm9, %zmm31
     {evex} vpminud -129(%rsp), %zmm20, %zmm12
-    {evex} vpminud 0(%rax,%r15,4), %zmm17, %zmm16
-    {evex} vpminud -8192(%rbp,%rsi,8), %zmm3, %zmm25
-    {evex} vpminud 1001(%r12,%rcx,1), %zmm9, %zmm31
+    {evex} vpminud 0(%rcx,%rax,1), %zmm17, %zmm16
+    {evex} vpminud -8192(%rax,%r15,2), %zmm3, %zmm25
+    {evex} vpminud 1001(%r9,%rsi,4), %zmm9, %zmm31
     {evex} vpminud gnu_back(%rip), %zmm20, %zmm12
     {evex} vpminud %zmm17, %zmm16, %zmm3{%k7}
-    {evex} vpminud 0(%r11), %zmm25, %zmm9{%k1}
-    {evex} vpminud 8128(%r9), %zmm31, %zmm20{%k2}
-    {evex} vpminud -2147483648(%rbx), %zmm12, %zmm17{%k3}
+    {evex} vpminud 0(%r14), %zmm25, %zmm9{%k1}
+    {evex} vpminud 8128(%r11), %zmm31, %zmm20{%k2}
+    {evex} vpminud -2147483648(%rdi), %zmm12, %zmm17{%k3}
     {evex} vpminud 0(%r12), %zmm16, %zmm3{%k4}
     {evex} vpminud -64(%rsp), %zmm25, %zmm9{%k5}
     {evex} vpminud 2147483647(%r12), %zmm31, %zmm20{%k6}
-    {evex} vpminud 0(%r8,%r9,2), %zmm12, %zmm17{%k7}
-    {evex} vpminud 128(%rdi,%rbp,4), %zmm16, %zmm3{%k1}
-    {evex} vpminud 4660(%r15,%r12,8), %zmm25, %zmm9{%k2}
+    {evex} vpminud 0(%r12,%rcx,8), %zmm12, %zmm17{%k7}
+    {evex} vpminud 128(%rsp,%r9,1), %zmm16, %zmm3{%k1}
+    {evex} vpminud 4660(%r13,%rbp,2), %zmm25, %zmm9{%k2}
     {evex} vpminud gnu_fwd(%rip), %zmm31, %zmm20{%k3}
+g73:
     {evex} vpminud %zmm12, %zmm17, %zmm16{%k4}{z}
-    {evex} vpminud 0(%rdi), %zmm3, %zmm25{%k5}{z}
-    {evex} vpminud -8192(%r10), %zmm9, %zmm31{%k6}{z}
-    {evex} vpminud -129(%rsi), %zmm20, %zmm12{%k7}{z}
+    {evex} vpminud 0(%r15), %zmm3, %zmm25{%k5}{z}
+    {evex} vpminud -8192(%r14), %zmm9, %zmm31{%k6}{z}
+    {evex} vpminud -129(%r15), %zmm20, %zmm12{%k7}{z}
     {evex} vpminud 0(%rsp), %zmm17, %zmm16{%k1}{z}
     {evex} vpminud 8128(%r12), %zmm3, %zmm25{%k2}{z}
     {evex} vpminud 1001(%rsp), %zmm9, %zmm31{%k3}{z}
-    {evex} vpminud 0(%rcx,%rax,1), %zmm20, %zmm12{%k4}{z}
-    {evex} vpminud -64(%rax,%r15,2), %zmm17, %zmm16{%k5}{z}
-    {evex} vpminud -2147483648(%r9,%rsi,4), %zmm3, %zmm25{%k6}{z}
+    {evex} vpminud 0(%rdx,%r12,4), %zmm20, %zmm12{%k4}{z}
+    {evex} vpminud -64(%rbp,%rax,8), %zmm17, %zmm16{%k5}{z}
+    {evex} vpminud -2147483648(%r12,%r15,1), %zmm3, %zmm25{%k6}{z}
     {evex} vpminud gnu_back(%rip), %zmm9, %zmm31{%k7}{z}
     {evex} vpaddb %xmm20, %xmm12, %xmm17
-    {evex} vpaddb 0(%r14), %xmm16, %xmm3
-    {evex} vpaddb 32(%r11), %xmm25, %xmm9
-    {evex} vpaddb 2147483647(%rdi), %xmm31, %xmm20
+    {evex} vpaddb 0(%rcx), %xmm16, %xmm3
+    {evex} vpaddb 32(%rcx), %xmm25, %xmm9
+    {evex} vpaddb 2147483647(%r8), %xmm31, %xmm20
     {evex} vpaddb 0(%r12), %xmm12, %xmm17
     {evex} vpaddb -2048(%rsp), %xmm16, %xmm3
     {evex} vpaddb 4660(%r12), %xmm25, %xmm9
-    {evex} vpaddb 0(%r12,%rcx,8), %xmm31, %xmm20
-    {evex} vpaddb 2032(%rsp,%r9,1), %xmm12, %xmm17
-    {evex} vpaddb -129(%r13,%rbp,2), %xmm16, %xmm3
+    {evex} vpaddb 0(%r9,%rsi,2), %xmm31, %xmm20
+    {evex} vpaddb 2032(%rdi,%rcx,4), %xmm12, %xmm17
+    {evex} vpaddb -129(%r15,%r9,8), %xmm16, %xmm3
     {evex} vpaddb gnu_fwd(%rip), %xmm25, %xmm9
     {evex} vpaddb %xmm31, %xmm20, %xmm12{%k1}
-    {evex} vpaddb 0(%r15), %xmm17, %xmm16{%k2}
-g73:
-    {evex} vpaddb -16(%r14), %xmm3, %xmm25{%k3}
-    {evex} vpaddb 1001(%r15), %xmm9, %xmm31{%k4}
+    {evex} vpaddb 0(%r8), %xmm17, %xmm16{%k2}
+    {evex} vpaddb -16(%rbp), %xmm3, %xmm25{%k3}
+    {evex} vpaddb 1001(%r13), %xmm9, %xmm31{%k4}
     {evex} vpaddb 0(%rsp), %xmm20, %xmm12{%k5}
     {evex} vpaddb 32(%r12), %xmm17, %xmm16{%k6}
     {evex} vpaddb -2147483648(%rsp), %xmm3, %xmm25{%k7}
-    {evex} vpaddb 0(%rdx,%r12,4), %xmm9, %xmm31{%k1}
-    {evex} vpaddb -2048(%rbp,%rax,8), %xmm20, %xmm12{%k2}
-    {evex} vpaddb 2147483647(%r12,%r15,1), %xmm17, %xmm16{%k3}
+    {evex} vpaddb 0(%rsp,%rbp,1), %xmm9, %xmm31{%k1}
+    {evex} vpaddb -2048(%rax,%r12,2), %xmm20, %xmm12{%k2}
+    {evex} vpaddb 2147483647(%r9,%rax,4), %xmm17, %xmm16{%k3}
     {evex} vpaddb gnu_back(%rip), %xmm3, %xmm25{%k4}
     {evex} vpaddb %xmm9, %xmm31, %xmm20{%k5}{z}
-    {evex} vpaddb 0(%rcx), %xmm12, %xmm17{%k6}{z}
-    {evex} vpaddb 2032(%rcx), %xmm16, %xmm3{%k7}{z}
-    {evex} vpaddb 4660(%r8), %xmm25, %xmm9{%k1}{z}
+    {evex} vpaddb 0(%rdx), %xmm12, %xmm17{%k6}{z}
+    {evex} vpaddb 2032(%rdx), %xmm16, %xmm3{%k7}{z}
+    {evex} vpaddb 4660(%r9), %xmm25, %xmm9{%k1}{z}
     {evex} vpaddb 0(%r12), %xmm31, %xmm20{%k2}{z}
     {evex} vpaddb -16(%rsp), %xmm12, %xmm17{%k3}{z}
     {evex} vpaddb -129(%r12), %xmm16, %xmm3{%k4}{z}
-    {evex} vpaddb 0(%r9,%rsi,2), %xmm25, %xmm9{%k5}{z}
-    {evex} vpaddb 32(%rdi,%rcx,4), %xmm31, %xmm20{%k6}{z}
-    {evex} vpaddb 1001(%r15,%r9,8), %xmm12, %xmm17{%k7}{z}
+    {evex} vpaddb 0(%r14,%r15,8), %xmm25, %xmm9{%k5}{z}
+    {evex} vpaddb 32(%rsp,%rsi,1), %xmm31, %xmm20{%k6}{z}
+    {evex} vpaddb 1001(%r13,%rcx,2), %xmm12, %xmm17{%k7}{z}
     {evex} vpaddb gnu_fwd(%rip), %xmm16, %xmm3{%k1}{z}
     {evex} vpaddb %ymm25, %ymm9, %ymm31
-    {evex} vpaddb 0(%r8), %ymm20, %ymm12
-    {evex} vpaddb 64(%rbp), %ymm17, %ymm16
-    {evex} vpaddb -2147483648(%r13), %ymm3, %ymm25
+    {evex} vpaddb 0(%r9), %ymm20, %ymm12
+    {evex} vpaddb 64(%rbx), %ymm17, %ymm16
+    {evex} vpaddb -2147483648(%r10), %ymm3, %ymm25
     {evex} vpaddb 0(%rsp), %ymm9, %ymm31
     {evex} vpaddb -4096(%r12), %ymm20, %ymm12
     {evex} vpaddb 2147483647(%rsp), %ymm17, %ymm16
-    {evex} vpaddb 0(%rsp,%rbp,1), %ymm3, %ymm25
-    {evex} vpaddb 4064(%rax,%r12,2), %ymm9, %ymm31
-    {evex} vpaddb 4660(%r9,%rax,4), %ymm20, %ymm12
+    {evex} vpaddb 0(%rsi,%r9,4), %ymm3, %ymm25
+    {evex} vpaddb 4064(%rbp,%rbp,8), %ymm9, %ymm31
+    {evex} vpaddb 4660(%r12,%r12,1), %ymm20, %ymm12
     {evex} vpaddb gnu_back(%rip), %ymm17, %ymm16
     {evex} vpaddb %ymm3, %ymm25, %ymm9{%k2}
-    {evex} vpaddb 0(%rdx), %ymm31, %ymm20{%k3}
-    {evex} vpaddb -32(%rdx), %ymm12, %ymm17{%k4}
-    {evex} vpaddb -129(%r9), %ymm16, %ymm3{%k5}
+    {evex} vpaddb 0(%rbx), %ymm31, %ymm20{%k3}
+    {evex} vpaddb -32(%rsi), %ymm12, %ymm17{%k4}
+    {evex} vpaddb -129(%r11), %ymm16, %ymm3{%k5}
     {evex} vpaddb 0(%r12), %ymm25, %ymm9{%k6}
     {evex} vpaddb 64(%rsp), %ymm31, %ymm20{%k7}
     {evex} vpaddb 1001(%r12), %ymm12, %ymm17{%k1}
-    {evex} vpaddb 0(%r14,%r15,8), %ymm16, %ymm3{%k2}
-    {evex} vpaddb -4096(%rsp,%rsi,1), %ymm25, %ymm9{%k3}
-    {evex} vpaddb -2147483648(%r13,%rcx,2), %ymm31, %ymm20{%k4}
+    {evex} vpaddb 0(%r15,%rax,2), %ymm16, %ymm3{%k2}
+    {evex} vpaddb -4096(%rdi,%r15,4), %ymm25, %ymm9{%k3}
+    {evex} vpaddb -2147483648(%r15,%rsi,8), %ymm31, %ymm20{%k4}
     {evex} vpaddb gnu_fwd(%rip), %ymm12, %ymm17{%k5}
     {evex} vpaddb %ymm16, %ymm3, %ymm25{%k6}{z}
-    {evex} vpaddb 0(%r9), %ymm9, %ymm31{%k7}{z}
-    {evex} vpaddb 4064(%rbx), %ymm20, %ymm12{%k1}{z}
-    {evex} vpaddb 2147483647(%r10), %ymm17, %ymm16{%k2}{z}
+    {evex} vpaddb 0(%r10), %ymm9, %ymm31{%k7}{z}
+    {evex} vpaddb 4064(%rdi), %ymm20, %ymm12{%k1}{z}
+    {evex} vpaddb 2147483647(%r14), %ymm17, %ymm16{%k2}{z}
     {evex} vpaddb 0(%rsp), %ymm3, %ymm25{%k3}{z}
     {evex} vpaddb -32(%r12), %ymm9, %ymm31{%k4}{z}
     {evex} vpaddb 4660(%rsp), %ymm20, %ymm12{%k5}{z}
-    {evex} vpaddb 0(%rsi,%r9,4), %ymm17, %ymm16{%k6}{z}
-    {evex} vpaddb 64(%rbp,%rbp,8), %ymm3, %ymm25{%k7}{z}
-    {evex} vpaddb -129(%r12,%r12,1), %ymm9, %ymm31{%k1}{z}
+    {evex} vpaddb 0(%rax,%rcx,1), %ymm17, %ymm16{%k6}{z}
+    {evex} vpaddb 64(%rax,%r9,2), %ymm3, %ymm25{%k7}{z}
+    {evex} vpaddb -129(%r9,%rbp,4), %ymm9, %ymm31{%k1}{z}
     {evex} vpaddb gnu_back(%rip), %ymm20, %ymm12{%k2}{z}
     {evex} vpaddb %zmm17, %zmm16, %zmm3
-    {evex} vpaddb 0(%rbx), %zmm25, %zmm9
-    {evex} vpaddb 128(%rsi), %zmm31, %zmm20
-    {evex} vpaddb 1001(%r11), %zmm12, %zmm17
+    {evex} vpaddb 0(%rsi), %zmm25, %zmm9
+    {evex} vpaddb 128(%r15), %zmm31, %zmm20
+    {evex} vpaddb 1001(%rcx), %zmm12, %zmm17
     {evex} vpaddb 0(%r12), %zmm16, %zmm3
     {evex} vpaddb -8192(%rsp), %zmm25, %zmm9
     {evex} vpaddb -2147483648(%r12), %zmm31, %zmm20
-    {evex} vpaddb 0(%r15,%rax,2), %zmm12, %zmm17
-    {evex} vpaddb 8128(%rdi,%r15,4), %zmm16, %zmm3
-    {evex} vpaddb 2147483647(%r15,%rsi,8), %zmm25, %zmm9
+    {evex} vpaddb 0(%r8,%r12,8), %zmm12, %zmm17
+    {evex} vpaddb 8128(%rsp,%rax,1), %zmm16, %zmm3
+    {evex} vpaddb 2147483647(%r13,%r15,2), %zmm25, %zmm9
     {evex} vpaddb gnu_fwd(%rip), %zmm31, %zmm20
     {evex} vpaddb %zmm12, %zmm17, %zmm16{%k3}
-    {evex} vpaddb 0(%r10), %zmm3, %zmm25{%k4}
-    {evex} vpaddb -64(%rdi), %zmm9, %zmm31{%k5}
-    {evex} vpaddb 4660(%r14), %zmm20, %zmm12{%k6}
+    {evex} vpaddb 0(%r11), %zmm3, %zmm25{%k4}
+    {evex} vpaddb -64(%r8), %zmm9, %zmm31{%k5}
+    {evex} vpaddb 4660(%rbp), %zmm20, %zmm12{%k6}
     {evex} vpaddb 0(%rsp), %zmm17, %zmm16{%k7}
     {evex} vpaddb 128(%r12), %zmm3, %zmm25{%k1}
     {evex} vpaddb -129(%rsp), %zmm9, %zmm31{%k2}
-    {evex} vpaddb 0(%rax,%rcx,1), %zmm20, %zmm12{%k3}
-    {evex} vpaddb -8192(%rax,%r9,2), %zmm17, %zmm16{%k4}
-    {evex} vpaddb 1001(%r9,%rbp,4), %zmm3, %zmm25{%k5}
+    {evex} vpaddb 0(%rcx,%rsi,4), %zmm20, %zmm12{%k3}
+    {evex} vpaddb -8192(%rbp,%rcx,8), %zmm17, %zmm16{%k4}
+    {evex} vpaddb 1001(%r12,%r9,1), %zmm3, %zmm25{%k5}
     {evex} vpaddb gnu_back(%rip), %zmm9, %zmm31{%k6}
     {evex} vpaddb %zmm20, %zmm12, %zmm17{%k7}{z}
-    {evex} vpaddb 0(%rsi), %zmm16, %zmm3{%k1}{z}
-    {evex} vpaddb 8128(%r15), %zmm25, %zmm9{%k2}{z}
-    {evex} vpaddb -2147483648(%rcx), %zmm31, %zmm20{%k3}{z}
+    {evex} vpaddb 0(%rdi), %zmm16, %zmm3{%k1}{z}
+    {evex} vpaddb 8128(%r13), %zmm25, %zmm9{%k2}{z}
+    {evex} vpaddb -2147483648(%rdx), %zmm31, %zmm20{%k3}{z}
     {evex} vpaddb 0(%r12), %zmm12, %zmm17{%k4}{z}
     {evex} vpaddb -64(%rsp), %zmm16, %zmm3{%k5}{z}
     {evex} vpaddb 2147483647(%r12), %zmm25, %zmm9{%k6}{z}
-    {evex} vpaddb 0(%r8,%r12,8), %zmm31, %zmm20{%k7}{z}
-    {evex} vpaddb 128(%rsp,%rax,1), %zmm12, %zmm17{%k1}{z}
-    {evex} vpaddb 4660(%r13,%r15,2), %zmm16, %zmm3{%k2}{z}
+    {evex} vpaddb 0(%r12,%rbp,2), %zmm31, %zmm20{%k7}{z}
+    {evex} vpaddb 128(%rdi,%r12,4), %zmm12, %zmm17{%k1}{z}
+    {evex} vpaddb 4660(%r15,%rax,8), %zmm16, %zmm3{%k2}{z}
     {evex} vpaddb gnu_fwd(%rip), %zmm25, %zmm9{%k3}{z}
     {evex} vpsubb %xmm31, %xmm20, %xmm12
-    {evex} vpsubb 0(%r11), %xmm17, %xmm16
-    {evex} vpsubb -2048(%r8), %xmm3, %xmm25
-    {evex} vpsubb -129(%rbp), %xmm9, %xmm31
+    {evex} vpsubb 0(%r14), %xmm17, %xmm16
+    {evex} vpsubb -2048(%r9), %xmm3, %xmm25
+    {evex} vpsubb -129(%rbx), %xmm9, %xmm31
     {evex} vpsubb 0(%rsp), %xmm20, %xmm12
     {evex} vpsubb 2032(%r12), %xmm17, %xmm16
     {evex} vpsubb 1001(%rsp), %xmm3, %xmm25
-    {evex} vpsubb 0(%rcx,%rsi,4), %xmm9, %xmm31
-    {evex} vpsubb -16(%rbp,%rcx,8), %xmm20, %xmm12
-    {evex} vpsubb -2147483648(%r12,%r9,1), %xmm17, %xmm16
+    {evex} vpsubb 0(%rdx,%r15,1), %xmm9, %xmm31
+    {evex} vpsubb -16(%rax,%rsi,2), %xmm20, %xmm12
+    {evex} vpsubb -2147483648(%r9,%rcx,4), %xmm17, %xmm16
     {evex} vpsubb gnu_back(%rip), %xmm3, %xmm25
     {evex} vpsubb %xmm9, %xmm31, %xmm20{%k4}
-    {evex} vpsubb 0(%rdi), %xmm12, %xmm17{%k5}
-    {evex} vpsubb 32(%r13), %xmm16, %xmm3{%k6}
-    {evex} vpsubb 2147483647(%rdx), %xmm25, %xmm9{%k7}
+    {evex} vpsubb 0(%r15), %xmm12, %xmm17{%k5}
+    {evex} vpsubb 32(%r10), %xmm16, %xmm3{%k6}
+    {evex} vpsubb 2147483647(%rsi), %xmm25, %xmm9{%k7}
     {evex} vpsubb 0(%r12), %xmm31, %xmm20{%k1}
     {evex} vpsubb -2048(%rsp), %xmm12, %xmm17{%k2}
     {evex} vpsubb 4660(%r12), %xmm16, %xmm3{%k3}
-    {evex} vpsubb 0(%r12,%rbp,2), %xmm25, %xmm9{%k4}
-    {evex} vpsubb 2032(%rdi,%r12,4), %xmm31, %xmm20{%k5}
-    {evex} vpsubb -129(%r15,%rax,8), %xmm12, %xmm17{%k6}
+    {evex} vpsubb 0(%r9,%r9,8), %xmm25, %xmm9{%k4}
+    {evex} vpsubb 2032(%rsp,%rbp,1), %xmm31, %xmm20{%k5}
+    {evex} vpsubb -129(%r13,%r12,2), %xmm12, %xmm17{%k6}
     {evex} vpsubb gnu_fwd(%rip), %xmm16, %xmm3{%k7}
     {evex} vpsubb %xmm25, %xmm9, %xmm31{%k1}{z}
-    {evex} vpsubb 0(%r14), %xmm20, %xmm12{%k2}{z}
-    {evex} vpsubb -16(%r9), %xmm17, %xmm16{%k3}{z}
-    {evex} vpsubb 1001(%rbx), %xmm3, %xmm25{%k4}{z}
+    {evex} vpsubb 0(%rcx), %xmm20, %xmm12{%k2}{z}
+    {evex} vpsubb -16(%r11), %xmm17, %xmm16{%k3}{z}
+    {evex} vpsubb 1001(%rdi), %xmm3, %xmm25{%k4}{z}
     {evex} vpsubb 0(%rsp), %xmm9, %xmm31{%k5}{z}
     {evex} vpsubb 32(%r12), %xmm20, %xmm12{%k6}{z}
     {evex} vpsubb -2147483648(%rsp), %xmm17, %xmm16{%k7}{z}
-    {evex} vpsubb 0(%rdx,%r15,1), %xmm3, %xmm25{%k1}{z}
-    {evex} vpsubb -2048(%rax,%rsi,2), %xmm9, %xmm31{%k2}{z}
-    {evex} vpsubb 2147483647(%r9,%rcx,4), %xmm20, %xmm12{%k3}{z}
+    {evex} vpsubb 0(%rsp,%rax,4), %xmm3, %xmm25{%k1}{z}
+    {evex} vpsubb -2048(%rbp,%r15,8), %xmm9, %xmm31{%k2}{z}
+    {evex} vpsubb 2147483647(%r12,%rsi,1), %xmm20, %xmm12{%k3}{z}
     {evex} vpsubb gnu_back(%rip), %xmm17, %xmm16{%k4}{z}
     {evex} vpsubb %ymm3, %ymm25, %ymm9
-    {evex} vpsubb 0(%r15), %ymm31, %ymm20
-    {evex} vpsubb -4096(%r10), %ymm12, %ymm17
-    {evex} vpsubb 4660(%rsi), %ymm16, %ymm3
+    {evex} vpsubb 0(%r8), %ymm31, %ymm20
+    {evex} vpsubb -4096(%r14), %ymm12, %ymm17
+    {evex} vpsubb 4660(%r15), %ymm16, %ymm3
     {evex} vpsubb 0(%r12), %ymm25, %ymm9
     {evex} vpsubb 4064(%rsp), %ymm31, %ymm20
     {evex} vpsubb -129(%r12), %ymm12, %ymm17
-    {evex} vpsubb 0(%r9,%r9,8), %ymm16, %ymm3
-    {evex} vpsubb -32(%rsp,%rbp,1), %ymm25, %ymm9
-    {evex} vpsubb 1001(%r13,%r12,2), %ymm31, %ymm20
+    {evex} vpsubb 0(%r14,%rcx,2), %ymm16, %ymm3
+    {evex} vpsubb -32(%rdi,%r9,4), %ymm25, %ymm9
+    {evex} vpsubb 1001(%r15,%rbp,8), %ymm31, %ymm20
     {evex} vpsubb gnu_fwd(%rip), %ymm12, %ymm17
     {evex} vpsubb %ymm16, %ymm3, %ymm25{%k5}
-    {evex} vpsubb 0(%rcx), %ymm9, %ymm31{%k6}
-    {evex} vpsubb 64(%r11), %ymm20, %ymm12{%k7}
-    {evex} vpsubb -2147483648(%rdi), %ymm17, %ymm16{%k1}
+    {evex} vpsubb 0(%rdx), %ymm9, %ymm31{%k6}
+    {evex} vpsubb 64(%rcx), %ymm20, %ymm12{%k7}
+    {evex} vpsubb -2147483648(%r8), %ymm17, %ymm16{%k1}
     {evex} vpsubb 0(%rsp), %ymm3, %ymm25{%k2}
     {evex} vpsubb -4096(%r12), %ymm9, %ymm31{%k3}
     {evex} vpsubb 2147483647(%rsp), %ymm20, %ymm12{%k4}
-    {evex} vpsubb 0(%rsp,%rax,4), %ymm17, %ymm16{%k5}
-    {evex} vpsubb 4064(%rbp,%r15,8), %ymm3, %ymm25{%k6}
-    {evex} vpsubb 4660(%r12,%rsi,1), %ymm9, %ymm31{%k7}
+    {evex} vpsubb 0(%rsi,%r12,1), %ymm17, %ymm16{%k5}
+    {evex} vpsubb 4064(%rax,%rax,2), %ymm3, %ymm25{%k6}
+    {evex} vpsubb 4660(%r9,%r15,4), %ymm9, %ymm31{%k7}
     {evex} vpsubb gnu_back(%rip), %ymm20, %ymm12{%k1}
     {evex} vpsubb %ymm17, %ymm16, %ymm3{%k2}{z}
-    {evex} vpsubb 0(%r8), %ymm25, %ymm9{%k3}{z}
-    {evex} vpsubb -32(%r14), %ymm31, %ymm20{%k4}{z}
-    {evex} vpsubb -129(%r15), %ymm12, %ymm17{%k5}{z}
+    {evex} vpsubb 0(%r9), %ymm25, %ymm9{%k3}{z}
+    {evex} vpsubb -32(%rbp), %ymm31, %ymm20{%k4}{z}
+    {evex} vpsubb -129(%r13), %ymm12, %ymm17{%k5}{z}
     {evex} vpsubb 0(%r12), %ymm16, %ymm3{%k6}{z}
     {evex} vpsubb 64(%rsp), %ymm25, %ymm9{%k7}{z}
     {evex} vpsubb 1001(%r12), %ymm31, %ymm20{%k1}{z}
-    {evex} vpsubb 0(%r14,%rcx,2), %ymm12, %ymm17{%k2}{z}
-    {evex} vpsubb -4096(%rdi,%r9,4), %ymm16, %ymm3{%k3}{z}
-    {evex} vpsubb -2147483648(%r15,%rbp,8), %ymm25, %ymm9{%k4}{z}
+    {evex} vpsubb 0(%r15,%rsi,8), %ymm12, %ymm17{%k2}{z}
+    {evex} vpsubb -4096(%rsp,%rcx,1), %ymm16, %ymm3{%k3}{z}
+    {evex} vpsubb -2147483648(%r13,%r9,2), %ymm25, %ymm9{%k4}{z}
     {evex} vpsubb gnu_fwd(%rip), %ymm31, %ymm20{%k5}{z}
     {evex} vpsubb %zmm12, %zmm17, %zmm16
-    {evex} vpsubb 0(%rdx), %zmm3, %zmm25
-    {evex} vpsubb -8192(%rcx), %zmm9, %zmm31
-    {evex} vpsubb 2147483647(%r8), %zmm20, %zmm12
+    {evex} vpsubb 0(%rbx), %zmm3, %zmm25
+    {evex} vpsubb -8192(%rdx), %zmm9, %zmm31
+    {evex} vpsubb 2147483647(%r9), %zmm20, %zmm12
     {evex} vpsubb 0(%rsp), %zmm17, %zmm16
     {evex} vpsubb 8128(%r12), %zmm3, %zmm25
     {evex} vpsubb 4660(%rsp), %zmm9, %zmm31
-    {evex} vpsubb 0(%rsi,%r12,1), %zmm20, %zmm12
-    {evex} vpsubb -64(%rax,%rax,2), %zmm17, %zmm16
-    {evex} vpsubb -129(%r9,%r15,4), %zmm3, %zmm25
+    {evex} vpsubb 0(%rax,%rbp,4), %zmm20, %zmm12
+    {evex} vpsubb -64(%rbp,%r12,8), %zmm17, %zmm16
+    {evex} vpsubb -129(%r12,%rax,1), %zmm3, %zmm25
     {evex} vpsubb gnu_back(%rip), %zmm9, %zmm31
     {evex} vpsubb %zmm20, %zmm12, %zmm17{%k6}
-    {evex} vpsubb 0(%r9), %zmm16, %zmm3{%k7}
-    {evex} vpsubb 128(%rbp), %zmm25, %zmm9{%k1}
-    {evex} vpsubb 1001(%r13), %zmm31, %zmm20{%k2}
+    {evex} vpsubb 0(%r10), %zmm16, %zmm3{%k7}
+    {evex} vpsubb 128(%rbx), %zmm25, %zmm9{%k1}
+    {evex} vpsubb 1001(%r10), %zmm31, %zmm20{%k2}
     {evex} vpsubb 0(%r12), %zmm12, %zmm17{%k3}
     {evex} vpsubb -8192(%rsp), %zmm16, %zmm3{%k4}
     {evex} vpsubb -2147483648(%r12), %zmm25, %zmm9{%k5}
-    {evex} vpsubb 0(%r15,%rsi,8), %zmm31, %zmm20{%k6}
-    {evex} vpsubb 8128(%rsp,%rcx,1), %zmm12, %zmm17{%k7}
-    {evex} vpsubb 2147483647(%r13,%r9,2), %zmm16, %zmm3{%k1}
+    {evex} vpsubb 0(%r8,%r15,2), %zmm31, %zmm20{%k6}
+    {evex} vpsubb 8128(%rdi,%rsi,4), %zmm12, %zmm17{%k7}
+    {evex} vpsubb 2147483647(%r15,%rcx,8), %zmm16, %zmm3{%k1}
     {evex} vpsubb gnu_fwd(%rip), %zmm25, %zmm9{%k2}
     {evex} vpsubb %zmm31, %zmm20, %zmm12{%k3}{z}
-    {evex} vpsubb 0(%rbx), %zmm17, %zmm16{%k4}{z}
-    {evex} vpsubb -64(%rdx), %zmm3, %zmm25{%k5}{z}
-    {evex} vpsubb 4660(%r9), %zmm9, %zmm31{%k6}{z}
+    {evex} vpsubb 0(%rsi), %zmm17, %zmm16{%k4}{z}
+g74:
+    {evex} vpsubb -64(%rsi), %zmm3, %zmm25{%k5}{z}
+    {evex} vpsubb 4660(%r11), %zmm9, %zmm31{%k6}{z}
     {evex} vpsubb 0(%rsp), %zmm20, %zmm12{%k7}{z}
     {evex} vpsubb 128(%r12), %zmm17, %zmm16{%k1}{z}
     {evex} vpsubb -129(%rsp), %zmm3, %zmm25{%k2}{z}
-    {evex} vpsubb 0(%rax,%rbp,4), %zmm9, %zmm31{%k3}{z}
-    {evex} vpsubb -8192(%rbp,%r12,8), %zmm20, %zmm12{%k4}{z}
-    {evex} vpsubb 1001(%r12,%rax,1), %zmm17, %zmm16{%k5}{z}
+    {evex} vpsubb 0(%rcx,%r9,1), %zmm9, %zmm31{%k3}{z}
+    {evex} vpsubb -8192(%rax,%rbp,2), %zmm20, %zmm12{%k4}{z}
+    {evex} vpsubb 1001(%r9,%r12,4), %zmm17, %zmm16{%k5}{z}
     {evex} vpsubb gnu_back(%rip), %zmm3, %zmm25{%k6}{z}
     {evex} vpxorq %xmm9, %xmm31, %xmm20
-    {evex} vpxorq 0(%r10), %xmm12, %xmm17
-    {evex} vpxorq 2032(%rbx), %xmm16, %xmm3
-    {evex} vpxorq -2147483648(%r10), %xmm25, %xmm9
+    {evex} vpxorq 0(%r11), %xmm12, %xmm17
+    {evex} vpxorq 2032(%rdi), %xmm16, %xmm3
+    {evex} vpxorq -2147483648(%r14), %xmm25, %xmm9
     {evex} vpxorq 0(%r12), %xmm31, %xmm20
     {evex} vpxorq -16(%rsp), %xmm12, %xmm17
     {evex} vpxorq 2147483647(%r12), %xmm16, %xmm3
-    {evex} vpxorq 0(%r8,%r15,2), %xmm25, %xmm9
-    {evex} vpxorq 32(%rdi,%rsi,4), %xmm31, %xmm20
-    {evex} vpxorq 4660(%r15,%rcx,8), %xmm12, %xmm17
+    {evex} vpxorq 0(%r12,%rax,8), %xmm25, %xmm9
+    {evex} vpxorq 32(%rsp,%r15,1), %xmm31, %xmm20
+    {evex} vpxorq 4660(%r13,%rsi,2), %xmm12, %xmm17
     {evex} vpxorq gnu_fwd(%rip), %xmm16, %xmm3
     {evex} vpxorq %xmm25, %xmm9, %xmm31{%k7}
-    {evex} vpxorq 0(%rsi), %xmm20, %xmm12{%k1}
-    {evex} vpxorq -2048(%rsi), %xmm17, %xmm16{%k2}
-    {evex} vpxorq -129(%r11), %xmm3, %xmm25{%k3}
-g74:
+    {evex} vpxorq 0(%rdi), %xmm20, %xmm12{%k1}
+    {evex} vpxorq -2048(%r15), %xmm17, %xmm16{%k2}
+    {evex} vpxorq -129(%rcx), %xmm3, %xmm25{%k3}
     {evex} vpxorq 0(%rsp), %xmm9, %xmm31{%k4}
     {evex} vpxorq 2032(%r12), %xmm20, %xmm12{%k5}
     {evex} vpxorq 1001(%rsp), %xmm17, %xmm16{%k6}
-    {evex} vpxorq 0(%rcx,%r9,1), %xmm3, %xmm25{%k7}
-    {evex} vpxorq -16(%rax,%rbp,2), %xmm9, %xmm31{%k1}
-    {evex} vpxorq -2147483648(%r9,%r12,4), %xmm20, %xmm12{%k2}
+    {evex} vpxorq 0(%rdx,%rcx,4), %xmm3, %xmm25{%k7}
+    {evex} vpxorq -16(%rbp,%r9,8), %xmm9, %xmm31{%k1}
+    {evex} vpxorq -2147483648(%r12,%rbp,1), %xmm20, %xmm12{%k2}
     {evex} vpxorq gnu_back(%rip), %xmm17, %xmm16{%k3}
     {evex} vpxorq %xmm3, %xmm25, %xmm9{%k4}{z}
-    {evex} vpxorq 0(%r11), %xmm31, %xmm20{%k5}{z}
-    {evex} vpxorq 32(%rdi), %xmm12, %xmm17{%k6}{z}
-    {evex} vpxorq 2147483647(%r14), %xmm16, %xmm3{%k7}{z}
+    {evex} vpxorq 0(%r14), %xmm31, %xmm20{%k5}{z}
+    {evex} vpxorq 32(%r8), %xmm12, %xmm17{%k6}{z}
+    {evex} vpxorq 2147483647(%rbp), %xmm16, %xmm3{%k7}{z}
     {evex} vpxorq 0(%r12), %xmm25, %xmm9{%k1}{z}
     {evex} vpxorq -2048(%rsp), %xmm31, %xmm20{%k2}{z}
     {evex} vpxorq 4660(%r12), %xmm12, %xmm17{%k3}{z}
-    {evex} vpxorq 0(%r12,%rax,8), %xmm16, %xmm3{%k4}{z}
-    {evex} vpxorq 2032(%rsp,%r15,1), %xmm25, %xmm9{%k5}{z}
-    {evex} vpxorq -129(%r13,%rsi,2), %xmm31, %xmm20{%k6}{z}
+    {evex} vpxorq 0(%r9,%r12,2), %xmm16, %xmm3{%k4}{z}
+    {evex} vpxorq 2032(%rdi,%rax,4), %xmm25, %xmm9{%k5}{z}
+    {evex} vpxorq -129(%r15,%r15,8), %xmm31, %xmm20{%k6}{z}
     {evex} vpxorq gnu_fwd(%rip), %xmm12, %xmm17{%k7}{z}
     {evex} vpxorq %ymm16, %ymm3, %ymm25
-    {evex} vpxorq 0(%rdi), %ymm9, %ymm31
-    {evex} vpxorq 4064(%r15), %ymm20, %ymm12
-    {evex} vpxorq 1001(%rcx), %ymm17, %ymm16
+    {evex} vpxorq 0(%r15), %ymm9, %ymm31
+    {evex} vpxorq 4064(%r13), %ymm20, %ymm12
+    {evex} vpxorq 1001(%rdx), %ymm17, %ymm16
     {evex} vpxorq 0(%rsp), %ymm3, %ymm25
     {evex} vpxorq -32(%r12), %ymm9, %ymm31
     {evex} vpxorq -2147483648(%rsp), %ymm20, %ymm12
-    {evex} vpxorq 0(%rdx,%rcx,4), %ymm17, %ymm16
-    {evex} vpxorq 64(%rbp,%r9,8), %ymm3, %ymm25
-    {evex} vpxorq 2147483647(%r12,%rbp,1), %ymm9, %ymm31
+    {evex} vpxorq 0(%rsp,%rsi,1), %ymm17, %ymm16
+    {evex} vpxorq 64(%rax,%rcx,2), %ymm3, %ymm25
+    {evex} vpxorq 2147483647(%r9,%r9,4), %ymm9, %ymm31
     {evex} vpxorq gnu_back(%rip), %ymm20, %ymm12
     {evex} vpxorq %ymm17, %ymm16, %ymm3{%k1}
-    {evex} vpxorq 0(%r14), %ymm25, %ymm9{%k2}
-    {evex} vpxorq -4096(%r8), %ymm31, %ymm20{%k3}
-    {evex} vpxorq 4660(%rbp), %ymm12, %ymm17{%k4}
+    {evex} vpxorq 0(%rcx), %ymm25, %ymm9{%k2}
+    {evex} vpxorq -4096(%r9), %ymm31, %ymm20{%k3}
+    {evex} vpxorq 4660(%rbx), %ymm12, %ymm17{%k4}
     {evex} vpxorq 0(%r12), %ymm16, %ymm3{%k5}
     {evex} vpxorq 4064(%rsp), %ymm25, %ymm9{%k6}
     {evex} vpxorq -129(%r12), %ymm31, %ymm20{%k7}
-    {evex} vpxorq 0(%r9,%r12,2), %ymm12, %ymm17{%k1}
-    {evex} vpxorq -32(%rdi,%rax,4), %ymm16, %ymm3{%k2}
-    {evex} vpxorq 1001(%r15,%r15,8), %ymm25, %ymm9{%k3}
+    {evex} vpxorq 0(%r14,%rbp,8), %ymm12, %ymm17{%k1}
+    {evex} vpxorq -32(%rsp,%r12,1), %ymm16, %ymm3{%k2}
+    {evex} vpxorq 1001(%r13,%rax,2), %ymm25, %ymm9{%k3}
     {evex} vpxorq gnu_fwd(%rip), %ymm31, %ymm20{%k4}
     {evex} vpxorq %ymm12, %ymm17, %ymm16{%k5}{z}
-    {evex} vpxorq 0(%r15), %ymm3, %ymm25{%k6}{z}
-    {evex} vpxorq 64(%r13), %ymm9, %ymm31{%k7}{z}
-    {evex} vpxorq -2147483648(%rdx), %ymm20, %ymm12{%k1}{z}
+    {evex} vpxorq 0(%r8), %ymm3, %ymm25{%k6}{z}
+    {evex} vpxorq 64(%r10), %ymm9, %ymm31{%k7}{z}
+    {evex} vpxorq -2147483648(%rsi), %ymm20, %ymm12{%k1}{z}
     {evex} vpxorq 0(%rsp), %ymm17, %ymm16{%k2}{z}
     {evex} vpxorq -4096(%r12), %ymm3, %ymm25{%k3}{z}
     {evex} vpxorq 2147483647(%rsp), %ymm9, %ymm31{%k4}{z}
-    {evex} vpxorq 0(%rsp,%rsi,1), %ymm20, %ymm12{%k5}{z}
-    {evex} vpxorq 4064(%rax,%rcx,2), %ymm17, %ymm16{%k6}{z}
-    {evex} vpxorq 4660(%r9,%r9,4), %ymm3, %ymm25{%k7}{z}
+    {evex} vpxorq 0(%rsi,%r15,4), %ymm20, %ymm12{%k5}{z}
+    {evex} vpxorq 4064(%rbp,%rsi,8), %ymm17, %ymm16{%k6}{z}
+    {evex} vpxorq 4660(%r12,%rcx,1), %ymm3, %ymm25{%k7}{z}
     {evex} vpxorq gnu_back(%rip), %ymm9, %ymm31{%k1}{z}
     {evex} vpxorq %zmm20, %zmm12, %zmm17
-    {evex} vpxorq 0(%rcx), %zmm16, %zmm3
-    {evex} vpxorq 8128(%r9), %zmm25, %zmm9
-    {evex} vpxorq -129(%rbx), %zmm31, %zmm20
+    {evex} vpxorq 0(%rdx), %zmm16, %zmm3
+    {evex} vpxorq 8128(%r11), %zmm25, %zmm9
+    {evex} vpxorq -129(%rdi), %zmm31, %zmm20
     {evex} vpxorq 0(%r12), %zmm12, %zmm17
     {evex} vpxorq -64(%rsp), %zmm16, %zmm3
     {evex} vpxorq 1001(%r12), %zmm25, %zmm9
-    {evex} vpxorq 0(%r14,%rbp,8), %zmm31, %zmm20
-    {evex} vpxorq 128(%rsp,%r12,1), %zmm12, %zmm17
-    {evex} vpxorq -2147483648(%r13,%rax,2), %zmm16, %zmm3
+    {evex} vpxorq 0(%r15,%r9,2), %zmm31, %zmm20
+    {evex} vpxorq 128(%rdi,%rbp,4), %zmm12, %zmm17
+    {evex} vpxorq -2147483648(%r15,%r12,8), %zmm16, %zmm3
     {evex} vpxorq gnu_fwd(%rip), %zmm25, %zmm9
     {evex} vpxorq %zmm31, %zmm20, %zmm12{%k2}
-    {evex} vpxorq 0(%r8), %zmm17, %zmm16{%k3}
-    {evex} vpxorq -8192(%r10), %zmm3, %zmm25{%k4}
-    {evex} vpxorq 2147483647(%rsi), %zmm9, %zmm31{%k5}
+    {evex} vpxorq 0(%r9), %zmm17, %zmm16{%k3}
+    {evex} vpxorq -8192(%r14), %zmm3, %zmm25{%k4}
+    {evex} vpxorq 2147483647(%r15), %zmm9, %zmm31{%k5}
     {evex} vpxorq 0(%rsp), %zmm20, %zmm12{%k6}
     {evex} vpxorq 8128(%r12), %zmm17, %zmm16{%k7}
     {evex} vpxorq 4660(%rsp), %zmm3, %zmm25{%k1}
-    {evex} vpxorq 0(%rsi,%r15,4), %zmm9, %zmm31{%k2}
-    {evex} vpxorq -64(%rbp,%rsi,8), %zmm20, %zmm12{%k3}
-    {evex} vpxorq -129(%r12,%rcx,1), %zmm17, %zmm16{%k4}
+    {evex} vpxorq 0(%rax,%rax,1), %zmm9, %zmm31{%k2}
+    {evex} vpxorq -64(%rax,%r15,2), %zmm20, %zmm12{%k3}
+    {evex} vpxorq -129(%r9,%rsi,4), %zmm17, %zmm16{%k4}
     {evex} vpxorq gnu_back(%rip), %zmm3, %zmm25{%k5}
     {evex} vpxorq %zmm9, %zmm31, %zmm20{%k6}{z}
-    {evex} vpxorq 0(%rdx), %zmm12, %zmm17{%k7}{z}
-    {evex} vpxorq 128(%r11), %zmm16, %zmm3{%k1}{z}
-    {evex} vpxorq 1001(%rdi), %zmm25, %zmm9{%k2}{z}
+    {evex} vpxorq 0(%rbx), %zmm12, %zmm17{%k7}{z}
+    {evex} vpxorq 128(%rcx), %zmm16, %zmm3{%k1}{z}
+    {evex} vpxorq 1001(%r8), %zmm25, %zmm9{%k2}{z}
     {evex} vpxorq 0(%r12), %zmm31, %zmm20{%k3}{z}
     {evex} vpxorq -8192(%rsp), %zmm12, %zmm17{%k4}{z}
     {evex} vpxorq -2147483648(%r12), %zmm16, %zmm3{%k5}{z}
-    {evex} vpxorq 0(%r15,%r9,2), %zmm25, %zmm9{%k6}{z}
-    {evex} vpxorq 8128(%rdi,%rbp,4), %zmm31, %zmm20{%k7}{z}
-    {evex} vpxorq 2147483647(%r15,%r12,8), %zmm12, %zmm17{%k1}{z}
+    {evex} vpxorq 0(%r8,%rcx,8), %zmm25, %zmm9{%k6}{z}
+    {evex} vpxorq 8128(%rsp,%r9,1), %zmm31, %zmm20{%k7}{z}
+    {evex} vpxorq 2147483647(%r13,%rbp,2), %zmm12, %zmm17{%k1}{z}
     {evex} vpxorq gnu_fwd(%rip), %zmm16, %zmm3{%k2}{z}
     {evex} vpxord %xmm25, %xmm9, %xmm31
-    {evex} vpxord 0(%r9), %xmm20, %xmm12
-    {evex} vpxord -16(%r14), %xmm17, %xmm16
-    {evex} vpxord 4660(%r15), %xmm3, %xmm25
+    {evex} vpxord 0(%r10), %xmm20, %xmm12
+    {evex} vpxord -16(%rbp), %xmm17, %xmm16
+    {evex} vpxord 4660(%r13), %xmm3, %xmm25
     {evex} vpxord 0(%rsp), %xmm9, %xmm31
     {evex} vpxord 32(%r12), %xmm20, %xmm12
     {evex} vpxord -129(%rsp), %xmm17, %xmm16
-    {evex} vpxord 0(%rax,%rax,1), %xmm3, %xmm25
-    {evex} vpxord -2048(%rax,%r15,2), %xmm9, %xmm31
-    {evex} vpxord 1001(%r9,%rsi,4), %xmm20, %xmm12
+    {evex} vpxord 0(%rcx,%r12,4), %xmm3, %xmm25
+    {evex} vpxord -2048(%rbp,%rax,8), %xmm9, %xmm31
+    {evex} vpxord 1001(%r12,%r15,1), %xmm20, %xmm12
     {evex} vpxord gnu_back(%rip), %xmm17, %xmm16
     {evex} vpxord %xmm3, %xmm25, %xmm9{%k3}
-    {evex} vpxord 0(%rbx), %xmm31, %xmm20{%k4}
-    {evex} vpxord 2032(%rcx), %xmm12, %xmm17{%k5}
-    {evex} vpxord -2147483648(%r8), %xmm16, %xmm3{%k6}
+    {evex} vpxord 0(%rsi), %xmm31, %xmm20{%k4}
+    {evex} vpxord 2032(%rdx), %xmm12, %xmm17{%k5}
+    {evex} vpxord -2147483648(%r9), %xmm16, %xmm3{%k6}
     {evex} vpxord 0(%r12), %xmm25, %xmm9{%k7}
     {evex} vpxord -16(%rsp), %xmm31, %xmm20{%k1}
     {evex} vpxord 2147483647(%r12), %xmm12, %xmm17{%k2}
-    {evex} vpxord 0(%r8,%rcx,8), %xmm16, %xmm3{%k3}
-    {evex} vpxord 32(%rsp,%r9,1), %xmm25, %xmm9{%k4}
-    {evex} vpxord 4660(%r13,%rbp,2), %xmm31, %xmm20{%k5}
+    {evex} vpxord 0(%r12,%rsi,2), %xmm16, %xmm3{%k3}
+    {evex} vpxord 32(%rdi,%rcx,4), %xmm25, %xmm9{%k4}
+    {evex} vpxord 4660(%r15,%r9,8), %xmm31, %xmm20{%k5}
     {evex} vpxord gnu_fwd(%rip), %xmm12, %xmm17{%k6}
     {evex} vpxord %xmm16, %xmm3, %xmm25{%k7}{z}
-    {evex} vpxord 0(%r10), %xmm9, %xmm31{%k1}{z}
-    {evex} vpxord -2048(%rbp), %xmm20, %xmm12{%k2}{z}
-    {evex} vpxord -129(%r13), %xmm17, %xmm16{%k3}{z}
+    {evex} vpxord 0(%r11), %xmm9, %xmm31{%k1}{z}
+    {evex} vpxord -2048(%rbx), %xmm20, %xmm12{%k2}{z}
+    {evex} vpxord -129(%r10), %xmm17, %xmm16{%k3}{z}
     {evex} vpxord 0(%rsp), %xmm3, %xmm25{%k4}{z}
     {evex} vpxord 2032(%r12), %xmm9, %xmm31{%k5}{z}
     {evex} vpxord 1001(%rsp), %xmm20, %xmm12{%k6}{z}
-    {evex} vpxord 0(%rcx,%r12,4), %xmm17, %xmm16{%k7}{z}
-    {evex} vpxord -16(%rbp,%rax,8), %xmm3, %xmm25{%k1}{z}
-    {evex} vpxord -2147483648(%r12,%r15,1), %xmm9, %xmm31{%k2}{z}
+    {evex} vpxord 0(%rdx,%rbp,1), %xmm17, %xmm16{%k7}{z}
+    {evex} vpxord -16(%rax,%r12,2), %xmm3, %xmm25{%k1}{z}
+    {evex} vpxord -2147483648(%r9,%rax,4), %xmm9, %xmm31{%k2}{z}
     {evex} vpxord gnu_back(%rip), %xmm20, %xmm12{%k3}{z}
     {evex} vpxord %ymm17, %ymm16, %ymm3
-    {evex} vpxord 0(%rsi), %ymm25, %ymm9
-    {evex} vpxord -32(%rdx), %ymm31, %ymm20
-    {evex} vpxord 2147483647(%r9), %ymm12, %ymm17
+    {evex} vpxord 0(%rdi), %ymm25, %ymm9
+    {evex} vpxord -32(%rsi), %ymm31, %ymm20
+    {evex} vpxord 2147483647(%r11), %ymm12, %ymm17
     {evex} vpxord 0(%r12), %ymm16, %ymm3
     {evex} vpxord 64(%rsp), %ymm25, %ymm9
     {evex} vpxord 4660(%r12), %ymm31, %ymm20
-    {evex} vpxord 0(%r12,%rsi,2), %ymm12, %ymm17
-    {evex} vpxord -4096(%rdi,%rcx,4), %ymm16, %ymm3
-    {evex} vpxord -129(%r15,%r9,8), %ymm25, %ymm9
+    {evex} vpxord 0(%r9,%r15,8), %ymm12, %ymm17
+    {evex} vpxord -4096(%rsp,%rsi,1), %ymm16, %ymm3
+    {evex} vpxord -129(%r13,%rcx,2), %ymm25, %ymm9
     {evex} vpxord gnu_fwd(%rip), %ymm31, %ymm20
     {evex} vpxord %ymm12, %ymm17, %ymm16{%k4}
-    {evex} vpxord 0(%r11), %ymm3, %ymm25{%k5}
-    {evex} vpxord 4064(%rbx), %ymm9, %ymm31{%k6}
-    {evex} vpxord 1001(%r10), %ymm20, %ymm12{%k7}
+    {evex} vpxord 0(%r14), %ymm3, %ymm25{%k5}
+    {evex} vpxord 4064(%rdi), %ymm9, %ymm31{%k6}
+    {evex} vpxord 1001(%r14), %ymm20, %ymm12{%k7}
     {evex} vpxord 0(%rsp), %ymm17, %ymm16{%k1}
     {evex} vpxord -32(%r12), %ymm3, %ymm25{%k2}
     {evex} vpxord -2147483648(%rsp), %ymm9, %ymm31{%k3}
-    {evex} vpxord 0(%rdx,%rbp,1), %ymm20, %ymm12{%k4}
-    {evex} vpxord 64(%rax,%r12,2), %ymm17, %ymm16{%k5}
-    {evex} vpxord 2147483647(%r9,%rax,4), %ymm3, %ymm25{%k6}
+    {evex} vpxord 0(%rsp,%r9,4), %ymm20, %ymm12{%k4}
+    {evex} vpxord 64(%rbp,%rbp,8), %ymm17, %ymm16{%k5}
+    {evex} vpxord 2147483647(%r12,%r12,1), %ymm3, %ymm25{%k6}
     {evex} vpxord gnu_back(%rip), %ymm9, %ymm31{%k7}
     {evex} vpxord %ymm20, %ymm12, %ymm17{%k1}{z}
-    {evex} vpxord 0(%rdi), %ymm16, %ymm3{%k2}{z}
-    {evex} vpxord -4096(%rsi), %ymm25, %ymm9{%k3}{z}
-    {evex} vpxord 4660(%r11), %ymm31, %ymm20{%k4}{z}
+    {evex} vpxord 0(%r15), %ymm16, %ymm3{%k2}{z}
+    {evex} vpxord -4096(%r15), %ymm25, %ymm9{%k3}{z}
+    {evex} vpxord 4660(%rcx), %ymm31, %ymm20{%k4}{z}
     {evex} vpxord 0(%r12), %ymm12, %ymm17{%k5}{z}
     {evex} vpxord 4064(%rsp), %ymm16, %ymm3{%k6}{z}
     {evex} vpxord -129(%r12), %ymm25, %ymm9{%k7}{z}
-    {evex} vpxord 0(%r9,%r15,8), %ymm31, %ymm20{%k1}{z}
-    {evex} vpxord -32(%rsp,%rsi,1), %ymm12, %ymm17{%k2}{z}
-    {evex} vpxord 1001(%r13,%rcx,2), %ymm16, %ymm3{%k3}{z}
+    {evex} vpxord 0(%r14,%rax,2), %ymm31, %ymm20{%k1}{z}
+    {evex} vpxord -32(%rdi,%r15,4), %ymm12, %ymm17{%k2}{z}
+    {evex} vpxord 1001(%r15,%rsi,8), %ymm16, %ymm3{%k3}{z}
     {evex} vpxord gnu_fwd(%rip), %ymm25, %ymm9{%k4}{z}
     {evex} vpxord %zmm31, %zmm20, %zmm12
-    {evex} vpxord 0(%r14), %zmm17, %zmm16
-    {evex} vpxord -64(%rdi), %zmm3, %zmm25
-    {evex} vpxord -2147483648(%r14), %zmm9, %zmm31
+    {evex} vpxord 0(%rcx), %zmm17, %zmm16
+    {evex} vpxord -64(%r8), %zmm3, %zmm25
+    {evex} vpxord -2147483648(%rbp), %zmm9, %zmm31
     {evex} vpxord 0(%rsp), %zmm20, %zmm12
     {evex} vpxord 128(%r12), %zmm17, %zmm16
     {evex} vpxord 2147483647(%rsp), %zmm3, %zmm25
-    {evex} vpxord 0(%rsp,%r9,4), %zmm9, %zmm31
-    {evex} vpxord -8192(%rbp,%rbp,8), %zmm20, %zmm12
-    {evex} vpxord 4660(%r12,%r12,1), %zmm17, %zmm16
+    {evex} vpxord 0(%rsi,%rcx,1), %zmm9, %zmm31
+    {evex} vpxord -8192(%rax,%r9,2), %zmm20, %zmm12
+    {evex} vpxord 4660(%r9,%rbp,4), %zmm17, %zmm16
     {evex} vpxord gnu_back(%rip), %zmm3, %zmm25
     {evex} vpxord %zmm9, %zmm31, %zmm20{%k5}
-    {evex} vpxord 0(%r15), %zmm12, %zmm17{%k6}
-    {evex} vpxord 8128(%r15), %zmm16, %zmm3{%k7}
-    {evex} vpxord -129(%rcx), %zmm25, %zmm9{%k1}
+    {evex} vpxord 0(%r8), %zmm12, %zmm17{%k6}
+    {evex} vpxord 8128(%r13), %zmm16, %zmm3{%k7}
+    {evex} vpxord -129(%rdx), %zmm25, %zmm9{%k1}
     {evex} vpxord 0(%r12), %zmm31, %zmm20{%k2}
     {evex} vpxord -64(%rsp), %zmm12, %zmm17{%k3}
     {evex} vpxord 1001(%r12), %zmm16, %zmm3{%k4}
-    {evex} vpxord 0(%r14,%rax,2), %zmm25, %zmm9{%k5}
-    {evex} vpxord 128(%rdi,%r15,4), %zmm31, %zmm20{%k6}
-    {evex} vpxord -2147483648(%r15,%rsi,8), %zmm12, %zmm17{%k7}
+    {evex} vpxord 0(%r15,%r12,8), %zmm25, %zmm9{%k5}
+    {evex} vpxord 128(%rsp,%rax,1), %zmm31, %zmm20{%k6}
+    {evex} vpxord -2147483648(%r13,%r15,2), %zmm12, %zmm17{%k7}
     {evex} vpxord gnu_fwd(%rip), %zmm16, %zmm3{%k1}
     {evex} vpxord %zmm25, %zmm9, %zmm31{%k2}{z}
-    {evex} vpxord 0(%rcx), %zmm20, %zmm12{%k3}{z}
-    {evex} vpxord -8192(%r8), %zmm17, %zmm16{%k4}{z}
-    {evex} vpxord 2147483647(%rbp), %zmm3, %zmm25{%k5}{z}
+    {evex} vpxord 0(%rdx), %zmm20, %zmm12{%k3}{z}
+    {evex} vpxord -8192(%r9), %zmm17, %zmm16{%k4}{z}
+    {evex} vpxord 2147483647(%rbx), %zmm3, %zmm25{%k5}{z}
+g75:
     {evex} vpxord 0(%rsp), %zmm9, %zmm31{%k6}{z}
     {evex} vpxord 8128(%r12), %zmm20, %zmm12{%k7}{z}
     {evex} vpxord 4660(%rsp), %zmm17, %zmm16{%k1}{z}
-    {evex} vpxord 0(%rsi,%rcx,1), %zmm3, %zmm25{%k2}{z}
-    {evex} vpxord -64(%rax,%r9,2), %zmm9, %zmm31{%k3}{z}
-    {evex} vpxord -129(%r9,%rbp,4), %zmm20, %zmm12{%k4}{z}
+    {evex} vpxord 0(%rax,%rsi,4), %zmm3, %zmm25{%k2}{z}
+    {evex} vpxord -64(%rbp,%rcx,8), %zmm9, %zmm31{%k3}{z}
+    {evex} vpxord -129(%r12,%r9,1), %zmm20, %zmm12{%k4}{z}
     {evex} vpxord gnu_back(%rip), %zmm17, %zmm16{%k5}{z}
     {evex} vporq %xmm3, %xmm25, %xmm9
-    {evex} vporq 0(%r8), %xmm31, %xmm20
-    {evex} vporq 32(%r13), %xmm12, %xmm17
-    {evex} vporq 1001(%rdx), %xmm16, %xmm3
+    {evex} vporq 0(%r9), %xmm31, %xmm20
+    {evex} vporq 32(%r10), %xmm12, %xmm17
+    {evex} vporq 1001(%rsi), %xmm16, %xmm3
     {evex} vporq 0(%r12), %xmm25, %xmm9
     {evex} vporq -2048(%rsp), %xmm31, %xmm20
     {evex} vporq -2147483648(%r12), %xmm12, %xmm17
-    {evex} vporq 0(%r15,%r12,8), %xmm16, %xmm3
-    {evex} vporq 2032(%rsp,%rax,1), %xmm25, %xmm9
-    {evex} vporq 2147483647(%r13,%r15,2), %xmm31, %xmm20
+    {evex} vporq 0(%r8,%rbp,2), %xmm16, %xmm3
+    {evex} vporq 2032(%rdi,%r12,4), %xmm25, %xmm9
+    {evex} vporq 2147483647(%r15,%rax,8), %xmm31, %xmm20
     {evex} vporq gnu_fwd(%rip), %xmm12, %xmm17
     {evex} vporq %xmm16, %xmm3, %xmm25{%k6}
-    {evex} vporq 0(%rdx), %xmm9, %xmm31{%k7}
-    {evex} vporq -16(%r9), %xmm20, %xmm12{%k1}
-    {evex} vporq 4660(%rbx), %xmm17, %xmm16{%k2}
+    {evex} vporq 0(%rbx), %xmm9, %xmm31{%k7}
+    {evex} vporq -16(%r11), %xmm20, %xmm12{%k1}
+    {evex} vporq 4660(%rdi), %xmm17, %xmm16{%k2}
     {evex} vporq 0(%rsp), %xmm3, %xmm25{%k3}
     {evex} vporq 32(%r12), %xmm9, %xmm31{%k4}
-g75:
     {evex} vporq -129(%rsp), %xmm20, %xmm12{%k5}
-    {evex} vporq 0(%rax,%rsi,4), %xmm17, %xmm16{%k6}
-    {evex} vporq -2048(%rbp,%rcx,8), %xmm3, %xmm25{%k7}
-    {evex} vporq 1001(%r12,%r9,1), %xmm9, %xmm31{%k1}
+    {evex} vporq 0(%rcx,%r15,1), %xmm17, %xmm16{%k6}
+    {evex} vporq -2048(%rax,%rsi,2), %xmm3, %xmm25{%k7}
+    {evex} vporq 1001(%r9,%rcx,4), %xmm9, %xmm31{%k1}
     {evex} vporq gnu_back(%rip), %xmm20, %xmm12{%k2}
     {evex} vporq %xmm17, %xmm16, %xmm3{%k3}{z}
-    {evex} vporq 0(%r9), %xmm25, %xmm9{%k4}{z}
-    {evex} vporq 2032(%r10), %xmm31, %xmm20{%k5}{z}
-    {evex} vporq -2147483648(%rsi), %xmm12, %xmm17{%k6}{z}
+    {evex} vporq 0(%r10), %xmm25, %xmm9{%k4}{z}
+    {evex} vporq 2032(%r14), %xmm31, %xmm20{%k5}{z}
+    {evex} vporq -2147483648(%r15), %xmm12, %xmm17{%k6}{z}
     {evex} vporq 0(%r12), %xmm16, %xmm3{%k7}{z}
     {evex} vporq -16(%rsp), %xmm25, %xmm9{%k1}{z}
     {evex} vporq 2147483647(%r12), %xmm31, %xmm20{%k2}{z}
-    {evex} vporq 0(%r8,%rbp,2), %xmm12, %xmm17{%k3}{z}
-    {evex} vporq 32(%rdi,%r12,4), %xmm16, %xmm3{%k4}{z}
-    {evex} vporq 4660(%r15,%rax,8), %xmm25, %xmm9{%k5}{z}
+    {evex} vporq 0(%r12,%r9,8), %xmm12, %xmm17{%k3}{z}
+    {evex} vporq 32(%rsp,%rbp,1), %xmm16, %xmm3{%k4}{z}
+    {evex} vporq 4660(%r13,%r12,2), %xmm25, %xmm9{%k5}{z}
     {evex} vporq gnu_fwd(%rip), %xmm31, %xmm20{%k6}{z}
     {evex} vporq %ymm12, %ymm17, %ymm16
-    {evex} vporq 0(%rbx), %ymm3, %ymm25
-    {evex} vporq 64(%r11), %ymm9, %ymm31
-    {evex} vporq -129(%rdi), %ymm20, %ymm12
+    {evex} vporq 0(%rsi), %ymm3, %ymm25
+    {evex} vporq 64(%rcx), %ymm9, %ymm31
+    {evex} vporq -129(%r8), %ymm20, %ymm12
     {evex} vporq 0(%rsp), %ymm17, %ymm16
     {evex} vporq -4096(%r12), %ymm3, %ymm25
     {evex} vporq 1001(%rsp), %ymm9, %ymm31
-    {evex} vporq 0(%rcx,%r15,1), %ymm20, %ymm12
-    {evex} vporq 4064(%rax,%rsi,2), %ymm17, %ymm16
-    {evex} vporq -2147483648(%r9,%rcx,4), %ymm3, %ymm25
+    {evex} vporq 0(%rdx,%rax,4), %ymm20, %ymm12
+    {evex} vporq 4064(%rbp,%r15,8), %ymm17, %ymm16
+    {evex} vporq -2147483648(%r12,%rsi,1), %ymm3, %ymm25
     {evex} vporq gnu_back(%rip), %ymm9, %ymm31
     {evex} vporq %ymm20, %ymm12, %ymm17{%k7}
-    {evex} vporq 0(%r10), %ymm16, %ymm3{%k1}
-    {evex} vporq -32(%r14), %ymm25, %ymm9{%k2}
-    {evex} vporq 2147483647(%r15), %ymm31, %ymm20{%k3}
+    {evex} vporq 0(%r11), %ymm16, %ymm3{%k1}
+    {evex} vporq -32(%rbp), %ymm25, %ymm9{%k2}
+    {evex} vporq 2147483647(%r13), %ymm31, %ymm20{%k3}
     {evex} vporq 0(%r12), %ymm12, %ymm17{%k4}
     {evex} vporq 64(%rsp), %ymm16, %ymm3{%k5}
     {evex} vporq 4660(%r12), %ymm25, %ymm9{%k6}
-    {evex} vporq 0(%r12,%r9,8), %ymm31, %ymm20{%k7}
-    {evex} vporq -4096(%rsp,%rbp,1), %ymm12, %ymm17{%k1}
-    {evex} vporq -129(%r13,%r12,2), %ymm16, %ymm3{%k2}
+    {evex} vporq 0(%r9,%rcx,2), %ymm31, %ymm20{%k7}
+    {evex} vporq -4096(%rdi,%r9,4), %ymm12, %ymm17{%k1}
+    {evex} vporq -129(%r15,%rbp,8), %ymm16, %ymm3{%k2}
     {evex} vporq gnu_fwd(%rip), %ymm25, %ymm9{%k3}
     {evex} vporq %ymm31, %ymm20, %ymm12{%k4}{z}
-    {evex} vporq 0(%rsi), %ymm17, %ymm16{%k5}{z}
-    {evex} vporq 4064(%rcx), %ymm3, %ymm25{%k6}{z}
-    {evex} vporq 1001(%r8), %ymm9, %ymm31{%k7}{z}
+    {evex} vporq 0(%rdi), %ymm17, %ymm16{%k5}{z}
+    {evex} vporq 4064(%rdx), %ymm3, %ymm25{%k6}{z}
+    {evex} vporq 1001(%r9), %ymm9, %ymm31{%k7}{z}
     {evex} vporq 0(%rsp), %ymm20, %ymm12{%k1}{z}
     {evex} vporq -32(%r12), %ymm17, %ymm16{%k2}{z}
     {evex} vporq -2147483648(%rsp), %ymm3, %ymm25{%k3}{z}
-    {evex} vporq 0(%rdx,%rax,4), %ymm9, %ymm31{%k4}{z}
-    {evex} vporq 64(%rbp,%r15,8), %ymm20, %ymm12{%k5}{z}
-    {evex} vporq 2147483647(%r12,%rsi,1), %ymm17, %ymm16{%k6}{z}
+    {evex} vporq 0(%rsp,%r12,1), %ymm9, %ymm31{%k4}{z}
+    {evex} vporq 64(%rax,%rax,2), %ymm20, %ymm12{%k5}{z}
+    {evex} vporq 2147483647(%r9,%r15,4), %ymm17, %ymm16{%k6}{z}
     {evex} vporq gnu_back(%rip), %ymm3, %ymm25{%k7}{z}
     {evex} vporq %zmm9, %zmm31, %zmm20
-    {evex} vporq 0(%r11), %zmm12, %zmm17
-    {evex} vporq 128(%rbp), %zmm16, %zmm3
-    {evex} vporq 4660(%r13), %zmm25, %zmm9
+    {evex} vporq 0(%r14), %zmm12, %zmm17
+    {evex} vporq 128(%rbx), %zmm16, %zmm3
+    {evex} vporq 4660(%r10), %zmm25, %zmm9
     {evex} vporq 0(%r12), %zmm31, %zmm20
     {evex} vporq -8192(%rsp), %zmm12, %zmm17
     {evex} vporq -129(%r12), %zmm16, %zmm3
-    {evex} vporq 0(%r9,%rcx,2), %zmm25, %zmm9
-    {evex} vporq 8128(%rdi,%r9,4), %zmm31, %zmm20
-    {evex} vporq 1001(%r15,%rbp,8), %zmm12, %zmm17
+    {evex} vporq 0(%r14,%rsi,8), %zmm25, %zmm9
+    {evex} vporq 8128(%rsp,%rcx,1), %zmm31, %zmm20
+    {evex} vporq 1001(%r13,%r9,2), %zmm12, %zmm17
     {evex} vporq gnu_fwd(%rip), %zmm16, %zmm3
     {evex} vporq %zmm25, %zmm9, %zmm31{%k1}
-    {evex} vporq 0(%rdi), %zmm20, %zmm12{%k2}
-    {evex} vporq -64(%rdx), %zmm17, %zmm16{%k3}
-    {evex} vporq -2147483648(%r9), %zmm3, %zmm25{%k4}
+    {evex} vporq 0(%r15), %zmm20, %zmm12{%k2}
+    {evex} vporq -64(%rsi), %zmm17, %zmm16{%k3}
+    {evex} vporq -2147483648(%r11), %zmm3, %zmm25{%k4}
     {evex} vporq 0(%rsp), %zmm9, %zmm31{%k5}
     {evex} vporq 128(%r12), %zmm20, %zmm12{%k6}
     {evex} vporq 2147483647(%rsp), %zmm17, %zmm16{%k7}
-    {evex} vporq 0(%rsp,%r12,1), %zmm3, %zmm25{%k1}
-    {evex} vporq -8192(%rax,%rax,2), %zmm9, %zmm31{%k2}
-    {evex} vporq 4660(%r9,%r15,4), %zmm20, %zmm12{%k3}
+    {evex} vporq 0(%rsi,%rbp,4), %zmm3, %zmm25{%k1}
+    {evex} vporq -8192(%rbp,%r12,8), %zmm9, %zmm31{%k2}
+    {evex} vporq 4660(%r12,%rax,1), %zmm20, %zmm12{%k3}
     {evex} vporq gnu_back(%rip), %zmm17, %zmm16{%k4}
     {evex} vporq %zmm3, %zmm25, %zmm9{%k5}{z}
-    {evex} vporq 0(%r14), %zmm31, %zmm20{%k6}{z}
-    {evex} vporq 8128(%rbx), %zmm12, %zmm17{%k7}{z}
-    {evex} vporq -129(%r10), %zmm16, %zmm3{%k1}{z}
+    {evex} vporq 0(%rcx), %zmm31, %zmm20{%k6}{z}
+    {evex} vporq 8128(%rdi), %zmm12, %zmm17{%k7}{z}
+    {evex} vporq -129(%r14), %zmm16, %zmm3{%k1}{z}
     {evex} vporq 0(%r12), %zmm25, %zmm9{%k2}{z}
     {evex} vporq -64(%rsp), %zmm31, %zmm20{%k3}{z}
     {evex} vporq 1001(%r12), %zmm12, %zmm17{%k4}{z}
-    {evex} vporq 0(%r14,%rsi,8), %zmm16, %zmm3{%k5}{z}
-    {evex} vporq 128(%rsp,%rcx,1), %zmm25, %zmm9{%k6}{z}
-    {evex} vporq -2147483648(%r13,%r9,2), %zmm31, %zmm20{%k7}{z}
+    {evex} vporq 0(%r15,%r15,2), %zmm16, %zmm3{%k5}{z}
+    {evex} vporq 128(%rdi,%rsi,4), %zmm25, %zmm9{%k6}{z}
+    {evex} vporq -2147483648(%r15,%rcx,8), %zmm31, %zmm20{%k7}{z}
     {evex} vporq gnu_fwd(%rip), %zmm12, %zmm17{%k1}{z}
     {evex} vpandq %xmm16, %xmm3, %xmm25
-    {evex} vpandq 0(%r15), %xmm9, %xmm31
-    {evex} vpandq -2048(%rsi), %xmm20, %xmm12
-    {evex} vpandq 2147483647(%r11), %xmm17, %xmm16
+    {evex} vpandq 0(%r8), %xmm9, %xmm31
+    {evex} vpandq -2048(%r15), %xmm20, %xmm12
+    {evex} vpandq 2147483647(%rcx), %xmm17, %xmm16
     {evex} vpandq 0(%rsp), %xmm3, %xmm25
     {evex} vpandq 2032(%r12), %xmm9, %xmm31
     {evex} vpandq 4660(%rsp), %xmm20, %xmm12
-    {evex} vpandq 0(%rsi,%rbp,4), %xmm17, %xmm16
-    {evex} vpandq -16(%rbp,%r12,8), %xmm3, %xmm25
-    {evex} vpandq -129(%r12,%rax,1), %xmm9, %xmm31
+    {evex} vpandq 0(%rax,%r9,1), %xmm17, %xmm16
+    {evex} vpandq -16(%rax,%rbp,2), %xmm3, %xmm25
+    {evex} vpandq -129(%r9,%r12,4), %xmm9, %xmm31
     {evex} vpandq gnu_back(%rip), %xmm20, %xmm12
     {evex} vpandq %xmm17, %xmm16, %xmm3{%k2}
-    {evex} vpandq 0(%rcx), %xmm25, %xmm9{%k3}
-    {evex} vpandq 32(%rdi), %xmm31, %xmm20{%k4}
-    {evex} vpandq 1001(%r14), %xmm12, %xmm17{%k5}
+    {evex} vpandq 0(%rdx), %xmm25, %xmm9{%k3}
+    {evex} vpandq 32(%r8), %xmm31, %xmm20{%k4}
+    {evex} vpandq 1001(%rbp), %xmm12, %xmm17{%k5}
     {evex} vpandq 0(%r12), %xmm16, %xmm3{%k6}
     {evex} vpandq -2048(%rsp), %xmm25, %xmm9{%k7}
     {evex} vpandq -2147483648(%r12), %xmm31, %xmm20{%k1}
-    {evex} vpandq 0(%r15,%r15,2), %xmm12, %xmm17{%k2}
-    {evex} vpandq 2032(%rdi,%rsi,4), %xmm16, %xmm3{%k3}
-    {evex} vpandq 2147483647(%r15,%rcx,8), %xmm25, %xmm9{%k4}
+    {evex} vpandq 0(%r8,%rax,8), %xmm12, %xmm17{%k2}
+    {evex} vpandq 2032(%rsp,%r15,1), %xmm16, %xmm3{%k3}
+    {evex} vpandq 2147483647(%r13,%rsi,2), %xmm25, %xmm9{%k4}
     {evex} vpandq gnu_fwd(%rip), %xmm31, %xmm20{%k5}
     {evex} vpandq %xmm12, %xmm17, %xmm16{%k6}{z}
-    {evex} vpandq 0(%r8), %xmm3, %xmm25{%k7}{z}
-    {evex} vpandq -16(%r15), %xmm9, %xmm31{%k1}{z}
-    {evex} vpandq 4660(%rcx), %xmm20, %xmm12{%k2}{z}
+    {evex} vpandq 0(%r9), %xmm3, %xmm25{%k7}{z}
+    {evex} vpandq -16(%r13), %xmm9, %xmm31{%k1}{z}
+    {evex} vpandq 4660(%rdx), %xmm20, %xmm12{%k2}{z}
     {evex} vpandq 0(%rsp), %xmm17, %xmm16{%k3}{z}
     {evex} vpandq 32(%r12), %xmm3, %xmm25{%k4}{z}
     {evex} vpandq -129(%rsp), %xmm9, %xmm31{%k5}{z}
-    {evex} vpandq 0(%rax,%r9,1), %xmm20, %xmm12{%k6}{z}
-    {evex} vpandq -2048(%rax,%rbp,2), %xmm17, %xmm16{%k7}{z}
-    {evex} vpandq 1001(%r9,%r12,4), %xmm3, %xmm25{%k1}{z}
+    {evex} vpandq 0(%rcx,%rcx,4), %xmm20, %xmm12{%k6}{z}
+    {evex} vpandq -2048(%rbp,%r9,8), %xmm17, %xmm16{%k7}{z}
+    {evex} vpandq 1001(%r12,%rbp,1), %xmm3, %xmm25{%k1}{z}
     {evex} vpandq gnu_back(%rip), %xmm9, %xmm31{%k2}{z}
     {evex} vpandq %ymm20, %ymm12, %ymm17
-    {evex} vpandq 0(%rdx), %ymm16, %ymm3
-    {evex} vpandq -4096(%r8), %ymm25, %ymm9
-    {evex} vpandq -2147483648(%rbp), %ymm31, %ymm20
+    {evex} vpandq 0(%rbx), %ymm16, %ymm3
+    {evex} vpandq -4096(%r9), %ymm25, %ymm9
+    {evex} vpandq -2147483648(%rbx), %ymm31, %ymm20
     {evex} vpandq 0(%r12), %ymm12, %ymm17
     {evex} vpandq 4064(%rsp), %ymm16, %ymm3
     {evex} vpandq 2147483647(%r12), %ymm25, %ymm9
-    {evex} vpandq 0(%r8,%rax,8), %ymm31, %ymm20
-    {evex} vpandq -32(%rsp,%r15,1), %ymm12, %ymm17
-    {evex} vpandq 4660(%r13,%rsi,2), %ymm16, %ymm3
+    {evex} vpandq 0(%r12,%r12,2), %ymm31, %ymm20
+    {evex} vpandq -32(%rdi,%rax,4), %ymm12, %ymm17
+    {evex} vpandq 4660(%r15,%r15,8), %ymm16, %ymm3
     {evex} vpandq gnu_fwd(%rip), %ymm25, %ymm9
     {evex} vpandq %ymm31, %ymm20, %ymm12{%k3}
-    {evex} vpandq 0(%r9), %ymm17, %ymm16{%k4}
-    {evex} vpandq 64(%r13), %ymm3, %ymm25{%k5}
-    {evex} vpandq -129(%rdx), %ymm9, %ymm31{%k6}
+    {evex} vpandq 0(%r10), %ymm17, %ymm16{%k4}
+    {evex} vpandq 64(%r10), %ymm3, %ymm25{%k5}
+    {evex} vpandq -129(%rsi), %ymm9, %ymm31{%k6}
     {evex} vpandq 0(%rsp), %ymm20, %ymm12{%k7}
     {evex} vpandq -4096(%r12), %ymm17, %ymm16{%k1}
     {evex} vpandq 1001(%rsp), %ymm3, %ymm25{%k2}
-    {evex} vpandq 0(%rcx,%rcx,4), %ymm9, %ymm31{%k3}
-    {evex} vpandq 4064(%rbp,%r9,8), %ymm20, %ymm12{%k4}
-    {evex} vpandq -2147483648(%r12,%rbp,1), %ymm17, %ymm16{%k5}
+    {evex} vpandq 0(%rdx,%rsi,1), %ymm9, %ymm31{%k3}
+    {evex} vpandq 4064(%rax,%rcx,2), %ymm20, %ymm12{%k4}
+    {evex} vpandq -2147483648(%r9,%r9,4), %ymm17, %ymm16{%k5}
     {evex} vpandq gnu_back(%rip), %ymm3, %ymm25{%k6}
     {evex} vpandq %ymm9, %ymm31, %ymm20{%k7}{z}
-    {evex} vpandq 0(%rbx), %ymm12, %ymm17{%k1}{z}
-    {evex} vpandq -32(%r9), %ymm16, %ymm3{%k2}{z}
-    {evex} vpandq 2147483647(%rbx), %ymm25, %ymm9{%k3}{z}
+    {evex} vpandq 0(%rsi), %ymm12, %ymm17{%k1}{z}
+    {evex} vpandq -32(%r11), %ymm16, %ymm3{%k2}{z}
+    {evex} vpandq 2147483647(%rdi), %ymm25, %ymm9{%k3}{z}
     {evex} vpandq 0(%r12), %ymm31, %ymm20{%k4}{z}
     {evex} vpandq 64(%rsp), %ymm12, %ymm17{%k5}{z}
     {evex} vpandq 4660(%r12), %ymm16, %ymm3{%k6}{z}
-    {evex} vpandq 0(%r12,%r12,2), %ymm25, %ymm9{%k7}{z}
-    {evex} vpandq -4096(%rdi,%rax,4), %ymm31, %ymm20{%k1}{z}
-    {evex} vpandq -129(%r15,%r15,8), %ymm12, %ymm17{%k2}{z}
+    {evex} vpandq 0(%r9,%rbp,8), %ymm25, %ymm9{%k7}{z}
+    {evex} vpandq -4096(%rsp,%r12,1), %ymm31, %ymm20{%k1}{z}
+    {evex} vpandq -129(%r13,%rax,2), %ymm12, %ymm17{%k2}{z}
     {evex} vpandq gnu_fwd(%rip), %ymm16, %ymm3{%k3}{z}
     {evex} vpandq %zmm25, %zmm9, %zmm31
-    {evex} vpandq 0(%r10), %zmm20, %zmm12
-    {evex} vpandq -8192(%r10), %zmm17, %zmm16
-    {evex} vpandq 1001(%rsi), %zmm3, %zmm25
+    {evex} vpandq 0(%r11), %zmm20, %zmm12
+    {evex} vpandq -8192(%r14), %zmm17, %zmm16
+    {evex} vpandq 1001(%r15), %zmm3, %zmm25
     {evex} vpandq 0(%rsp), %zmm9, %zmm31
     {evex} vpandq 8128(%r12), %zmm20, %zmm12
     {evex} vpandq -2147483648(%rsp), %zmm17, %zmm16
-    {evex} vpandq 0(%rdx,%rsi,1), %zmm3, %zmm25
-    {evex} vpandq -64(%rax,%rcx,2), %zmm9, %zmm31
-    {evex} vpandq 2147483647(%r9,%r9,4), %zmm20, %zmm12
+    {evex} vpandq 0(%rsp,%r15,4), %zmm3, %zmm25
+    {evex} vpandq -64(%rbp,%rsi,8), %zmm9, %zmm31
+    {evex} vpandq 2147483647(%r12,%rcx,1), %zmm20, %zmm12
     {evex} vpandq gnu_back(%rip), %zmm17, %zmm16
     {evex} vpandq %zmm3, %zmm25, %zmm9{%k4}
-    {evex} vpandq 0(%rsi), %zmm31, %zmm20{%k5}
-    {evex} vpandq 128(%r11), %zmm12, %zmm17{%k6}
-    {evex} vpandq 4660(%rdi), %zmm16, %zmm3{%k7}
+    {evex} vpandq 0(%rdi), %zmm31, %zmm20{%k5}
+    {evex} vpandq 128(%rcx), %zmm12, %zmm17{%k6}
+    {evex} vpandq 4660(%r8), %zmm16, %zmm3{%k7}
     {evex} vpandq 0(%r12), %zmm25, %zmm9{%k1}
     {evex} vpandq -8192(%rsp), %zmm31, %zmm20{%k2}
     {evex} vpandq -129(%r12), %zmm12, %zmm17{%k3}
-    {evex} vpandq 0(%r9,%rbp,8), %zmm16, %zmm3{%k4}
-    {evex} vpandq 8128(%rsp,%r12,1), %zmm25, %zmm9{%k5}
-    {evex} vpandq 1001(%r13,%rax,2), %zmm31, %zmm20{%k6}
+    {evex} vpandq 0(%r14,%r9,2), %zmm16, %zmm3{%k4}
+    {evex} vpandq 8128(%rdi,%rbp,4), %zmm25, %zmm9{%k5}
+    {evex} vpandq 1001(%r15,%r12,8), %zmm31, %zmm20{%k6}
     {evex} vpandq gnu_fwd(%rip), %zmm12, %zmm17{%k7}
     {evex} vpandq %zmm16, %zmm3, %zmm25{%k1}{z}
-    {evex} vpandq 0(%r11), %zmm9, %zmm31{%k2}{z}
-    {evex} vpandq -64(%r14), %zmm20, %zmm12{%k3}{z}
-    {evex} vpandq -2147483648(%r15), %zmm17, %zmm16{%k4}{z}
+    {evex} vpandq 0(%r14), %zmm9, %zmm31{%k2}{z}
+    {evex} vpandq -64(%rbp), %zmm20, %zmm12{%k3}{z}
+    {evex} vpandq -2147483648(%r13), %zmm17, %zmm16{%k4}{z}
     {evex} vpandq 0(%rsp), %zmm3, %zmm25{%k5}{z}
     {evex} vpandq 128(%r12), %zmm9, %zmm31{%k6}{z}
+g76:
     {evex} vpandq 2147483647(%rsp), %zmm20, %zmm12{%k7}{z}
-    {evex} vpandq 0(%rsp,%r15,4), %zmm17, %zmm16{%k1}{z}
-    {evex} vpandq -8192(%rbp,%rsi,8), %zmm3, %zmm25{%k2}{z}
-    {evex} vpandq 4660(%r12,%rcx,1), %zmm9, %zmm31{%k3}{z}
+    {evex} vpandq 0(%rsi,%rax,1), %zmm17, %zmm16{%k1}{z}
+    {evex} vpandq -8192(%rax,%r15,2), %zmm3, %zmm25{%k2}{z}
+    {evex} vpandq 4660(%r9,%rsi,4), %zmm9, %zmm31{%k3}{z}
     {evex} vpandq gnu_back(%rip), %zmm20, %zmm12{%k4}{z}
     {evex} vpandnq %xmm17, %xmm16, %xmm3
-    {evex} vpandnq 0(%rdi), %xmm25, %xmm9
-    {evex} vpandnq 2032(%rcx), %xmm31, %xmm20
-    {evex} vpandnq -129(%r8), %xmm12, %xmm17
+    {evex} vpandnq 0(%r15), %xmm25, %xmm9
+    {evex} vpandnq 2032(%rdx), %xmm31, %xmm20
+    {evex} vpandnq -129(%r9), %xmm12, %xmm17
     {evex} vpandnq 0(%r12), %xmm16, %xmm3
     {evex} vpandnq -16(%rsp), %xmm25, %xmm9
     {evex} vpandnq 1001(%r12), %xmm31, %xmm20
-    {evex} vpandnq 0(%r14,%r9,2), %xmm12, %xmm17
-    {evex} vpandnq 32(%rdi,%rbp,4), %xmm16, %xmm3
-    {evex} vpandnq -2147483648(%r15,%r12,8), %xmm25, %xmm9
+    {evex} vpandnq 0(%r15,%rcx,8), %xmm12, %xmm17
+    {evex} vpandnq 32(%rsp,%r9,1), %xmm16, %xmm3
+    {evex} vpandnq -2147483648(%r13,%rbp,2), %xmm25, %xmm9
     {evex} vpandnq gnu_fwd(%rip), %xmm31, %xmm20
     {evex} vpandnq %xmm12, %xmm17, %xmm16{%k5}
-    {evex} vpandnq 0(%r14), %xmm3, %xmm25{%k6}
-    {evex} vpandnq -2048(%rbp), %xmm9, %xmm31{%k7}
-    {evex} vpandnq 2147483647(%r13), %xmm20, %xmm12{%k1}
+    {evex} vpandnq 0(%rcx), %xmm3, %xmm25{%k6}
+    {evex} vpandnq -2048(%rbx), %xmm9, %xmm31{%k7}
+    {evex} vpandnq 2147483647(%r10), %xmm20, %xmm12{%k1}
     {evex} vpandnq 0(%rsp), %xmm17, %xmm16{%k2}
     {evex} vpandnq 2032(%r12), %xmm3, %xmm25{%k3}
     {evex} vpandnq 4660(%rsp), %xmm9, %xmm31{%k4}
-    {evex} vpandnq 0(%rsi,%rax,1), %xmm20, %xmm12{%k5}
-g76:
-    {evex} vpandnq -16(%rax,%r15,2), %xmm17, %xmm16{%k6}
-    {evex} vpandnq -129(%r9,%rsi,4), %xmm3, %xmm25{%k7}
+    {evex} vpandnq 0(%rax,%r12,4), %xmm20, %xmm12{%k5}
+    {evex} vpandnq -16(%rbp,%rax,8), %xmm17, %xmm16{%k6}
+    {evex} vpandnq -129(%r12,%r15,1), %xmm3, %xmm25{%k7}
     {evex} vpandnq gnu_back(%rip), %xmm9, %xmm31{%k1}
     {evex} vpandnq %xmm20, %xmm12, %xmm17{%k2}{z}
-    {evex} vpandnq 0(%r15), %xmm16, %xmm3{%k3}{z}
-    {evex} vpandnq 32(%rdx), %xmm25, %xmm9{%k4}{z}
-    {evex} vpandnq 1001(%r9), %xmm31, %xmm20{%k5}{z}
+    {evex} vpandnq 0(%r8), %xmm16, %xmm3{%k3}{z}
+    {evex} vpandnq 32(%rsi), %xmm25, %xmm9{%k4}{z}
+    {evex} vpandnq 1001(%r11), %xmm31, %xmm20{%k5}{z}
     {evex} vpandnq 0(%r12), %xmm12, %xmm17{%k6}{z}
     {evex} vpandnq -2048(%rsp), %xmm16, %xmm3{%k7}{z}
     {evex} vpandnq -2147483648(%r12), %xmm25, %xmm9{%k1}{z}
-    {evex} vpandnq 0(%r15,%rcx,8), %xmm31, %xmm20{%k2}{z}
-    {evex} vpandnq 2032(%rsp,%r9,1), %xmm12, %xmm17{%k3}{z}
-    {evex} vpandnq 2147483647(%r13,%rbp,2), %xmm16, %xmm3{%k4}{z}
+    {evex} vpandnq 0(%r8,%rsi,2), %xmm31, %xmm20{%k2}{z}
+    {evex} vpandnq 2032(%rdi,%rcx,4), %xmm12, %xmm17{%k3}{z}
+    {evex} vpandnq 2147483647(%r15,%r9,8), %xmm16, %xmm3{%k4}{z}
     {evex} vpandnq gnu_fwd(%rip), %xmm25, %xmm9{%k5}{z}
     {evex} vpandnq %ymm31, %ymm20, %ymm12
-    {evex} vpandnq 0(%rcx), %ymm17, %ymm16
-    {evex} vpandnq 4064(%rbx), %ymm3, %ymm25
-    {evex} vpandnq 4660(%r10), %ymm9, %ymm31
+    {evex} vpandnq 0(%rdx), %ymm17, %ymm16
+    {evex} vpandnq 4064(%rdi), %ymm3, %ymm25
+    {evex} vpandnq 4660(%r14), %ymm9, %ymm31
     {evex} vpandnq 0(%rsp), %ymm20, %ymm12
     {evex} vpandnq -32(%r12), %ymm17, %ymm16
     {evex} vpandnq -129(%rsp), %ymm3, %ymm25
-    {evex} vpandnq 0(%rax,%r12,4), %ymm9, %ymm31
-    {evex} vpandnq 64(%rbp,%rax,8), %ymm20, %ymm12
-    {evex} vpandnq 1001(%r12,%r15,1), %ymm17, %ymm16
+    {evex} vpandnq 0(%rcx,%rbp,1), %ymm9, %ymm31
+    {evex} vpandnq 64(%rax,%r12,2), %ymm20, %ymm12
+    {evex} vpandnq 1001(%r9,%rax,4), %ymm17, %ymm16
     {evex} vpandnq gnu_back(%rip), %ymm3, %ymm25
     {evex} vpandnq %ymm9, %ymm31, %ymm20{%k6}
-    {evex} vpandnq 0(%r8), %ymm12, %ymm17{%k7}
-    {evex} vpandnq -4096(%rsi), %ymm16, %ymm3{%k1}
-    {evex} vpandnq -2147483648(%r11), %ymm25, %ymm9{%k2}
+    {evex} vpandnq 0(%r9), %ymm12, %ymm17{%k7}
+    {evex} vpandnq -4096(%r15), %ymm16, %ymm3{%k1}
+    {evex} vpandnq -2147483648(%rcx), %ymm25, %ymm9{%k2}
     {evex} vpandnq 0(%r12), %ymm31, %ymm20{%k3}
     {evex} vpandnq 4064(%rsp), %ymm12, %ymm17{%k4}
     {evex} vpandnq 2147483647(%r12), %ymm16, %ymm3{%k5}
-    {evex} vpandnq 0(%r8,%rsi,2), %ymm25, %ymm9{%k6}
-    {evex} vpandnq -32(%rdi,%rcx,4), %ymm31, %ymm20{%k7}
-    {evex} vpandnq 4660(%r15,%r9,8), %ymm12, %ymm17{%k1}
+    {evex} vpandnq 0(%r12,%r15,8), %ymm25, %ymm9{%k6}
+    {evex} vpandnq -32(%rsp,%rsi,1), %ymm31, %ymm20{%k7}
+    {evex} vpandnq 4660(%r13,%rcx,2), %ymm12, %ymm17{%k1}
     {evex} vpandnq gnu_fwd(%rip), %ymm16, %ymm3{%k2}
     {evex} vpandnq %ymm25, %ymm9, %ymm31{%k3}{z}
-    {evex} vpandnq 0(%rdx), %ymm20, %ymm12{%k4}{z}
-    {evex} vpandnq 64(%rdi), %ymm17, %ymm16{%k5}{z}
-    {evex} vpandnq -129(%r14), %ymm3, %ymm25{%k6}{z}
+    {evex} vpandnq 0(%rbx), %ymm20, %ymm12{%k4}{z}
+    {evex} vpandnq 64(%r8), %ymm17, %ymm16{%k5}{z}
+    {evex} vpandnq -129(%rbp), %ymm3, %ymm25{%k6}{z}
     {evex} vpandnq 0(%rsp), %ymm9, %ymm31{%k7}{z}
     {evex} vpandnq -4096(%r12), %ymm20, %ymm12{%k1}{z}
     {evex} vpandnq 1001(%rsp), %ymm17, %ymm16{%k2}{z}
-    {evex} vpandnq 0(%rcx,%rbp,1), %ymm3, %ymm25{%k3}{z}
-    {evex} vpandnq 4064(%rax,%r12,2), %ymm9, %ymm31{%k4}{z}
-    {evex} vpandnq -2147483648(%r9,%rax,4), %ymm20, %ymm12{%k5}{z}
+    {evex} vpandnq 0(%rdx,%r9,4), %ymm3, %ymm25{%k3}{z}
+    {evex} vpandnq 4064(%rbp,%rbp,8), %ymm9, %ymm31{%k4}{z}
+    {evex} vpandnq -2147483648(%r12,%r12,1), %ymm20, %ymm12{%k5}{z}
     {evex} vpandnq gnu_back(%rip), %ymm17, %ymm16{%k6}{z}
     {evex} vpandnq %zmm3, %zmm25, %zmm9
-    {evex} vpandnq 0(%r9), %zmm31, %zmm20
-    {evex} vpandnq 8128(%r15), %zmm12, %zmm17
-    {evex} vpandnq 2147483647(%rcx), %zmm16, %zmm3
+    {evex} vpandnq 0(%r10), %zmm31, %zmm20
+    {evex} vpandnq 8128(%r13), %zmm12, %zmm17
+    {evex} vpandnq 2147483647(%rdx), %zmm16, %zmm3
     {evex} vpandnq 0(%r12), %zmm25, %zmm9
     {evex} vpandnq -64(%rsp), %zmm31, %zmm20
     {evex} vpandnq 4660(%r12), %zmm12, %zmm17
-    {evex} vpandnq 0(%r12,%r15,8), %zmm16, %zmm3
-    {evex} vpandnq 128(%rsp,%rsi,1), %zmm25, %zmm9
-    {evex} vpandnq -129(%r13,%rcx,2), %zmm31, %zmm20
+    {evex} vpandnq 0(%r9,%rax,2), %zmm16, %zmm3
+    {evex} vpandnq 128(%rdi,%r15,4), %zmm25, %zmm9
+    {evex} vpandnq -129(%r15,%rsi,8), %zmm31, %zmm20
     {evex} vpandnq gnu_fwd(%rip), %zmm12, %zmm17
     {evex} vpandnq %zmm16, %zmm3, %zmm25{%k7}
-    {evex} vpandnq 0(%rbx), %zmm9, %zmm31{%k1}
-    {evex} vpandnq -8192(%r8), %zmm20, %zmm12{%k2}
-    {evex} vpandnq 1001(%rbp), %zmm17, %zmm16{%k3}
+    {evex} vpandnq 0(%rsi), %zmm9, %zmm31{%k1}
+    {evex} vpandnq -8192(%r9), %zmm20, %zmm12{%k2}
+    {evex} vpandnq 1001(%rbx), %zmm17, %zmm16{%k3}
     {evex} vpandnq 0(%rsp), %zmm3, %zmm25{%k4}
     {evex} vpandnq 8128(%r12), %zmm9, %zmm31{%k5}
     {evex} vpandnq -2147483648(%rsp), %zmm20, %zmm12{%k6}
-    {evex} vpandnq 0(%rdx,%r9,4), %zmm17, %zmm16{%k7}
-    {evex} vpandnq -64(%rbp,%rbp,8), %zmm3, %zmm25{%k1}
-    {evex} vpandnq 2147483647(%r12,%r12,1), %zmm9, %zmm31{%k2}
+    {evex} vpandnq 0(%rsp,%rcx,1), %zmm17, %zmm16{%k7}
+    {evex} vpandnq -64(%rax,%r9,2), %zmm3, %zmm25{%k1}
+    {evex} vpandnq 2147483647(%r9,%rbp,4), %zmm9, %zmm31{%k2}
     {evex} vpandnq gnu_back(%rip), %zmm20, %zmm12{%k3}
     {evex} vpandnq %zmm17, %zmm16, %zmm3{%k4}{z}
-    {evex} vpandnq 0(%r10), %zmm25, %zmm9{%k5}{z}
-    {evex} vpandnq 128(%r13), %zmm31, %zmm20{%k6}{z}
-    {evex} vpandnq 4660(%rdx), %zmm12, %zmm17{%k7}{z}
+    {evex} vpandnq 0(%r11), %zmm25, %zmm9{%k5}{z}
+    {evex} vpandnq 128(%r10), %zmm31, %zmm20{%k6}{z}
+    {evex} vpandnq 4660(%rsi), %zmm12, %zmm17{%k7}{z}
     {evex} vpandnq 0(%r12), %zmm16, %zmm3{%k1}{z}
     {evex} vpandnq -8192(%rsp), %zmm25, %zmm9{%k2}{z}
     {evex} vpandnq -129(%r12), %zmm31, %zmm20{%k3}{z}
-    {evex} vpandnq 0(%r9,%rax,2), %zmm12, %zmm17{%k4}{z}
-    {evex} vpandnq 8128(%rdi,%r15,4), %zmm16, %zmm3{%k5}{z}
-    {evex} vpandnq 1001(%r15,%rsi,8), %zmm25, %zmm9{%k6}{z}
+    {evex} vpandnq 0(%r14,%r12,8), %zmm12, %zmm17{%k4}{z}
+    {evex} vpandnq 8128(%rsp,%rax,1), %zmm16, %zmm3{%k5}{z}
+    {evex} vpandnq 1001(%r13,%r15,2), %zmm25, %zmm9{%k6}{z}
     {evex} vpandnq gnu_fwd(%rip), %zmm31, %zmm20{%k7}{z}
     {evex} vpshufb %xmm12, %xmm17, %xmm16
-    {evex} vpshufb 0(%rsi), %xmm3, %xmm25
-    {evex} vpshufb -16(%r9), %xmm9, %xmm31
-    {evex} vpshufb -2147483648(%rbx), %xmm20, %xmm12
+    {evex} vpshufb 0(%rdi), %xmm3, %xmm25
+    {evex} vpshufb -16(%r11), %xmm9, %xmm31
+    {evex} vpshufb -2147483648(%rdi), %xmm20, %xmm12
     {evex} vpshufb 0(%rsp), %xmm17, %xmm16
     {evex} vpshufb 32(%r12), %xmm3, %xmm25
     {evex} vpshufb 2147483647(%rsp), %xmm9, %xmm31
-    {evex} vpshufb 0(%rsp,%rcx,1), %xmm20, %xmm12
-    {evex} vpshufb -2048(%rax,%r9,2), %xmm17, %xmm16
-    {evex} vpshufb 4660(%r9,%rbp,4), %xmm3, %xmm25
+    {evex} vpshufb 0(%rsi,%rsi,4), %xmm20, %xmm12
+    {evex} vpshufb -2048(%rbp,%rcx,8), %xmm17, %xmm16
+    {evex} vpshufb 4660(%r12,%r9,1), %xmm3, %xmm25
     {evex} vpshufb gnu_back(%rip), %xmm9, %xmm31
     {evex} vpshufb %xmm20, %xmm12, %xmm17{%k1}
-    {evex} vpshufb 0(%r11), %xmm16, %xmm3{%k2}
-    {evex} vpshufb 2032(%r10), %xmm25, %xmm9{%k3}
-    {evex} vpshufb -129(%rsi), %xmm31, %xmm20{%k4}
+    {evex} vpshufb 0(%r14), %xmm16, %xmm3{%k2}
+    {evex} vpshufb 2032(%r14), %xmm25, %xmm9{%k3}
+    {evex} vpshufb -129(%r15), %xmm31, %xmm20{%k4}
     {evex} vpshufb 0(%r12), %xmm12, %xmm17{%k5}
     {evex} vpshufb -16(%rsp), %xmm16, %xmm3{%k6}
     {evex} vpshufb 1001(%r12), %xmm25, %xmm9{%k7}
-    {evex} vpshufb 0(%r14,%r12,8), %xmm31, %xmm20{%k1}
-    {evex} vpshufb 32(%rsp,%rax,1), %xmm12, %xmm17{%k2}
-    {evex} vpshufb -2147483648(%r13,%r15,2), %xmm16, %xmm3{%k3}
+    {evex} vpshufb 0(%r15,%rbp,2), %xmm31, %xmm20{%k1}
+    {evex} vpshufb 32(%rdi,%r12,4), %xmm12, %xmm17{%k2}
+    {evex} vpshufb -2147483648(%r15,%rax,8), %xmm16, %xmm3{%k3}
     {evex} vpshufb gnu_fwd(%rip), %xmm25, %xmm9{%k4}
     {evex} vpshufb %xmm31, %xmm20, %xmm12{%k5}{z}
-    {evex} vpshufb 0(%rdi), %xmm17, %xmm16{%k6}{z}
-    {evex} vpshufb -2048(%r11), %xmm3, %xmm25{%k7}{z}
-    {evex} vpshufb 2147483647(%rdi), %xmm9, %xmm31{%k1}{z}
+    {evex} vpshufb 0(%r15), %xmm17, %xmm16{%k6}{z}
+    {evex} vpshufb -2048(%rcx), %xmm3, %xmm25{%k7}{z}
+    {evex} vpshufb 2147483647(%r8), %xmm9, %xmm31{%k1}{z}
     {evex} vpshufb 0(%rsp), %xmm20, %xmm12{%k2}{z}
     {evex} vpshufb 2032(%r12), %xmm17, %xmm16{%k3}{z}
     {evex} vpshufb 4660(%rsp), %xmm3, %xmm25{%k4}{z}
-    {evex} vpshufb 0(%rsi,%rsi,4), %xmm9, %xmm31{%k5}{z}
-    {evex} vpshufb -16(%rbp,%rcx,8), %xmm20, %xmm12{%k6}{z}
-    {evex} vpshufb -129(%r12,%r9,1), %xmm17, %xmm16{%k7}{z}
+    {evex} vpshufb 0(%rax,%r15,1), %xmm9, %xmm31{%k5}{z}
+    {evex} vpshufb -16(%rax,%rsi,2), %xmm20, %xmm12{%k6}{z}
+    {evex} vpshufb -129(%r9,%rcx,4), %xmm17, %xmm16{%k7}{z}
     {evex} vpshufb gnu_back(%rip), %xmm3, %xmm25{%k1}{z}
     {evex} vpshufb %ymm9, %ymm31, %ymm20
-    {evex} vpshufb 0(%r14), %ymm12, %ymm17
-    {evex} vpshufb -32(%r14), %ymm16, %ymm3
-    {evex} vpshufb 1001(%r15), %ymm25, %ymm9
+    {evex} vpshufb 0(%rcx), %ymm12, %ymm17
+    {evex} vpshufb -32(%rbp), %ymm16, %ymm3
+    {evex} vpshufb 1001(%r13), %ymm25, %ymm9
     {evex} vpshufb 0(%r12), %ymm31, %ymm20
     {evex} vpshufb 64(%rsp), %ymm12, %ymm17
     {evex} vpshufb -2147483648(%r12), %ymm16, %ymm3
-    {evex} vpshufb 0(%r15,%rbp,2), %ymm25, %ymm9
-    {evex} vpshufb -4096(%rdi,%r12,4), %ymm31, %ymm20
-    {evex} vpshufb 2147483647(%r15,%rax,8), %ymm12, %ymm17
+    {evex} vpshufb 0(%r8,%r9,8), %ymm25, %ymm9
+    {evex} vpshufb -4096(%rsp,%rbp,1), %ymm31, %ymm20
+    {evex} vpshufb 2147483647(%r13,%r12,2), %ymm12, %ymm17
     {evex} vpshufb gnu_fwd(%rip), %ymm16, %ymm3
     {evex} vpshufb %ymm25, %ymm9, %ymm31{%k2}
-    {evex} vpshufb 0(%r15), %ymm20, %ymm12{%k3}
-    {evex} vpshufb 4064(%rcx), %ymm17, %ymm16{%k4}
-    {evex} vpshufb 4660(%r8), %ymm3, %ymm25{%k5}
+    {evex} vpshufb 0(%r8), %ymm20, %ymm12{%k3}
+    {evex} vpshufb 4064(%rdx), %ymm17, %ymm16{%k4}
+    {evex} vpshufb 4660(%r9), %ymm3, %ymm25{%k5}
     {evex} vpshufb 0(%rsp), %ymm9, %ymm31{%k6}
     {evex} vpshufb -32(%r12), %ymm20, %ymm12{%k7}
     {evex} vpshufb -129(%rsp), %ymm17, %ymm16{%k1}
-    {evex} vpshufb 0(%rax,%r15,1), %ymm3, %ymm25{%k2}
-    {evex} vpshufb 64(%rax,%rsi,2), %ymm9, %ymm31{%k3}
-    {evex} vpshufb 1001(%r9,%rcx,4), %ymm20, %ymm12{%k4}
+    {evex} vpshufb 0(%rcx,%rax,4), %ymm3, %ymm25{%k2}
+    {evex} vpshufb 64(%rbp,%r15,8), %ymm9, %ymm31{%k3}
+    {evex} vpshufb 1001(%r12,%rsi,1), %ymm20, %ymm12{%k4}
     {evex} vpshufb gnu_back(%rip), %ymm17, %ymm16{%k5}
     {evex} vpshufb %ymm3, %ymm25, %ymm9{%k6}{z}
-    {evex} vpshufb 0(%rcx), %ymm31, %ymm20{%k7}{z}
-    {evex} vpshufb -4096(%rbp), %ymm12, %ymm17{%k1}{z}
-    {evex} vpshufb -2147483648(%r13), %ymm16, %ymm3{%k2}{z}
+    {evex} vpshufb 0(%rdx), %ymm31, %ymm20{%k7}{z}
+    {evex} vpshufb -4096(%rbx), %ymm12, %ymm17{%k1}{z}
+    {evex} vpshufb -2147483648(%r10), %ymm16, %ymm3{%k2}{z}
     {evex} vpshufb 0(%r12), %ymm25, %ymm9{%k3}{z}
     {evex} vpshufb 4064(%rsp), %ymm31, %ymm20{%k4}{z}
     {evex} vpshufb 2147483647(%r12), %ymm12, %ymm17{%k5}{z}
-    {evex} vpshufb 0(%r8,%r9,8), %ymm16, %ymm3{%k6}{z}
-    {evex} vpshufb -32(%rsp,%rbp,1), %ymm25, %ymm9{%k7}{z}
-    {evex} vpshufb 4660(%r13,%r12,2), %ymm31, %ymm20{%k1}{z}
+    {evex} vpshufb 0(%r12,%rcx,2), %ymm16, %ymm3{%k6}{z}
+    {evex} vpshufb -32(%rdi,%r9,4), %ymm25, %ymm9{%k7}{z}
+    {evex} vpshufb 4660(%r15,%rbp,8), %ymm31, %ymm20{%k1}{z}
     {evex} vpshufb gnu_fwd(%rip), %ymm12, %ymm17{%k2}{z}
     {evex} vpshufb %zmm16, %zmm3, %zmm25
-    {evex} vpshufb 0(%r8), %zmm9, %zmm31
-    {evex} vpshufb -64(%rdx), %zmm20, %zmm12
-    {evex} vpshufb -129(%r9), %zmm17, %zmm16
+    {evex} vpshufb 0(%r9), %zmm9, %zmm31
+    {evex} vpshufb -64(%rsi), %zmm20, %zmm12
+    {evex} vpshufb -129(%r11), %zmm17, %zmm16
     {evex} vpshufb 0(%rsp), %zmm3, %zmm25
     {evex} vpshufb 128(%r12), %zmm9, %zmm31
     {evex} vpshufb 1001(%rsp), %zmm20, %zmm12
-    {evex} vpshufb 0(%rcx,%rax,4), %zmm17, %zmm16
-    {evex} vpshufb -8192(%rbp,%r15,8), %zmm3, %zmm25
-    {evex} vpshufb -2147483648(%r12,%rsi,1), %zmm9, %zmm31
+    {evex} vpshufb 0(%rdx,%r12,1), %zmm17, %zmm16
+    {evex} vpshufb -8192(%rax,%rax,2), %zmm3, %zmm25
+    {evex} vpshufb -2147483648(%r9,%r15,4), %zmm9, %zmm31
     {evex} vpshufb gnu_back(%rip), %zmm20, %zmm12
     {evex} vpshufb %zmm17, %zmm16, %zmm3{%k3}
-    {evex} vpshufb 0(%rdx), %zmm25, %zmm9{%k4}
-    {evex} vpshufb 8128(%rbx), %zmm31, %zmm20{%k5}
-    {evex} vpshufb 2147483647(%r10), %zmm12, %zmm17{%k6}
+    {evex} vpshufb 0(%rbx), %zmm25, %zmm9{%k4}
+    {evex} vpshufb 8128(%rdi), %zmm31, %zmm20{%k5}
+    {evex} vpshufb 2147483647(%r14), %zmm12, %zmm17{%k6}
     {evex} vpshufb 0(%r12), %zmm16, %zmm3{%k7}
     {evex} vpshufb -64(%rsp), %zmm25, %zmm9{%k1}
     {evex} vpshufb 4660(%r12), %zmm31, %zmm20{%k2}
-    {evex} vpshufb 0(%r12,%rcx,2), %zmm12, %zmm17{%k3}
-    {evex} vpshufb 128(%rdi,%r9,4), %zmm16, %zmm3{%k4}
-    {evex} vpshufb -129(%r15,%rbp,8), %zmm25, %zmm9{%k5}
+    {evex} vpshufb 0(%r9,%rsi,8), %zmm12, %zmm17{%k3}
+    {evex} vpshufb 128(%rsp,%rcx,1), %zmm16, %zmm3{%k4}
+    {evex} vpshufb -129(%r13,%r9,2), %zmm25, %zmm9{%k5}
     {evex} vpshufb gnu_fwd(%rip), %zmm31, %zmm20{%k6}
     {evex} vpshufb %zmm12, %zmm17, %zmm16{%k7}{z}
-    {evex} vpshufb 0(%r9), %zmm3, %zmm25{%k1}{z}
-    {evex} vpshufb -8192(%rsi), %zmm9, %zmm31{%k2}{z}
-    {evex} vpshufb 1001(%r11), %zmm20, %zmm12{%k3}{z}
+    {evex} vpshufb 0(%r10), %zmm3, %zmm25{%k1}{z}
+    {evex} vpshufb -8192(%r15), %zmm9, %zmm31{%k2}{z}
+    {evex} vpshufb 1001(%rcx), %zmm20, %zmm12{%k3}{z}
     {evex} vpshufb 0(%rsp), %zmm17, %zmm16{%k4}{z}
     {evex} vpshufb 8128(%r12), %zmm3, %zmm25{%k5}{z}
     {evex} vpshufb -2147483648(%rsp), %zmm9, %zmm31{%k6}{z}
-    {evex} vpshufb 0(%rdx,%r12,1), %zmm20, %zmm12{%k7}{z}
-    {evex} vpshufb -64(%rax,%rax,2), %zmm17, %zmm16{%k1}{z}
-    {evex} vpshufb 2147483647(%r9,%r15,4), %zmm3, %zmm25{%k2}{z}
+    {evex} vpshufb 0(%rsp,%rbp,4), %zmm20, %zmm12{%k7}{z}
+g77:
+    {evex} vpshufb -64(%rbp,%r12,8), %zmm17, %zmm16{%k1}{z}
+    {evex} vpshufb 2147483647(%r12,%rax,1), %zmm3, %zmm25{%k2}{z}
     {evex} vpshufb gnu_back(%rip), %zmm9, %zmm31{%k3}{z}
     {evex} vpternlogd $63, %xmm20, %xmm12, %xmm17
-    {evex} vpternlogd $7, 0(%rbx), %xmm16, %xmm3
-    {evex} vpternlogd $0, 32(%rdi), %xmm25, %xmm9
-    {evex} vpternlogd $255, 4660(%r14), %xmm31, %xmm20
+    {evex} vpternlogd $7, 0(%rsi), %xmm16, %xmm3
+    {evex} vpternlogd $0, 32(%r8), %xmm25, %xmm9
+    {evex} vpternlogd $255, 4660(%rbp), %xmm31, %xmm20
     {evex} vpternlogd $63, 0(%r12), %xmm12, %xmm17
     {evex} vpternlogd $7, -2048(%rsp), %xmm16, %xmm3
     {evex} vpternlogd $0, -129(%r12), %xmm25, %xmm9
-    {evex} vpternlogd $255, 0(%r9,%rsi,8), %xmm31, %xmm20
-    {evex} vpternlogd $63, 2032(%rsp,%rcx,1), %xmm12, %xmm17
-    {evex} vpternlogd $7, 1001(%r13,%r9,2), %xmm16, %xmm3
+    {evex} vpternlogd $255, 0(%r14,%r15,2), %xmm31, %xmm20
+    {evex} vpternlogd $63, 2032(%rdi,%rsi,4), %xmm12, %xmm17
+    {evex} vpternlogd $7, 1001(%r15,%rcx,8), %xmm16, %xmm3
     {evex} vpternlogd $0, gnu_fwd(%rip), %xmm25, %xmm9
     {evex} vpternlogd $255, %xmm31, %xmm20, %xmm12{%k4}
-    {evex} vpternlogd $63, 0(%r10), %xmm17, %xmm16{%k5}
-    {evex} vpternlogd $7, -16(%r15), %xmm3, %xmm25{%k6}
-    {evex} vpternlogd $0, -2147483648(%rcx), %xmm9, %xmm31{%k7}
+    {evex} vpternlogd $63, 0(%r11), %xmm17, %xmm16{%k5}
+    {evex} vpternlogd $7, -16(%r13), %xmm3, %xmm25{%k6}
+    {evex} vpternlogd $0, -2147483648(%rdx), %xmm9, %xmm31{%k7}
     {evex} vpternlogd $255, 0(%rsp), %xmm20, %xmm12{%k1}
     {evex} vpternlogd $63, 32(%r12), %xmm17, %xmm16{%k2}
     {evex} vpternlogd $7, 2147483647(%rsp), %xmm3, %xmm25{%k3}
-    {evex} vpternlogd $0, 0(%rsp,%rbp,4), %xmm9, %xmm31{%k4}
-    {evex} vpternlogd $255, -2048(%rbp,%r12,8), %xmm20, %xmm12{%k5}
-    {evex} vpternlogd $63, 4660(%r12,%rax,1), %xmm17, %xmm16{%k6}
-g77:
+    {evex} vpternlogd $0, 0(%rsi,%r9,1), %xmm9, %xmm31{%k4}
+    {evex} vpternlogd $255, -2048(%rax,%rbp,2), %xmm20, %xmm12{%k5}
+    {evex} vpternlogd $63, 4660(%r9,%r12,4), %xmm17, %xmm16{%k6}
     {evex} vpternlogd $7, gnu_back(%rip), %xmm3, %xmm25{%k7}
     {evex} vpternlogd $0, %xmm9, %xmm31, %xmm20{%k1}{z}
-    {evex} vpternlogd $255, 0(%rsi), %xmm12, %xmm17{%k2}{z}
-    {evex} vpternlogd $63, 2032(%r8), %xmm16, %xmm3{%k3}{z}
-    {evex} vpternlogd $7, -129(%rbp), %xmm25, %xmm9{%k4}{z}
+    {evex} vpternlogd $255, 0(%rdi), %xmm12, %xmm17{%k2}{z}
+    {evex} vpternlogd $63, 2032(%r9), %xmm16, %xmm3{%k3}{z}
+    {evex} vpternlogd $7, -129(%rbx), %xmm25, %xmm9{%k4}{z}
     {evex} vpternlogd $0, 0(%r12), %xmm31, %xmm20{%k5}{z}
     {evex} vpternlogd $255, -16(%rsp), %xmm12, %xmm17{%k6}{z}
     {evex} vpternlogd $63, 1001(%r12), %xmm16, %xmm3{%k7}{z}
-    {evex} vpternlogd $7, 0(%r14,%r15,2), %xmm25, %xmm9{%k1}{z}
-    {evex} vpternlogd $0, 32(%rdi,%rsi,4), %xmm31, %xmm20{%k2}{z}
-    {evex} vpternlogd $255, -2147483648(%r15,%rcx,8), %xmm12, %xmm17{%k3}{z}
+    {evex} vpternlogd $7, 0(%r15,%rax,8), %xmm25, %xmm9{%k1}{z}
+    {evex} vpternlogd $0, 32(%rsp,%r15,1), %xmm31, %xmm20{%k2}{z}
+    {evex} vpternlogd $255, -2147483648(%r13,%rsi,2), %xmm12, %xmm17{%k3}{z}
     {evex} vpternlogd $63, gnu_fwd(%rip), %xmm16, %xmm3{%k4}{z}
     {evex} vpternlogd $7, %ymm25, %ymm9, %ymm31
-    {evex} vpternlogd $0, 0(%r11), %ymm20, %ymm12
-    {evex} vpternlogd $255, 64(%r13), %ymm17, %ymm16
-    {evex} vpternlogd $63, 2147483647(%rdx), %ymm3, %ymm25
+    {evex} vpternlogd $0, 0(%r14), %ymm20, %ymm12
+    {evex} vpternlogd $255, 64(%r10), %ymm17, %ymm16
+    {evex} vpternlogd $63, 2147483647(%rsi), %ymm3, %ymm25
     {evex} vpternlogd $7, 0(%rsp), %ymm9, %ymm31
     {evex} vpternlogd $0, -4096(%r12), %ymm20, %ymm12
     {evex} vpternlogd $255, 4660(%rsp), %ymm17, %ymm16
-    {evex} vpternlogd $63, 0(%rsi,%r9,1), %ymm3, %ymm25
-    {evex} vpternlogd $7, 4064(%rax,%rbp,2), %ymm9, %ymm31
-    {evex} vpternlogd $0, -129(%r9,%r12,4), %ymm20, %ymm12
+    {evex} vpternlogd $63, 0(%rax,%rcx,4), %ymm3, %ymm25
+    {evex} vpternlogd $7, 4064(%rbp,%r9,8), %ymm9, %ymm31
+    {evex} vpternlogd $0, -129(%r12,%rbp,1), %ymm20, %ymm12
     {evex} vpternlogd $255, gnu_back(%rip), %ymm17, %ymm16
     {evex} vpternlogd $63, %ymm3, %ymm25, %ymm9{%k5}
-    {evex} vpternlogd $7, 0(%rdi), %ymm31, %ymm20{%k6}
-    {evex} vpternlogd $0, -32(%r9), %ymm12, %ymm17{%k7}
-    {evex} vpternlogd $255, 1001(%rbx), %ymm16, %ymm3{%k1}
+    {evex} vpternlogd $7, 0(%r15), %ymm31, %ymm20{%k6}
+    {evex} vpternlogd $0, -32(%r11), %ymm12, %ymm17{%k7}
+    {evex} vpternlogd $255, 1001(%rdi), %ymm16, %ymm3{%k1}
     {evex} vpternlogd $63, 0(%r12), %ymm25, %ymm9{%k2}
     {evex} vpternlogd $7, 64(%rsp), %ymm31, %ymm20{%k3}
     {evex} vpternlogd $0, -2147483648(%r12), %ymm12, %ymm17{%k4}
-    {evex} vpternlogd $255, 0(%r15,%rax,8), %ymm16, %ymm3{%k5}
-    {evex} vpternlogd $63, -4096(%rsp,%r15,1), %ymm25, %ymm9{%k6}
-    {evex} vpternlogd $7, 2147483647(%r13,%rsi,2), %ymm31, %ymm20{%k7}
+    {evex} vpternlogd $255, 0(%r8,%r12,2), %ymm16, %ymm3{%k5}
+    {evex} vpternlogd $63, -4096(%rdi,%rax,4), %ymm25, %ymm9{%k6}
+    {evex} vpternlogd $7, 2147483647(%r15,%r15,8), %ymm31, %ymm20{%k7}
     {evex} vpternlogd $0, gnu_fwd(%rip), %ymm12, %ymm17{%k1}
     {evex} vpternlogd $255, %ymm16, %ymm3, %ymm25{%k2}{z}
-    {evex} vpternlogd $63, 0(%r14), %ymm9, %ymm31{%k3}{z}
-    {evex} vpternlogd $7, 4064(%r10), %ymm20, %ymm12{%k4}{z}
-    {evex} vpternlogd $0, 4660(%rsi), %ymm17, %ymm16{%k5}{z}
+    {evex} vpternlogd $63, 0(%rcx), %ymm9, %ymm31{%k3}{z}
+    {evex} vpternlogd $7, 4064(%r14), %ymm20, %ymm12{%k4}{z}
+    {evex} vpternlogd $0, 4660(%r15), %ymm17, %ymm16{%k5}{z}
     {evex} vpternlogd $255, 0(%rsp), %ymm3, %ymm25{%k6}{z}
     {evex} vpternlogd $63, -32(%r12), %ymm9, %ymm31{%k7}{z}
     {evex} vpternlogd $7, -129(%rsp), %ymm20, %ymm12{%k1}{z}
-    {evex} vpternlogd $0, 0(%rax,%rcx,4), %ymm17, %ymm16{%k2}{z}
-    {evex} vpternlogd $255, 64(%rbp,%r9,8), %ymm3, %ymm25{%k3}{z}
-    {evex} vpternlogd $63, 1001(%r12,%rbp,1), %ymm9, %ymm31{%k4}{z}
+    {evex} vpternlogd $0, 0(%rcx,%rsi,1), %ymm17, %ymm16{%k2}{z}
+    {evex} vpternlogd $255, 64(%rax,%rcx,2), %ymm3, %ymm25{%k3}{z}
+    {evex} vpternlogd $63, 1001(%r9,%r9,4), %ymm9, %ymm31{%k4}{z}
     {evex} vpternlogd $7, gnu_back(%rip), %ymm20, %ymm12{%k5}{z}
     {evex} vpternlogd $0, %zmm17, %zmm16, %zmm3
-    {evex} vpternlogd $255, 0(%r15), %zmm25, %zmm9
-    {evex} vpternlogd $63, 128(%r11), %zmm31, %zmm20
-    {evex} vpternlogd $7, -2147483648(%rdi), %zmm12, %zmm17
+    {evex} vpternlogd $255, 0(%r8), %zmm25, %zmm9
+    {evex} vpternlogd $63, 128(%rcx), %zmm31, %zmm20
+    {evex} vpternlogd $7, -2147483648(%r8), %zmm12, %zmm17
     {evex} vpternlogd $0, 0(%r12), %zmm16, %zmm3
     {evex} vpternlogd $255, -8192(%rsp), %zmm25, %zmm9
     {evex} vpternlogd $63, 2147483647(%r12), %zmm31, %zmm20
-    {evex} vpternlogd $7, 0(%r8,%r12,2), %zmm12, %zmm17
-    {evex} vpternlogd $0, 8128(%rdi,%rax,4), %zmm16, %zmm3
-    {evex} vpternlogd $255, 4660(%r15,%r15,8), %zmm25, %zmm9
+    {evex} vpternlogd $7, 0(%r12,%rbp,8), %zmm12, %zmm17
+    {evex} vpternlogd $0, 8128(%rsp,%r12,1), %zmm16, %zmm3
+    {evex} vpternlogd $255, 4660(%r13,%rax,2), %zmm25, %zmm9
     {evex} vpternlogd $63, gnu_fwd(%rip), %zmm31, %zmm20
     {evex} vpternlogd $7, %zmm12, %zmm17, %zmm16{%k6}
-    {evex} vpternlogd $0, 0(%rcx), %zmm3, %zmm25{%k7}
-    {evex} vpternlogd $255, -64(%r14), %zmm9, %zmm31{%k1}
-    {evex} vpternlogd $63, -129(%r15), %zmm20, %zmm12{%k2}
+    {evex} vpternlogd $0, 0(%rdx), %zmm3, %zmm25{%k7}
+    {evex} vpternlogd $255, -64(%rbp), %zmm9, %zmm31{%k1}
+    {evex} vpternlogd $63, -129(%r13), %zmm20, %zmm12{%k2}
     {evex} vpternlogd $7, 0(%rsp), %zmm17, %zmm16{%k3}
     {evex} vpternlogd $0, 128(%r12), %zmm3, %zmm25{%k4}
     {evex} vpternlogd $255, 1001(%rsp), %zmm9, %zmm31{%k5}
-    {evex} vpternlogd $63, 0(%rcx,%rsi,1), %zmm20, %zmm12{%k6}
-    {evex} vpternlogd $7, -8192(%rax,%rcx,2), %zmm17, %zmm16{%k7}
-    {evex} vpternlogd $0, -2147483648(%r9,%r9,4), %zmm3, %zmm25{%k1}
+    {evex} vpternlogd $63, 0(%rdx,%r15,4), %zmm20, %zmm12{%k6}
+    {evex} vpternlogd $7, -8192(%rbp,%rsi,8), %zmm17, %zmm16{%k7}
+    {evex} vpternlogd $0, -2147483648(%r12,%rcx,1), %zmm3, %zmm25{%k1}
     {evex} vpternlogd $255, gnu_back(%rip), %zmm9, %zmm31{%k2}
     {evex} vpternlogd $63, %zmm20, %zmm12, %zmm17{%k3}{z}
-    {evex} vpternlogd $7, 0(%r8), %zmm16, %zmm3{%k4}{z}
-    {evex} vpternlogd $0, 8128(%rcx), %zmm25, %zmm9{%k5}{z}
-    {evex} vpternlogd $255, 2147483647(%r8), %zmm31, %zmm20{%k6}{z}
+    {evex} vpternlogd $7, 0(%r9), %zmm16, %zmm3{%k4}{z}
+    {evex} vpternlogd $0, 8128(%rdx), %zmm25, %zmm9{%k5}{z}
+    {evex} vpternlogd $255, 2147483647(%r9), %zmm31, %zmm20{%k6}{z}
     {evex} vpternlogd $63, 0(%r12), %zmm12, %zmm17{%k7}{z}
     {evex} vpternlogd $7, -64(%rsp), %zmm16, %zmm3{%k1}{z}
     {evex} vpternlogd $0, 4660(%r12), %zmm25, %zmm9{%k2}{z}
-    {evex} vpternlogd $255, 0(%r12,%rbp,8), %zmm31, %zmm20{%k3}{z}
-    {evex} vpternlogd $63, 128(%rsp,%r12,1), %zmm12, %zmm17{%k4}{z}
-    {evex} vpternlogd $7, -129(%r13,%rax,2), %zmm16, %zmm3{%k5}{z}
+    {evex} vpternlogd $255, 0(%r9,%r9,2), %zmm31, %zmm20{%k3}{z}
+    {evex} vpternlogd $63, 128(%rdi,%rbp,4), %zmm12, %zmm17{%k4}{z}
+    {evex} vpternlogd $7, -129(%r15,%r12,8), %zmm16, %zmm3{%k5}{z}
     {evex} vpternlogd $0, gnu_fwd(%rip), %zmm25, %zmm9{%k6}{z}
     {evex} vpbroadcastb %xmm31, %xmm20
-    {evex} vpbroadcastb 0(%rdx), %xmm12
-    {evex} vpbroadcastb -128(%rbp), %xmm17
-    {evex} vpbroadcastb 1001(%r13), %xmm16
+    {evex} vpbroadcastb 0(%rbx), %xmm12
+    {evex} vpbroadcastb -128(%rbx), %xmm17
+    {evex} vpbroadcastb 1001(%r10), %xmm16
     {evex} vpbroadcastb 0(%rsp), %xmm3
     {evex} vpbroadcastb 127(%r12), %xmm25
     {evex} vpbroadcastb -2147483648(%rsp), %xmm9
-    {evex} vpbroadcastb 0(%rdx,%r15,4), %xmm31
-    {evex} vpbroadcastb -1(%rbp,%rsi,8), %xmm20
-    {evex} vpbroadcastb 2147483647(%r12,%rcx,1), %xmm12
+    {evex} vpbroadcastb 0(%rsp,%rax,1), %xmm31
+    {evex} vpbroadcastb -1(%rax,%r15,2), %xmm20
+    {evex} vpbroadcastb 2147483647(%r9,%rsi,4), %xmm12
     {evex} vpbroadcastb gnu_back(%rip), %xmm17
     {evex} vpbroadcastb %xmm16, %xmm3{%k7}
-    {evex} vpbroadcastb 0(%r9), %xmm25{%k1}
-    {evex} vpbroadcastb 2(%rdx), %xmm9{%k2}
-    {evex} vpbroadcastb 4660(%r9), %xmm31{%k3}
+    {evex} vpbroadcastb 0(%r10), %xmm25{%k1}
+    {evex} vpbroadcastb 2(%rsi), %xmm9{%k2}
+    {evex} vpbroadcastb 4660(%r11), %xmm31{%k3}
     {evex} vpbroadcastb 0(%r12), %xmm20{%k4}
     {evex} vpbroadcastb -128(%rsp), %xmm12{%k5}
     {evex} vpbroadcastb -129(%r12), %xmm17{%k6}
-    {evex} vpbroadcastb 0(%r9,%r9,2), %xmm16{%k7}
-    {evex} vpbroadcastb 127(%rdi,%rbp,4), %xmm3{%k1}
-    {evex} vpbroadcastb 1001(%r15,%r12,8), %xmm25{%k2}
+    {evex} vpbroadcastb 0(%r14,%rcx,8), %xmm16{%k7}
+    {evex} vpbroadcastb 127(%rsp,%r9,1), %xmm3{%k1}
+    {evex} vpbroadcastb 1001(%r13,%rbp,2), %xmm25{%k2}
     {evex} vpbroadcastb gnu_fwd(%rip), %xmm9{%k3}
     {evex} vpbroadcastb %xmm31, %xmm20{%k4}{z}
-    {evex} vpbroadcastb 0(%rbx), %xmm12{%k5}{z}
-    {evex} vpbroadcastb -1(%rbx), %xmm17{%k6}{z}
-    {evex} vpbroadcastb -2147483648(%r10), %xmm16{%k7}{z}
+    {evex} vpbroadcastb 0(%rsi), %xmm12{%k5}{z}
+    {evex} vpbroadcastb -1(%rdi), %xmm17{%k6}{z}
+    {evex} vpbroadcastb -2147483648(%r14), %xmm16{%k7}{z}
     {evex} vpbroadcastb 0(%rsp), %xmm3{%k1}{z}
     {evex} vpbroadcastb 2(%r12), %xmm25{%k2}{z}
     {evex} vpbroadcastb 2147483647(%rsp), %xmm9{%k3}{z}
-    {evex} vpbroadcastb 0(%rsp,%rax,1), %xmm31{%k4}{z}
-    {evex} vpbroadcastb -128(%rax,%r15,2), %xmm20{%k5}{z}
-    {evex} vpbroadcastb 4660(%r9,%rsi,4), %xmm12{%k6}{z}
+    {evex} vpbroadcastb 0(%rsi,%r12,4), %xmm31{%k4}{z}
+    {evex} vpbroadcastb -128(%rbp,%rax,8), %xmm20{%k5}{z}
+    {evex} vpbroadcastb 4660(%r12,%r15,1), %xmm12{%k6}{z}
     {evex} vpbroadcastb gnu_back(%rip), %xmm17{%k7}{z}
     {evex} vpbroadcastb %xmm16, %ymm3
-    {evex} vpbroadcastb 0(%r10), %ymm25
-    {evex} vpbroadcastb 127(%rsi), %ymm9
-    {evex} vpbroadcastb -129(%r11), %ymm31
+    {evex} vpbroadcastb 0(%r11), %ymm25
+    {evex} vpbroadcastb 127(%r15), %ymm9
+    {evex} vpbroadcastb -129(%rcx), %ymm31
     {evex} vpbroadcastb 0(%r12), %ymm20
     {evex} vpbroadcastb -1(%rsp), %ymm12
     {evex} vpbroadcastb 1001(%r12), %ymm17
-    {evex} vpbroadcastb 0(%r14,%rcx,8), %ymm16
-    {evex} vpbroadcastb 2(%rsp,%r9,1), %ymm3
-    {evex} vpbroadcastb -2147483648(%r13,%rbp,2), %ymm25
+    {evex} vpbroadcastb 0(%r15,%rsi,2), %ymm16
+    {evex} vpbroadcastb 2(%rdi,%rcx,4), %ymm3
+    {evex} vpbroadcastb -2147483648(%r15,%r9,8), %ymm25
     {evex} vpbroadcastb gnu_fwd(%rip), %ymm9
     {evex} vpbroadcastb %xmm31, %ymm20{%k1}
-    {evex} vpbroadcastb 0(%rsi), %ymm12{%k2}
-    {evex} vpbroadcastb -128(%rdi), %ymm17{%k3}
-    {evex} vpbroadcastb 2147483647(%r14), %ymm16{%k4}
+    {evex} vpbroadcastb 0(%rdi), %ymm12{%k2}
+    {evex} vpbroadcastb -128(%r8), %ymm17{%k3}
+    {evex} vpbroadcastb 2147483647(%rbp), %ymm16{%k4}
     {evex} vpbroadcastb 0(%rsp), %ymm3{%k5}
     {evex} vpbroadcastb 127(%r12), %ymm25{%k6}
     {evex} vpbroadcastb 4660(%rsp), %ymm9{%k7}
-    {evex} vpbroadcastb 0(%rsi,%r12,4), %ymm31{%k1}
-    {evex} vpbroadcastb -1(%rbp,%rax,8), %ymm20{%k2}
-    {evex} vpbroadcastb -129(%r12,%r15,1), %ymm12{%k3}
+    {evex} vpbroadcastb 0(%rax,%rbp,1), %ymm31{%k1}
+    {evex} vpbroadcastb -1(%rax,%r12,2), %ymm20{%k2}
+    {evex} vpbroadcastb -129(%r9,%rax,4), %ymm12{%k3}
     {evex} vpbroadcastb gnu_back(%rip), %ymm17{%k4}
     {evex} vpbroadcastb %xmm16, %ymm3{%k5}{z}
-    {evex} vpbroadcastb 0(%r11), %ymm25{%k6}{z}
-    {evex} vpbroadcastb 2(%r15), %ymm9{%k7}{z}
-    {evex} vpbroadcastb 1001(%rcx), %ymm31{%k1}{z}
+    {evex} vpbroadcastb 0(%r14), %ymm25{%k6}{z}
+    {evex} vpbroadcastb 2(%r13), %ymm9{%k7}{z}
+    {evex} vpbroadcastb 1001(%rdx), %ymm31{%k1}{z}
     {evex} vpbroadcastb 0(%r12), %ymm20{%k2}{z}
     {evex} vpbroadcastb -128(%rsp), %ymm12{%k3}{z}
     {evex} vpbroadcastb -2147483648(%r12), %ymm17{%k4}{z}
-    {evex} vpbroadcastb 0(%r15,%rsi,2), %ymm16{%k5}{z}
-    {evex} vpbroadcastb 127(%rdi,%rcx,4), %ymm3{%k6}{z}
-    {evex} vpbroadcastb 2147483647(%r15,%r9,8), %ymm25{%k7}{z}
+    {evex} vpbroadcastb 0(%r8,%r15,8), %ymm16{%k5}{z}
+    {evex} vpbroadcastb 127(%rsp,%rsi,1), %ymm3{%k6}{z}
+    {evex} vpbroadcastb 2147483647(%r13,%rcx,2), %ymm25{%k7}{z}
     {evex} vpbroadcastb gnu_fwd(%rip), %ymm9{%k1}{z}
     {evex} vpbroadcastb %xmm31, %zmm20
-    {evex} vpbroadcastb 0(%rdi), %zmm12
-    {evex} vpbroadcastb -1(%r8), %zmm17
-    {evex} vpbroadcastb 4660(%rbp), %zmm16
+    {evex} vpbroadcastb 0(%r15), %zmm12
+    {evex} vpbroadcastb -1(%r9), %zmm17
+    {evex} vpbroadcastb 4660(%rbx), %zmm16
     {evex} vpbroadcastb 0(%rsp), %zmm3
     {evex} vpbroadcastb 2(%r12), %zmm25
     {evex} vpbroadcastb -129(%rsp), %zmm9
-    {evex} vpbroadcastb 0(%rax,%rbp,1), %zmm31
-    {evex} vpbroadcastb -128(%rax,%r12,2), %zmm20
-    {evex} vpbroadcastb 1001(%r9,%rax,4), %zmm12
+    {evex} vpbroadcastb 0(%rcx,%r9,4), %zmm31
+    {evex} vpbroadcastb -128(%rbp,%rbp,8), %zmm20
+    {evex} vpbroadcastb 1001(%r12,%r12,1), %zmm12
     {evex} vpbroadcastb gnu_back(%rip), %zmm17
     {evex} vpbroadcastb %xmm16, %zmm3{%k2}
-    {evex} vpbroadcastb 0(%r14), %zmm25{%k3}
-    {evex} vpbroadcastb 127(%r13), %zmm9{%k4}
-    {evex} vpbroadcastb -2147483648(%rdx), %zmm31{%k5}
+    {evex} vpbroadcastb 0(%rcx), %zmm25{%k3}
+    {evex} vpbroadcastb 127(%r10), %zmm9{%k4}
+    {evex} vpbroadcastb -2147483648(%rsi), %zmm31{%k5}
     {evex} vpbroadcastb 0(%r12), %zmm20{%k6}
     {evex} vpbroadcastb -1(%rsp), %zmm12{%k7}
     {evex} vpbroadcastb 2147483647(%r12), %zmm17{%k1}
-    {evex} vpbroadcastb 0(%r8,%r15,8), %zmm16{%k2}
-    {evex} vpbroadcastb 2(%rsp,%rsi,1), %zmm3{%k3}
-    {evex} vpbroadcastb 4660(%r13,%rcx,2), %zmm25{%k4}
+    {evex} vpbroadcastb 0(%r12,%rax,2), %zmm16{%k2}
+    {evex} vpbroadcastb 2(%rdi,%r15,4), %zmm3{%k3}
+    {evex} vpbroadcastb 4660(%r15,%rsi,8), %zmm25{%k4}
     {evex} vpbroadcastb gnu_fwd(%rip), %zmm9{%k5}
     {evex} vpbroadcastb %xmm31, %zmm20{%k6}{z}
-    {evex} vpbroadcastb 0(%r15), %zmm12{%k7}{z}
-    {evex} vpbroadcastb -128(%r9), %zmm17{%k1}{z}
-    {evex} vpbroadcastb -129(%rbx), %zmm16{%k2}{z}
+    {evex} vpbroadcastb 0(%r8), %zmm12{%k7}{z}
+    {evex} vpbroadcastb -128(%r11), %zmm17{%k1}{z}
+    {evex} vpbroadcastb -129(%rdi), %zmm16{%k2}{z}
     {evex} vpbroadcastb 0(%rsp), %zmm3{%k3}{z}
     {evex} vpbroadcastb 127(%r12), %zmm25{%k4}{z}
     {evex} vpbroadcastb 1001(%rsp), %zmm9{%k5}{z}
-    {evex} vpbroadcastb 0(%rcx,%r9,4), %zmm31{%k6}{z}
-    {evex} vpbroadcastb -1(%rbp,%rbp,8), %zmm20{%k7}{z}
-    {evex} vpbroadcastb -2147483648(%r12,%r12,1), %zmm12{%k1}{z}
+    {evex} vpbroadcastb 0(%rdx,%rcx,1), %zmm31{%k6}{z}
+    {evex} vpbroadcastb -1(%rax,%r9,2), %zmm20{%k7}{z}
+    {evex} vpbroadcastb -2147483648(%r9,%rbp,4), %zmm12{%k1}{z}
+g78:
     {evex} vpbroadcastb gnu_back(%rip), %zmm17{%k2}{z}
     {evex} vpbroadcastd %xmm16, %xmm3
-    {evex} vpbroadcastd 0(%rcx), %xmm25
-    {evex} vpbroadcastd -4(%r10), %xmm9
-    {evex} vpbroadcastd 2147483647(%rsi), %xmm31
+    {evex} vpbroadcastd 0(%rdx), %xmm25
+    {evex} vpbroadcastd -4(%r14), %xmm9
+    {evex} vpbroadcastd 2147483647(%r15), %xmm31
     {evex} vpbroadcastd 0(%r12), %xmm20
     {evex} vpbroadcastd 8(%rsp), %xmm12
     {evex} vpbroadcastd 4660(%r12), %xmm17
-    {evex} vpbroadcastd 0(%r12,%rax,2), %xmm16
-    {evex} vpbroadcastd -512(%rdi,%r15,4), %xmm3
-    {evex} vpbroadcastd -129(%r15,%rsi,8), %xmm25
+    {evex} vpbroadcastd 0(%r9,%r12,8), %xmm16
+    {evex} vpbroadcastd -512(%rsp,%rax,1), %xmm3
+    {evex} vpbroadcastd -129(%r13,%r15,2), %xmm25
     {evex} vpbroadcastd gnu_fwd(%rip), %xmm9
     {evex} vpbroadcastd %xmm31, %xmm20{%k3}
-    {evex} vpbroadcastd 0(%r8), %xmm12{%k4}
-    {evex} vpbroadcastd 508(%r11), %xmm17{%k5}
-    {evex} vpbroadcastd 1001(%rdi), %xmm16{%k6}
+    {evex} vpbroadcastd 0(%r9), %xmm12{%k4}
+    {evex} vpbroadcastd 508(%rcx), %xmm17{%k5}
+    {evex} vpbroadcastd 1001(%r8), %xmm16{%k6}
     {evex} vpbroadcastd 0(%rsp), %xmm3{%k7}
     {evex} vpbroadcastd -4(%r12), %xmm25{%k1}
     {evex} vpbroadcastd -2147483648(%rsp), %xmm9{%k2}
-    {evex} vpbroadcastd 0(%rdx,%rcx,1), %xmm31{%k3}
-    {evex} vpbroadcastd 8(%rax,%r9,2), %xmm20{%k4}
-    {evex} vpbroadcastd 2147483647(%r9,%rbp,4), %xmm12{%k5}
+    {evex} vpbroadcastd 0(%rsp,%rsi,4), %xmm31{%k3}
+    {evex} vpbroadcastd 8(%rbp,%rcx,8), %xmm20{%k4}
+    {evex} vpbroadcastd 2147483647(%r12,%r9,1), %xmm12{%k5}
     {evex} vpbroadcastd gnu_back(%rip), %xmm17{%k6}
     {evex} vpbroadcastd %xmm16, %xmm3{%k7}{z}
-g78:
-    {evex} vpbroadcastd 0(%rdx), %xmm25{%k1}{z}
-    {evex} vpbroadcastd -512(%r14), %xmm9{%k2}{z}
-    {evex} vpbroadcastd 4660(%r15), %xmm31{%k3}{z}
+    {evex} vpbroadcastd 0(%rbx), %xmm25{%k1}{z}
+    {evex} vpbroadcastd -512(%rbp), %xmm9{%k2}{z}
+    {evex} vpbroadcastd 4660(%r13), %xmm31{%k3}{z}
     {evex} vpbroadcastd 0(%r12), %xmm20{%k4}{z}
     {evex} vpbroadcastd 508(%rsp), %xmm12{%k5}{z}
     {evex} vpbroadcastd -129(%r12), %xmm17{%k6}{z}
-    {evex} vpbroadcastd 0(%r9,%r12,8), %xmm16{%k7}{z}
-    {evex} vpbroadcastd -4(%rsp,%rax,1), %xmm3{%k1}{z}
-    {evex} vpbroadcastd 1001(%r13,%r15,2), %xmm25{%k2}{z}
+    {evex} vpbroadcastd 0(%r14,%rbp,2), %xmm16{%k7}{z}
+    {evex} vpbroadcastd -4(%rdi,%r12,4), %xmm3{%k1}{z}
+    {evex} vpbroadcastd 1001(%r15,%rax,8), %xmm25{%k2}{z}
     {evex} vpbroadcastd gnu_fwd(%rip), %xmm9{%k3}{z}
     {evex} vpbroadcastd %xmm31, %ymm20
-    {evex} vpbroadcastd 0(%r9), %ymm12
-    {evex} vpbroadcastd 8(%rcx), %ymm17
-    {evex} vpbroadcastd -2147483648(%r8), %ymm16
+    {evex} vpbroadcastd 0(%r10), %ymm12
+    {evex} vpbroadcastd 8(%rdx), %ymm17
+    {evex} vpbroadcastd -2147483648(%r9), %ymm16
     {evex} vpbroadcastd 0(%rsp), %ymm3
     {evex} vpbroadcastd -512(%r12), %ymm25
     {evex} vpbroadcastd 2147483647(%rsp), %ymm9
-    {evex} vpbroadcastd 0(%rsp,%rsi,4), %ymm31
-    {evex} vpbroadcastd 508(%rbp,%rcx,8), %ymm20
-    {evex} vpbroadcastd 4660(%r12,%r9,1), %ymm12
+    {evex} vpbroadcastd 0(%rsi,%r15,1), %ymm31
+    {evex} vpbroadcastd 508(%rax,%rsi,2), %ymm20
+    {evex} vpbroadcastd 4660(%r9,%rcx,4), %ymm12
     {evex} vpbroadcastd gnu_back(%rip), %ymm17
     {evex} vpbroadcastd %xmm16, %ymm3{%k4}
-    {evex} vpbroadcastd 0(%rbx), %ymm25{%k5}
-    {evex} vpbroadcastd -4(%rbp), %ymm9{%k6}
-    {evex} vpbroadcastd -129(%r13), %ymm31{%k7}
+    {evex} vpbroadcastd 0(%rsi), %ymm25{%k5}
+    {evex} vpbroadcastd -4(%rbx), %ymm9{%k6}
+    {evex} vpbroadcastd -129(%r10), %ymm31{%k7}
     {evex} vpbroadcastd 0(%r12), %ymm20{%k1}
     {evex} vpbroadcastd 8(%rsp), %ymm12{%k2}
     {evex} vpbroadcastd 1001(%r12), %ymm17{%k3}
-    {evex} vpbroadcastd 0(%r14,%rbp,2), %ymm16{%k4}
-    {evex} vpbroadcastd -512(%rdi,%r12,4), %ymm3{%k5}
-    {evex} vpbroadcastd -2147483648(%r15,%rax,8), %ymm25{%k6}
+    {evex} vpbroadcastd 0(%r15,%r9,8), %ymm16{%k4}
+    {evex} vpbroadcastd -512(%rsp,%rbp,1), %ymm3{%k5}
+    {evex} vpbroadcastd -2147483648(%r13,%r12,2), %ymm25{%k6}
     {evex} vpbroadcastd gnu_fwd(%rip), %ymm9{%k7}
     {evex} vpbroadcastd %xmm31, %ymm20{%k1}{z}
-    {evex} vpbroadcastd 0(%r10), %ymm12{%k2}{z}
-    {evex} vpbroadcastd 508(%rdx), %ymm17{%k3}{z}
-    {evex} vpbroadcastd 2147483647(%r9), %ymm16{%k4}{z}
+    {evex} vpbroadcastd 0(%r11), %ymm12{%k2}{z}
+    {evex} vpbroadcastd 508(%rsi), %ymm17{%k3}{z}
+    {evex} vpbroadcastd 2147483647(%r11), %ymm16{%k4}{z}
     {evex} vpbroadcastd 0(%rsp), %ymm3{%k5}{z}
     {evex} vpbroadcastd -4(%r12), %ymm25{%k6}{z}
     {evex} vpbroadcastd 4660(%rsp), %ymm9{%k7}{z}
-    {evex} vpbroadcastd 0(%rsi,%r15,1), %ymm31{%k1}{z}
-    {evex} vpbroadcastd 8(%rax,%rsi,2), %ymm20{%k2}{z}
-    {evex} vpbroadcastd -129(%r9,%rcx,4), %ymm12{%k3}{z}
+    {evex} vpbroadcastd 0(%rax,%rax,4), %ymm31{%k1}{z}
+    {evex} vpbroadcastd 8(%rbp,%r15,8), %ymm20{%k2}{z}
+    {evex} vpbroadcastd -129(%r12,%rsi,1), %ymm12{%k3}{z}
     {evex} vpbroadcastd gnu_back(%rip), %ymm17{%k4}{z}
     {evex} vpbroadcastd %xmm16, %zmm3
-    {evex} vpbroadcastd 0(%rsi), %zmm25
-    {evex} vpbroadcastd -512(%rbx), %zmm9
-    {evex} vpbroadcastd 1001(%r10), %zmm31
+    {evex} vpbroadcastd 0(%rdi), %zmm25
+    {evex} vpbroadcastd -512(%rdi), %zmm9
+    {evex} vpbroadcastd 1001(%r14), %zmm31
     {evex} vpbroadcastd 0(%r12), %zmm20
     {evex} vpbroadcastd 508(%rsp), %zmm12
     {evex} vpbroadcastd -2147483648(%r12), %zmm17
-    {evex} vpbroadcastd 0(%r15,%r9,8), %zmm16
-    {evex} vpbroadcastd -4(%rsp,%rbp,1), %zmm3
-    {evex} vpbroadcastd 2147483647(%r13,%r12,2), %zmm25
+    {evex} vpbroadcastd 0(%r8,%rcx,2), %zmm16
+    {evex} vpbroadcastd -4(%rdi,%r9,4), %zmm3
+    {evex} vpbroadcastd 2147483647(%r15,%rbp,8), %zmm25
     {evex} vpbroadcastd gnu_fwd(%rip), %zmm9
     {evex} vpbroadcastd %xmm31, %zmm20{%k5}
-    {evex} vpbroadcastd 0(%r11), %zmm12{%k6}
-    {evex} vpbroadcastd 8(%rsi), %zmm17{%k7}
-    {evex} vpbroadcastd 4660(%r11), %zmm16{%k1}
+    {evex} vpbroadcastd 0(%r14), %zmm12{%k6}
+    {evex} vpbroadcastd 8(%r15), %zmm17{%k7}
+    {evex} vpbroadcastd 4660(%rcx), %zmm16{%k1}
     {evex} vpbroadcastd 0(%rsp), %zmm3{%k2}
     {evex} vpbroadcastd -512(%r12), %zmm25{%k3}
     {evex} vpbroadcastd -129(%rsp), %zmm9{%k4}
-    {evex} vpbroadcastd 0(%rax,%rax,4), %zmm31{%k5}
-    {evex} vpbroadcastd 508(%rbp,%r15,8), %zmm20{%k6}
-    {evex} vpbroadcastd 1001(%r12,%rsi,1), %zmm12{%k7}
+    {evex} vpbroadcastd 0(%rcx,%r12,1), %zmm31{%k5}
+    {evex} vpbroadcastd 508(%rax,%rax,2), %zmm20{%k6}
+    {evex} vpbroadcastd 1001(%r9,%r15,4), %zmm12{%k7}
     {evex} vpbroadcastd gnu_back(%rip), %zmm17{%k1}
     {evex} vpbroadcastd %xmm16, %zmm3{%k2}{z}
-    {evex} vpbroadcastd 0(%rdi), %zmm25{%k3}{z}
-    {evex} vpbroadcastd -4(%rdi), %zmm9{%k4}{z}
-    {evex} vpbroadcastd -2147483648(%r14), %zmm31{%k5}{z}
+    {evex} vpbroadcastd 0(%r15), %zmm25{%k3}{z}
+    {evex} vpbroadcastd -4(%r8), %zmm9{%k4}{z}
+    {evex} vpbroadcastd -2147483648(%rbp), %zmm31{%k5}{z}
     {evex} vpbroadcastd 0(%r12), %zmm20{%k6}{z}
     {evex} vpbroadcastd 8(%rsp), %zmm12{%k7}{z}
     {evex} vpbroadcastd 2147483647(%r12), %zmm17{%k1}{z}
-    {evex} vpbroadcastd 0(%r8,%rcx,2), %zmm16{%k2}{z}
-    {evex} vpbroadcastd -512(%rdi,%r9,4), %zmm3{%k3}{z}
-    {evex} vpbroadcastd 4660(%r15,%rbp,8), %zmm25{%k4}{z}
+    {evex} vpbroadcastd 0(%r12,%rsi,8), %zmm16{%k2}{z}
+    {evex} vpbroadcastd -512(%rsp,%rcx,1), %zmm3{%k3}{z}
+    {evex} vpbroadcastd 4660(%r13,%r9,2), %zmm25{%k4}{z}
     {evex} vpbroadcastd gnu_fwd(%rip), %zmm9{%k5}{z}
     {evex} vbroadcastss %xmm31, %ymm20
-    {evex} vbroadcastss 0(%r14), %ymm12
-    {evex} vbroadcastss 508(%r15), %ymm17
-    {evex} vbroadcastss -129(%rcx), %ymm16
+    {evex} vbroadcastss 0(%rcx), %ymm12
+    {evex} vbroadcastss 508(%r13), %ymm17
+    {evex} vbroadcastss -129(%rdx), %ymm16
     {evex} vbroadcastss 0(%rsp), %ymm3
     {evex} vbroadcastss -4(%r12), %ymm25
     {evex} vbroadcastss 1001(%rsp), %ymm9
-    {evex} vbroadcastss 0(%rcx,%r12,1), %ymm31
-    {evex} vbroadcastss 8(%rax,%rax,2), %ymm20
-    {evex} vbroadcastss -2147483648(%r9,%r15,4), %ymm12
+    {evex} vbroadcastss 0(%rdx,%rbp,4), %ymm31
+    {evex} vbroadcastss 8(%rbp,%r12,8), %ymm20
+    {evex} vbroadcastss -2147483648(%r12,%rax,1), %ymm12
     {evex} vbroadcastss gnu_back(%rip), %ymm17
     {evex} vbroadcastss %xmm16, %ymm3{%k6}
-    {evex} vbroadcastss 0(%r15), %ymm25{%k7}
-    {evex} vbroadcastss -512(%r8), %ymm9{%k1}
-    {evex} vbroadcastss 2147483647(%rbp), %ymm31{%k2}
+    {evex} vbroadcastss 0(%r8), %ymm25{%k7}
+    {evex} vbroadcastss -512(%r9), %ymm9{%k1}
+    {evex} vbroadcastss 2147483647(%rbx), %ymm31{%k2}
     {evex} vbroadcastss 0(%r12), %ymm20{%k3}
     {evex} vbroadcastss 508(%rsp), %ymm12{%k4}
     {evex} vbroadcastss 4660(%r12), %ymm17{%k5}
-    {evex} vbroadcastss 0(%r12,%rsi,8), %ymm16{%k6}
-    {evex} vbroadcastss -4(%rsp,%rcx,1), %ymm3{%k7}
-    {evex} vbroadcastss -129(%r13,%r9,2), %ymm25{%k1}
+    {evex} vbroadcastss 0(%r9,%r15,2), %ymm16{%k6}
+    {evex} vbroadcastss -4(%rdi,%rsi,4), %ymm3{%k7}
+    {evex} vbroadcastss -129(%r15,%rcx,8), %ymm25{%k1}
     {evex} vbroadcastss gnu_fwd(%rip), %ymm9{%k2}
     {evex} vbroadcastss %xmm31, %ymm20{%k3}{z}
-    {evex} vbroadcastss 0(%rcx), %ymm12{%k4}{z}
-    {evex} vbroadcastss 8(%r13), %ymm17{%k5}{z}
-    {evex} vbroadcastss 1001(%rdx), %ymm16{%k6}{z}
+    {evex} vbroadcastss 0(%rdx), %ymm12{%k4}{z}
+    {evex} vbroadcastss 8(%r10), %ymm17{%k5}{z}
+    {evex} vbroadcastss 1001(%rsi), %ymm16{%k6}{z}
     {evex} vbroadcastss 0(%rsp), %ymm3{%k7}{z}
     {evex} vbroadcastss -512(%r12), %ymm25{%k1}{z}
     {evex} vbroadcastss -2147483648(%rsp), %ymm9{%k2}{z}
-    {evex} vbroadcastss 0(%rdx,%rbp,4), %ymm31{%k3}{z}
-    {evex} vbroadcastss 508(%rbp,%r12,8), %ymm20{%k4}{z}
-    {evex} vbroadcastss 2147483647(%r12,%rax,1), %ymm12{%k5}{z}
+    {evex} vbroadcastss 0(%rsp,%r9,1), %ymm31{%k3}{z}
+    {evex} vbroadcastss 508(%rax,%rbp,2), %ymm20{%k4}{z}
+    {evex} vbroadcastss 2147483647(%r9,%r12,4), %ymm12{%k5}{z}
     {evex} vbroadcastss gnu_back(%rip), %ymm17{%k6}{z}
     {evex} vbroadcastss %xmm16, %zmm3
-    {evex} vbroadcastss 0(%r8), %zmm25
-    {evex} vbroadcastss -4(%r9), %zmm9
-    {evex} vbroadcastss 4660(%rbx), %zmm31
+    {evex} vbroadcastss 0(%r9), %zmm25
+    {evex} vbroadcastss -4(%r11), %zmm9
+    {evex} vbroadcastss 4660(%rdi), %zmm31
     {evex} vbroadcastss 0(%r12), %zmm20
     {evex} vbroadcastss 8(%rsp), %zmm12
     {evex} vbroadcastss -129(%r12), %zmm17
-    {evex} vbroadcastss 0(%r9,%r15,2), %zmm16
-    {evex} vbroadcastss -512(%rdi,%rsi,4), %zmm3
-    {evex} vbroadcastss 1001(%r15,%rcx,8), %zmm25
+    {evex} vbroadcastss 0(%r14,%rax,8), %zmm16
+    {evex} vbroadcastss -512(%rsp,%r15,1), %zmm3
+    {evex} vbroadcastss 1001(%r13,%rsi,2), %zmm25
     {evex} vbroadcastss gnu_fwd(%rip), %zmm9
     {evex} vbroadcastss %xmm31, %zmm20{%k7}
-    {evex} vbroadcastss 0(%rdx), %zmm12{%k1}
-    {evex} vbroadcastss 508(%r10), %zmm17{%k2}
-    {evex} vbroadcastss -2147483648(%rsi), %zmm16{%k3}
+    {evex} vbroadcastss 0(%rbx), %zmm12{%k1}
+    {evex} vbroadcastss 508(%r14), %zmm17{%k2}
+    {evex} vbroadcastss -2147483648(%r15), %zmm16{%k3}
     {evex} vbroadcastss 0(%rsp), %zmm3{%k4}
     {evex} vbroadcastss -4(%r12), %zmm25{%k5}
     {evex} vbroadcastss 2147483647(%rsp), %zmm9{%k6}
-    {evex} vbroadcastss 0(%rsp,%r9,1), %zmm31{%k7}
-    {evex} vbroadcastss 8(%rax,%rbp,2), %zmm20{%k1}
-    {evex} vbroadcastss 4660(%r9,%r12,4), %zmm12{%k2}
+    {evex} vbroadcastss 0(%rsi,%rcx,4), %zmm31{%k7}
+    {evex} vbroadcastss 8(%rbp,%r9,8), %zmm20{%k1}
+    {evex} vbroadcastss 4660(%r12,%rbp,1), %zmm12{%k2}
     {evex} vbroadcastss gnu_back(%rip), %zmm17{%k3}
     {evex} vbroadcastss %xmm16, %zmm3{%k4}{z}
-    {evex} vbroadcastss 0(%r9), %zmm25{%k5}{z}
-    {evex} vbroadcastss -512(%r11), %zmm9{%k6}{z}
-    {evex} vbroadcastss -129(%rdi), %zmm31{%k7}{z}
+    {evex} vbroadcastss 0(%r10), %zmm25{%k5}{z}
+    {evex} vbroadcastss -512(%rcx), %zmm9{%k6}{z}
+    {evex} vbroadcastss -129(%r8), %zmm31{%k7}{z}
     {evex} vbroadcastss 0(%r12), %zmm20{%k1}{z}
     {evex} vbroadcastss 508(%rsp), %zmm12{%k2}{z}
     {evex} vbroadcastss 1001(%r12), %zmm17{%k3}{z}
-    {evex} vbroadcastss 0(%r14,%rax,8), %zmm16{%k4}{z}
-    {evex} vbroadcastss -4(%rsp,%r15,1), %zmm3{%k5}{z}
-    {evex} vbroadcastss -2147483648(%r13,%rsi,2), %zmm25{%k6}{z}
+    {evex} vbroadcastss 0(%r15,%r12,2), %zmm16{%k4}{z}
+    {evex} vbroadcastss -4(%rdi,%rax,4), %zmm3{%k5}{z}
+    {evex} vbroadcastss -2147483648(%r15,%r15,8), %zmm25{%k6}{z}
     {evex} vbroadcastss gnu_fwd(%rip), %zmm9{%k7}{z}
-    {evex} vpbroadcastb %r9d, %xmm31
-    {evex} vpbroadcastb %edx, %xmm20{%k1}
-    {evex} vpbroadcastb %r12d, %xmm12{%k2}{z}
-    {evex} vpbroadcastb %ebx, %ymm17
-    {evex} vpbroadcastb %r13d, %ymm16{%k3}
-    {evex} vpbroadcastb %esi, %ymm3{%k4}{z}
-    {evex} vpbroadcastb %r14d, %zmm25
-    {evex} vpbroadcastb %edi, %zmm9{%k5}
-    {evex} vpbroadcastb %r15d, %zmm31{%k6}{z}
-    {evex} vpbroadcastd %ebp, %xmm20
-    {evex} vpbroadcastd %r8d, %xmm12{%k7}
-    {evex} vpbroadcastd %ecx, %xmm17{%k1}{z}
-    {evex} vpbroadcastd %r9d, %ymm16
-    {evex} vpbroadcastd %edx, %ymm3{%k2}
-    {evex} vpbroadcastd %r12d, %ymm25{%k3}{z}
-    {evex} vpbroadcastd %ebx, %zmm9
-    {evex} vpbroadcastd %r13d, %zmm31{%k4}
-    {evex} vpbroadcastd %esi, %zmm20{%k5}{z}
+    {evex} vpbroadcastb %r14d, %xmm31
+    {evex} vpbroadcastb %edi, %xmm20{%k1}
+    {evex} vpbroadcastb %r15d, %xmm12{%k2}{z}
+    {evex} vpbroadcastb %ebp, %ymm17
+    {evex} vpbroadcastb %r8d, %ymm16{%k3}
+    {evex} vpbroadcastb %ecx, %ymm3{%k4}{z}
+    {evex} vpbroadcastb %r9d, %zmm25
+    {evex} vpbroadcastb %edx, %zmm9{%k5}
+    {evex} vpbroadcastb %r12d, %zmm31{%k6}{z}
+    {evex} vpbroadcastd %ebx, %xmm20
+    {evex} vpbroadcastd %r13d, %xmm12{%k7}
+    {evex} vpbroadcastd %esi, %xmm17{%k1}{z}
+    {evex} vpbroadcastd %r14d, %ymm16
+    {evex} vpbroadcastd %edi, %ymm3{%k2}
+    {evex} vpbroadcastd %r15d, %ymm25{%k3}{z}
+    {evex} vpbroadcastd %ebp, %zmm9
+    {evex} vpbroadcastd %r8d, %zmm31{%k4}
+    {evex} vpbroadcastd %ecx, %zmm20{%k5}{z}
     flds 0(%r15)
-    flds 8(%r8)
-    flds 128(%r9)
+    flds -128(%r8)
+    flds -129(%r9)
     flds 0(%r12)
-    flds -128(%r12)
-    flds -129(%r12)
-    flds 0(%r8,%rcx,4)
-    flds 127(%r12,%r9,8)
-    flds -2147483648(%r13,%rbp,1)
+    flds 127(%r12)
+    flds -2147483648(%r12)
+    flds 0(%r8,%rsi,1)
+    flds -1(%r12,%rcx,2)
+    flds 2147483647(%r13,%r9,4)
     flds 0(%rdx)
-    flds -1(%rbx)
-    flds 2147483647(%rbp)
+    flds 64(%rbx)
+    flds 4660(%rbp)
     flds 0(%rsp)
-    flds 64(%rsp)
-    flds 4660(%rsp)
-    flds 0(%rdx,%rdi,2)
-    flds 8(%rax,%rax,4)
-    flds 128(%rcx,%rcx,8)
-    flds gnu_back(%rip)
-    flds -129
-    fldl 0(%r8)
-    fldl -128(%r10)
-    fldl -2147483648(%r11)
-    fldl 0(%r12)
-    fldl 127(%r12)
-    fldl 2147483647(%r12)
-    fldl 0(%r9,%r12,1)
-    fldl -1(%r15,%rax,2)
-    fldl 4660(%r8,%r15,4)
-    fldl 0(%rbx)
-    fldl 64(%rsi)
-    fldl 128(%rdi)
-    fldl 0(%rsp)
-    fldl 8(%rsp)
-    fldl -129(%rsp)
-    fldl 0(%rbx,%rdx,8)
-    fldl -128(%rdx,%rbx,1)
-    fldl -2147483648(%rbx,%rbp,2)
-    fldl gnu_fwd(%rip)
-    fldl 2147483647
+    flds 8(%rsp)
+    flds 128(%rsp)
+    flds 0(%rdx,%rdi,8)
 g79:
+    flds -128(%rax,%rax,1)
+    flds -129(%rcx,%rcx,2)
+    flds gnu_back(%rip)
+    flds -2147483648
+    fldl 0(%r8)
+    fldl 127(%r10)
+    fldl 2147483647(%r11)
+    fldl 0(%r12)
+    fldl -1(%r12)
+    fldl 4660(%r12)
+    fldl 0(%r9,%rbp,4)
+    fldl 64(%r15,%r12,8)
+    fldl 128(%r8,%rax,1)
+    fldl 0(%rbx)
+    fldl 8(%rsi)
+    fldl -129(%rdi)
+    fldl 0(%rsp)
+    fldl -128(%rsp)
+    fldl -2147483648(%rsp)
+    fldl 0(%rbx,%rdx,2)
+    fldl 127(%rdx,%rbx,4)
+    fldl 2147483647(%rbx,%rbp,8)
+    fldl gnu_fwd(%rip)
+    fldl 4660
     fldt 0(%r9)
-    fldt 127(%r13)
-    fldt 4660(%r14)
+    fldt -1(%r13)
+    fldt 128(%r14)
     fldt 0(%r12)
-    fldt -1(%r12)
-    fldt 128(%r12)
-    fldt 0(%r10,%rsi,4)
-    fldt 64(%r9,%rcx,8)
-    fldt -129(%r12,%r9,1)
+    fldt 64(%r12)
+    fldt -129(%r12)
+    fldt 0(%r10,%r15,1)
+    fldt 8(%r9,%rsi,2)
+    fldt -2147483648(%r12,%rcx,4)
     fldt 0(%rsi)
-    fldt 8(%rcx)
-    fldt -2147483648(%rdx)
+    fldt -128(%rcx)
+    fldt 2147483647(%rdx)
     fldt 0(%rsp)
-    fldt -128(%rsp)
-    fldt 2147483647(%rsp)
-    fldt 0(%rsp,%rsi,2)
-    fldt 127(%rsp,%rdi,4)
-    fldt 4660(%rbp,%rax,8)
+    fldt 127(%rsp)
+    fldt 4660(%rsp)
+    fldt 0(%rsp,%rsi,8)
+    fldt -1(%rsp,%rdi,1)
+    fldt 128(%rbp,%rax,2)
     fldt gnu_back(%rip)
-    fldt 128
+    fldt -129
     fsts 0(%r10)
-    fsts -1(%r15)
-    fsts -129(%r8)
+    fsts 64(%r15)
+    fsts -2147483648(%r8)
     fsts 0(%r12)
-    fsts 64(%r12)
-    fsts -2147483648(%r12)
-    fsts 0(%r11,%rbp,1)
-    fsts 8(%r13,%r12,2)
-    fsts 2147483647(%r15,%rax,4)
+    fsts 8(%r12)
+    fsts 2147483647(%r12)
+    fsts 0(%r11,%r9,4)
+    fsts -128(%r13,%rbp,8)
+    fsts 4660(%r15,%r12,1)
     fsts 0(%rdi)
-    fsts -128(%rbx)
-    fsts 4660(%rbp)
+    fsts 127(%rbx)
+    fsts 128(%rbp)
     fsts 0(%rsp)
-    fsts 127(%rsp)
-    fsts 128(%rsp)
-    fsts 0(%rsi,%rcx,8)
-    fsts -1(%rsi,%rdx,1)
-    fsts -129(%rdi,%rbx,2)
+    fsts -1(%rsp)
+    fsts -129(%rsp)
+    fsts 0(%rsi,%rcx,2)
+    fsts 64(%rsi,%rdx,4)
+    fsts -2147483648(%rdi,%rbx,8)
     fsts gnu_fwd(%rip)
-    fsts -2147483648
+    fsts 2147483647
     fstl 0(%r11)
-    fstl 64(%r9)
-    fstl 2147483647(%r10)
+    fstl 8(%r9)
+    fstl 4660(%r10)
     fstl 0(%r12)
-    fstl 8(%r12)
-    fstl 4660(%r12)
-    fstl 0(%r12,%r15,4)
-    fstl -128(%r8,%rsi,8)
-    fstl 128(%r9,%rcx,1)
+    fstl -128(%r12)
+    fstl 128(%r12)
+    fstl 0(%r12,%rax,1)
+    fstl 127(%r8,%r15,2)
+    fstl -129(%r9,%rsi,4)
     fstl 0(%rcx)
-    fstl 127(%rsi)
-    fstl -129(%rdi)
+    fstl -1(%rsi)
+    fstl -2147483648(%rdi)
     fstl 0(%rsp)
-    fstl -1(%rsp)
-    fstl -2147483648(%rsp)
-    fstl 0(%rdi,%rbp,2)
-    fstl 64(%rax,%rsi,4)
-    fstl 2147483647(%rcx,%rdi,8)
+    fstl 64(%rsp)
+    fstl 2147483647(%rsp)
+    fstl 0(%rdi,%rbp,8)
+    fstl 8(%rax,%rsi,1)
+    fstl 4660(%rcx,%rdi,2)
     fstl gnu_back(%rip)
-    fstl 4660
+    fstl 128
     fstps 0(%r14)
-    fstps 8(%r11)
-    fstps 128(%r13)
+    fstps -128(%r11)
+    fstps -129(%r13)
     fstps 0(%r12)
-    fstps -128(%r12)
-    fstps -129(%r12)
-    fstps 0(%r14,%r9,1)
-    fstps 127(%r12,%rbp,2)
-    fstps -2147483648(%r13,%r12,4)
+    fstps 127(%r12)
+    fstps -2147483648(%r12)
+    fstps 0(%r14,%rcx,4)
+    fstps -1(%r12,%r9,8)
+    fstps 2147483647(%r13,%rbp,1)
     fstps 0(%rdx)
-    fstps -1(%rcx)
-    fstps 2147483647(%rdx)
+    fstps 64(%rcx)
+    fstps 4660(%rdx)
     fstps 0(%rsp)
-    fstps 64(%rsp)
-    fstps 4660(%rsp)
-    fstps 0(%rax,%rax,8)
-    fstps 8(%rdx,%rcx,1)
-    fstps 128(%rbx,%rdx,2)
+    fstps 8(%rsp)
+    fstps 128(%rsp)
+    fstps 0(%rax,%rax,2)
+    fstps -128(%rdx,%rcx,4)
+    fstps -129(%rbx,%rdx,8)
     fstps gnu_fwd(%rip)
-    fstps -129
+    fstps -2147483648
     fstpl 0(%r15)
-    fstpl -128(%r14)
-    fstpl -2147483648(%r15)
+    fstpl 127(%r14)
+    fstpl 2147483647(%r15)
     fstpl 0(%r12)
-    fstpl 127(%r12)
-    fstpl 2147483647(%r12)
-    fstpl 0(%r15,%rax,4)
-    fstpl -1(%r15,%r15,8)
-    fstpl 4660(%r8,%rsi,1)
+    fstpl -1(%r12)
+    fstpl 4660(%r12)
+    fstpl 0(%r15,%r12,1)
+    fstpl 64(%r15,%rax,2)
+    fstpl 128(%r8,%r15,4)
     fstpl 0(%rbx)
-    fstpl 64(%rbx)
-    fstpl 128(%rbp)
+    fstpl 8(%rbx)
+    fstpl -129(%rbp)
     fstpl 0(%rsp)
-    fstpl 8(%rsp)
-    fstpl -129(%rsp)
-    fstpl 0(%rcx,%rbx,2)
-    fstpl -128(%rsp,%rbp,4)
-    fstpl -2147483648(%rbp,%rsi,8)
+    fstpl -128(%rsp)
+    fstpl -2147483648(%rsp)
+    fstpl 0(%rcx,%rbx,8)
+    fstpl 127(%rsp,%rbp,1)
+    fstpl 2147483647(%rbp,%rsi,2)
     fstpl gnu_back(%rip)
-    fstpl 2147483647
+    fstpl 4660
     fstpt 0(%r8)
-    fstpt 127(%r8)
-    fstpt 4660(%r9)
+    fstpt -1(%r8)
+    fstpt 128(%r9)
     fstpt 0(%r12)
-    fstpt -1(%r12)
-    fstpt 128(%r12)
-    fstpt 0(%r8,%rcx,1)
-    fstpt 64(%r9,%r9,2)
-    fstpt -129(%r12,%rbp,4)
+    fstpt 64(%r12)
+    fstpt -129(%r12)
+    fstpt 0(%r8,%rsi,4)
+    fstpt 8(%r9,%rcx,8)
+    fstpt -2147483648(%r12,%r9,1)
     fstpt 0(%rsi)
-    fstpt 8(%rsi)
-    fstpt -2147483648(%rdi)
+    fstpt -128(%rsi)
+    fstpt 2147483647(%rdi)
     fstpt 0(%rsp)
-    fstpt -128(%rsp)
-    fstpt 2147483647(%rsp)
-    fstpt 0(%rdx,%rdi,8)
-    fstpt 127(%rsi,%rax,1)
-    fstpt 4660(%rdi,%rcx,2)
+    fstpt 127(%rsp)
+    fstpt 4660(%rsp)
+    fstpt 0(%rdx,%rdi,2)
+    fstpt -1(%rsi,%rax,4)
+    fstpt 128(%rdi,%rcx,8)
     fstpt gnu_fwd(%rip)
-    fstpt 128
+    fstpt -129
     filds 0(%r9)
-    filds -1(%r10)
-    filds -129(%r11)
+    filds 64(%r10)
+    filds -2147483648(%r11)
     filds 0(%r12)
-    filds 64(%r12)
-    filds -2147483648(%r12)
-    filds 0(%r9,%r12,4)
-    filds 8(%r13,%rax,8)
-    filds 2147483647(%r15,%r15,1)
+    filds 8(%r12)
+    filds 2147483647(%r12)
+    filds 0(%r9,%rbp,1)
+    filds -128(%r13,%r12,2)
+    filds 4660(%r15,%rax,4)
     filds 0(%rdi)
-    filds -128(%rcx)
-    filds 4660(%rdx)
+    filds 127(%rcx)
+    filds 128(%rdx)
     filds 0(%rsp)
-    filds 127(%rsp)
-    filds 128(%rsp)
-    filds 0(%rbx,%rdx,2)
-    filds -1(%rax,%rbx,4)
-    filds -129(%rcx,%rbp,8)
+    filds -1(%rsp)
+    filds -129(%rsp)
+    filds 0(%rbx,%rdx,8)
+    filds 64(%rax,%rbx,1)
+    filds -2147483648(%rcx,%rbp,2)
     filds gnu_back(%rip)
-    filds -2147483648
+    filds 2147483647
     fildl 0(%r10)
-    fildl 64(%r13)
-    fildl 2147483647(%r14)
+    fildl 8(%r13)
+    fildl 4660(%r14)
     fildl 0(%r12)
-    fildl 8(%r12)
-    fildl 4660(%r12)
-    fildl 0(%r10,%rsi,1)
-    fildl -128(%r8,%rcx,2)
-    fildl 128(%r9,%r9,4)
+    fildl -128(%r12)
+    fildl 128(%r12)
+    fildl 0(%r10,%r15,4)
+    fildl 127(%r8,%rsi,8)
+    fildl -129(%r9,%rcx,1)
     fildl 0(%rcx)
-    fildl 127(%rbx)
-    fildl -129(%rbp)
+    fildl -1(%rbx)
+    fildl -2147483648(%rbp)
     fildl 0(%rsp)
-    fildl -1(%rsp)
-    fildl -2147483648(%rsp)
-    fildl 0(%rsp,%rsi,8)
-    fildl 64(%rdx,%rdi,1)
-    fildl 2147483647(%rbx,%rax,2)
+    fildl 64(%rsp)
+    fildl 2147483647(%rsp)
+    fildl 0(%rsp,%rsi,2)
+    fildl 8(%rdx,%rdi,4)
+    fildl 4660(%rbx,%rax,8)
     fildl gnu_fwd(%rip)
-    fildl 4660
+    fildl 128
     fildll 0(%r11)
-    fildll 8(%r15)
-    fildll 128(%r8)
+    fildll -128(%r15)
+    fildll -129(%r8)
     fildll 0(%r12)
-    fildll -128(%r12)
-    fildll -129(%r12)
-    fildll 0(%r11,%rbp,4)
-    fildll 127(%r12,%r12,8)
-    fildll -2147483648(%r13,%rax,1)
+    fildll 127(%r12)
+    fildll -2147483648(%r12)
+    fildll 0(%r11,%r9,1)
+    fildll -1(%r12,%rbp,2)
+    fildll 2147483647(%r13,%r12,4)
     fildll 0(%rdx)
-    fildll -1(%rsi)
-    fildll 2147483647(%rdi)
+    fildll 64(%rsi)
+    fildll 4660(%rdi)
     fildll 0(%rsp)
-    fildll 64(%rsp)
-    fildll 4660(%rsp)
-    fildll 0(%rsi,%rcx,2)
-    fildll 8(%rsp,%rdx,4)
-    fildll 128(%rbp,%rbx,8)
-    fildll gnu_back(%rip)
-    fildll -129
-    fists 0(%r14)
-    fists -128(%r9)
-    fists -2147483648(%r10)
-    fists 0(%r12)
-    fists 127(%r12)
-    fists 2147483647(%r12)
-    fists 0(%r12,%r15,1)
-    fists -1(%r15,%rsi,2)
-    fists 4660(%r8,%rcx,4)
-    fists 0(%rbx)
-    fists 64(%rcx)
-    fists 128(%rdx)
-    fists 0(%rsp)
-    fists 8(%rsp)
-    fists -129(%rsp)
-    fists 0(%rdi,%rbp,8)
-    fists -128(%rsi,%rsi,1)
-    fists -2147483648(%rdi,%rdi,2)
-    fists gnu_fwd(%rip)
-    fists 2147483647
+    fildll 8(%rsp)
+    fildll 128(%rsp)
+    fildll 0(%rsi,%rcx,8)
 g80:
+    fildll -128(%rsp,%rdx,1)
+    fildll -129(%rbp,%rbx,2)
+    fildll gnu_back(%rip)
+    fildll -2147483648
+    fists 0(%r14)
+    fists 127(%r9)
+    fists 2147483647(%r10)
+    fists 0(%r12)
+    fists -1(%r12)
+    fists 4660(%r12)
+    fists 0(%r12,%rax,4)
+    fists 64(%r15,%r15,8)
+    fists 128(%r8,%rsi,1)
+    fists 0(%rbx)
+    fists 8(%rcx)
+    fists -129(%rdx)
+    fists 0(%rsp)
+    fists -128(%rsp)
+    fists -2147483648(%rsp)
+    fists 0(%rdi,%rbp,2)
+    fists 127(%rsi,%rsi,4)
+    fists 2147483647(%rdi,%rdi,8)
+    fists gnu_fwd(%rip)
+    fists 4660
     fistl 0(%r15)
-    fistl 127(%r11)
-    fistl 4660(%r13)
+    fistl -1(%r11)
+    fistl 128(%r13)
     fistl 0(%r12)
-    fistl -1(%r12)
-    fistl 128(%r12)
-    fistl 0(%r14,%r9,4)
-    fistl 64(%r9,%rbp,8)
-    fistl -129(%r12,%r12,1)
+    fistl 64(%r12)
+    fistl -129(%r12)
+    fistl 0(%r14,%rcx,1)
+    fistl 8(%r9,%r9,2)
+    fistl -2147483648(%r12,%rbp,4)
     fistl 0(%rsi)
-    fistl 8(%rbx)
-    fistl -2147483648(%rbp)
+    fistl -128(%rbx)
+    fistl 2147483647(%rbp)
     fistl 0(%rsp)
-    fistl -128(%rsp)
-    fistl 2147483647(%rsp)
-    fistl 0(%rax,%rax,2)
-    fistl 127(%rax,%rcx,4)
-    fistl 4660(%rcx,%rdx,8)
+    fistl 127(%rsp)
+    fistl 4660(%rsp)
+    fistl 0(%rax,%rax,8)
+    fistl -1(%rax,%rcx,1)
+    fistl 128(%rcx,%rdx,2)
     fistl gnu_back(%rip)
-    fistl 128
+    fistl -129
     fistps 0(%r8)
-    fistps -1(%r14)
-    fistps -129(%r15)
+    fistps 64(%r14)
+    fistps -2147483648(%r15)
     fistps 0(%r12)
-    fistps 64(%r12)
-    fistps -2147483648(%r12)
-    fistps 0(%r15,%rax,1)
-    fistps 8(%r13,%r15,2)
-    fistps 2147483647(%r15,%rsi,4)
+    fistps 8(%r12)
+    fistps 2147483647(%r12)
+    fistps 0(%r15,%r12,4)
+    fistps -128(%r13,%rax,8)
+    fistps 4660(%r15,%r15,1)
     fistps 0(%rdi)
-    fistps -128(%rsi)
-    fistps 4660(%rdi)
+    fistps 127(%rsi)
+    fistps 128(%rdi)
     fistps 0(%rsp)
-    fistps 127(%rsp)
-    fistps 128(%rsp)
-    fistps 0(%rcx,%rbx,8)
-    fistps -1(%rdx,%rbp,1)
-    fistps -129(%rbx,%rsi,2)
+    fistps -1(%rsp)
+    fistps -129(%rsp)
+    fistps 0(%rcx,%rbx,2)
+    fistps 64(%rdx,%rbp,4)
+    fistps -2147483648(%rbx,%rsi,8)
     fistps gnu_fwd(%rip)
-    fistps -2147483648
+    fistps 2147483647
     fistpl 0(%r9)
-    fistpl 64(%r8)
-    fistpl 2147483647(%r9)
+    fistpl 8(%r8)
+    fistpl 4660(%r9)
     fistpl 0(%r12)
-    fistpl 8(%r12)
-    fistpl 4660(%r12)
-    fistpl 0(%r8,%rcx,4)
-    fistpl -128(%r8,%r9,8)
-    fistpl 128(%r9,%rbp,1)
+    fistpl -128(%r12)
+    fistpl 128(%r12)
+    fistpl 0(%r8,%rsi,1)
+    fistpl 127(%r8,%rcx,2)
+    fistpl -129(%r9,%r9,4)
     fistpl 0(%rcx)
-    fistpl 127(%rcx)
-    fistpl -129(%rdx)
+    fistpl -1(%rcx)
+    fistpl -2147483648(%rdx)
     fistpl 0(%rsp)
-    fistpl -1(%rsp)
-    fistpl -2147483648(%rsp)
-    fistpl 0(%rdx,%rdi,2)
-    fistpl 64(%rsp,%rax,4)
-    fistpl 2147483647(%rbp,%rcx,8)
+    fistpl 64(%rsp)
+    fistpl 2147483647(%rsp)
+    fistpl 0(%rdx,%rdi,8)
+    fistpl 8(%rsp,%rax,1)
+    fistpl 4660(%rbp,%rcx,2)
     fistpl gnu_back(%rip)
-    fistpl 4660
+    fistpl 128
     fistpll 0(%r10)
-    fistpll 8(%r10)
-    fistpll 128(%r11)
+    fistpll -128(%r10)
+    fistpll -129(%r11)
     fistpll 0(%r12)
-    fistpll -128(%r12)
-    fistpll -129(%r12)
-    fistpll 0(%r9,%r12,1)
-    fistpll 127(%r12,%rax,2)
-    fistpll -2147483648(%r13,%r15,4)
+    fistpll 127(%r12)
+    fistpll -2147483648(%r12)
+    fistpll 0(%r9,%rbp,4)
+    fistpll -1(%r12,%r12,8)
+    fistpll 2147483647(%r13,%rax,1)
     fistpll 0(%rdx)
-    fistpll -1(%rbx)
-    fistpll 2147483647(%rbp)
+    fistpll 64(%rbx)
+    fistpll 4660(%rbp)
     fistpll 0(%rsp)
-    fistpll 64(%rsp)
-    fistpll 4660(%rsp)
-    fistpll 0(%rbx,%rdx,8)
-    fistpll 8(%rsi,%rbx,1)
-    fistpll 128(%rdi,%rbp,2)
+    fistpll 8(%rsp)
+    fistpll 128(%rsp)
+    fistpll 0(%rbx,%rdx,2)
+    fistpll -128(%rsi,%rbx,4)
+    fistpll -129(%rdi,%rbp,8)
     fistpll gnu_fwd(%rip)
-    fistpll -129
+    fistpll -2147483648
     fadds 0(%r11)
-    fadds -128(%r13)
-    fadds -2147483648(%r14)
+    fadds 127(%r13)
+    fadds 2147483647(%r14)
     fadds 0(%r12)
-    fadds 127(%r12)
-    fadds 2147483647(%r12)
-    fadds 0(%r10,%rsi,4)
-    fadds -1(%r15,%rcx,8)
-    fadds 4660(%r8,%r9,1)
+    fadds -1(%r12)
+    fadds 4660(%r12)
+    fadds 0(%r10,%r15,1)
+    fadds 64(%r15,%rsi,2)
+    fadds 128(%r8,%rcx,4)
     fadds 0(%rbx)
-    fadds 64(%rsi)
-    fadds 128(%rdi)
+    fadds 8(%rsi)
+    fadds -129(%rdi)
     fadds 0(%rsp)
-    fadds 8(%rsp)
-    fadds -129(%rsp)
-    fadds 0(%rsp,%rsi,2)
-    fadds -128(%rax,%rdi,4)
-    fadds -2147483648(%rcx,%rax,8)
+    fadds -128(%rsp)
+    fadds -2147483648(%rsp)
+    fadds 0(%rsp,%rsi,8)
+    fadds 127(%rax,%rdi,1)
+    fadds 2147483647(%rcx,%rax,2)
     fadds gnu_back(%rip)
-    fadds 2147483647
+    fadds 4660
     faddl 0(%r14)
-    faddl 127(%r15)
-    faddl 4660(%r8)
+    faddl -1(%r15)
+    faddl 128(%r8)
     faddl 0(%r12)
-    faddl -1(%r12)
-    faddl 128(%r12)
-    faddl 0(%r11,%rbp,1)
-    faddl 64(%r9,%r12,2)
-    faddl -129(%r12,%rax,4)
+    faddl 64(%r12)
+    faddl -129(%r12)
+    faddl 0(%r11,%r9,4)
+    faddl 8(%r9,%rbp,8)
+    faddl -2147483648(%r12,%r12,1)
     faddl 0(%rsi)
-    faddl 8(%rcx)
-    faddl -2147483648(%rdx)
+    faddl -128(%rcx)
+    faddl 2147483647(%rdx)
     faddl 0(%rsp)
-    faddl -128(%rsp)
-    faddl 2147483647(%rsp)
-    faddl 0(%rsi,%rcx,8)
-    faddl 127(%rdx,%rdx,1)
-    faddl 4660(%rbx,%rbx,2)
+    faddl 127(%rsp)
+    faddl 4660(%rsp)
+    faddl 0(%rsi,%rcx,2)
+    faddl -1(%rdx,%rdx,4)
+    faddl 128(%rbx,%rbx,8)
     faddl gnu_fwd(%rip)
-    faddl 128
+    faddl -129
     fmuls 0(%r15)
-    fmuls -1(%r9)
-    fmuls -129(%r10)
+    fmuls 64(%r9)
+    fmuls -2147483648(%r10)
     fmuls 0(%r12)
-    fmuls 64(%r12)
-    fmuls -2147483648(%r12)
-    fmuls 0(%r12,%r15,4)
-    fmuls 8(%r13,%rsi,8)
-    fmuls 2147483647(%r15,%rcx,1)
+    fmuls 8(%r12)
+    fmuls 2147483647(%r12)
+    fmuls 0(%r12,%rax,1)
+    fmuls -128(%r13,%r15,2)
+    fmuls 4660(%r15,%rsi,4)
     fmuls 0(%rdi)
-    fmuls -128(%rbx)
-    fmuls 4660(%rbp)
+    fmuls 127(%rbx)
+    fmuls 128(%rbp)
     fmuls 0(%rsp)
-    fmuls 127(%rsp)
-    fmuls 128(%rsp)
-    fmuls 0(%rdi,%rbp,2)
-    fmuls -1(%rsp,%rsi,4)
-    fmuls -129(%rbp,%rdi,8)
+    fmuls -1(%rsp)
+    fmuls -129(%rsp)
+    fmuls 0(%rdi,%rbp,8)
+    fmuls 64(%rsp,%rsi,1)
+    fmuls -2147483648(%rbp,%rdi,2)
     fmuls gnu_back(%rip)
-    fmuls -2147483648
+    fmuls 2147483647
     fmull 0(%r8)
-    fmull 64(%r11)
-    fmull 2147483647(%r13)
+    fmull 8(%r11)
+    fmull 4660(%r13)
     fmull 0(%r12)
-    fmull 8(%r12)
-    fmull 4660(%r12)
-    fmull 0(%r14,%r9,1)
-    fmull -128(%r8,%rbp,2)
-    fmull 128(%r9,%r12,4)
+    fmull -128(%r12)
+    fmull 128(%r12)
+    fmull 0(%r14,%rcx,4)
+    fmull 127(%r8,%r9,8)
+    fmull -129(%r9,%rbp,1)
     fmull 0(%rcx)
-    fmull 127(%rsi)
-    fmull -129(%rdi)
+    fmull -1(%rsi)
+    fmull -2147483648(%rdi)
     fmull 0(%rsp)
-    fmull -1(%rsp)
-    fmull -2147483648(%rsp)
-    fmull 0(%rax,%rax,8)
-    fmull 64(%rsi,%rcx,1)
-    fmull 2147483647(%rdi,%rdx,2)
+    fmull 64(%rsp)
+    fmull 2147483647(%rsp)
+    fmull 0(%rax,%rax,2)
+    fmull 8(%rsi,%rcx,4)
+    fmull 4660(%rdi,%rdx,8)
     fmull gnu_fwd(%rip)
-    fmull 4660
+    fmull 128
     fcoms 0(%r9)
-    fcoms 8(%r14)
-    fcoms 128(%r15)
+    fcoms -128(%r14)
+    fcoms -129(%r15)
     fcoms 0(%r12)
-    fcoms -128(%r12)
-    fcoms -129(%r12)
-    fcoms 0(%r15,%rax,4)
-    fcoms 127(%r12,%r15,8)
-    fcoms -2147483648(%r13,%rsi,1)
+    fcoms 127(%r12)
+    fcoms -2147483648(%r12)
+    fcoms 0(%r15,%r12,1)
+    fcoms -1(%r12,%rax,2)
+    fcoms 2147483647(%r13,%r15,4)
     fcoms 0(%rdx)
-    fcoms -1(%rcx)
-    fcoms 2147483647(%rdx)
+    fcoms 64(%rcx)
+    fcoms 4660(%rdx)
     fcoms 0(%rsp)
-    fcoms 64(%rsp)
-    fcoms 4660(%rsp)
-    fcoms 0(%rcx,%rbx,2)
-    fcoms 8(%rax,%rbp,4)
-    fcoms 128(%rcx,%rsi,8)
-    fcoms gnu_back(%rip)
-    fcoms -129
-    fcoml 0(%r10)
-    fcoml -128(%r8)
-    fcoml -2147483648(%r9)
-    fcoml 0(%r12)
-    fcoml 127(%r12)
-    fcoml 2147483647(%r12)
-    fcoml 0(%r8,%rcx,1)
-    fcoml -1(%r15,%r9,2)
-    fcoml 4660(%r8,%rbp,4)
-    fcoml 0(%rbx)
-    fcoml 64(%rbx)
-    fcoml 128(%rbp)
-    fcoml 0(%rsp)
-    fcoml 8(%rsp)
-    fcoml -129(%rsp)
-    fcoml 0(%rdx,%rdi,8)
-    fcoml -128(%rdx,%rax,1)
-    fcoml -2147483648(%rbx,%rcx,2)
-    fcoml gnu_fwd(%rip)
-    fcoml 2147483647
+    fcoms 8(%rsp)
+    fcoms 128(%rsp)
+    fcoms 0(%rcx,%rbx,8)
 g81:
+    fcoms -128(%rax,%rbp,1)
+    fcoms -129(%rcx,%rsi,2)
+    fcoms gnu_back(%rip)
+    fcoms -2147483648
+    fcoml 0(%r10)
+    fcoml 127(%r8)
+    fcoml 2147483647(%r9)
+    fcoml 0(%r12)
+    fcoml -1(%r12)
+    fcoml 4660(%r12)
+    fcoml 0(%r8,%rsi,4)
+    fcoml 64(%r15,%rcx,8)
+    fcoml 128(%r8,%r9,1)
+    fcoml 0(%rbx)
+    fcoml 8(%rbx)
+    fcoml -129(%rbp)
+    fcoml 0(%rsp)
+    fcoml -128(%rsp)
+    fcoml -2147483648(%rsp)
+    fcoml 0(%rdx,%rdi,2)
+    fcoml 127(%rdx,%rax,4)
+    fcoml 2147483647(%rbx,%rcx,8)
+    fcoml gnu_fwd(%rip)
+    fcoml 4660
     fcomps 0(%r11)
-    fcomps 127(%r10)
-    fcomps 4660(%r11)
+    fcomps -1(%r10)
+    fcomps 128(%r11)
     fcomps 0(%r12)
-    fcomps -1(%r12)
-    fcomps 128(%r12)
-    fcomps 0(%r9,%r12,4)
-    fcomps 64(%r9,%rax,8)
-    fcomps -129(%r12,%r15,1)
+    fcomps 64(%r12)
+    fcomps -129(%r12)
+    fcomps 0(%r9,%rbp,1)
+    fcomps 8(%r9,%r12,2)
+    fcomps -2147483648(%r12,%rax,4)
     fcomps 0(%rsi)
-    fcomps 8(%rsi)
-    fcomps -2147483648(%rdi)
+    fcomps -128(%rsi)
+    fcomps 2147483647(%rdi)
     fcomps 0(%rsp)
-    fcomps -128(%rsp)
-    fcomps 2147483647(%rsp)
-    fcomps 0(%rbx,%rdx,2)
-    fcomps 127(%rsp,%rbx,4)
-    fcomps 4660(%rbp,%rbp,8)
+    fcomps 127(%rsp)
+    fcomps 4660(%rsp)
+    fcomps 0(%rbx,%rdx,8)
+    fcomps -1(%rsp,%rbx,1)
+    fcomps 128(%rbp,%rbp,2)
     fcomps gnu_back(%rip)
-    fcomps 128
+    fcomps -129
     fcompl 0(%r14)
-    fcompl -1(%r13)
-    fcompl -129(%r14)
+    fcompl 64(%r13)
+    fcompl -2147483648(%r14)
     fcompl 0(%r12)
-    fcompl 64(%r12)
-    fcompl -2147483648(%r12)
-    fcompl 0(%r10,%rsi,1)
-    fcompl 8(%r13,%rcx,2)
-    fcompl 2147483647(%r15,%r9,4)
+    fcompl 8(%r12)
+    fcompl 2147483647(%r12)
+    fcompl 0(%r10,%r15,4)
+    fcompl -128(%r13,%rsi,8)
+    fcompl 4660(%r15,%rcx,1)
     fcompl 0(%rdi)
-    fcompl -128(%rcx)
-    fcompl 4660(%rdx)
+    fcompl 127(%rcx)
+    fcompl 128(%rdx)
     fcompl 0(%rsp)
-    fcompl 127(%rsp)
-    fcompl 128(%rsp)
-    fcompl 0(%rsp,%rsi,8)
-    fcompl -1(%rsi,%rdi,1)
-    fcompl -129(%rdi,%rax,2)
+    fcompl -1(%rsp)
+    fcompl -129(%rsp)
+    fcompl 0(%rsp,%rsi,2)
+    fcompl 64(%rsi,%rdi,4)
+    fcompl -2147483648(%rdi,%rax,8)
     fcompl gnu_fwd(%rip)
-    fcompl -2147483648
+    fcompl 2147483647
     fsubs 0(%r15)
-    fsubs 64(%r15)
-    fsubs 2147483647(%r8)
+    fsubs 8(%r15)
+    fsubs 4660(%r8)
     fsubs 0(%r12)
-    fsubs 8(%r12)
-    fsubs 4660(%r12)
-    fsubs 0(%r11,%rbp,4)
-    fsubs -128(%r8,%r12,8)
-    fsubs 128(%r9,%rax,1)
+    fsubs -128(%r12)
+    fsubs 128(%r12)
+    fsubs 0(%r11,%r9,1)
+    fsubs 127(%r8,%rbp,2)
+    fsubs -129(%r9,%r12,4)
     fsubs 0(%rcx)
-    fsubs 127(%rbx)
-    fsubs -129(%rbp)
+    fsubs -1(%rbx)
+    fsubs -2147483648(%rbp)
     fsubs 0(%rsp)
-    fsubs -1(%rsp)
-    fsubs -2147483648(%rsp)
-    fsubs 0(%rsi,%rcx,2)
-    fsubs 64(%rax,%rdx,4)
-    fsubs 2147483647(%rcx,%rbx,8)
+    fsubs 64(%rsp)
+    fsubs 2147483647(%rsp)
+    fsubs 0(%rsi,%rcx,8)
+    fsubs 8(%rax,%rdx,1)
+    fsubs 4660(%rcx,%rbx,2)
     fsubs gnu_back(%rip)
-    fsubs 4660
+    fsubs 128
     fsubl 0(%r8)
-    fsubl 8(%r9)
-    fsubl 128(%r10)
+    fsubl -128(%r9)
+    fsubl -129(%r10)
     fsubl 0(%r12)
-    fsubl -128(%r12)
-    fsubl -129(%r12)
-    fsubl 0(%r12,%r15,1)
-    fsubl 127(%r12,%rsi,2)
-    fsubl -2147483648(%r13,%rcx,4)
+    fsubl 127(%r12)
+    fsubl -2147483648(%r12)
+    fsubl 0(%r12,%rax,4)
+    fsubl -1(%r12,%r15,8)
+    fsubl 2147483647(%r13,%rsi,1)
     fsubl 0(%rdx)
-    fsubl -1(%rsi)
-    fsubl 2147483647(%rdi)
+    fsubl 64(%rsi)
+    fsubl 4660(%rdi)
     fsubl 0(%rsp)
-    fsubl 64(%rsp)
-    fsubl 4660(%rsp)
-    fsubl 0(%rdi,%rbp,8)
-    fsubl 8(%rdx,%rsi,1)
-    fsubl 128(%rbx,%rdi,2)
+    fsubl 8(%rsp)
+    fsubl 128(%rsp)
+    fsubl 0(%rdi,%rbp,2)
+    fsubl -128(%rdx,%rsi,4)
+    fsubl -129(%rbx,%rdi,8)
     fsubl gnu_fwd(%rip)
-    fsubl -129
+    fsubl -2147483648
     fsubrs 0(%r9)
-    fsubrs -128(%r11)
-    fsubrs -2147483648(%r13)
+    fsubrs 127(%r11)
+    fsubrs 2147483647(%r13)
     fsubrs 0(%r12)
-    fsubrs 127(%r12)
-    fsubrs 2147483647(%r12)
-    fsubrs 0(%r14,%r9,4)
-    fsubrs -1(%r15,%rbp,8)
-    fsubrs 4660(%r8,%r12,1)
+    fsubrs -1(%r12)
+    fsubrs 4660(%r12)
+    fsubrs 0(%r14,%rcx,1)
+    fsubrs 64(%r15,%r9,2)
+    fsubrs 128(%r8,%rbp,4)
     fsubrs 0(%rbx)
-    fsubrs 64(%rcx)
-    fsubrs 128(%rdx)
+    fsubrs 8(%rcx)
+    fsubrs -129(%rdx)
     fsubrs 0(%rsp)
-    fsubrs 8(%rsp)
-    fsubrs -129(%rsp)
-    fsubrs 0(%rax,%rax,2)
-    fsubrs -128(%rsp,%rcx,4)
-    fsubrs -2147483648(%rbp,%rdx,8)
+    fsubrs -128(%rsp)
+    fsubrs -2147483648(%rsp)
+    fsubrs 0(%rax,%rax,8)
+    fsubrs 127(%rsp,%rcx,1)
+    fsubrs 2147483647(%rbp,%rdx,2)
     fsubrs gnu_back(%rip)
-    fsubrs 2147483647
+    fsubrs 4660
     fsubrl 0(%r10)
-    fsubrl 127(%r14)
-    fsubrl 4660(%r15)
+    fsubrl -1(%r14)
+    fsubrl 128(%r15)
     fsubrl 0(%r12)
-    fsubrl -1(%r12)
-    fsubrl 128(%r12)
-    fsubrl 0(%r15,%rax,1)
-    fsubrl 64(%r9,%r15,2)
-    fsubrl -129(%r12,%rsi,4)
+    fsubrl 64(%r12)
+    fsubrl -129(%r12)
+    fsubrl 0(%r15,%r12,4)
+    fsubrl 8(%r9,%rax,8)
+    fsubrl -2147483648(%r12,%r15,1)
     fsubrl 0(%rsi)
-    fsubrl 8(%rbx)
-    fsubrl -2147483648(%rbp)
+    fsubrl -128(%rbx)
+    fsubrl 2147483647(%rbp)
     fsubrl 0(%rsp)
-    fsubrl -128(%rsp)
-    fsubrl 2147483647(%rsp)
-    fsubrl 0(%rcx,%rbx,8)
-    fsubrl 127(%rsi,%rbp,1)
-    fsubrl 4660(%rdi,%rsi,2)
+    fsubrl 127(%rsp)
+    fsubrl 4660(%rsp)
+    fsubrl 0(%rcx,%rbx,2)
+    fsubrl -1(%rsi,%rbp,4)
+    fsubrl 128(%rdi,%rsi,8)
     fsubrl gnu_fwd(%rip)
-    fsubrl 128
+    fsubrl -129
     fdivs 0(%r11)
-    fdivs -1(%r8)
-    fdivs -129(%r9)
+    fdivs 64(%r8)
+    fdivs -2147483648(%r9)
     fdivs 0(%r12)
-    fdivs 64(%r12)
-    fdivs -2147483648(%r12)
-    fdivs 0(%r8,%rcx,4)
-    fdivs 8(%r13,%r9,8)
-    fdivs 2147483647(%r15,%rbp,1)
+    fdivs 8(%r12)
+    fdivs 2147483647(%r12)
+    fdivs 0(%r8,%rsi,1)
+    fdivs -128(%r13,%rcx,2)
+    fdivs 4660(%r15,%r9,4)
     fdivs 0(%rdi)
-    fdivs -128(%rsi)
-    fdivs 4660(%rdi)
+    fdivs 127(%rsi)
+    fdivs 128(%rdi)
     fdivs 0(%rsp)
-    fdivs 127(%rsp)
-    fdivs 128(%rsp)
-    fdivs 0(%rdx,%rdi,2)
-    fdivs -1(%rax,%rax,4)
-    fdivs -129(%rcx,%rcx,8)
+    fdivs -1(%rsp)
+    fdivs -129(%rsp)
+    fdivs 0(%rdx,%rdi,8)
+    fdivs 64(%rax,%rax,1)
+    fdivs -2147483648(%rcx,%rcx,2)
     fdivs gnu_back(%rip)
-    fdivs -2147483648
+    fdivs 2147483647
     fdivl 0(%r14)
-    fdivl 64(%r10)
-    fdivl 2147483647(%r11)
+    fdivl 8(%r10)
+    fdivl 4660(%r11)
     fdivl 0(%r12)
-    fdivl 8(%r12)
-    fdivl 4660(%r12)
-    fdivl 0(%r9,%r12,1)
-    fdivl -128(%r8,%rax,2)
-    fdivl 128(%r9,%r15,4)
+    fdivl -128(%r12)
+    fdivl 128(%r12)
+    fdivl 0(%r9,%rbp,4)
+    fdivl 127(%r8,%r12,8)
+    fdivl -129(%r9,%rax,1)
     fdivl 0(%rcx)
-    fdivl 127(%rcx)
-    fdivl -129(%rdx)
+    fdivl -1(%rcx)
+    fdivl -2147483648(%rdx)
     fdivl 0(%rsp)
-    fdivl -1(%rsp)
-    fdivl -2147483648(%rsp)
-    fdivl 0(%rbx,%rdx,8)
-    fdivl 64(%rdx,%rbx,1)
-    fdivl 2147483647(%rbx,%rbp,2)
+    fdivl 64(%rsp)
+    fdivl 2147483647(%rsp)
+    fdivl 0(%rbx,%rdx,2)
+    fdivl 8(%rdx,%rbx,4)
+    fdivl 4660(%rbx,%rbp,8)
     fdivl gnu_fwd(%rip)
-    fdivl 4660
+    fdivl 128
     fdivrs 0(%r15)
-    fdivrs 8(%r13)
-    fdivrs 128(%r14)
+    fdivrs -128(%r13)
+    fdivrs -129(%r14)
     fdivrs 0(%r12)
-    fdivrs -128(%r12)
-    fdivrs -129(%r12)
-    fdivrs 0(%r10,%rsi,4)
-    fdivrs 127(%r12,%rcx,8)
-    fdivrs -2147483648(%r13,%r9,1)
+    fdivrs 127(%r12)
+    fdivrs -2147483648(%r12)
+    fdivrs 0(%r10,%r15,1)
+    fdivrs -1(%r12,%rsi,2)
+    fdivrs 2147483647(%r13,%rcx,4)
     fdivrs 0(%rdx)
-    fdivrs -1(%rbx)
-    fdivrs 2147483647(%rbp)
+    fdivrs 64(%rbx)
+    fdivrs 4660(%rbp)
     fdivrs 0(%rsp)
-    fdivrs 64(%rsp)
-    fdivrs 4660(%rsp)
-    fdivrs 0(%rsp,%rsi,2)
-    fdivrs 8(%rsp,%rdi,4)
-    fdivrs 128(%rbp,%rax,8)
-    fdivrs gnu_back(%rip)
-    fdivrs -129
-    fdivrl 0(%r8)
-    fdivrl -128(%r15)
-    fdivrl -2147483648(%r8)
-    fdivrl 0(%r12)
-    fdivrl 127(%r12)
-    fdivrl 2147483647(%r12)
-    fdivrl 0(%r11,%rbp,1)
-    fdivrl -1(%r15,%r12,2)
-    fdivrl 4660(%r8,%rax,4)
-    fdivrl 0(%rbx)
-    fdivrl 64(%rsi)
-    fdivrl 128(%rdi)
-    fdivrl 0(%rsp)
-    fdivrl 8(%rsp)
-    fdivrl -129(%rsp)
-    fdivrl 0(%rsi,%rcx,8)
-    fdivrl -128(%rsi,%rdx,1)
-    fdivrl -2147483648(%rdi,%rbx,2)
-    fdivrl gnu_fwd(%rip)
-    fdivrl 2147483647
+    fdivrs 8(%rsp)
+    fdivrs 128(%rsp)
+    fdivrs 0(%rsp,%rsi,8)
 g82:
+    fdivrs -128(%rsp,%rdi,1)
+    fdivrs -129(%rbp,%rax,2)
+    fdivrs gnu_back(%rip)
+    fdivrs -2147483648
+    fdivrl 0(%r8)
+    fdivrl 127(%r15)
+    fdivrl 2147483647(%r8)
+    fdivrl 0(%r12)
+    fdivrl -1(%r12)
+    fdivrl 4660(%r12)
+    fdivrl 0(%r11,%r9,4)
+    fdivrl 64(%r15,%rbp,8)
+    fdivrl 128(%r8,%r12,1)
+    fdivrl 0(%rbx)
+    fdivrl 8(%rsi)
+    fdivrl -129(%rdi)
+    fdivrl 0(%rsp)
+    fdivrl -128(%rsp)
+    fdivrl -2147483648(%rsp)
+    fdivrl 0(%rsi,%rcx,2)
+    fdivrl 127(%rsi,%rdx,4)
+    fdivrl 2147483647(%rdi,%rbx,8)
+    fdivrl gnu_fwd(%rip)
+    fdivrl 4660
     fnstcw 0(%r9)
-    fnstcw 127(%r9)
-    fnstcw 4660(%r10)
+    fnstcw -1(%r9)
+    fnstcw 128(%r10)
     fnstcw 0(%r12)
-    fnstcw -1(%r12)
-    fnstcw 128(%r12)
-    fnstcw 0(%r12,%r15,4)
-    fnstcw 64(%r9,%rsi,8)
-    fnstcw -129(%r12,%rcx,1)
+    fnstcw 64(%r12)
+    fnstcw -129(%r12)
+    fnstcw 0(%r12,%rax,1)
+    fnstcw 8(%r9,%r15,2)
+    fnstcw -2147483648(%r12,%rsi,4)
     fnstcw 0(%rsi)
-    fnstcw 8(%rcx)
-    fnstcw -2147483648(%rdx)
+    fnstcw -128(%rcx)
+    fnstcw 2147483647(%rdx)
     fnstcw 0(%rsp)
-    fnstcw -128(%rsp)
-    fnstcw 2147483647(%rsp)
-    fnstcw 0(%rdi,%rbp,2)
-    fnstcw 127(%rax,%rsi,4)
-    fnstcw 4660(%rcx,%rdi,8)
+    fnstcw 127(%rsp)
+    fnstcw 4660(%rsp)
+    fnstcw 0(%rdi,%rbp,8)
+    fnstcw -1(%rax,%rsi,1)
+    fnstcw 128(%rcx,%rdi,2)
     fnstcw gnu_back(%rip)
-    fnstcw 128
+    fnstcw -129
     fldcw 0(%r10)
-    fldcw -1(%r11)
-    fldcw -129(%r13)
+    fldcw 64(%r11)
+    fldcw -2147483648(%r13)
     fldcw 0(%r12)
-    fldcw 64(%r12)
-    fldcw -2147483648(%r12)
-    fldcw 0(%r14,%r9,1)
-    fldcw 8(%r13,%rbp,2)
-    fldcw 2147483647(%r15,%r12,4)
+    fldcw 8(%r12)
+    fldcw 2147483647(%r12)
+    fldcw 0(%r14,%rcx,4)
+    fldcw -128(%r13,%r9,8)
+    fldcw 4660(%r15,%rbp,1)
     fldcw 0(%rdi)
-    fldcw -128(%rbx)
-    fldcw 4660(%rbp)
+    fldcw 127(%rbx)
+    fldcw 128(%rbp)
     fldcw 0(%rsp)
-    fldcw 127(%rsp)
-    fldcw 128(%rsp)
-    fldcw 0(%rax,%rax,8)
-    fldcw -1(%rdx,%rcx,1)
-    fldcw -129(%rbx,%rdx,2)
+    fldcw -1(%rsp)
+    fldcw -129(%rsp)
+    fldcw 0(%rax,%rax,2)
+    fldcw 64(%rdx,%rcx,4)
+    fldcw -2147483648(%rbx,%rdx,8)
     fldcw gnu_fwd(%rip)
-    fldcw -2147483648
+    fldcw 2147483647
     fnstsw 0(%r11)
-    fnstsw 64(%r14)
-    fnstsw 2147483647(%r15)
+    fnstsw 8(%r14)
+    fnstsw 4660(%r15)
     fnstsw 0(%r12)
-    fnstsw 8(%r12)
-    fnstsw 4660(%r12)
-    fnstsw 0(%r15,%rax,4)
-    fnstsw -128(%r8,%r15,8)
-    fnstsw 128(%r9,%rsi,1)
+    fnstsw -128(%r12)
+    fnstsw 128(%r12)
+    fnstsw 0(%r15,%r12,1)
+    fnstsw 127(%r8,%rax,2)
+    fnstsw -129(%r9,%r15,4)
     fnstsw 0(%rcx)
-    fnstsw 127(%rsi)
-    fnstsw -129(%rdi)
+    fnstsw -1(%rsi)
+    fnstsw -2147483648(%rdi)
     fnstsw 0(%rsp)
-    fnstsw -1(%rsp)
-    fnstsw -2147483648(%rsp)
-    fnstsw 0(%rcx,%rbx,2)
-    fnstsw 64(%rsp,%rbp,4)
-    fnstsw 2147483647(%rbp,%rsi,8)
+    fnstsw 64(%rsp)
+    fnstsw 2147483647(%rsp)
+    fnstsw 0(%rcx,%rbx,8)
+    fnstsw 8(%rsp,%rbp,1)
+    fnstsw 4660(%rbp,%rsi,2)
     fnstsw gnu_back(%rip)
-    fnstsw 4660
+    fnstsw 128
     fnstenv 0(%r14)
-    fnstenv 8(%r8)
-    fnstenv 128(%r9)
+    fnstenv -128(%r8)
+    fnstenv -129(%r9)
     fnstenv 0(%r12)
-    fnstenv -128(%r12)
-    fnstenv -129(%r12)
-    fnstenv 0(%r8,%rcx,1)
-    fnstenv 127(%r12,%r9,2)
-    fnstenv -2147483648(%r13,%rbp,4)
+    fnstenv 127(%r12)
+    fnstenv -2147483648(%r12)
+    fnstenv 0(%r8,%rsi,4)
+    fnstenv -1(%r12,%rcx,8)
+    fnstenv 2147483647(%r13,%r9,1)
     fnstenv 0(%rdx)
-    fnstenv -1(%rcx)
-    fnstenv 2147483647(%rdx)
+    fnstenv 64(%rcx)
+    fnstenv 4660(%rdx)
     fnstenv 0(%rsp)
-    fnstenv 64(%rsp)
-    fnstenv 4660(%rsp)
-    fnstenv 0(%rdx,%rdi,8)
-    fnstenv 8(%rsi,%rax,1)
-    fnstenv 128(%rdi,%rcx,2)
+    fnstenv 8(%rsp)
+    fnstenv 128(%rsp)
+    fnstenv 0(%rdx,%rdi,2)
+    fnstenv -128(%rsi,%rax,4)
+    fnstenv -129(%rdi,%rcx,8)
     fnstenv gnu_fwd(%rip)
-    fnstenv -129
+    fnstenv -2147483648
     fldenv 0(%r15)
-    fldenv -128(%r10)
-    fldenv -2147483648(%r11)
+    fldenv 127(%r10)
+    fldenv 2147483647(%r11)
     fldenv 0(%r12)
-    fldenv 127(%r12)
-    fldenv 2147483647(%r12)
-    fldenv 0(%r9,%r12,4)
-    fldenv -1(%r15,%rax,8)
-    fldenv 4660(%r8,%r15,1)
+    fldenv -1(%r12)
+    fldenv 4660(%r12)
+    fldenv 0(%r9,%rbp,1)
+    fldenv 64(%r15,%r12,2)
+    fldenv 128(%r8,%rax,4)
     fldenv 0(%rbx)
-    fldenv 64(%rbx)
-    fldenv 128(%rbp)
+    fldenv 8(%rbx)
+    fldenv -129(%rbp)
     fldenv 0(%rsp)
-    fldenv 8(%rsp)
-    fldenv -129(%rsp)
-    fldenv 0(%rbx,%rdx,2)
-    fldenv -128(%rax,%rbx,4)
-    fldenv -2147483648(%rcx,%rbp,8)
+    fldenv -128(%rsp)
+    fldenv -2147483648(%rsp)
+    fldenv 0(%rbx,%rdx,8)
+    fldenv 127(%rax,%rbx,1)
+    fldenv 2147483647(%rcx,%rbp,2)
     fldenv gnu_back(%rip)
-    fldenv 2147483647
+    fldenv 4660
     fstcw 0(%r8)
-    fstcw 127(%r13)
-    fstcw 4660(%r14)
+    fstcw -1(%r13)
+    fstcw 128(%r14)
     fstcw 0(%r12)
-    fstcw -1(%r12)
-    fstcw 128(%r12)
-    fstcw 0(%r10,%rsi,1)
-    fstcw 64(%r9,%rcx,2)
-    fstcw -129(%r12,%r9,4)
+    fstcw 64(%r12)
+    fstcw -129(%r12)
+    fstcw 0(%r10,%r15,4)
+    fstcw 8(%r9,%rsi,8)
+    fstcw -2147483648(%r12,%rcx,1)
     fstcw 0(%rsi)
-    fstcw 8(%rsi)
-    fstcw -2147483648(%rdi)
+    fstcw -128(%rsi)
+    fstcw 2147483647(%rdi)
     fstcw 0(%rsp)
-    fstcw -128(%rsp)
-    fstcw 2147483647(%rsp)
-    fstcw 0(%rsp,%rsi,8)
-    fstcw 127(%rdx,%rdi,1)
-    fstcw 4660(%rbx,%rax,2)
+    fstcw 127(%rsp)
+    fstcw 4660(%rsp)
+    fstcw 0(%rsp,%rsi,2)
+    fstcw -1(%rdx,%rdi,4)
+    fstcw 128(%rbx,%rax,8)
     fstcw gnu_fwd(%rip)
-    fstcw 128
+    fstcw -129
     fstsw 0(%r9)
-    fstsw -1(%r15)
-    fstsw -129(%r8)
+    fstsw 64(%r15)
+    fstsw -2147483648(%r8)
     fstsw 0(%r12)
-    fstsw 64(%r12)
-    fstsw -2147483648(%r12)
-    fstsw 0(%r11,%rbp,4)
-    fstsw 8(%r13,%r12,8)
-    fstsw 2147483647(%r15,%rax,1)
+    fstsw 8(%r12)
+    fstsw 2147483647(%r12)
+    fstsw 0(%r11,%r9,1)
+    fstsw -128(%r13,%rbp,2)
+    fstsw 4660(%r15,%r12,4)
     fstsw 0(%rdi)
-    fstsw -128(%rcx)
-    fstsw 4660(%rdx)
+    fstsw 127(%rcx)
+    fstsw 128(%rdx)
     fstsw 0(%rsp)
-    fstsw 127(%rsp)
-    fstsw 128(%rsp)
-    fstsw 0(%rsi,%rcx,2)
-    fstsw -1(%rsp,%rdx,4)
-    fstsw -129(%rbp,%rbx,8)
+    fstsw -1(%rsp)
+    fstsw -129(%rsp)
+    fstsw 0(%rsi,%rcx,8)
+    fstsw 64(%rsp,%rdx,1)
+    fstsw -2147483648(%rbp,%rbx,2)
     fstsw gnu_back(%rip)
-    fstsw -2147483648
+    fstsw 2147483647
     fstenv 0(%r10)
-    fstenv 64(%r9)
-    fstenv 2147483647(%r10)
+    fstenv 8(%r9)
+    fstenv 4660(%r10)
     fstenv 0(%r12)
-    fstenv 8(%r12)
-    fstenv 4660(%r12)
-    fstenv 0(%r12,%r15,1)
-    fstenv -128(%r8,%rsi,2)
-    fstenv 128(%r9,%rcx,4)
+    fstenv -128(%r12)
+    fstenv 128(%r12)
+    fstenv 0(%r12,%rax,4)
+    fstenv 127(%r8,%r15,8)
+    fstenv -129(%r9,%rsi,1)
     fstenv 0(%rcx)
-    fstenv 127(%rbx)
-    fstenv -129(%rbp)
+    fstenv -1(%rbx)
+    fstenv -2147483648(%rbp)
     fstenv 0(%rsp)
-    fstenv -1(%rsp)
-    fstenv -2147483648(%rsp)
-    fstenv 0(%rdi,%rbp,8)
-    fstenv 64(%rsi,%rsi,1)
-    fstenv 2147483647(%rdi,%rdi,2)
+    fstenv 64(%rsp)
+    fstenv 2147483647(%rsp)
+    fstenv 0(%rdi,%rbp,2)
+    fstenv 8(%rsi,%rsi,4)
+    fstenv 4660(%rdi,%rdi,8)
     fstenv gnu_fwd(%rip)
-    fstenv 4660
+    fstenv 128
     fld %st(1)
     fst %st(2)
     fstp %st(3)
@@ -16668,6 +16692,7 @@ g82:
     fucomip %st(7), %st
     fadd %st(1), %st
     fmul %st(2), %st
+g83:
     fsub %st(3), %st
     fsubr %st(4), %st
     fdiv %st(5), %st
@@ -16692,7 +16717,6 @@ g82:
     fldln2
     fldpi
     f2xm1
-g83:
     fscale
     fprem
     fprem1
@@ -16719,347 +16743,347 @@ g83:
     fnstsw %ax
     fstsw %ax
     fxsave 0(%r11)
-    fxsave 8(%r11)
-    fxsave 128(%r13)
+    fxsave -128(%r11)
+    fxsave -129(%r13)
     fxsave 0(%r12)
-    fxsave -128(%r12)
-    fxsave -129(%r12)
-    fxsave 0(%r14,%r9,4)
-    fxsave 127(%r12,%rbp,8)
-    fxsave -2147483648(%r13,%r12,1)
+    fxsave 127(%r12)
+    fxsave -2147483648(%r12)
+    fxsave 0(%r14,%rcx,1)
+    fxsave -1(%r12,%r9,2)
+    fxsave 2147483647(%r13,%rbp,4)
     fxsave 0(%rdx)
-    fxsave -1(%rsi)
-    fxsave 2147483647(%rdi)
+    fxsave 64(%rsi)
+    fxsave 4660(%rdi)
     fxsave 0(%rsp)
-    fxsave 64(%rsp)
-    fxsave 4660(%rsp)
-    fxsave 0(%rax,%rax,2)
-    fxsave 8(%rax,%rcx,4)
-    fxsave 128(%rcx,%rdx,8)
+    fxsave 8(%rsp)
+    fxsave 128(%rsp)
+    fxsave 0(%rax,%rax,8)
+    fxsave -128(%rax,%rcx,1)
+    fxsave -129(%rcx,%rdx,2)
     fxsave gnu_back(%rip)
-    fxsave -129
+    fxsave -2147483648
     fxrstor 0(%r14)
-    fxrstor -128(%r14)
-    fxrstor -2147483648(%r15)
+    fxrstor 127(%r14)
+    fxrstor 2147483647(%r15)
     fxrstor 0(%r12)
-    fxrstor 127(%r12)
-    fxrstor 2147483647(%r12)
-    fxrstor 0(%r15,%rax,1)
-    fxrstor -1(%r15,%r15,2)
-    fxrstor 4660(%r8,%rsi,4)
+    fxrstor -1(%r12)
+    fxrstor 4660(%r12)
+    fxrstor 0(%r15,%r12,4)
+    fxrstor 64(%r15,%rax,8)
+    fxrstor 128(%r8,%r15,1)
     fxrstor 0(%rbx)
-    fxrstor 64(%rcx)
-    fxrstor 128(%rdx)
+    fxrstor 8(%rcx)
+    fxrstor -129(%rdx)
     fxrstor 0(%rsp)
-    fxrstor 8(%rsp)
-    fxrstor -129(%rsp)
-    fxrstor 0(%rcx,%rbx,8)
-    fxrstor -128(%rdx,%rbp,1)
-    fxrstor -2147483648(%rbx,%rsi,2)
+    fxrstor -128(%rsp)
+    fxrstor -2147483648(%rsp)
+    fxrstor 0(%rcx,%rbx,2)
+    fxrstor 127(%rdx,%rbp,4)
+    fxrstor 2147483647(%rbx,%rsi,8)
     fxrstor gnu_fwd(%rip)
-    fxrstor 2147483647
+    fxrstor 4660
     xsave 0(%r15)
-    xsave 127(%r8)
-    xsave 4660(%r9)
+    xsave -1(%r8)
+    xsave 128(%r9)
     xsave 0(%r12)
-    xsave -1(%r12)
-    xsave 128(%r12)
-    xsave 0(%r8,%rcx,4)
-    xsave 64(%r9,%r9,8)
-    xsave -129(%r12,%rbp,1)
+    xsave 64(%r12)
+    xsave -129(%r12)
+    xsave 0(%r8,%rsi,1)
+    xsave 8(%r9,%rcx,2)
+    xsave -2147483648(%r12,%r9,4)
     xsave 0(%rsi)
-    xsave 8(%rbx)
-    xsave -2147483648(%rbp)
+    xsave -128(%rbx)
+    xsave 2147483647(%rbp)
     xsave 0(%rsp)
-    xsave -128(%rsp)
-    xsave 2147483647(%rsp)
-    xsave 0(%rdx,%rdi,2)
-    xsave 127(%rsp,%rax,4)
-    xsave 4660(%rbp,%rcx,8)
+    xsave 127(%rsp)
+    xsave 4660(%rsp)
+    xsave 0(%rdx,%rdi,8)
+    xsave -1(%rsp,%rax,1)
+    xsave 128(%rbp,%rcx,2)
     xsave gnu_back(%rip)
-    xsave 128
+    xsave -129
     xrstor 0(%r8)
-    xrstor -1(%r10)
-    xrstor -129(%r11)
+    xrstor 64(%r10)
+    xrstor -2147483648(%r11)
     xrstor 0(%r12)
-    xrstor 64(%r12)
-    xrstor -2147483648(%r12)
-    xrstor 0(%r9,%r12,1)
-    xrstor 8(%r13,%rax,2)
-    xrstor 2147483647(%r15,%r15,4)
+    xrstor 8(%r12)
+    xrstor 2147483647(%r12)
+    xrstor 0(%r9,%rbp,4)
+    xrstor -128(%r13,%r12,8)
+    xrstor 4660(%r15,%rax,1)
     xrstor 0(%rdi)
-    xrstor -128(%rsi)
-    xrstor 4660(%rdi)
+    xrstor 127(%rsi)
+    xrstor 128(%rdi)
     xrstor 0(%rsp)
-    xrstor 127(%rsp)
-    xrstor 128(%rsp)
-    xrstor 0(%rbx,%rdx,8)
-    xrstor -1(%rsi,%rbx,1)
-    xrstor -129(%rdi,%rbp,2)
+    xrstor -1(%rsp)
+    xrstor -129(%rsp)
+    xrstor 0(%rbx,%rdx,2)
+    xrstor 64(%rsi,%rbx,4)
+    xrstor -2147483648(%rdi,%rbp,8)
     xrstor gnu_fwd(%rip)
-    xrstor -2147483648
+    xrstor 2147483647
     xsavec 0(%r9)
-    xsavec 64(%r13)
-    xsavec 2147483647(%r14)
+    xsavec 8(%r13)
+    xsavec 4660(%r14)
     xsavec 0(%r12)
-    xsavec 8(%r12)
-    xsavec 4660(%r12)
-    xsavec 0(%r10,%rsi,4)
-    xsavec -128(%r8,%rcx,8)
-    xsavec 128(%r9,%r9,1)
+    xsavec -128(%r12)
+    xsavec 128(%r12)
+    xsavec 0(%r10,%r15,1)
+    xsavec 127(%r8,%rsi,2)
+    xsavec -129(%r9,%rcx,4)
     xsavec 0(%rcx)
-    xsavec 127(%rcx)
-    xsavec -129(%rdx)
+    xsavec -1(%rcx)
+    xsavec -2147483648(%rdx)
     xsavec 0(%rsp)
-    xsavec -1(%rsp)
-    xsavec -2147483648(%rsp)
-    xsavec 0(%rsp,%rsi,2)
-    xsavec 64(%rax,%rdi,4)
-    xsavec 2147483647(%rcx,%rax,8)
+    xsavec 64(%rsp)
+    xsavec 2147483647(%rsp)
+    xsavec 0(%rsp,%rsi,8)
+    xsavec 8(%rax,%rdi,1)
+    xsavec 4660(%rcx,%rax,2)
     xsavec gnu_back(%rip)
-    xsavec 4660
+    xsavec 128
     ldmxcsr 0(%r10)
-    ldmxcsr 8(%r15)
-    ldmxcsr 128(%r8)
+    ldmxcsr -128(%r15)
+    ldmxcsr -129(%r8)
     ldmxcsr 0(%r12)
-    ldmxcsr -128(%r12)
-    ldmxcsr -129(%r12)
-    ldmxcsr 0(%r11,%rbp,1)
-    ldmxcsr 127(%r12,%r12,2)
-    ldmxcsr -2147483648(%r13,%rax,4)
+    ldmxcsr 127(%r12)
+    ldmxcsr -2147483648(%r12)
+    ldmxcsr 0(%r11,%r9,4)
+    ldmxcsr -1(%r12,%rbp,8)
+    ldmxcsr 2147483647(%r13,%r12,1)
     ldmxcsr 0(%rdx)
-    ldmxcsr -1(%rbx)
-    ldmxcsr 2147483647(%rbp)
+    ldmxcsr 64(%rbx)
+    ldmxcsr 4660(%rbp)
     ldmxcsr 0(%rsp)
-    ldmxcsr 64(%rsp)
-    ldmxcsr 4660(%rsp)
-    ldmxcsr 0(%rsi,%rcx,8)
-    ldmxcsr 8(%rdx,%rdx,1)
-    ldmxcsr 128(%rbx,%rbx,2)
+    ldmxcsr 8(%rsp)
+    ldmxcsr 128(%rsp)
+    ldmxcsr 0(%rsi,%rcx,2)
+    ldmxcsr -128(%rdx,%rdx,4)
+    ldmxcsr -129(%rbx,%rbx,8)
     ldmxcsr gnu_fwd(%rip)
-    ldmxcsr -129
+    ldmxcsr -2147483648
     stmxcsr 0(%r11)
-    stmxcsr -128(%r9)
-    stmxcsr -2147483648(%r10)
+    stmxcsr 127(%r9)
+    stmxcsr 2147483647(%r10)
     stmxcsr 0(%r12)
-    stmxcsr 127(%r12)
-    stmxcsr 2147483647(%r12)
-    stmxcsr 0(%r12,%r15,4)
-    stmxcsr -1(%r15,%rsi,8)
-    stmxcsr 4660(%r8,%rcx,1)
+    stmxcsr -1(%r12)
+    stmxcsr 4660(%r12)
+    stmxcsr 0(%r12,%rax,1)
+    stmxcsr 64(%r15,%r15,2)
+    stmxcsr 128(%r8,%rsi,4)
     stmxcsr 0(%rbx)
-    stmxcsr 64(%rsi)
-    stmxcsr 128(%rdi)
+    stmxcsr 8(%rsi)
+    stmxcsr -129(%rdi)
     stmxcsr 0(%rsp)
-    stmxcsr 8(%rsp)
-    stmxcsr -129(%rsp)
-    stmxcsr 0(%rdi,%rbp,2)
-    stmxcsr -128(%rsp,%rsi,4)
-    stmxcsr -2147483648(%rbp,%rdi,8)
+    stmxcsr -128(%rsp)
+    stmxcsr -2147483648(%rsp)
+    stmxcsr 0(%rdi,%rbp,8)
+    stmxcsr 127(%rsp,%rsi,1)
+    stmxcsr 2147483647(%rbp,%rdi,2)
     stmxcsr gnu_back(%rip)
-    stmxcsr 2147483647
+    stmxcsr 4660
     prefetcht0 0(%r14)
-    prefetcht0 127(%r11)
-    prefetcht0 4660(%r13)
+    prefetcht0 -1(%r11)
+    prefetcht0 128(%r13)
     prefetcht0 0(%r12)
-    prefetcht0 -1(%r12)
-    prefetcht0 128(%r12)
-    prefetcht0 0(%r14,%r9,1)
-    prefetcht0 64(%r9,%rbp,2)
-    prefetcht0 -129(%r12,%r12,4)
+    prefetcht0 64(%r12)
+    prefetcht0 -129(%r12)
+    prefetcht0 0(%r14,%rcx,4)
+    prefetcht0 8(%r9,%r9,8)
+    prefetcht0 -2147483648(%r12,%rbp,1)
     prefetcht0 0(%rsi)
-    prefetcht0 8(%rcx)
-    prefetcht0 -2147483648(%rdx)
-    prefetcht0 0(%rsp)
-    prefetcht0 -128(%rsp)
-    prefetcht0 2147483647(%rsp)
-    prefetcht0 0(%rax,%rax,8)
-    prefetcht0 127(%rsi,%rcx,1)
-    prefetcht0 4660(%rdi,%rdx,2)
-    prefetcht0 gnu_fwd(%rip)
-    prefetcht0 128
-    prefetcht1 0(%r15)
-    prefetcht1 -1(%r14)
-    prefetcht1 -129(%r15)
-    prefetcht1 0(%r12)
-    prefetcht1 64(%r12)
-    prefetcht1 -2147483648(%r12)
-    prefetcht1 0(%r15,%rax,4)
-    prefetcht1 8(%r13,%r15,8)
-    prefetcht1 2147483647(%r15,%rsi,1)
-    prefetcht1 0(%rdi)
-    prefetcht1 -128(%rbx)
-    prefetcht1 4660(%rbp)
-    prefetcht1 0(%rsp)
-    prefetcht1 127(%rsp)
-    prefetcht1 128(%rsp)
+    prefetcht0 -128(%rcx)
 g84:
-    prefetcht1 0(%rcx,%rbx,2)
-    prefetcht1 -1(%rax,%rbp,4)
-    prefetcht1 -129(%rcx,%rsi,8)
+    prefetcht0 2147483647(%rdx)
+    prefetcht0 0(%rsp)
+    prefetcht0 127(%rsp)
+    prefetcht0 4660(%rsp)
+    prefetcht0 0(%rax,%rax,2)
+    prefetcht0 -1(%rsi,%rcx,4)
+    prefetcht0 128(%rdi,%rdx,8)
+    prefetcht0 gnu_fwd(%rip)
+    prefetcht0 -129
+    prefetcht1 0(%r15)
+    prefetcht1 64(%r14)
+    prefetcht1 -2147483648(%r15)
+    prefetcht1 0(%r12)
+    prefetcht1 8(%r12)
+    prefetcht1 2147483647(%r12)
+    prefetcht1 0(%r15,%r12,1)
+    prefetcht1 -128(%r13,%rax,2)
+    prefetcht1 4660(%r15,%r15,4)
+    prefetcht1 0(%rdi)
+    prefetcht1 127(%rbx)
+    prefetcht1 128(%rbp)
+    prefetcht1 0(%rsp)
+    prefetcht1 -1(%rsp)
+    prefetcht1 -129(%rsp)
+    prefetcht1 0(%rcx,%rbx,8)
+    prefetcht1 64(%rax,%rbp,1)
+    prefetcht1 -2147483648(%rcx,%rsi,2)
     prefetcht1 gnu_back(%rip)
-    prefetcht1 -2147483648
+    prefetcht1 2147483647
     prefetcht2 0(%r8)
-    prefetcht2 64(%r8)
-    prefetcht2 2147483647(%r9)
+    prefetcht2 8(%r8)
+    prefetcht2 4660(%r9)
     prefetcht2 0(%r12)
-    prefetcht2 8(%r12)
-    prefetcht2 4660(%r12)
-    prefetcht2 0(%r8,%rcx,1)
-    prefetcht2 -128(%r8,%r9,2)
-    prefetcht2 128(%r9,%rbp,4)
+    prefetcht2 -128(%r12)
+    prefetcht2 128(%r12)
+    prefetcht2 0(%r8,%rsi,4)
+    prefetcht2 127(%r8,%rcx,8)
+    prefetcht2 -129(%r9,%r9,1)
     prefetcht2 0(%rcx)
-    prefetcht2 127(%rsi)
-    prefetcht2 -129(%rdi)
+    prefetcht2 -1(%rsi)
+    prefetcht2 -2147483648(%rdi)
     prefetcht2 0(%rsp)
-    prefetcht2 -1(%rsp)
-    prefetcht2 -2147483648(%rsp)
-    prefetcht2 0(%rdx,%rdi,8)
-    prefetcht2 64(%rdx,%rax,1)
-    prefetcht2 2147483647(%rbx,%rcx,2)
+    prefetcht2 64(%rsp)
+    prefetcht2 2147483647(%rsp)
+    prefetcht2 0(%rdx,%rdi,2)
+    prefetcht2 8(%rdx,%rax,4)
+    prefetcht2 4660(%rbx,%rcx,8)
     prefetcht2 gnu_fwd(%rip)
-    prefetcht2 4660
+    prefetcht2 128
     prefetchnta 0(%r9)
-    prefetchnta 8(%r10)
-    prefetchnta 128(%r11)
+    prefetchnta -128(%r10)
+    prefetchnta -129(%r11)
     prefetchnta 0(%r12)
-    prefetchnta -128(%r12)
-    prefetchnta -129(%r12)
-    prefetchnta 0(%r9,%r12,4)
-    prefetchnta 127(%r12,%rax,8)
-    prefetchnta -2147483648(%r13,%r15,1)
+    prefetchnta 127(%r12)
+    prefetchnta -2147483648(%r12)
+    prefetchnta 0(%r9,%rbp,1)
+    prefetchnta -1(%r12,%r12,2)
+    prefetchnta 2147483647(%r13,%rax,4)
     prefetchnta 0(%rdx)
-    prefetchnta -1(%rcx)
-    prefetchnta 2147483647(%rdx)
+    prefetchnta 64(%rcx)
+    prefetchnta 4660(%rdx)
     prefetchnta 0(%rsp)
-    prefetchnta 64(%rsp)
-    prefetchnta 4660(%rsp)
-    prefetchnta 0(%rbx,%rdx,2)
-    prefetchnta 8(%rsp,%rbx,4)
-    prefetchnta 128(%rbp,%rbp,8)
+    prefetchnta 8(%rsp)
+    prefetchnta 128(%rsp)
+    prefetchnta 0(%rbx,%rdx,8)
+    prefetchnta -128(%rsp,%rbx,1)
+    prefetchnta -129(%rbp,%rbp,2)
     prefetchnta gnu_back(%rip)
-    prefetchnta -129
-    xsave64 0(%rbx)
-    xsave64 -128(%r14)
-    xsave64 -2147483648(%r15)
+    prefetchnta -2147483648
+    xsave64 0(%rsi)
+    xsave64 127(%rbp)
+    xsave64 2147483647(%r13)
     xsave64 0(%rsp)
-    xsave64 127(%r12)
-    xsave64 2147483647(%rsp)
-    xsave64 0(%rsi,%rsi,1)
-    xsave64 -1(%rbp,%rcx,2)
-    xsave64 4660(%r12,%r9,4)
+    xsave64 -1(%r12)
+    xsave64 4660(%rsp)
+    xsave64 0(%rax,%r15,4)
+    xsave64 64(%rax,%rsi,8)
+    xsave64 128(%r9,%rcx,1)
     xsave64 gnu_fwd(%rip)
-    xsave64 128
-    xrstor64 0(%r10)
-    xrstor64 64(%rcx)
-    xrstor64 -129(%r8)
+    xsave64 -129
+    xrstor64 0(%r11)
+    xrstor64 8(%rdx)
+    xrstor64 -2147483648(%r9)
     xrstor64 0(%r12)
-    xrstor64 8(%rsp)
-    xrstor64 -2147483648(%r12)
-    xrstor64 0(%r15,%rbp,8)
-    xrstor64 -128(%rdi,%r12,1)
-    xrstor64 2147483647(%r15,%rax,2)
+    xrstor64 -128(%rsp)
+    xrstor64 2147483647(%r12)
+    xrstor64 0(%r8,%r9,2)
+    xrstor64 127(%rsp,%rbp,4)
+    xrstor64 4660(%r13,%r12,8)
     xrstor64 gnu_back(%rip)
-    xrstor64 4660
-    xsavec64 0(%rsi)
-    xsavec64 127(%rbp)
-    xsavec64 128(%r13)
+    xrstor64 128
+    xsavec64 0(%rdi)
+    xsavec64 -1(%rbx)
+    xsavec64 -129(%r10)
     xsavec64 0(%rsp)
-    xsavec64 -1(%r12)
-    xsavec64 -129(%rsp)
-    xsavec64 0(%rax,%r15,4)
-    xsavec64 64(%rax,%rsi,8)
-    xsavec64 -2147483648(%r9,%rcx,1)
+    xsavec64 64(%r12)
+    xsavec64 -2147483648(%rsp)
+    xsavec64 0(%rcx,%rax,1)
+    xsavec64 8(%rbp,%r15,2)
+    xsavec64 2147483647(%r12,%rsi,4)
     xsavec64 gnu_fwd(%rip)
-    xsavec64 2147483647
-    fxsave64 0(%r11)
-    fxsave64 8(%rdx)
-    fxsave64 4660(%r9)
+    xsavec64 4660
+    fxsave64 0(%r14)
+    fxsave64 -128(%rsi)
+    fxsave64 128(%r11)
     fxsave64 0(%r12)
-    fxsave64 -128(%rsp)
-    fxsave64 128(%r12)
-    fxsave64 0(%r8,%r9,2)
-    fxsave64 127(%rsp,%rbp,4)
-    fxsave64 -129(%r13,%r12,8)
+    fxsave64 127(%rsp)
+    fxsave64 -129(%r12)
+    fxsave64 0(%r12,%rcx,8)
+    fxsave64 -1(%rdi,%r9,1)
+    fxsave64 -2147483648(%r15,%rbp,2)
     fxsave64 gnu_back(%rip)
-    fxsave64 -2147483648
-    fxrstor64 0(%rdi)
-    fxrstor64 -1(%rbx)
-    fxrstor64 2147483647(%r10)
+    fxsave64 2147483647
+    fxrstor64 0(%r15)
+    fxrstor64 64(%rdi)
+    fxrstor64 4660(%r14)
     fxrstor64 0(%rsp)
-    fxrstor64 64(%r12)
-    fxrstor64 4660(%rsp)
-    fxrstor64 0(%rcx,%rax,1)
-    fxrstor64 8(%rbp,%r15,2)
-    fxrstor64 128(%r12,%rsi,4)
+    fxrstor64 8(%r12)
+    fxrstor64 128(%rsp)
+    fxrstor64 0(%rdx,%r12,4)
+    fxrstor64 -128(%rax,%rax,8)
+    fxrstor64 -129(%r9,%r15,1)
     fxrstor64 gnu_fwd(%rip)
-    fxrstor64 -129
-    movbe 0(%r14), %r9d
-    movbe -128(%rsi), %r10d
-    movbe -2147483648(%r11), %r11d
+    fxrstor64 -2147483648
+    movbe 0(%rcx), %r9d
+    movbe 127(%r15), %r10d
+    movbe 2147483647(%rcx), %r11d
     movbe 0(%r12), %r14d
-    movbe 127(%rsp), %r8d
-    movbe 2147483647(%r12), %r12d
-    movbe 0(%r12,%rcx,8), %r13d
-    movbe -1(%rdi,%r9,1), %r15d
-    movbe 4660(%r15,%rbp,2), %r9d
+    movbe -1(%rsp), %r8d
+    movbe 4660(%r12), %r12d
+    movbe 0(%r9,%rsi,2), %r13d
+    movbe 64(%rsp,%rcx,4), %r15d
+    movbe 128(%r13,%r9,8), %r9d
     movbe gnu_back(%rip), %r10d
-    movbe 128, %r11d
+    movbe -129, %r11d
     movbe 0(%rbx), %ebx
-    movbe 64(%rbx), %esi
-    movbe -129(%rbp), %edi
+    movbe 8(%rbx), %esi
+    movbe -2147483648(%rbp), %edi
     movbe 0(%rsp), %ebp
-    movbe 8(%rsp), %esp
-    movbe -2147483648(%rsp), %ecx
-    movbe 0(%rsp,%rsi,4), %edx
-    movbe -128(%rsi,%rdi,8), %ebx
-    movbe 2147483647(%rdi,%rax,1), %esi
+    movbe -128(%rsp), %esp
+    movbe 2147483647(%rsp), %ecx
+    movbe 0(%rsp,%rsi,1), %edx
+    movbe 127(%rsi,%rdi,2), %ebx
+    movbe 4660(%rdi,%rax,4), %esi
     movbe gnu_fwd(%rip), %edi
-    movbe 4660, %ebp
-    movbe %r14d, 0(%r15)
-    movbe %r8d, 127(%rdi)
-    movbe %r12d, 128(%r14)
+    movbe 128, %ebp
+    movbe %r14d, 0(%r8)
+    movbe %r8d, -1(%r8)
+    movbe %r12d, -129(%rbp)
     movbe %r13d, 0(%rsp)
-    movbe %r15d, -1(%r12)
-    movbe %r9d, -129(%rsp)
-    movbe %r10d, 0(%rdx,%r12,2)
-    movbe %r11d, 64(%rax,%rax,4)
-    movbe %r14d, -2147483648(%r9,%r15,8)
+    movbe %r15d, 64(%r12)
+    movbe %r9d, -2147483648(%rsp)
+    movbe %r10d, 0(%rsp,%rbp,8)
+    movbe %r11d, 8(%rbp,%r12,1)
+    movbe %r14d, 2147483647(%r12,%rax,2)
     movbe %r8d, gnu_back(%rip)
-    movbe %r12d, 2147483647
+    movbe %r12d, 4660
     movbe %esp, 0(%rsi)
-    movbe %ecx, 8(%rsi)
-    movbe %edx, 4660(%rdi)
+    movbe %ecx, -128(%rsi)
+    movbe %edx, 128(%rdi)
     movbe %ebx, 0(%rsp)
-    movbe %esi, -128(%rsp)
-    movbe %edi, 128(%rsp)
-    movbe %ebp, 0(%rsi,%rcx,1)
-    movbe %esp, 127(%rax,%rdx,2)
-    movbe %ecx, -129(%rcx,%rbx,4)
+    movbe %esi, 127(%rsp)
+    movbe %edi, -129(%rsp)
+    movbe %ebp, 0(%rsi,%rcx,4)
+    movbe %esp, -1(%rax,%rdx,8)
+    movbe %ecx, -2147483648(%rcx,%rbx,1)
     movbe %edx, gnu_fwd(%rip)
-    movbe %ebx, -2147483648
-    movbe 0(%rcx), %r13
-    movbe -1(%r15), %r15
-    movbe 2147483647(%rcx), %r9
+    movbe %ebx, 2147483647
+    movbe 0(%rdx), %r13
+    movbe 64(%r13), %r15
+    movbe 4660(%rdx), %r9
     movbe 0(%r12), %r10
-    movbe 64(%rsp), %r11
-    movbe 4660(%r12), %r14
-    movbe 0(%r9,%rsi,8), %r8
-    movbe 8(%rsp,%rcx,1), %r12
-    movbe 128(%r13,%r9,2), %r13
+    movbe 8(%rsp), %r11
+    movbe 128(%r12), %r14
+    movbe 0(%r14,%r15,2), %r8
+    movbe -128(%rdi,%rsi,4), %r12
+    movbe -129(%r15,%rcx,8), %r13
     movbe gnu_back(%rip), %r15
-    movbe -129, %r9
-    movbe %r10, 0(%r8)
-    movbe %r11, -128(%r8)
-    movbe %r14, -2147483648(%rbp)
+    movbe -2147483648, %r9
+    movbe %r10, 0(%r9)
+    movbe %r11, 127(%r9)
+    movbe %r14, 2147483647(%rbx)
     movbe %r8, 0(%rsp)
-    movbe %r12, 127(%r12)
-    movbe %r13, 2147483647(%rsp)
-    movbe %r15, 0(%rsp,%rbp,4)
-    movbe %r9, -1(%rbp,%r12,8)
-    movbe %r10, 4660(%r12,%rax,1)
+    movbe %r12, -1(%r12)
+    movbe %r13, 4660(%rsp)
+    movbe %r15, 0(%rsi,%r9,1)
+    movbe %r9, 64(%rax,%rbp,2)
+    movbe %r10, 128(%r9,%r12,4)
     movbe %r11, gnu_fwd(%rip)
-    movbe %r14, 128
+    movbe %r14, -129
     xtest
     xgetbv
     rdpkru
@@ -17070,5 +17094,6 @@ g84:
     .byte 0x3e
     .byte 0x66
     .byte 0x67
+g85:
     .byte 0x3e
 gnu_fwd:
