@@ -53,13 +53,34 @@ P := $(BUILD)/progs
 
 # The trees as the frozen ttpcs read them (stage0 and the seeds of the
 # hosts, ttpc1, ttpc2, ttpc3): without their licenses, a word younger than
-# they are (gen/unlicense.pl). A license emits nothing, so what they make is
-# the same; stage1 makes stage2 from the trees with their licenses, and
-# stage1 == stage2 checks it.
+# they are, and in the C words of before (tools/unlicense.ff, as
+# gen/unlicense.pl). A license emits nothing, so what they make is the same;
+# stage1 makes stage2 from the trees with their licenses, and stage1 ==
+# stage2 checks it. The unlicense that makes them is ttp's own, in ff:
+# ttpc3 compiles it from tools/old/ (below), so no Perl is in the chain.
+BOOT := $(BUILD)/boot
 NL := $(BUILD)/nl
-$(NL)/%.ff: %.ff gen/unlicense.pl gen/FF.pm
+$(NL)/%.ff: %.ff $(BOOT)/unlicense
 	@mkdir -p $(dir $@)
-	perl gen/unlicense.pl $< > $@
+	$(QEMU) $(BOOT)/unlicense $< > $@.tmp && mv $@.tmp $@
+
+# What the links before ttpc3 read, and ttpc3 reads the tools in, committed
+# (each a copy of what ttp's tools make of a source, without its license
+# root: its license is in LICENSES; copies-check checks that the ff tools and
+# the Perl make each of them, and `make copies` makes them again after its
+# source changed):
+#   boot/riscv64/shared.ff  ttpc1's shared page (linking ttpc2): shared.ff
+#                           unlicensed, trimmed to riscv64, frozen
+#   boot/riscv64/shared1.ff ttpc2's (ttpc2.self, ttpc3) and ttpc3's when it
+#                           compiles the tools: unlicensed, trimmed to riscv64
+#   boot/<host>/shared1.ff  the same on a host: trimmed to riscv64 and it
+#   tools/old/<tool>.ff     ttp's tools in the C words of before, which ttpc3
+#                           reads (unlicense -t OLDTYPES tools/<tool>.ff)
+BOOTCOPY := boot/riscv64/shared.ff boot/riscv64/shared1.ff $(foreach h,x86_64 aarch64 arm,boot/$(h)/shared1.ff)
+OLDTOOLS := rt sha256 fftree words unlicense
+OLDLIB := $(foreach t,rt sha256 fftree words,tools/old/$(t).ff)
+OLDTYPES := $(foreach t,rt sha256 fftree words,-t tools/$(t).ff)
+COPIES := $(BOOTCOPY) $(OLDTOOLS:%=tools/old/%.ff)
 
 all: $(BIN)
 
@@ -107,7 +128,7 @@ decls:
 # notice, a line per child), its SPDX ids known to gen/spdx.txt; the frozen
 # files, which stay as they are, have theirs in LICENSES. A tree with an
 # unknown id fails.
-LICENSED := $(TREES) $(X86GNU) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
+LICENSED := $(TREES) $(COPIES) $(X86GNU) shared.ff.txt $(wildcard macros/*.ff.txt) language.ff.txt gen/license.ff.txt
 licenses: | $(BUILD)
 	@perl gen/licenses.pl --sidecar LICENSES $(LICENSED)
 	@printf 'license\n  GPL-3.0-or-whatever\n  a notice\n' > $(BUILD)/badlicense.ff.txt
@@ -141,12 +162,20 @@ run: $(P)/exit42.elf $(P)/hello.elf
 # assemble itself into itself; ttpc3 assembles ttpc (TTPC_SRC) into stage1,
 # stage1 assembles it into stage2: they must be the same, the fixed point.
 # ttpc1 gets shared.ff in its own language
-# (frozen.pl): without the comments, which it knows only in code, and
+# (frozen): without the comments, which it knows only in code, and
 # without else if:, which it would take for a register. Neither emits
 # anything: stage1 is the same. ttpc1 and ttpc2 get it with only the
-# sections they assemble with (trim.pl), for their 4 MiB of input, and
-# insize.pl stops a link of theirs whose input passes 3.5 MiB.
-BOOT := $(BUILD)/boot
+# sections they assemble with (trim), for their 4 MiB of input, and
+# insize.pl (copies-check) stops a link of theirs whose input passes 3.5 MiB.
+# Both are committed copies (boot/riscv64/, above): they come before ttpc3,
+# which is the first link to compile ttp's tools (tools/old/: unlicense,
+# for the NL trees of stage1 and of ttpc3.self). Which link reads what:
+#   stage0  ttpc1.ff (frozen, no license) -> ttpc1
+#   ttpc1   boot/riscv64/shared.ff, TTPC2_SRC -> ttpc2
+#   ttpc2   boot/riscv64/shared1.ff, TTPC2_SRC -> ttpc2.self; TTPC3_SRC -> ttpc3
+#   ttpc3   boot/riscv64/shared1.ff, tools/old/ -> boot/unlicense
+#   ttpc3   NL trees (boot/unlicense) -> ttpc3.self, stage1
+#   stage1  the trees as they are -> stage2
 
 $(BOOT):
 	mkdir -p $@
@@ -157,25 +186,21 @@ $(BOOT)/ttpc1: $(TTPC1_FF) $(BIN) | $(BOOT)
 $(BOOT)/ttpc1.self: $(TTPC1_FF) $(BOOT)/ttpc1
 	$(QEMU) $(BOOT)/ttpc1 $< $@ > $@.lst
 
-$(BOOT)/shared.ff: $(BOOT)/shared1.ff gen/frozen.pl gen/FF.pm | $(BOOT)
-	perl gen/frozen.pl $< > $@
-
-$(BOOT)/ttpc2: $(BOOT)/shared.ff $(TTPC2_SRC) $(BOOT)/ttpc1 gen/insize.pl
-	perl gen/insize.pl ttpc1 $(BOOT)/shared.ff $(TTPC2_SRC)
-	$(QEMU) $(BOOT)/ttpc1 --target riscv64 $(BOOT)/shared.ff $(TTPC2_SRC) $@ > $@.lst
-
-$(BOOT)/ttpc2.self: $(BOOT)/shared1.ff $(TTPC2_SRC) $(BOOT)/ttpc2 gen/insize.pl
-	perl gen/insize.pl ttpc2 $(BOOT)/shared1.ff $(TTPC2_SRC)
-	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff $(TTPC2_SRC) $@ > $@.lst
+$(BOOT)/ttpc2: boot/riscv64/shared.ff $(TTPC2_SRC) $(BOOT)/ttpc1
+	$(QEMU) $(BOOT)/ttpc1 --target riscv64 boot/riscv64/shared.ff $(TTPC2_SRC) $@ > $@.lst
 
 # ttpc1 and ttpc2 read at most 4 MiB: they get shared.ff with only riscv64's
-# section (trim.pl), which is all that emits anything for them.
-$(BOOT)/shared1.ff: $(NL)/$(SHARED) gen/trim.pl gen/FF.pm | $(BOOT)
-	perl gen/trim.pl $< riscv64 > $@
+# section (trim), which is all that emits anything for them.
+$(BOOT)/ttpc2.self: boot/riscv64/shared1.ff $(TTPC2_SRC) $(BOOT)/ttpc2
+	$(QEMU) $(BOOT)/ttpc2 --target riscv64 boot/riscv64/shared1.ff $(TTPC2_SRC) $@ > $@.lst
 
-$(BOOT)/ttpc3: $(TTPC3_SRC) $(BOOT)/ttpc2 $(BOOT)/shared1.ff gen/insize.pl
-	perl gen/insize.pl ttpc2 $(BOOT)/shared1.ff $(TTPC3_SRC)
-	$(QEMU) $(BOOT)/ttpc2 --target riscv64 $(BOOT)/shared1.ff $(TTPC3_SRC) $@ > $@.lst
+$(BOOT)/ttpc3: $(TTPC3_SRC) $(BOOT)/ttpc2 boot/riscv64/shared1.ff
+	$(QEMU) $(BOOT)/ttpc2 --target riscv64 boot/riscv64/shared1.ff $(TTPC3_SRC) $@ > $@.lst
+
+# ttp's unlicense, compiled by ttpc3 from its copy in the words of before
+$(BOOT)/unlicense: $(OLDLIB) tools/old/unlicense.ff boot/riscv64/shared1.ff $(BOOT)/ttpc3
+	$(QEMU) $(BOOT)/ttpc3 --target riscv64 boot/riscv64/shared1.ff $(OLDLIB) tools/old/unlicense.ff $@ > $@.lst
+	chmod +x $@
 
 $(BOOT)/ttpc3.self: $(NL)/$(SHARED) $(TTPC3_SRC) $(BOOT)/ttpc3
 	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(NL)/$(SHARED) $(TTPC3_SRC) $@ > $@.lst
@@ -436,6 +461,9 @@ SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
 SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
 
+# the NL trees a host's chain makes with its own unlicense
+NLHOST := $(SHARED) ttpc.defs.ff $(TTPC_FF)
+
 define host
 
 $(BUILD)/$(1):
@@ -445,8 +473,8 @@ $(BUILD)/$(1)/seed: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
 	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
 	$(SEEDCROSS_$(1))ld -static -e _start $$@.o -o $$@
 
-$(BUILD)/$(1)/ttpc.ff: $(NL)/$(TTPC_FF) $(NL)/ttpc.defs.ff $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
-	perl gen/mkhost.pl $(1) $(BUILD)/$(1) $(NL)/ttpc.defs.ff $(NL)/$(TTPC_FF)
+$(BUILD)/$(1)/ttpc.ff: $(BUILD)/$(1)/nl/$(TTPC_FF) $(BUILD)/$(1)/nl/ttpc.defs.ff $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
+	perl gen/mkhost.pl $(1) $(BUILD)/$(1) $(BUILD)/$(1)/nl/ttpc.defs.ff $(BUILD)/$(1)/nl/$(TTPC_FF)
 
 $(BUILD)/$(1)/ttpc.defs.ff: $(BUILD)/$(1)/ttpc.ff
 
@@ -461,27 +489,34 @@ $(BUILD)/$(1)/whole.ff: $(BUILD)/$(1)/ttpc2.ff $(BUILD)/$(1)/ttpc2.defs.ff gen/m
 $(BUILD)/$(1)/ttpc2: $(BUILD)/$(1)/whole.ff $(BUILD)/$(1)/seed
 	$(RUN_$(1)) $(BUILD)/$(1)/seed $$< $$@ > $$@.lst
 
-$(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/shared1.ff gen/insize.pl
-	perl gen/insize.pl ttpc2 $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff
-	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
-
-$(BUILD)/$(1)/shared1.ff: $(NL)/$(SHARED) gen/trim.pl gen/FF.pm | $(BUILD)/$(1)
-	perl gen/trim.pl $$< riscv64 $(1) > $$@
+$(BUILD)/$(1)/ttpc2.self: $(BUILD)/$(1)/ttpc2 boot/$(1)/shared1.ff gen/insize.pl
+	perl gen/insize.pl ttpc2 boot/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff
+	$(RUN_$(1)) $$< --target $(1) boot/$(1)/shared1.ff $(BUILD)/$(1)/ttpc2.defs.ff $(BUILD)/$(1)/ttpc2.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/ttpc3.ff: $(TTPC3_SRC) $(SHARED) gen/mkhost.pl | $(BUILD)/$(1)
 	perl gen/mkhost.pl $(1) $(BUILD)/$(1) $(TTPC3_SRC)
 
 $(BUILD)/$(1)/ttpc3.defs.ff: $(BUILD)/$(1)/ttpc3.ff
 
-$(BUILD)/$(1)/ttpc3: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc3.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/shared1.ff gen/insize.pl
-	perl gen/insize.pl ttpc2 $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff
-	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
+$(BUILD)/$(1)/ttpc3: $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc3.ff $(BUILD)/$(1)/ttpc3.defs.ff boot/$(1)/shared1.ff gen/insize.pl
+	perl gen/insize.pl ttpc2 boot/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff
+	$(RUN_$(1)) $$< --target $(1) boot/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
 
-$(BUILD)/$(1)/ttpc3.self: $(BUILD)/$(1)/ttpc3 $(NL)/$(SHARED)
-	$(RUN_$(1)) $$< --target $(1) $(NL)/$(SHARED) $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
+# the host's own unlicense, compiled by its ttpc3 (as the riscv64 chain's),
+# and the trees it makes for its ttpc3.self and stage1
+$(BUILD)/$(1)/unlicense: $(OLDLIB) tools/old/unlicense.ff boot/$(1)/shared1.ff $(BUILD)/$(1)/ttpc3
+	$(RUN_$(1)) $(BUILD)/$(1)/ttpc3 --target $(1) boot/$(1)/shared1.ff $(OLDLIB) tools/old/unlicense.ff $$@ > $$@.lst
+	chmod +x $$@
 
-$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc.ff $(NL)/$(SHARED)
-	$(RUN_$(1)) $$< --target $(1) $(NL)/$(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+$(BUILD)/$(1)/nl/%.ff: %.ff $(BUILD)/$(1)/unlicense
+	@mkdir -p $$(dir $$@)
+	$(RUN_$(1)) $(BUILD)/$(1)/unlicense $$< > $$@.tmp && mv $$@.tmp $$@
+
+$(BUILD)/$(1)/ttpc3.self: $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/nl/$(SHARED)
+	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/nl/$(SHARED) $(BUILD)/$(1)/ttpc3.defs.ff $(BUILD)/$(1)/ttpc3.ff $$@ > $$@.lst
+
+$(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc.ff $(BUILD)/$(1)/nl/$(SHARED)
+	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/nl/$(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/stage2: $(BUILD)/$(1)/stage1
 	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
@@ -509,7 +544,7 @@ seed-$(1): $(BUILD)/$(1)/seed $(BIN) $(SEED_FF) | $(BUILD)/$(1)
 	pr print-ttpc1 ttpc1.ff; pr print-hello $(NL)/progs/riscv64/hello.ff; pr toolarge $(SHARED); pr usage; \
 	pr toomany a b c; pr missing $$$$d/none.ff; pr truncated $$$$d/truncated.ff; pr trailing $$$$d/trailing.ff
 
-bootstrap-$(1): $(BUILD)/$(1)/ttpc2.self $(BUILD)/$(1)/ttpc3.self $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),$(BUILD)/$(1)/cross)
+bootstrap-$(1): $(BUILD)/$(1)/ttpc2.self $(BUILD)/$(1)/ttpc3.self $(BUILD)/$(1)/stage2 $(if $(CAN_RISCV),$(BUILD)/$(1)/cross $(NLHOST:%=$(NL)/%))
 	cmp $(BUILD)/$(1)/ttpc2 $(BUILD)/$(1)/ttpc2.self
 	@echo "bootstrap-$(1): from its seed, ttpc2 assembles itself"
 	cmp $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc3.self
@@ -518,6 +553,7 @@ bootstrap-$(1): $(BUILD)/$(1)/ttpc2.self $(BUILD)/$(1)/ttpc3.self $(BUILD)/$(1)/
 	@echo "bootstrap-$(1): from its seed, stage1 == stage2"
 	$(if $(CAN_RISCV),cmp $(BUILD)/$(1)/stage1 $(BUILD)/$(1)/cross,@echo "bootstrap-$(1): no $(QEMU) here, not compared with the riscv64 chain")
 	$(if $(CAN_RISCV),@echo "bootstrap-$(1): == the riscv64 chain's ttpc for $(1)")
+	$(if $(CAN_RISCV),@for f in $(NLHOST); do cmp $(BUILD)/$(1)/nl/$$$$f $(NL)/$$$$f || exit 1; done; echo "bootstrap-$(1): its unlicense makes the trees as the riscv64 chain's")
 
 # The C programs, built by stage2 for its own host and run there.
 # casm, casm2 and casmfail also for riscv64: compile time runs on the host,
@@ -559,13 +595,22 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # stage2): the runtime (tools/rt.ff: raw Linux system calls, no libc, an
 # allocator, buffered output), sha256 (tools/sha256.ff) and the ff tree
 # (tools/fftree.ff: FF.pm's .ff and .ff.txt reader and writer, the Merkle
-# hash) are library pages; each tool is a program with them: fftext as
-# gen/fftext.pl, sha256sum as coreutils'. $(TL)/<target>/<tool> is one for
+# hash) and the C words of before (tools/words.ff: Words.pm's oldwords)
+# are library pages; each tool is a program with them: fftext as
+# gen/fftext.pl, sha256sum as coreutils', unlicense, trim and frozen as
+# gen/unlicense.pl, trim.pl and frozen.pl. $(TL)/<target>/<tool> is one for
 # that target, TOOLT the target this machine runs natively (riscv64 under
 # qemu on another). The Perl versions stay, a second implementation:
 # tools-check runs sha256sum on NIST's vectors (and Digest::SHA on more),
-# and fftext and fftext.pl both ways on every tree, for each target here.
-TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff
+# fftext and fftext.pl both ways on every tree, unlicense and unlicense.pl on
+# every tree (output, messages, status), trim and frozen as the bootstrap
+# uses them, for each target here.
+# Which link compiles each: stage2 all of them ($(TL)); ttpc3 unlicense too,
+# from tools/old/ ($(BOOT)/unlicense, $(BUILD)/<host>/unlicense), for the
+# trees of the chain after it. trim and frozen make only the committed
+# copies of the links before ttpc3 (boot/), so stage2's are enough.
+TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff
+TOOLS := fftext sha256sum unlicense trim frozen
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -579,7 +624,7 @@ $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
 	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
-tools-check-$(1): $(TL)/$(1)/sha256sum $(TL)/$(1)/fftext $(SHAV)/want
+tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
 	cd $(SHAV) && $(RUN_$(1)) $(abspath $(TL))/$(1)/sha256sum $(SHAVFILES) > ../$(1).sha
 	cmp $(TL)/$(1).sha $(SHAV)/want
 	@echo "tools-check-$(1): sha256 agrees with NIST's vectors and Digest::SHA"
@@ -589,6 +634,20 @@ tools-check-$(1): $(TL)/$(1)/sha256sum $(TL)/$(1)/fftext $(SHAV)/want
 	    $(RUN_$(1)) $(TL)/$(1)/fftext ff $(TL)/$(1).pl.txt | cmp - $$$$t || { echo "tools-check-$(1): fftext: $$$$t"; exit 1; }; \
 	done
 	@echo "tools-check-$(1): fftext and fftext.pl agree on $(words $(TREES)) trees, both ways"
+	@for t in $(TREES); do \
+	    s=0; perl gen/unlicense.pl $$$$t > $(TL)/$(1).pl.ff 2> $(TL)/$(1).pl.err || s=$$$$?; \
+	    f=0; $(RUN_$(1)) $(TL)/$(1)/unlicense $$$$t > $(TL)/$(1).ul.ff 2> $(TL)/$(1).ul.err || f=$$$$?; \
+	    test $$$$s = $$$$f && cmp -s $(TL)/$(1).pl.ff $(TL)/$(1).ul.ff && cmp -s $(TL)/$(1).pl.err $(TL)/$(1).ul.err || { echo "tools-check-$(1): unlicense: $$$$t"; exit 1; }; \
+	done
+	@echo "tools-check-$(1): unlicense and unlicense.pl agree on $(words $(TREES)) trees"
+	@set -e; perl gen/unlicense.pl $(SHARED) > $(TL)/$(1).nl.ff; \
+	for k in riscv64 "riscv64 x86_64" "riscv64 aarch64" "riscv64 arm"; do \
+	    perl gen/trim.pl $(TL)/$(1).nl.ff $$$$k > $(TL)/$(1).pl.ff; \
+	    $(RUN_$(1)) $(TL)/$(1)/trim $(TL)/$(1).nl.ff $$$$k | cmp - $(TL)/$(1).pl.ff; \
+	    perl gen/frozen.pl $(TL)/$(1).pl.ff > $(TL)/$(1).fz.ff; \
+	    $(RUN_$(1)) $(TL)/$(1)/frozen $(TL)/$(1).pl.ff | cmp - $(TL)/$(1).fz.ff; \
+	done
+	@echo "tools-check-$(1): trim and frozen agree with trim.pl and frozen.pl on the shared pages of the bootstrap"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
@@ -611,8 +670,48 @@ $(SHAV)/want:
 	head -n 5 $(SHAV)/want.tmp | cut -d' ' -f1 | cmp - $(SHAV)/nist.want
 	mv $(SHAV)/want.tmp $@
 
-tools: $(TL)/$(TOOLT)/fftext $(TL)/$(TOOLT)/sha256sum
+tools: $(TOOLS:%=$(TL)/$(TOOLT)/%)
 tools-check: $(TOOLTARGETS:%=tools-check-%)
+
+# The committed copies (boot/, tools/old/, see NL above), made again by
+# stage2's tools after a source of theirs changed: shared.ff, a tool.
+CT := $(TL)/$(TOOLT)
+RUNT := $(RUN_$(TOOLT))
+copies: $(CT)/unlicense $(CT)/trim $(CT)/frozen
+	@set -e; $(RUNT) $(CT)/unlicense $(SHARED) > $(TL)/copies.nl.ff; \
+	$(RUNT) $(CT)/trim $(TL)/copies.nl.ff riscv64 > boot/riscv64/shared1.ff; \
+	$(RUNT) $(CT)/frozen boot/riscv64/shared1.ff > boot/riscv64/shared.ff; \
+	for h in x86_64 aarch64 arm; do $(RUNT) $(CT)/trim $(TL)/copies.nl.ff riscv64 $$h > boot/$$h/shared1.ff; done; \
+	for t in $(OLDTOOLS); do $(RUNT) $(CT)/unlicense $(OLDTYPES) tools/$$t.ff > tools/old/$$t.ff; done
+	@echo "copies: $(COPIES)"
+
+# Each committed copy is what the ff tools (stage2's, and ttpc3's unlicense)
+# and the Perl make of its source, and each tree ttpc3's unlicense makes for
+# the chain is what unlicense.pl makes; the links before ttpc3 get at most
+# 3.5 MiB (insize.pl).
+copies-check: $(CT)/unlicense $(CT)/trim $(CT)/frozen $(BOOT)/unlicense $(TTPC_SRC:%=$(NL)/%) $(PROGS:%=$(NL)/progs/riscv64/%.ff)
+	@set -e; d=$(TL)/copies; mkdir -p $$d; \
+	perl gen/unlicense.pl $(SHARED) > $$d/nl.pl; $(RUNT) $(CT)/unlicense $(SHARED) | cmp - $$d/nl.pl; \
+	$(QEMU) $(BOOT)/unlicense $(SHARED) | cmp - $$d/nl.pl; \
+	for k in riscv64 x86_64 aarch64 arm; do \
+	    if test $$k = riscv64; then a=riscv64; else a="riscv64 $$k"; fi; \
+	    perl gen/trim.pl $$d/nl.pl $$a | cmp - boot/$$k/shared1.ff; \
+	    $(RUNT) $(CT)/trim $$d/nl.pl $$a | cmp - boot/$$k/shared1.ff; \
+	done; \
+	perl gen/frozen.pl boot/riscv64/shared1.ff | cmp - boot/riscv64/shared.ff; \
+	$(RUNT) $(CT)/frozen boot/riscv64/shared1.ff | cmp - boot/riscv64/shared.ff; \
+	echo "copies-check: boot/: ttpc1's and ttpc2's shared pages, as the ff tools and the Perl make them"; \
+	for t in $(OLDTOOLS); do \
+	    perl gen/unlicense.pl $(OLDTYPES) tools/$$t.ff | cmp - tools/old/$$t.ff; \
+	    $(RUNT) $(CT)/unlicense $(OLDTYPES) tools/$$t.ff | cmp - tools/old/$$t.ff; \
+	    $(QEMU) $(BOOT)/unlicense $(OLDTYPES) tools/$$t.ff | cmp - tools/old/$$t.ff; \
+	done; \
+	echo "copies-check: tools/old/: the tools in the words of before, as the ff tools and the Perl make them"; \
+	for t in $(TTPC_SRC) $(PROGS:%=progs/riscv64/%.ff); do perl gen/unlicense.pl $$t | cmp - $(NL)/$$t; done; \
+	echo "copies-check: ttpc3's unlicense makes the trees of the chain as unlicense.pl"
+	perl gen/insize.pl ttpc1 boot/riscv64/shared.ff $(TTPC2_SRC)
+	perl gen/insize.pl ttpc2 boot/riscv64/shared1.ff $(TTPC2_SRC)
+	perl gen/insize.pl ttpc2 boot/riscv64/shared1.ff $(TTPC3_SRC)
 
 # Make shared.ff again from mkff.pl, shared.ff.txt, isa/ and macros/, after
 # changing any of them. The whole trees keep the shared pages they have.
@@ -636,4 +735,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean licenses abi tools tools-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))
+.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean licenses abi tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))

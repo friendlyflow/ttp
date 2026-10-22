@@ -23,7 +23,7 @@ use warnings;
 use Digest::SHA qw(sha256);
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(node call uncomment unlicense oldwords newwords is_license ttp_license frozen is_layer kids holder layers read_ff write_ff read_txt write_txt);
+our @EXPORT_OK = qw(node call uncomment unlicense unlicense1 oldwords typenames newwords is_license ttp_license frozen is_layer kids holder layers read_ff write_ff read_txt write_txt);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
@@ -91,8 +91,8 @@ sub is_license { $_[0]{content} eq "license" && @{ $_[0]{children} } }
 # ttpc (stage0, the seeds, ttpc1, ttpc2, ttpc3) reads. A license emits
 # nothing, so what it makes of the tree is the same.
 sub unlicense {
-    my ($n) = @_;
-    oldwords(unlicense1($n));
+    my ($n, $types) = @_;
+    oldwords(unlicense1($n), $types);
 }
 sub unlicense1 {
     my ($n) = @_;
@@ -100,9 +100,11 @@ sub unlicense1 {
 }
 
 # The C words of before (the frozen ttpcs') and now: Words.pm. oldwords
-# gives the tree under n in the words of before, newwords(types, nodes) a
-# tree of before in the words now.
-sub oldwords { require Words; my ($n) = @_; (Words::oldwords({}, $n))[0] }
+# gives the tree under n in the words of before (with the types of another
+# tree too, types from typenames), newwords(types, nodes) a tree of before
+# in the words now.
+sub oldwords { require Words; my ($n, $types) = @_; (Words::oldwords($types // {}, $n))[0] }
+sub typenames { require Words; Words::typenames({}, @_) }
 sub newwords { require Words; Words::newwords(@_) }
 
 # ttp's own license (GPL-3.0-only), the node of gen/license.ff.txt, for
