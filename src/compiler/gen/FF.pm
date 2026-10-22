@@ -23,7 +23,7 @@ use warnings;
 use Digest::SHA qw(sha256);
 use Exporter qw(import);
 
-our @EXPORT_OK = qw(node call uncomment frozen is_layer kids holder layers read_ff write_ff read_txt write_txt);
+our @EXPORT_OK = qw(node call uncomment unlicense unlicense1 oldwords typenames newwords is_license ttp_license frozen is_layer kids holder layers read_ff write_ff read_txt write_txt);
 
 sub node { my ($content, @children) = @_; { content => $content, children => \@children } }
 
@@ -82,21 +82,56 @@ sub uncomment {
             @{ $n->{children} });
 }
 
+# A license: license / SPDX expression / the notice, a line per child (the
+# user's form, 2026-10-19). ttpc takes it for a comment; the frozen ttpcs,
+# which predate it, do not know it.
+sub is_license { $_[0]{content} eq "license" && @{ $_[0]{children} } }
+
+# The tree under n without its licenses, all the way down: what a frozen
+# ttpc (stage0, the seeds, ttpc1, ttpc2, ttpc3) reads. A license emits
+# nothing, so what it makes of the tree is the same.
+sub unlicense {
+    my ($n, $types) = @_;
+    oldwords(unlicense1($n), $types);
+}
+sub unlicense1 {
+    my ($n) = @_;
+    node($n->{content}, map { unlicense1($_) } grep { !is_license($_) } @{ $n->{children} });
+}
+
+# The C words of before (the frozen ttpcs') and now: Words.pm. oldwords
+# gives the tree under n in the words of before (with the types of another
+# tree too, types from typenames), newwords(types, nodes) a tree of before
+# in the words now.
+sub oldwords { require Words; my ($n, $types) = @_; (Words::oldwords($types // {}, $n))[0] }
+sub typenames { require Words; Words::typenames({}, @_) }
+sub newwords { require Words; Words::newwords(@_) }
+
+# ttp's own license (GPL-3.0-only), the node of gen/license.ff.txt, for
+# the trees a tool writes.
+sub ttp_license {
+    my $file = __FILE__ =~ s{[^/]*$}{license.ff.txt}r;
+    open my $h, "<:raw", $file or die "ff: cannot open $file: $!\n";
+    my ($l) = read_txt(do { local $/; <$h> }, $file);
+    $l;
+}
+
 # The tree under n in the language of the frozen ttpc1 and stage0: without
-# comments, and without a definition whose name has a space unless it is a
-# register (its first child a bit string). They take any such definition
-# with children for a register: else if: / condition would name registers
-# else and if.
+# comments and licenses, and without a definition whose name has a space
+# unless it is a register (its first child a bit string). They take any
+# such definition with children for a register: else if: / condition would
+# name registers else and if.
 sub frozen {
     my ($n) = @_;
     my $k = $n->{children};
     return node("char", frozen($k->[1]))
         if $n->{content} eq "address" && @$k == 2 && $k->[0]{content} eq "char"
         && !@{ $k->[0]{children} } && !@{ $k->[1]{children} };
+    # (a layer's children are its holder's: the frozen ones read no layers)
     node($n->{content},
-        map { frozen($_) } grep {
+        map { is_layer($_) ? @{ frozen($_)->{children} } : frozen($_) } grep {
             my $c = $_->{children};
-            !($_->{content} eq "comment" && @$c)
+            !($_->{content} eq "comment" && @$c) && !is_license($_)
                 && !($_->{content} =~ / .*:$/ && @$c && !($c->[0]{content} =~ /^[01]+$/ && !@{ $c->[0]{children} }))
         } @{ $n->{children} });
 }

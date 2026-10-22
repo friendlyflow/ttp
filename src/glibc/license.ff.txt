@@ -1,0 +1,5 @@
+license
+  LGPL-2.1-or-later AND GPL-3.0-only
+  glibc-2.44 in ff: the GNU C Library's own C and asm, translated by ttp (c2ff, s2ff). It is LGPL-2.1-or-later, glibc's COPYING.LIB.
+  Each page holds the license header of each source file it is made of, as the file has it (some files have an exception, or another license).
+  What ttp writes for it (the builtins, libatomic's functions, what c2ff adds) is GPL-3.0-only, Copyright (C) 2026 Nico Verrijdt: see ttp's LICENSE.

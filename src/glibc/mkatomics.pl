@@ -12,23 +12,24 @@ use strict;
 use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../compiler/gen";
-use FF qw(node write_txt);
+use FF qw(node ttp_license write_txt);
 
 sub leaf { map { node($_) } @_ }
 sub param { my ($n, @t) = @_; node("$n:", leaf(@t)) }
-sub content { node('content', node($_[0])) }
+# C's *p: p, then * pointer
+sub content { (node($_[0]), node('* pointer')) }
 
 my @fns;
 for my $n (1, 2, 4, 8) {
     my $u = "u" . 8 * $n;
-    my @p = (param('p', 'address', $u));
+    my @p = (param('p', $u, '* pointer'));
     push @fns, node("__atomic_load_$n:", leaf($u), @p, param('order', 'int'),
         node('return', content('p')));
     push @fns, node("__atomic_store_$n:", leaf('void'), @p, param('v', $u), param('order', 'int'),
         content('p'), leaf('=', 'v'));
     push @fns, node("__atomic_exchange_$n:", leaf($u), @p, param('v', $u), param('order', 'int'),
         node('old:', leaf($u), content('p')), content('p'), leaf('=', 'v'), node('return', leaf('old')));
-    push @fns, node("__atomic_compare_exchange_$n:", leaf('int'), @p, param('e', 'address', $u), param('d', $u),
+    push @fns, node("__atomic_compare_exchange_$n:", leaf('int'), @p, param('e', $u, '* pointer'), param('d', $u),
         param('success', 'int'), param('failure', 'int'),
         node('if', content('p'), leaf('=='), content('e'), content('p'), leaf('=', 'd'), node('return', leaf(1))),
         content('e'), leaf('='), content('p'), node('return', leaf(0)));
@@ -43,4 +44,4 @@ for my $n (1, 2, 4, 8) {
     }
 }
 print write_txt(node('comment', node("libatomic's functions for one thread, written by mkatomics.pl.")),
-    node('atomics:', @fns));
+    node('atomics:', ttp_license(), @fns));

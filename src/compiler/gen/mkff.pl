@@ -32,7 +32,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use FF qw(node write_ff read_txt);
+use FF qw(node is_license write_ff read_txt);
 
 my @TARGETS = qw(riscv64 x86_64 aarch64 arm);
 
@@ -52,9 +52,21 @@ sub section {
     $section;
 }
 
-my $shared = node("shared:",
-    read_txt(slurp("$FindBin::Bin/../shared.ff.txt"), "shared.ff.txt"),
-    map { section($_) } @TARGETS);
+# shared.ff.txt's license (the first of its nodes) is the license of the
+# tree, at its root.
+my @page = read_txt(slurp("$FindBin::Bin/../shared.ff.txt"), "shared.ff.txt");
+my @license = grep { is_license($_) } @page;
+# (past 255 children the first definitions go in a layer, 0:, which ttpc
+# and FF.pm's kids see through; the end of shared.ff.txt, which chooses the
+# target, and the target sections stay where ttpc and the tools that pick
+# them look, among the page's own children)
+my @defs = grep { !is_license($_) } @page;
+my @sections = map { section($_) } @TARGETS;
+if (@defs + @sections > 255) {
+    my $over = @defs + @sections - 254;
+    @defs = (node("0:", @defs[0 .. $over - 1]), @defs[$over .. $#defs]);
+}
+my $shared = node("shared:", @defs, @sections);
 
 binmode STDOUT;
-print write_ff(node("", $shared, map { node("$_:", read_txt(slurp($_), $_)) } @ARGV));
+print write_ff(node("", @license, $shared, map { node("$_:", read_txt(slurp($_), $_)) } @ARGV));

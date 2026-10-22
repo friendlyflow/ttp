@@ -5,6 +5,10 @@
 # held against clang's AST of the C they were made of (src/glibc/roundtrip.pl).
 #
 #   perl ff2c.pl tree.ff.txt out.c names.txt
+#   perl ff2c.pl --pages 'glibc string,glibc stdlib' tree.ff.txt out.c names.txt
+#
+# With --pages, only those glibc pages' bodies and globals are written (the
+# rest declared): all of glibc is held against its C a part at a time.
 #
 # out.c has every type, a declaration of every global and function, the body
 # of every C function of the glibc pages and the definition of each of their
@@ -27,10 +31,38 @@ use FindBin;
 use lib $FindBin::Bin;
 use FF qw(read_txt);
 use FF ();
+use Header ();
 
+my %only;      # --pages a,b: only these glibc pages' bodies and globals
+if (@ARGV && $ARGV[0] eq '--pages') { shift @ARGV; $only{$_} = 1 for split /,/, shift @ARGV }
 my ($in, $out, $namesout) = @ARGV;
-die "usage: ff2c.pl tree.ff.txt out.c names.txt\n" unless defined $namesout;
+die "usage: ff2c.pl [--pages page,...] tree.ff.txt out.c names.txt\n" unless defined $namesout;
 my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt(<$h>, $in) };
+# The C words now (Words.pm): read in the words of before, which the rest of
+# ff2c knows; a : field of a scalar type (C's unnamed bitfield) is padding n:
+# again
+{
+    require Words;
+    my $t = {};
+    { open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "ff2c: shared.ff: $!\n"; local $/; Words::typenames($t, FF::read_ff(<$h>)) }
+    # (through the layers of a node past 255, 0: 1: ...: one list again)
+    my $flat;
+    $flat = sub { my ($n) = @_; $n->{children} = [map { FF::is_layer($_) ? @{ $flat->($_)->{children} } : $flat->($_) } @{ $n->{children} }]; $n };
+    $flat->($_) for @top;
+    @top = Words::oldwords($t, @top);
+    my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 u8 u16 u32 u64);
+    my $pad;
+    $pad = sub {
+        my ($n) = @_;
+        my $k = $n->{children};
+        if (@$k && !@{ $k->[0]{children} } && $k->[0]{content} =~ /^(?:struct|union)$/) {
+            my $i = 0;
+            for (@$k[1 .. $#$k]) { $_->{content} = 'padding ' . ++$i . ':' if $_->{content} eq ':' && @{ $_->{children} } && $scalar{ $_->{children}[0]{content} } }
+        }
+        $pad->($_) for @$k;
+    };
+    $pad->($_) for @top;
+}
 
 sub kids { @{ $_[0]{children} } }
 sub leaf { !@{ $_[0]{children} } }
@@ -62,19 +94,33 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
-    va_list => '__builtin_va_list');
+    va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
+    'complex long double' => '_Complex long double');
 my (%rec, %enum, %fntype, %fn, %var, %econst, @order);
 my %glibcpage;   # functions of the glibc pages (their bodies are written)
+my @headers;    # the license of each file a page is made of: [its name, its lines]
 
 for my $page (@top) {
-    next if c($page) eq 'comment';
-    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:';
+    next if c($page) eq 'comment' || c($page) eq 'license';
+    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:' && (!%only || $only{ c($page) =~ s/:$//r });
+    # (each license after a comment naming its file: that file's header)
+    { my @k = FF::kids($page);
+      for my $i (1 .. $#k) {
+          next unless c($k[$i]) eq 'license' && c($k[$i - 1]) eq 'comment' && @{ $k[$i - 1]{children} };
+          my ($f) = c($k[$i - 1]{children}[0]) =~ /^glibc-\S+ (.+)$/ or next;
+          my (undef, @l) = map { c($_) } kids($k[$i]);
+          push @headers, [$f, \@l];
+      } }
     # (a page's definitions through its layers, 0: 1: ...)
+    my $al;
     for my $d (FF::kids($page)) {
-        next if c($d) eq 'comment';
+        undef $al;
+        next if c($d) eq 'comment' || c($d) eq 'license';
         (my $name = c($d)) =~ s/:$// or fail('not a definition', $d);
         my @k = kids($d);
         my $w = @k ? c($k[0]) : '';
+        # a global's align n first (C's aligned attribute): the words after it as before
+        if ($w eq 'align' && !leaf($k[0])) { $al = c((kids($k[0]))[0]); shift @k; $w = @k ? c($k[0]) : '' }
         push @order, $name;
         if ($w eq 'struct' || $w eq 'union') { $rec{$name} = { kind => $w, node => $d }; next }
         if ($w eq 'enum') {
@@ -96,9 +142,28 @@ for my $page (@top) {
             else { $var{$name} = { node => $d, from => 1, weak => 1 } }
             next;
         }
+        # a constructor or destructor (and its priority): C's attribute
+        if ($w eq 'constructor' || $w eq 'destructor') {
+            my @p = kids($k[0]);
+            $fn{$name} = { kind => 'c', node => $d, from => 1, ctor => $w . (@p ? '(' . c($p[0]) . ')' : '') };
+            $glibcpage{$name} = 1 if $glibc;
+            next;
+        }
         if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1, glibc => $glibc }; next }
+        # a global of a named section; its bounds __start_ and __stop_ of
+        # the name are arrays of its type, as C declares them
+        if ($w eq 'section') {
+            my $sec = c($k[1]);
+            $var{$name} = { node => $d, from => 2, glibc => $glibc, section => $sec };
+            for my $b ("__start_$sec", "__stop_$sec") { next if $var{$b}; $var{$b} = { bound => $name }; push @order, $b }
+            next;
+        }
         if (is_function($d)) { $fn{$name} = { kind => 'c', node => $d, from => 0 }; $glibcpage{$name} = 1 if $glibc }
         else { $var{$name} = { node => $d, from => 0, glibc => $glibc } }
+    } continue {
+        # (past its align)
+        (my $name = c($d)) =~ s/:$//;
+        if (defined $al && $var{$name} && $var{$name}{node} == $d) { $var{$name}{from}++; $var{$name}{align} = $al }
     }
 }
 
@@ -109,7 +174,7 @@ sub is_function {
     for my $k (kids($d)) {
         next if leaf($k);
         my $w = c($k);
-        next if $w eq ':' || $w eq 'address' || $w eq 'cast:' || $w eq 'items';
+        next if $w eq ':' || $w eq 'address' || $w eq 'cast:' || $w eq 'items' || $w eq 'align';
         next if (exists $scalar{$w} || $rec{$w}) && !grep { !leaf($_) } kids($k);
         return 1;
     }
@@ -118,11 +183,12 @@ sub is_function {
 
 # ---- types ------------------------------------------------------------------
 # A type is [scalar => 'int'], [ptr => T or undef (void)], [arr => T, count
-# node], [rec => name], [enum => name], [fn => name].
+# node], [rec => name], [enum => name], [fn => name], [fs => T] (x86_64's
+# __seg_fs: T in fs), [vec => T, count node] (a vector, gcc's vector_size).
 
 sub is_typeword {
     my ($w) = @_;
-    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $rec{$w} || $enum{$w} || $fntype{$w};
+    exists $scalar{$w} || $w eq 'address' || $w eq 'array' || $w eq 'vector' || $w eq 'fs' || $rec{$w} || $enum{$w} || $fntype{$w};
 }
 
 # The type run at $$i of a list of nodes.
@@ -140,10 +206,16 @@ sub ptype {
         return [ptr => undef] if $$i >= @$l || !leaf($l->[$$i]) || !is_typeword(c($l->[$$i]));
         return [ptr => ptype($l, $i)];
     }
+    return [fs => ptype($l, $i)] if $w eq 'fs';
     if ($w eq 'array') {
         my $t = ptype($l, $i);
         my $count = $l->[$$i++] // fail('an array without its count');
         return [arr => $t, $count];
+    }
+    if ($w eq 'vector') {
+        my $t = ptype($l, $i);
+        my $count = $l->[$$i++] // fail('a vector without its count');
+        return [vec => $t, $count];
     }
     fail("not a type: $w", $n);
 }
@@ -165,9 +237,17 @@ sub cdecl {
         $inner = "($inner)" if $to->[0] eq 'arr';
         return cdecl($to, $inner);
     }
+    # (C's qualifier after the type it qualifies: struct p __seg_fs *x,
+    # struct p *__seg_fs *x)
+    return cdecl($t->[1], "__seg_fs $name" =~ s/\s+$//r, $count) if $k eq 'fs';
     if ($k eq 'arr') {
         my $n = $count // count_text($t->[2]);
         return cdecl($t->[1], "$name\[$n\]");
+    }
+    # (a vector as clang spells it: __attribute__((__vector_size__(16 * sizeof(char)))) char)
+    if ($k eq 'vec') {
+        my $e = ctype($t->[1]);
+        return "__attribute__((__vector_size__(" . count_text($t->[2]) . " * sizeof($e)))) $e $name" =~ s/\s+$//r;
     }
     die;
 }
@@ -189,13 +269,16 @@ sub fields {
     my $pad = 0;
     for my $f (kids($r->{node})) {
         my $w = c($f);
-        next if $w eq 'struct' || $w eq 'union' || $w eq 'comment';
+        next if $w eq 'struct' || $w eq 'union' || $w eq 'comment' || $w eq 'align';
         (my $fname = $w) =~ s/:$//;
         my @l = kids($f);
         my $i = 0;
+        # (align n first: C's aligned attribute)
+        my $al = @l && c($l[0]) eq 'align' && !leaf($l[0]) ? c((kids($l[0]))[0]) : undef;
+        $i = 1 if defined $al;
         my $t = ptype(\@l, \$i);
         my $bits = $i < @l ? c($l[$i]) : undef;
-        push @f, { name => $fname, type => $t, bits => $bits };
+        push @f, { name => $fname, type => $t, bits => $bits, align => $al };
     }
     @f;
 }
@@ -217,6 +300,7 @@ sub gtype {
     my ($n) = @_;
     return gtype($fn{$n}{target}) if $fn{$n} && $fn{$n}{kind} eq 'alias' && !$fn{ $fn{$n}{target} };
     my $v = $var{$n} or return undef;
+    return $v->{type} //= [arr => gtype($v->{bound}), { content => '0', children => [] }] if $v->{bound};
     my @l = kids($v->{node});
     my $i = $v->{from};
     $v->{type} //= ptype(\@l, \$i);
@@ -336,7 +420,9 @@ sub binary {
     }
     ($s, $t);
 }
-sub is_ptr { my ($t) = @_; $t && ($t->[0] eq 'ptr' || $t->[0] eq 'arr') }
+sub is_ptr { my ($t) = @_; $t = nofs($t); $t && ($t->[0] eq 'ptr' || $t->[0] eq 'arr') }
+# a type without its fs (x86_64's __seg_fs: the same type in fs)
+sub nofs { my ($t) = @_; $t = $t->[1] while $t && $t->[0] eq 'fs'; $t }
 sub unary {
     my ($l, $pos) = @_;
     my $n = $l->[$$pos] // fail('an operand missing');
@@ -369,7 +455,7 @@ sub text_of { my (@n) = @_; my $s = join '', map { c($_) } @n; utf8::encode($s) 
 
 # The items of a global's array, as numbers: a text global's bytes.
 # A global's items, after its type
-sub items_of { my ($n) = @_; my $v = $var{$n}; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); @l[$i .. $#l] }
+sub items_of { my ($n) = @_; my $v = $var{$n}; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); map { $_->{content} eq 'items' ? kids($_) : $_ } @l[$i .. $#l] }
 sub global_items { my ($n) = @_; my $v = $var{$n} or return; my @l = kids($v->{node}); my $i = $v->{from}; ptype(\@l, \$i); map { $_->{content} =~ /^items$/ ? kids($_) : $_ } @l[$i .. $#l] }
 
 sub operand {
@@ -385,6 +471,7 @@ sub operand {
     }
     if (!@k) {
         return ($w, [scalar => 'int']) if $w =~ /^-?(?:0x[0-9a-fA-F]+|\d+)$/;
+        return ($w, [scalar => 'long double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+L$/i;
         return ($w, [scalar => $w =~ /f$/ ? 'float' : 'double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+f?$/i;
         return ('__builtin_va_arg_pack()', undef) if $w eq 'va_arg_pack';
         return ('__builtin_va_arg_pack_len()', undef) if $w eq 'va_arg_pack_len';
@@ -453,10 +540,34 @@ sub operand {
         my ($s, $t) = expr([@k]);
         return ("(&$s)", [ptr => $t]);
     }
+    # a complex value's parts: C's __real__ and __imag__
+    if ($w eq 'real' || $w eq 'imag') {
+        my ($s, $t) = expr([@k]);
+        return ("(__${w}__ ($s))", $t && $t->[0] eq 'scalar' && $t->[1] =~ /^complex (.+)$/ ? [scalar => $1] : undef);
+    }
     if ($w eq 'content') {
         my ($s, $t) = expr([@k]);
         my $to = $t && $t->[0] eq 'ptr' ? $t->[1] : $t && $t->[0] eq 'arr' ? $t->[1] : undef;
         return ("(*$s)", $to);
+    }
+    # C11's _Generic: an association's name is its type, address as often as
+    # it says and then one type name
+    if ($w eq 'generic') {
+        my ($x, @as) = @k;
+        my ($xs) = expr([$x]);
+        my (@parts, $rt);
+        for my $as (@as) {
+            (my $name = c($as)) =~ s/:$//;
+            my ($v, $vt) = expr([kids($as)]);
+            $rt //= $vt;
+            if ($name eq 'default') { push @parts, "default: $v"; next }
+            my @w;
+            push @w, { content => 'address', children => [] } while $name =~ s/^address (?=.)//;
+            push @w, { content => $name, children => [] };
+            my $i = 0;
+            push @parts, ctype(ptype(\@w, \$i)) . ": $v";
+        }
+        return ("_Generic($xs, " . join(', ', @parts) . ")", $rt);
     }
     if ($w eq 'cast:') {
         my $i = 0;
@@ -474,8 +585,8 @@ sub operand {
         return (($w eq 'sizeof' ? 'sizeof' : '_Alignof') . '(' . ctype($t) . ')', [scalar => 'u64']);
     }
     # an array compound literal: array / its element's type / its count / items
-    if ($w eq 'array') {
-        my @l = ({ content => 'array', children => [] }, @k);
+    if ($w eq 'array' || $w eq 'vector') {
+        my @l = ({ content => $w, children => [] }, @k);
         my $i = 0;
         my $t = ptype(\@l, \$i);
         return ('((' . ctype($t) . ')' . init_list($t, [@l[$i .. $#l]]) . ')', $t);
@@ -507,6 +618,12 @@ sub operand {
         return ("((" . ctype($t) . ")" . init_list($t, [@k]) . ")", $t);
     }
     # a call
+    # (x86_64's pcmpistri of an immediate, c2ff's of gcc's _mm_cmpistri,
+    # _mm_cmpistrc, _mm_cmpistrz: those again, the immediate last)
+    if ($w =~ /^__builtin_ia32_pcmpistr(i|ic|iz)128 (0x[0-9a-f]+)$/) {
+        my $f = '_mm_cmpistr' . { i => 'i', ic => 'c', iz => 'z' }->{$1};
+        return ("$f(" . join(', ', (map { expr_item($_) } items(@k)), $2) . ')', [scalar => 'int']);
+    }
     if (!local_type($w) && !gtype($w) && (sig($w) || $w =~ /^__builtin_/)) {
         my $s = sig($w);
         return (callee($w) . '(' . join(', ', map { expr_item($_) } items(@k)) . ')', $s ? $s->{ret} : undef);
@@ -530,7 +647,9 @@ sub path {
     my @l = @$l;
     while (@l) {
         my $n = $l[0];
-        my $rt = $t && $t->[0] eq 'rec' ? $t->[1] : $t && $t->[0] eq 'ptr' && $t->[1] && $t->[1][0] eq 'rec' ? $t->[1][1] : undef;
+        $t = nofs($t);
+        my $pt = $t && $t->[0] eq 'ptr' ? nofs($t->[1]) : undef;
+        my $rt = $t && $t->[0] eq 'rec' ? $t->[1] : $pt && $pt->[0] eq 'rec' ? $pt->[1] : undef;
         if (defined $rt && leaf($n) && (my $ft = field($rt, c($n)))) {
             $s = "($s" . ($t->[0] eq 'ptr' ? '->' : '.') . cid_local(c($n)) . ")";
             $t = $ft;
@@ -568,7 +687,7 @@ sub init_list {
             push @parts, '{' . join(', ', map { init_item($fl[$k]{type}[1], $_) } @items[$k .. $#items]) . '}';
             last;
         }
-        my $et = $t->[0] eq 'arr' ? $t->[1] : $fl[$k] ? $fl[$k]{type} : undef;
+        my $et = $t->[0] =~ /^(?:arr|vec)$/ ? $t->[1] : $fl[$k] ? $fl[$k]{type} : undef;
         push @parts, init_item($et, $items[$k]);
     }
     # a union set through a member not its first: ttpc sets by place, zeros first
@@ -725,7 +844,12 @@ sub items_head {
 
 my @c;
 push @c, '/* made by ff2c.pl from ' . ($in =~ s{.*/}{}r) . ' */';
+# the header of each file, as the file has it (gen/headers.pl checks them)
+push @c, map { ("/* ff2c: the header of $_->[0] */", Header::header_text(@{ $_->[1] })) } @headers;
+push @c, '/* ff2c: the end of the headers */' if @headers;
 push @c, 'long __ff_syscall(long, ...);', 'extern void *tp;';
+# (gcc's SSE4.2 compares of an immediate, <smmintrin.h>'s, whose calls c2ff makes builtins)
+push @c, map { "int _mm_cmpistr$_(__attribute__((__vector_size__(2 * sizeof(long long)))) long long, __attribute__((__vector_size__(2 * sizeof(long long)))) long long, const int);" } qw(i c z);
 # the records first as names, so that each may point at any
 push @c, map { "$rec{$_}{kind} " . cid($_) . ';' } grep { $rec{$_} } @order;
 # the enums: a constant's value where it has one
@@ -774,7 +898,7 @@ sub rec_body {
         if ($f->{name} eq '' && $f->{type}[0] eq 'rec') { "$rec{ $f->{type}[1] }{kind} " . rec_body($f->{type}[1]) . ';' }
         else {
             my $nm = $f->{name} =~ /^padding \d+$/ && defined $f->{bits} ? '' : cid_local($f->{name});
-            cdecl($f->{type}, $nm) . (defined $f->{bits} ? " : $f->{bits}" : '') . ';';
+            cdecl($f->{type}, $nm) . (defined $f->{bits} ? " : $f->{bits}" : '') . (defined $f->{align} ? " __attribute__((aligned($f->{align})))" : '') . ';';
         }
     } @fl) . ' }';
 }
@@ -782,7 +906,9 @@ sub emit_rec {
     my ($r) = @_;
     return if $rdone{$r}++;
     rec_deps($r);
-    push @c, "$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . ';';
+    # (a record's own align, after struct: C's aligned attribute after its braces)
+    my ($al) = map { c((kids($_))[0]) } grep { c($_) eq 'align' && !leaf($_) } kids($rec{$r}{node});
+    push @c, "$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . (defined $al ? " __attribute__((aligned($al)))" : '') . ';';
 }
 emit_rec($_) for grep { $rec{$_} } @order;
 # the globals
@@ -801,7 +927,7 @@ sub proto {
     cdecl($s->{ret}, cid($name) . "($ps)");
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} ne 'alias' && !clang_builtin($_) } @order) {
-    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ';';
+    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ';';
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} eq 'alias' } @order) {
     my $t = $fn{$f}{target};
@@ -815,7 +941,9 @@ for my $v (grep { $var{$_} && $var{$_}{glibc} && !$var{$_}{weak} && $_ !~ /^(?:w
     my @items = items_of($v);
     my $init = !@items ? '' : ($t->[0] eq 'arr' || $t->[0] eq 'rec') ? ' = ' . init_list($t, \@items) : ' = ' . expr_item([map { c($_) eq 'items' ? kids($_) : $_ } @items]);
     local $cur_fn = $v;
-    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$init;"; 1 };
+    my $sec = $var{$v}{section} ? " __attribute__((section(\"$var{$v}{section}\")))" : '';
+    $sec .= " __attribute__((aligned($var{$v}{align})))" if defined $var{$v}{align};
+    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$sec$init;"; 1 };
     warn $@ unless $ok;
     # (where glibc has it: a unit's own static in that unit, a function's static in that function)
     my $hint = $v =~ /^\S+ (\S+\/\S+)$/ ? "unit $1" : $v =~ /^(\S+) \S+$/ && $fn{$1} ? 'in ' . orig($1) : '-';
@@ -864,7 +992,13 @@ open my $h, '>', $out or die "ff2c: $out: $!\n";
 print $h join("\n", @c), "\n";
 close $h;
 push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { $var{$_} || $fn{$_} } @order;
+# (and the enum constants c2ff named with their unit: C's name for them)
+push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { /^\S+ \S+\/\S+$/ } sort keys %econst;
 push @names, map { join("\t", 'asm', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'asm' } @order;
+# (and the aliases of asm functions, which C calls as they are: aarch64's
+# stpcpy of __stpcpy)
+sub asm_target { my ($n, $d) = @_; return 0 if $d > 8 || !$fn{$n}; return 1 if $fn{$n}{kind} eq 'asm'; $fn{$n}{kind} eq 'alias' && asm_target($fn{$n}{target}, $d + 1) }
+push @names, map { join("\t", 'asm', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'alias' && asm_target($_, 0) } @order;
 open $h, '>', $namesout or die "ff2c: $namesout: $!\n";
 print $h map { "$_\n" } @names;
 close $h;

@@ -9,6 +9,12 @@
 #   perl s2ff.pl --items file.s file.dump    its functions alone, for a page of
 #                                            several files'
 #   perl s2ff.pl --size file.s file.dump     the bytes of those instructions
+#   perl s2ff.pl --header file.s ...        the license of each one's file, for
+#                                            the top of their page
+#   perl s2ff.pl --align file.s file.dump    x86_64: the first function's
+#                                            alignment
+#
+# x86_64's (the dump of an elf64-x86-64 object) is s2ffx86.pm's.
 #
 # file.dump is what GNU as made of file.s, without relaxation, as objdump
 # -d -M no-aliases prints it: where it chose a compressed instruction, the ff
@@ -21,7 +27,7 @@
 #   directives      .globl .weak .type .size .cfi_* .option .attribute .align .text
 #                   give no bytes of their own here and are dropped (ttpc places a
 #                   function on a 2-byte boundary, as RVC allows); any other
-#                   stops the translation; X = Y is an alias; in a section
+#                   stops the translation; X = Y (or .set X, Y) is an alias; in a section
 #                   other than .text, .zero N is c2ff --zero's global (its
 #                   other labels aliases of it), and an init array is left out
 #   instructions    GNU's operands reversed (loads off base rd, stores off
@@ -37,22 +43,44 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use FF qw(node write_txt);
+use Header qw(license_nodes);
 
 my $page = 'glibc asm';
 my @files;
 my $size;
 my $items;
+my $alignopt;             # --align (x86_64): the first function's alignment
+my $header;
+my (@zero, @then);               # --header file.s ...: the license of each one's file (Header.pm)
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--size') { $size = 1; next }
     if ($a eq '--items') { $items = 1; next }
+    if ($a eq '--header') { $header = 1; next }
+    if ($a eq '--align') { $alignopt = 1; next }
+    # (x86_64: c2ff --zero's objects; crtn's .s and dump, the end of crti's)
+    if ($a eq '--zero') { push @zero, shift @ARGV; next }
+    if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     push @files, $a;
 }
+if ($header) { print write_txt(license_nodes(@files)); exit }
 die "usage: s2ff.pl [--page name | --items | --size] file.s file.dump\n" unless @files == 2;
 my ($src, $dump) = @files;
 my $where = $src;
 sub fail { die "s2ff: $where: @_\n" }
+
+# x86_64 (the dump says so) has its own arm, s2ffx86.pm: one AT&T
+# instruction is many encodings there, and it takes the form whose bytes
+# are GNU's (--align: the alignment of the first function)
+if (do { open my $h, "<", $dump or die "s2ff: cannot open $dump: $!\n"; local $/; <$h> } =~ /file format elf64-x86-64/) {
+    require s2ffx86;
+    my %opt = (zero => \@zero, @then ? (then => \@then) : ());
+    if ($size || $alignopt) { print s2ffx86::run($size ? "size" : "align", $src, $dump, %opt), "\n"; exit }
+    my $out = s2ffx86::run("ff", $src, $dump, %opt);
+    print $items ? write_txt(@$out) : write_txt(node("$page:", license_nodes($src), @$out));
+    exit;
+}
 
 # ---- what GNU as made: the size and the canonical form of each instruction
 my @made;
@@ -134,7 +162,12 @@ sub full {
     return ins($op) if $op =~ /^(ecall|ebreak|fence\.i)$/ && !@o;
     my $vm = 1;
     if (@o && $o[-1] eq 'v0.t') { pop @o; $vm = 0 }
+    # (add, and, or, xor of an immediate: GNU as takes them for addi ...,
+    # getcontext's add a2, a0, 40)
+    return ins("${op}i", reverse @o) if $op =~ /^(add|and|or|xor)$/ && @o == 3 && $o[2] =~ /^-?(?:0x[0-9a-f]+|\d+)$/i;
     return ins($op, reverse @o) if $rtype{$op} || $itype{$op} || $macro{$op};
+    # jal [rd,] target (rd ra where it is left out: setcontext's jal __setcontext)
+    return ins('jal', rel($o[-1]), @o == 2 ? $o[0] : 'ra') if $op eq 'jal' && @o <= 2 && !isnum($o[-1]);
     return ins($op, mem($o[1]), $o[0]) if $load{$op};
     if ($store{$op}) { my ($off, $base) = mem($o[1]); return ins($op, $off, $o[0], $base) }
     return ins($op, rel($o[2]), $o[1], $o[0]) if $btype{$op};
@@ -145,6 +178,10 @@ sub full {
     return ins('xori', -1, $o[1], $o[0]) if $op eq 'not';
     return ins('subw', $o[1], 'zero', $o[0]) if $op eq 'negw';
     return ins('addiw', 0, $o[1], $o[0]) if $op eq 'sext.w';
+    # the float CSR, fcsr (3): frsr rd is csrrs rd, fcsr, zero, fssr [rd,] rs
+    # csrrw rd (or zero), fcsr, rs (getcontext, setcontext)
+    return ins('csrrs', 3, 'zero', $o[0]) if $op eq 'frsr' || $op eq 'frcsr';
+    return ins('csrrw', 3, $o[-1], @o == 2 ? $o[0] : 'zero') if $op eq 'fssr' || $op eq 'fscsr';
     # vector
     return ins($op, vtype(@o[2 .. $#o]), $o[1], $o[0]) if $op eq 'vsetvli';
     return ins($op, vtype(@o[2 .. $#o]), num($o[1]), $o[0]) if $op eq 'vsetivli';
@@ -182,7 +219,8 @@ sub short {
 sub canon {
     my ($m) = @_;
     return short($m) if $m->{bytes} == 2;
-    my @o = split_ops($m->{args});
+    # (without objdump's note of the value, addiw a0,a0,273 # 4111 <...>)
+    my @o = split_ops($m->{args} =~ s/\s*#.*$//r);
     if ($m->{op} eq 'lui') { my $v = num($o[1]) << 12; $v -= 2**32 if $v >= 2**31; return ins('lui', $v, $o[0]) }
     return ins($m->{op}, num($o[2]), $o[1], $o[0]) if $m->{op} =~ /^(addi|addiw)$/;
     fail "no ff form for $m->{op} in a li";
@@ -284,8 +322,8 @@ while (my $l = <$s>) {
             }
         }
         next if $st eq '';
-        # X = Y (a weak_alias): another name for Y
-        if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)); next }
+        # X = Y (a weak_alias), or .set X, Y (vfork's __vfork): another name for Y
+        if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)); next }
         my ($op, $rest) = $st =~ /^(\S+)\s*(.*)$/;
         if ($op =~ /^\./) {
             # the nops GNU as put in to align a function, kept where it runs
@@ -385,4 +423,4 @@ if ($size) { my $b = 0; $b += $_->{bytes} for @made; print "$b\n"; exit }
         $i--;
     }
 }
-print $items ? write_txt(@fns) : write_txt(node("$page:", @fns));
+print $items ? write_txt(@fns) : write_txt(node("$page:", license_nodes($src), @fns));
