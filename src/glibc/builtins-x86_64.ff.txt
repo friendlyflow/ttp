@@ -337,3 +337,91 @@
         :
           y
           & address
+  comment
+    gcc's __builtin_sqrt and __builtin_sqrtf on x86_64 (-fno-math-errno, as glibc's libm is built): sqrtsd and sqrtss, the root rounded once, as gcc makes them;
+    each a C function that gives the addresses of its operand and its result (rdi rsi) to an asm function of its own.
+    __builtin_fma and __builtin_fmaf: gcc calls fma and fmaf, libm's (s_fma.c, s_fmaf.c: their ifuncs pick FMA3, FMA4 or the C of SSE2), when FMA is not on (glibc is built for x86-64 without it); so do these.
+  __ff_sqrtsd:
+    asm
+    movsd.n.m0
+      0
+      rdi
+      xmm0
+    sqrtsd.n
+      xmm0
+      xmm0
+    movsd.n.m0r
+      xmm0
+      0
+      rsi
+    ret
+  __builtin_sqrt:
+    double
+    x:
+      double
+    r:
+      double
+    __ff_sqrtsd
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_sqrtss:
+    asm
+    movss.n.m0
+      0
+      rdi
+      xmm0
+    sqrtss.n
+      xmm0
+      xmm0
+    movss.n.m0r
+      xmm0
+      0
+      rsi
+    ret
+  __builtin_sqrtf:
+    float
+    x:
+      float
+    r:
+      float
+    __ff_sqrtss
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __builtin_fma:
+    double
+    x:
+      double
+    y:
+      double
+    z:
+      double
+    return
+      fma
+        x
+        y
+        z
+  __builtin_fmaf:
+    float
+    x:
+      float
+    y:
+      float
+    z:
+      float
+    return
+      fmaf
+        x
+        y
+        z

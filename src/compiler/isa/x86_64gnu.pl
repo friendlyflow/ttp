@@ -574,6 +574,24 @@ vexf(nm => "vmovq", pp => 66, lens => ["lig"], op => 0xd6, kind => "MR", regs =>
 gform("vzeroupper", [], "vzeroupper", gbytes(0xc5, 0xf8, 0x77));
 gform("vzeroall", [], "vzeroall", gbytes(0xc5, 0xfc, 0x77));
 
+# FMA: x * y + z rounded once (libm's fma and fmaf, whose ifuncs pick
+# these: s_fma.c's and s_fmaf.c's asm statements). FMA3 is VEX 66 0F38, W
+# by the width (sd W1, ss W0); FMA4 (AMD's) VEX 66 0F3A, of registers
+# W1 as GNU as takes it: AT&T's first operand (the addend) the r/m, its
+# second a register in imm8's high nibble (is4)
+$isa->group("gnu encodings");
+$isa->def("is4", "is'[3:0]", "zz=0000");
+$isa->group("gnu fma");
+for my $t (["sd", 1], ["ss", 0]) {
+    my ($p, $w) = @$t;
+    vexf(nm => "vfmadd213$p", pp => 66, map => 2, w => $w, lens => ["lig"], op => 0xa9, kind => "RVM", mk => "x");
+}
+for my $t (["vfmaddsd", 0x6b], ["vfmaddss", 0x6a]) {
+    my ($nm, $op) = @$t;
+    gform("$nm.vex3", ["rs:x.any", "is:x.any", "vs:x.any", "rd:x.any"], "$nm <rs>, <is>, <vs>, <rd>",
+        gbytes(0xc4), C("vex3.1", "rd", 0, "rs", 3), C("vex3.2", 1, "vs", 0, 1), gbytes($op), C("modrm", 3, "rd", "rs"), C("is4", "is"));
+}
+
 # the masks: kmov between k and r32/r64, kortest, kord (VEX, L0; kord L1)
 $isa->group("gnu mask");
 vexf(nm => "kmovd", pp => "f2", lens => ["lz"], op => 0x92, kind => "RM", rk => "k", mk => "l", mem => 0, rsfx => "tok", gnu => "kmovd");

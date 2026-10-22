@@ -290,7 +290,10 @@ RUNENV_args := FF_ARGS=hello
 OBJS_gnuc := $(OBJS_ldouble)
 CFLAGS_gnuc := -fno-math-errno
 ASMS_gnuc :=
-ROOTS_gnuc := $(ROOTS_ldouble)
+# (x86_64's __builtin_fma and __builtin_fmaf call libm's fma and fmaf, as
+# gcc does: builtins-x86_64.ff.txt)
+ROOTS_gnuc_x86_64 := fma fmaf
+ROOTS_gnuc := $(ROOTS_ldouble) $(ROOTS_gnuc_$(GTARGET))
 
 MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 
@@ -310,8 +313,7 @@ MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
 # has no startup in ff yet: its programs have a _start of their own (c2ff
 # --start).
 GLIBC_START := $(filter riscv64 aarch64 x86_64,$(GTARGET))
-# (on x86_64 for its milestones of LINKED_x86_64, all but gnuc, which is
-# not checked there)
+# (on x86_64 for its milestones of LINKED_x86_64, all of them now)
 startms = $(if $(GLIBC_START),$(if $(filter x86_64,$(GTARGET)),$(filter $(1),$(LINKED_x86_64)),1))
 OBJS_start := csu/static-reloc csu/init csu/check_fds elf/dl-early_allocate nptl/nptl_deallocate_tsd nptl/nptl_nthreads \
 	elf/dl-tls_init_tp stdlib/setenv elf/dl-execstack-tunable nptl/pthread_keys
@@ -336,7 +338,7 @@ UNITDEP_x86_64 := c2ff
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
 LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
-LINKED_x86_64 := string stdlib ldouble malloc stdio floats args
+LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -470,13 +472,9 @@ ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
 # (x86_64: every asm object of glibc but those s2ff makes no ff of yet,
 # by reason: libmvec's (mathvec/: SSE and AVX's packed floats, mulpd
 # vfmadd213pd vinsertf128 ..., have no forms yet, and most have tables in
-# .rodata); libm's long double constants (.byte lists, .double, a label
-# and its data on one line); ____longjmp_chk (a string in another section,
-# and padding past an alignment); crti and crtn (.init and .fini, not
-# .text: s2ff --then makes their ff, the milestones run it))
-ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM)) \
-	math/e_exp2l math/e_exp10l math/e_expl math/s_expm1l math/e_scalbl math/e_log10l math/e_log2l math/e_logl \
-	math/e_powl math/s_log1pl debug/____longjmp_chk csu/crti csu/crtn
+# .rodata); crti and crtn (.init and .fini, not .text: s2ff --then makes
+# their ff, the milestones run it))
+ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM)) csu/crti csu/crtn
 ASMCHECK_x86_64 = $(filter-out $(ASMSKIP_x86_64),$(ALL_ASM))
 ASMCHECK ?= $(or $(ASMCHECK_$(GTARGET)),$(ASMS_stdio))
 # (made by a make of its own: aarch64's list is all of glibc's asm, which
@@ -544,6 +542,9 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 # files of what the program reaches, read lazily). Both run with V and without; all
 # four must exit with the status on the first line of progs/NAME.expect
 # ("exit N") and print the rest of it.
+# (x86_64's gnuc with libm.a too: gcc calls fma and fmaf there, which it
+# makes no instruction of without FMA, as glibc's own libm is built)
+REFLIBS_gnuc_x86_64 = $(OBJ)/math/libm.a
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
@@ -551,7 +552,7 @@ $(FF)/%.ref $(FF)/%.map &: progs/%.c $(OBJ)/libc.a
 	mkdir -p $(FF)
 	$(RUN) -t 120 $(GLIBC_CC) -O2 -fno-builtin $(PROGFLAGS) $(CFLAGS_$*) -c $< -o $(FF)/$*.ref.o
 	$(RUN) -t 120 $(GLIBC_CC) -static -nostdlib -Wl,-Map=$(FF)/$*.map -o $(FF)/$*.ref $(OBJ)/csu/crt1.o $(OBJ)/csu/crti.o $(CRTBEGIN) \
-	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
+	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a $(REFLIBS_$*_$(GTARGET)) -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
 
 # what a milestone's program links of glibc (aarch64's milestones)
 $(FF)/%.objs.mk: $(FF)/%.map linkobjs.pl allobjs.pl mki.pl
@@ -577,7 +578,8 @@ $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
 
 # what a check expects: progs/NAME.expect, or progs/NAME.<target>.expect
 # where the target's glibc differs (soft-fp's NaNs: riscv64 makes them
-# canonical, aarch64 and x86_64 keep a NaN's payload, x86_64's sign is 1)
+# canonical, aarch64 and x86_64 keep a NaN's payload, x86_64's sign is 1;
+# gnuc: riscv64's program hashes its asm statements' results too)
 expect = $(firstword $(wildcard progs/$(1).$(GTARGET).expect) progs/$(1).expect)
 
 define check

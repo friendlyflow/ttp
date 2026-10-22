@@ -1178,8 +1178,10 @@ sub asm_stmt {
 # aarch64's FP/SIMD operand (w, a float) comes in s0, s1 ... by AAPCS64 and
 # is moved to s16 ... (sfp-machine.h's fdiv, fadd ... that raise its
 # exceptions); x86_64's
-# x operand, only in an empty template (sfp-exceptions.c: the division is
-# the C around it), passes through a register as it is.
+# x operand, in an empty template (sfp-exceptions.c: the division is the C
+# around it), passes through a register as it is; in a template with
+# instructions (libm's fma: vfmadd213sd), one of a float or a double is an
+# xmm register of its own, through its address.
 my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9)]);
 my %retreg = (aarch64 => 'x0', x86_64 => 'rax');
 # aarch64's system registers as mrs and msr take them: op0 op1 CRn CRm op2
@@ -1244,6 +1246,11 @@ sub asm_ins_other {
             return node($o, map { node(s/^%//r) } @a) if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)[lq]$/;
         }
         return node($op, node($1)) if $op =~ /^(?:div|mul)q$/ && @a == 1 && $a[0] =~ /^%(\w+)$/;
+        # FMA on xmm registers (libm's fma and fmaf): FMA3's 213 form and
+        # FMA4's, both VEX3 (x86_64gnu.ff)
+        if ((($op =~ /^vfmadd213s[sd]$/ && @a == 3) || ($op =~ /^vfmadds[sd]$/ && @a == 4)) && !grep { !/^%xmm\d+$/ } @a) {
+            return node("$op.vex3", map { node(s/^%//r) } @a);
+        }
         if ($op =~ /^(?:ldmxcsr|stmxcsr|fldenv|fnstenv)$/ && @a == 1 && $a[0] =~ /^(-?\d*)\(%(\w+)\)$/) {
             return node("$op.m", node($1 eq '' ? 0 : $1), node($2));
         }
@@ -1267,11 +1274,25 @@ sub asm_stmt_other {
     }
     # each operand: what it is, and the register it wants (x86's a, d ...)
     my (@want, $ret, @code, @after, %text);
+    # (x86_64's x operands of a float or a double in a template that has
+    # instructions, libm's fma: each in an xmm register of its own, xmm0
+    # up, loaded from its address and an output stored there after; an
+    # input in an output's place, "0", loaded into the output's)
+    my (%xreg, $xn);
     for my $i (0 .. $#$ops) {
         my $out = $i < @$oc;
         my $c = $out ? $oc->[$i] : $ic->[$i - @$oc];
         (my $k = $c) =~ s/[=+&]//g;
         $k = 'r' if ($k eq 'rm' || $k eq 'g') && $target eq 'x86_64';
+        if ($target eq 'x86_64' && $template =~ /\S/ && ($k =~ /^xm?$/ || ($k =~ /^\d$/ && !$out && $xreg{$k}))) {
+            stop("the asm constraint $c", $n) if $c =~ /\+/;
+            my $t = tword($ops->[$i]);
+            my $w = $t eq 'float' ? 's' : $t eq 'double' ? 'd' : stop("the asm operand $c of a $t", $n);
+            $xreg{$i} = $k =~ /^\d$/ ? $xreg{$k} : ['xmm' . ($xn++ // 0), $w];
+            $text{$i} = $xreg{$i}[0];
+            push @want, [$i, $out ? 'xout' : 'xin'];
+            next;
+        }
         if ($out && $fixed{$k}) {
             # an output in a fixed register: stored through its address after
             stop("the asm constraint $c", $n) if $c =~ /\+/;
@@ -1317,7 +1338,11 @@ sub asm_stmt_other {
         my ($i, $how, $r, $j) = @$w;
         my $a = $j < 100 ? $regs->[$j] : undef;
         $arg[$j] = [$i, $how eq 'value' ? 'value' : 'address'];
-        if ($how eq 'address') {
+        if ($how =~ /^x(in|out)$/) {
+            my ($x, $w) = @{ $xreg{$i} };
+            push @code, node("movs$w.n.m0", node(0), node($a), node($x)) if $how eq 'xin';
+            push @after, node("movs$w.n.m0r", node($x), node(0), node($a)) if $how eq 'xout';
+        } elsif ($how eq 'address') {
             stop("the asm output $oc->[$i]", $n) unless $target eq 'x86_64';
             # stored by its C type's size (cpuid's are 32 bits); an address
             # in a register the instructions write (cpuid's rcx, rdx) is
@@ -1628,6 +1653,9 @@ sub expr {
         # a builtin of a libc function is a call of it, as gcc makes one
         # where it does not expand the builtin
         $name = $1 if $name =~ /^__builtin_((?:mem|str|stp)\w+|free|malloc)$/;
+        # and the other way: a libm function gcc always expands, as its
+        # builtin (s_scalbn's copysign, which libc.a has no function of)
+        $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
         # gcc's alloca: ttpc's, C on the shared page, which the function gives
         # back when it returns
         return node('alloca', map { item(expr($_)) } @args) if $name eq '__builtin_alloca';
