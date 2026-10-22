@@ -19,3 +19,16 @@ ttpc2.ff              GPL-3.0-only
 ttpc2.defs.ff         GPL-3.0-only
 ttpc3.ff              GPL-3.0-only
 ttpc3.defs.ff         GPL-3.0-only
+# The committed copies of the bootstrap (see the Makefile, NL): what ttp's
+# tools make of a source of ttp's, without its license root, for the frozen
+# links that read no license; their license is their source's.
+boot/riscv64/shared.ff     GPL-3.0-only
+boot/riscv64/shared1.ff    GPL-3.0-only
+boot/x86_64/shared1.ff     GPL-3.0-only
+boot/aarch64/shared1.ff    GPL-3.0-only
+boot/arm/shared1.ff        GPL-3.0-only
+tools/old/rt.ff            GPL-3.0-only
+tools/old/sha256.ff        GPL-3.0-only
+tools/old/fftree.ff        GPL-3.0-only
+tools/old/words.ff         GPL-3.0-only
+tools/old/unlicense.ff     GPL-3.0-only
