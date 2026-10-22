@@ -2329,10 +2329,24 @@ sub align_attr {
     my $n;
     for my $a (grep { $_->{kind} eq 'AlignedAttr' } @{ $d->{inner} || [] }) {
         my ($e) = @{ $a->{inner} || [] };
-        my $v = !$e || !%$e ? ($target eq 'arm' ? 8 : 16) : $e->{value};
+        my $v = !$e || !%$e ? alignas($a) // ($target eq 'arm' ? 8 : 16) : $e->{value};
         defined $v && $v =~ /^\d+$/ or stop('an aligned attribute of no number', $d);
         $n = $v if !defined $n || $v > $n;
     }
+    $n;
+}
+# _Alignas (type), whose JSON has neither n nor the type (the .i has it):
+# the alignment of the type, a scalar's; undef for aligned without n
+sub alignas {
+    my ($a) = @_;
+    my $b = $a->{range}{begin}{offset} // ($a->{range}{begin}{expansionLoc} // {})->{offset};
+    return undef unless defined $b && $cur_unit;
+    substr($cur_unit->{text}, $b, 200) =~ /^(?:_Alignas|alignas)\s*\(\s*([^()]*?)\s*\)/ or return undef;
+    my $t = $1;
+    return $t + 0 if $t =~ /^\d+$/;
+    my ($w, @more) = ctype($t);
+    my $n = !@more && ($target eq 'arm' && $w =~ /^(?:long|address)$/ ? 4 : $wsize{$w});
+    $n or stop("_Alignas of $t, no scalar", $a);
     $n;
 }
 sub max_align { my ($a, $b) = @_; !defined $a ? $b : !defined $b ? $a : $a > $b ? $a : $b }
@@ -2369,8 +2383,9 @@ sub decl {
     # static program: no section there
     my ($sec) = $global ? grep { $_->{kind} eq 'SectionAttr' && $_->{section_name} =~ /^[A-Za-z_]\w*$/ } kids($v) : ();
     unshift @tls, node('section'), node($sec->{section_name}) if $sec;
-    # (a global's aligned attribute first; a local's is not kept)
-    unshift @tls, align_node(align_attr($v)) if $global;
+    # (an aligned attribute or _Alignas first: a global's, a local's,
+    # qsort's _Alignas (uint64_t) char tmp[1024])
+    unshift @tls, align_node(align_attr($v));
     node(($name // ffname($v->{name})) . ':', @tls, map({ node($_) } @t), grouped(255 - @t - @tls, @i));
 }
 # A variable-length array's count from its text: names (its locals), numbers,

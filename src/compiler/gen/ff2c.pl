@@ -737,7 +737,9 @@ sub stmt_of {
     if (@$e == 1 && $w =~ /^(.+):$/ && $w ne ':' && $w ne 'cast:') {
         my $name = $1;
         my @k = kids($n);
-        if (@k && leaf($k[0]) && is_typeword(c($k[0])) && !local_type(c($k[0]))) { return ['decl', decl($name, $n)] }
+        # (a local's align n first: C's aligned attribute)
+        my $j = @k > 1 && c($k[0]) eq 'align' && kids($k[0]) == 1 && leaf((kids($k[0]))[0]) ? 1 : 0;
+        if (@k > $j && leaf($k[$j]) && is_typeword(c($k[$j])) && !local_type(c($k[$j]))) { return ['decl', decl($name, $n)] }
         # a label: its statements after it
         my @s = map { stmt_of($_) } elements(@k);
         return ['stmt', cid_local($name) . ': ' . (@s ? join(' ', map { text($_) } @s) : ';')];
@@ -766,12 +768,15 @@ sub decl {
     my ($name, $n) = @_;
     my @k = kids($n);
     my $i = 0;
+    my $al;
+    if (c($k[0]) eq 'align' && !leaf($k[0])) { $al = c((kids($k[0]))[0]); $i = 1 }
     my $t = ptype(\@k, \$i);
     my @init = @k[$i .. $#k];
     my $vla;
     if ($t->[0] eq 'arr' && !(leaf($t->[2]) && (c($t->[2]) =~ /^\d+$/ || $econst{ c($t->[2]) }))) { $vla = 1 }
     $scope[-1]{$name} = $t;
     my $d = cdecl($t, cid_local($name));
+    $d .= " __attribute__((aligned($al)))" if defined $al;
     return "$d;" unless @init;
     if ($t->[0] eq 'arr' || ($t->[0] eq 'rec' && !copy_of($t, \@init))) { return "$d = " . init_list($t, \@init) . ';' }
     "$d = " . expr_item([@init]) . ';';

@@ -282,6 +282,7 @@ ff, the language ttpc compiles
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64, aarch64, x86_64), else a global
       align / n, first under a global's name (before thread local or section), places the global at a multiple of n
+      align / n, first under a local's name, places the local in its frame at a multiple of n from the frame's base (C's _Alignas, qsort's tmp); the base is only as aligned as the stack's word, so past that n holds only where the caller's sp was aligned
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
       ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled
