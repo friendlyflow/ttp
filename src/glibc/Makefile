@@ -481,6 +481,8 @@ ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
 # their ff, the milestones run it))
 ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM)) csu/crti csu/crtn
 ASMCHECK_x86_64 = $(filter-out $(ASMSKIP_x86_64),$(ALL_ASM))
+# (arm: as aarch64, every asm object but crti and crtn)
+ASMCHECK_arm = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
 ASMCHECK ?= $(or $(ASMCHECK_$(GTARGET)),$(ASMS_stdio))
 # (made by a make of its own: aarch64's list is all of glibc's asm, which
 # this Makefile works out only after this rule)
