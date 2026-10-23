@@ -100,7 +100,7 @@ if ($cmd eq 'why') {
     exit 0;
 }
 
-sub slurp { my ($f) = @_; open my $h, '<:raw', $f or return ''; local $/; <$h> }
+sub slurp { my ($f) = @_; open my $h, '<:raw', $f or return ''; local $/; my $c = <$h>; defined $c ? $c : '' }
 sub status_word { my ($s) = @_; $s == 0 ? 'PASS' : $s == 77 ? 'UNSUPPORTED' : $s >= 128 ? 'FAIL, signal ' . ($s - 128) : 'FAIL' }
 
 if ($cmd eq 'run') {
