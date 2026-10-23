@@ -29,7 +29,7 @@ OBJ := $(BUILD)/ttpc.o
 
 # The ff sources, edited in sicompass. ttpc is a program of only its own,
 # ttpc.ff, with its constants in ttpc.defs.ff, on the shared page
-# (shared.ff, from mkff.pl): ttpc --target riscv64 shared.ff ttpc.defs.ff
+# (shared.ff, from tools/mkff.ff: make refresh): ttpc --target riscv64 shared.ff ttpc.defs.ff
 # ttpc.ff out. A C program is its program alone too: ttpc shared.ff prog.ff
 # out. ttpc1.ff (the frozen ttpc of the chain) and the asm programs in
 # progs/riscv64/ are whole trees (the shared pages of then, their own; the
@@ -624,14 +624,13 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # mkff (tools/mkff.ff, as gen/mkff.pl) makes the shared page: shared.ff.txt,
 # a section per target, macros/<target>.ff.txt. A target's forms are an ff
 # page (isa/<target>.ff, as isa/<target>.pl) that tools/isa.ff (gen/ISA.pm's
-# builder) makes the section's groups of; MKFFLIB are those pages. Of a
-# target not yet in ff (x86_64 for now) mkff takes the section of the
-# shared page it replaces (./shared.ff) as it is, so `make refresh` stays
-# mkff.pl until all four are; tools-check runs both and compares. mkff
-# runs after stage2 exists (it builds it): the chain reads the committed
-# shared.ff and never makes it.
+# builder) makes the section's groups of; MKFFLIB are those pages, all four
+# targets'. `make refresh` runs it; tools-check runs mkff.pl too (with
+# gen/ISA.pm and isa/<target>.pl, the second implementation) and compares.
+# mkff runs after stage2 exists (it builds it): the chain reads the
+# committed shared.ff and never makes it.
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff
-MKFFLIB := tools/isa.ff isa/riscv64.ff isa/aarch64.ff isa/arm.ff
+MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
@@ -699,7 +698,7 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
 	$(RUN_$(1)) $(TL)/$(1)/mkff | cmp - $(TL)/$(1).shared.pl; \
 	perl gen/mkff.pl gen/license.ff.txt macros/riscv64.ff.txt > $(TL)/$(1).shared.pl; \
 	$(RUN_$(1)) $(TL)/$(1)/mkff gen/license.ff.txt macros/riscv64.ff.txt | cmp - $(TL)/$(1).shared.pl
-	@echo "tools-check-$(1): mkff and mkff.pl make the same shared page (the sections of riscv64, aarch64 and arm from isa/riscv64.ff, isa/aarch64.ff and isa/arm.ff), and the same tree of pages"
+	@echo "tools-check-$(1): mkff and mkff.pl make the same shared page (every section from isa/<target>.ff), and the same tree of pages"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
@@ -790,11 +789,14 @@ copies-check: $(CT)/unlicense $(CT)/trim $(CT)/frozen $(CT)/mkhost $(CT)/mkwhole
 	    perl gen/insize.pl ttpc2 boot/$$h/shared1.ff boot/$$h/ttpc3.defs.ff boot/$$h/ttpc3.ff || exit 1; \
 	done
 
-# Make shared.ff again from mkff.pl, shared.ff.txt, isa/ and macros/, after
-# changing any of them (mkff.pl until every target's forms are in ff, see
-# MKFFLIB; then tools/mkff.ff, and mkff.pl in tools-check). The whole trees keep the shared pages they have.
-refresh:
-	perl gen/mkff.pl > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
+# Make shared.ff again from shared.ff.txt, isa/*.ff and macros/, after
+# changing any of them: mkff (tools/mkff.ff, this machine's, see MKFFLIB),
+# built by stage2 with the shared page of before; mkff.pl, ISA.pm and
+# isa/*.pl make the same in tools-check. x86_64gnu.ff is still made by
+# gen/mkgnuff.pl (from isa/x86_64gnu.pl's forms, outside the chain: only a
+# build of x86_64 asm reads it). The whole trees keep the shared pages they have.
+refresh: $(CT)/mkff
+	$(RUNT) $(CT)/mkff > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 	perl gen/mkgnuff.pl > $(X86GNU).tmp && mv $(X86GNU).tmp $(X86GNU)
 
 # A change of ttpc is a patch script (gen/patches/*.pl, see gen/patchlib.pl),
