@@ -114,10 +114,10 @@ comment
   weak: C, first under a name, before its type: a global that may stay undefined (C's #pragma weak, a weak symbol nothing defines); its address is 0. weak / function / type is a function, called through 0.
 weak:
 comment
-  cleanup function: C, first under a local, before its type (after its align): at every exit of the local's block the function is called with the local's address, newest first (C's cleanup attribute).
+  cleanup f: C, first under a local, before its type (after its align): at every exit of the local's block the function f is called with the local's address, newest first (C's cleanup attribute).
   The exits: the block's end, a return (after its value), a break, continue or goto out of it.
 cleanup:
-  function
+  f
 comment
   cast type: C's cast, the value after it converted to the type cast holds: (cast / char / * pointer), then p, is (char *) p; every conversion is one.
   A leaf after a cast to char * pointer (or u8, i8) is text, whatever it reads as: (cast / char / * pointer), then 3, is "3".

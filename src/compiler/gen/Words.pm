@@ -394,7 +394,8 @@ sub newdef {
     # (a group's children are page items; a compile time function's are code)
     my $sub = $ctx eq 'page' && !$r && !(@k && is($k[0], 'compile time')) ? 'page' : 'fn';
     return node($w, newlist($t, \@k, $sub)) unless $r;
-    node($w, newlist($t, [@k[0 .. $i - 1]], 'fn'), @$r, newlist($t, [@k[$j .. $#k]], 'fn'));
+    # (a cleanup mark as it is: its function's name is no value)
+    node($w, (map { is_cleanup($_) ? $_ : newlist($t, [$_], 'fn') } @k[0 .. $i - 1]), @$r, newlist($t, [@k[$j .. $#k]], 'fn'));
 }
 # A compound literal now: its type, then an item for each place. The
 # items of before (old) are one per field, padding and an anonymous member
