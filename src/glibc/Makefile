@@ -876,9 +876,16 @@ endif
 $(TI)/%.i: mki.pl | $(TOBJ)/$(AREA).log
 	$(RUN) -t 120 perl mki.pl $(TLOGS) $(TOBJ) $(GLIBC_SRC) $*.o > /dev/null
 
+# (a test's .i for clang: on riscv64 the suffixes of gcc's _FloatN literals,
+# f32 f64 f32x f64x f128, which clang lacks, as the C types they are there,
+# each the same length, so that the offsets stay: strtod's and strfrom's
+# tests; glibc's own units have none that it translates)
+TCLANGFIX_riscv64 := sed -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\?\)[fF]64x\b/\1L   /g' \
+	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g' -e 's/\([0-9]\.\?\)[fF]128\b/\1L   /g'
+TCLANGFIX = $(or $(CLANGFIX),$(TCLANGFIX_$(GTARGET)))
 $(TI)/%.c2ff: $(TI)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
-	@$(if $(CLANGFIX),$(CLANGFIX) $< > $(TI)/$*.clang.i;) \
-	sh unit.sh $(GTARGET) $< $(TI)/$*.json $(if $(CLANGFIX),$(TI)/$*.clang.i,$<) $(CLANG_AST)
+	@$(if $(TCLANGFIX),$(TCLANGFIX) $< > $(TI)/$*.clang.i;) \
+	sh unit.sh $(GTARGET) $< $(TI)/$*.json $(if $(TCLANGFIX),$(TI)/$*.clang.i,$<) $(CLANG_AST)
 	@touch $@
 
 # libsupport's passes, once for all tests (one that fails is the c2ff step's
@@ -906,7 +913,7 @@ $(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).c2ff) $(TI)/support.rea
 	mkdir -p $(TFF)
 	ln -sfn $(abspath $(FF))/glibc $(TFF)/glibc
 	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program glibc --index $(FF)/glibc/index.ff $(if $(GLIBC_START),,--start) \
-	    $(foreach o,$(TOBJS_$*) $(SUPPORT),$(TI)/$(o).json=$(TI)/$(o).i) -- main > $(TFF)/$*-prog.ff.txt
+	    $(foreach o,$(TOBJS_$*),--object $(TI)/$(o).json=$(TI)/$(o).i) $(foreach o,$(SUPPORT),$(TI)/$(o).json=$(TI)/$(o).i) -- main > $(TFF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(TFF)/$*-prog.ff.txt > $@
 
 $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC)

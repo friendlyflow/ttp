@@ -38,6 +38,10 @@
 # definition for an undefined weak one (libsupport's mallopt), and so is a
 # function of the tree's that a header has as a gnu89 extern inline one.
 #
+# --object before tu.json=tu.i: that unit is an object of the program,
+# linked whole as ld links one (not an archive's member): its constructors
+# and destructors are roots.
+#
 # --zero name: an object glibc's asm only reserves, zeroed in .bss (elf/dl-debug-
 # symbols.S's _r_debug_extended), is a global of the type C declares, zero.
 # --weak name: a name nothing defines for a static program (the linker's
@@ -130,6 +134,10 @@ sub ctype {
     local $ctype_depth = $ctype_depth + 1;
     die "c2ff: a type that does not end: $t\n" if $ctype_depth > 100;
     $t = trim($t);
+    # (C11's _Atomic (T) is T here: its loads and stores plain ones, which an
+    # aligned word's are on the targets; a read-modify-write of one is not
+    # atomic: tst-setcontext6's flags of a signal handler)
+    $t = trim($t =~ s/_Atomic\s*\(([^()]*)\)/$1/gr =~ s/\b_Atomic\b//gr) if $t =~ /_Atomic/;
     $t = typeof_subst($t) if $t =~ /typeof/;
     $t = vector_mark($t);
     # (x86_64's __seg_fs, clang's address space 257: the user's fs, a type
@@ -400,6 +408,7 @@ my %forceweak;             # --weak name: nothing defines it for a static progra
 my %section;               # a named section: its globals (their keys in %var), in their order
 my (%ctor, %ctors_of);      # a constructor or destructor (by key): its word and priority; a unit's
 my (@units, @roots);
+my $object = 0;          # --object: the next unit is an object, linked whole (its constructors are roots)
 my $passonly;              # --pass: only each unit's own pass (unit_pass), made where it is not
 our $keep_going;           # --keep-going: what cannot be translated yet is left out (leave_out)
 # (@file: the arguments in a file, one a line: all of glibc's units and
@@ -422,9 +431,11 @@ while (@ARGV) {
     if ($a eq '--target') { $target = shift @ARGV; next }
     if ($a eq '--pass') { $passonly = 1; next }
     if ($a eq '--keep-going') { $keep_going = 1; next }
+    if ($a eq '--object') { $object = 1; next }
     if ($a eq '--') { @roots = @ARGV; last }
     my ($json, $i) = split /=/, $a, 2;
-    push @units, { json => $json, i => $i };
+    push @units, { json => $json, i => $i, object => $object };
+    $object = 0;
 }
 die "usage: c2ff.pl [--page name | --program tree] [--target t] tu.json=tu.i ... -- root ...\n" unless @units && (@roots || $passonly);
 reserve_target($target) if $target ne 'riscv64';
@@ -2567,6 +2578,9 @@ sub leave_out {
     (my $why = $@) =~ s/\n+$//;
     warn "c2ff: left out: $name: $why\n";
 }
+# (an object's constructors and destructors are roots: the start code runs
+# them, whatever names the object: tst-putenv's module of a constructor alone)
+want($_) for map { @{ $ctors_of{$_} // [] } } grep { $_->{object} } @units;
 while (defined(my $name = next_name())) {
     if (my $a = $alias{$name}) { push @out, [$a->[1], node(ffname($name) . ':', node('alias'), node(ffname($a->[0])))]; want($a->[0]); next }
     if (my $f = $ifunc{$name}) {
