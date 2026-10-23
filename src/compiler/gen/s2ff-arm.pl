@@ -144,7 +144,7 @@ $secend{$_} = undef for @then ? @secs : ();
 # label (a local one, .L..., by this file and it); each other label in it
 # is its place there (%dlab: the block, the offset), which a relocation of
 # the code reaches as the block plus the offset.
-my (@aliases, @data, $file, $line, %dlab, %got, %weakref);
+my (@aliases, @data, $file, $line, %dlab, %got, %weakref, %srcalias);
 (my $base = $src) =~ s{.*/}{}; $base =~ s/\.s$//;
 # the offset of a symbol's word in the file's GOT
 sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("$base got"), node("$base got $t"), node('a0')) }
@@ -195,6 +195,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
                 my ($x, $y) = ($1, $2);
                 if ($y =~ /^-?\d+$/) { warn "s2ff-arm: $where: $x = $y, a constant, left out\n"; next }
                 push @aliases, node("$x:", node('alias'), node($y));
+                $srcalias{$x} = 1;
                 next;
             }
             # GNU's numeric labels (99:) are .L99^B1, .L99^B2 ... in its object
@@ -251,7 +252,9 @@ for my $s (@secs) {
     my @lines = @{ $sec{$s}{lines} };
     next unless @lines;
     my %names;          # address -> names of symbols there
-    push @{ $names{ $_->[0] } }, $_->[1] for sort { $a->[0] <=> $b->[0] || $a->[1] cmp $b->[1] } @{ $secsyms{$s} // [] };
+    # (a name the source makes an alias, index = strchr, after the others:
+    # the function is strchr)
+    push @{ $names{ $_->[0] } }, $_->[1] for sort { $a->[0] <=> $b->[0] || ($srcalias{ $a->[1] } // 0) <=> ($srcalias{ $b->[1] } // 0) || $a->[1] cmp $b->[1] } @{ $secsyms{$s} // [] };
     # (a section that starts before its first symbol, with instructions of
     # its own, sigrestorer.S's nop for the unwinder, strcmp.S's tail: a
     # local name of it)
@@ -374,16 +377,21 @@ sub data_reloc {
 
 if ($size) { print $bytes // 0, "\n"; exit }
 # the GOT: its start, then a word for each symbol read through it, each a
-# function of data, placed where the code names it
+# function of data, placed where the code names it (the code reads it at
+# its offset from the start: it may be anywhere); the word of a weak name
+# left undefined a C global, its address (0), as asm names no C weak
 if (%got) {
     push @data, node("$base got:", node('asm'), node('align', node(4)));
-    push @data, map { node("$base got $_:", node('asm'), $got{$_}) } sort keys %got;
+    push @data, map { $weakref{$_} && $undef{$_} ? node("$base got $_:", node('void'), node('* pointer'), node($_), node('& address'))
+        : node("$base got $_:", node('asm'), $got{$_}) } sort keys %got;
 }
 # a weak name the file declares and does not define (crti's __gmon_start__)
 push @fns, map { node("$_:", node('weak'), node('function'), node('void')) } sort grep { $undef{$_} } keys %weakref;
-# each alias once, and none of a name that is a label of the code already
+# each alias once, and none of a name that is a function or a label of the
+# code already (strchr.S's index = strchr, where index, first by name, is
+# the function: strchr its alias, not both ways round)
 my %seen;
-my %entry;
+my %entry = map { ($_->{content} =~ s/:$//r => 1) } @fns;
 my $walk; $walk = sub { for (@{ $_[0]{children} }) { $entry{ $_->{content} =~ s/:$//r } = 1 if $_->{content} =~ /:$/; $walk->($_) } };
 $walk->($_) for @fns;
 @aliases = grep { my $n = $_->{content} =~ s/:$//r; !$seen{$n}++ && !$entry{$n} } @aliases;

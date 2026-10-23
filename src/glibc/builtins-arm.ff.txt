@@ -4,7 +4,8 @@
     This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
     It comes with no warranty. See the file LICENSE for the full text.
   comment
-    builtins-arm.ff.txt: the builtins of gcc for arm that glibc uses, after builtins.ff.txt on its page (GTARGET=arm). __builtin_thread_pointer: the thread pointer, TPIDRURO (mrc p15, 0, r0, c13, c0, 3, as gcc makes it for armv7-a: glibc's THREAD_SELF is below it).
+    builtins-arm.ff.txt: the builtins of gcc for arm that glibc uses, after builtins.ff.txt on its page (GTARGET=arm).
+    __builtin_thread_pointer: the thread pointer, TPIDRURO (mrc p15, 0, r0, c13, c0, 3, as gcc makes it for armv7-a: glibc's THREAD_SELF is below it).
   __builtin_thread_pointer:
     asm
     mrc
@@ -26,3 +27,324 @@
     dmb
       11
     ret
+  comment
+    __builtin_mul_overflow on unsigned ints, arm's size_t (malloc's calloc): the product wrapped, and whether it did (its high word not 0).
+  __builtin_mul_overflow u32 u32 u32:
+    int
+    a:
+      u32
+    b:
+      u32
+    r:
+      u32
+      * pointer
+    s:
+      u64
+      cast
+        u64
+      a
+      *
+      b
+    r
+    * pointer
+    =
+    cast
+      u32
+    s
+    return
+      :
+        s
+        >>
+        32
+      !=
+      0
+  comment
+    __builtin_mul_overflow of an unsigned int by an int into an unsigned int (dl-open): the exact product in an i64, cut to an unsigned int, and whether it is below 0 or past what an unsigned int holds.
+  __builtin_mul_overflow u32 int u32:
+    int
+    a:
+      u32
+    b:
+      int
+    r:
+      u32
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      *
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      u32
+    s
+    return
+      :
+        s
+        <
+        0
+      ||
+      :
+        s
+        >
+        4294967295
+  comment
+    __builtin_add_overflow of an unsigned int and an int into an unsigned int (wcsmbsload's counter): the exact sum in an i64, cut to an unsigned int, and whether it is below 0 or past what an unsigned int holds.
+  __builtin_add_overflow u32 int u32:
+    int
+    a:
+      u32
+    b:
+      int
+    r:
+      u32
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      +
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      u32
+    s
+    return
+      :
+        s
+        <
+        0
+      ||
+      :
+        s
+        >
+        4294967295
+  comment
+    __builtin_add_overflow of a u64 and an unsigned int into an int (printf's count of what it wrote, a u64 on arm): the sum, and whether it wrapped or is more than an int holds.
+  __builtin_add_overflow u64 u32 int:
+    int
+    a:
+      u64
+    b:
+      u32
+    r:
+      int
+      * pointer
+    s:
+      u64
+      a
+      +
+      cast
+        u64
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    s
+    return
+      :
+        s
+        <
+        a
+      ||
+      :
+        s
+        >
+        2147483647
+  comment
+    __builtin_add_overflow_p on arm's words, unsigned ints (malloc's check of a chunk's end): whether a + b would wrap.
+  __builtin_add_overflow_p u32:
+    int
+    a:
+      u32
+    b:
+      u32
+    c:
+      u32
+    return
+      :
+        a
+        +
+        b
+      <
+      a
+  comment
+    C23's bit functions (gcc's __builtin_stdc_*) of a 4-byte value, an unsigned int or arm's unsigned long (its pointer guard's rotations, its 32-bit limbs): c2ff names a call of one so.
+    builtins.ff.txt's take a u64, whose leading zeros, width, ceiling and rotations differ.
+  __builtin_stdc_leading_zeros u32:
+    u32
+    x:
+      u32
+    if
+      :
+        x
+        ==
+        0
+      return
+        32
+    return
+      cast
+        u32
+      __builtin_clz
+        x
+  __builtin_stdc_trailing_zeros u32:
+    u32
+    x:
+      u32
+    if
+      :
+        x
+        ==
+        0
+      return
+        32
+    return
+      cast
+        u32
+      __builtin_ctz
+        x
+  __builtin_stdc_count_ones u32:
+    u32
+    x:
+      u32
+    return
+      cast
+        u32
+      __builtin_popcount
+        x
+  __builtin_stdc_bit_width u32:
+    u32
+    x:
+      u32
+    if
+      :
+        x
+        ==
+        0
+      return
+        0
+    return
+      32
+      -
+      cast
+        u32
+      __builtin_clz
+        x
+  __builtin_stdc_has_single_bit u32:
+    int
+    x:
+      u32
+    return
+      :
+        x
+        !=
+        0
+      &&
+      :
+        :
+          x
+          &
+          :
+            x
+            -
+            1
+        ==
+        0
+  __builtin_stdc_bit_ceil u32:
+    u32
+    x:
+      u32
+    if
+      :
+        x
+        <=
+        1
+      return
+        1
+    return
+      cast
+        u32
+      1
+      <<
+      :
+        32
+        -
+        __builtin_clz
+          x
+          -
+          1
+  __builtin_stdc_rotate_left u32:
+    u32
+    x:
+      u32
+    n:
+      u32
+    n
+    =
+    n
+    %
+    32
+    if
+      :
+        n
+        ==
+        0
+      return
+        x
+    return
+      :
+        x
+        <<
+        n
+      |
+      :
+        x
+        >>
+        :
+          32
+          -
+          n
+  __builtin_stdc_rotate_right u32:
+    u32
+    x:
+      u32
+    n:
+      u32
+    n
+    =
+    n
+    %
+    32
+    if
+      :
+        n
+        ==
+        0
+      return
+        x
+    return
+      :
+        x
+        >>
+        n
+      |
+      :
+        x
+        <<
+        :
+          32
+          -
+          n

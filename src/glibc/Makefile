@@ -608,7 +608,7 @@ $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 # the AST of glibc's own, each against its .i's (roundtrip.pl). The
 # addresses of asm functions, which have no C type in ff, are let through.
 $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl ../compiler/gen/Words.pm
-	$(RUN) -t 300 perl ../compiler/gen/ff2c.pl $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
+	$(RUN) -t 300 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
 
 # (x86_64's with SSE4.2: the builtins of gcc's intrinsics that strcspn-sse4's C calls)
 RTFLAGS_x86_64 := -msse4.2
@@ -618,7 +618,7 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 
 define roundtrip
 $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json)
-	$$(RUN) -t 900 perl roundtrip.pl $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
+	$$(RUN) -t 900 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
 	$$(RUN) -t 300 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
@@ -664,10 +664,10 @@ $(eval $(call check,generic))
 GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit
 generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
-	$(RUN) -t 120 perl ../compiler/gen/ff2c.pl $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
+	$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/generic.rt.c > $(FF)/generic.rt.json
-	$(RUN) -t 300 perl roundtrip.pl $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
+	$(RUN) -t 300 perl roundtrip.pl --target $(GTARGET) $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
 	$(RUN) -t 120 perl ../compiler/gen/headers.pl $(FF)/generic.rt.c $(FF)/generic.rt.names
 .PHONY: generic-roundtrip
 
