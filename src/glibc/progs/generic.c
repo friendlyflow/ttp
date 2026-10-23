@@ -81,6 +81,65 @@ arrlit (void)
          + ((unsigned long[3]) { 4, 5, 6 })[2];
 }
 
+/* tst-random's const int nseq = 3 and long rnd[nseq][nrnd]: a const
+   global's number as an array's count (in C a VLA) */
+static const int rows = 3;
+const int cols = 4;
+static long
+const_counts (void)
+{
+  long m[rows][cols];
+  long s = 0;
+  for (int i = 0; i < rows; i++)
+    for (int j = 0; j < cols; j++)
+      m[i][j] = i * 10 + j;
+  for (int i = 0; i < rows; i++)
+    for (int j = 0; j < cols; j++)
+      s += m[i][j];
+  return s + sizeof m / sizeof m[0];
+}
+
+/* wordexp's enum action action and fts's enum leaf_optimization
+   leaf_optimization (...): a tag that is also a local's or a function's
+   name */
+enum leaf { LEAF_NO, LEAF_YES = 7 };
+static enum leaf
+leaf (int x)
+{
+  return x ? LEAF_YES : LEAF_NO;
+}
+static int
+tag_names (int x)
+{
+  enum action { ACT_NONE, ACT_A = 35, ACT_B } action = ACT_NONE;
+  if (x)
+    action = ACT_B;
+  return action + leaf (x);
+}
+
+/* nss.h's enum nss_status, first only declared (a GNU C incomplete enum):
+   its constants are those of its definition */
+enum later;
+enum later *later_p;
+enum later { LATER_A = -2, LATER_B, LATER_C };
+
+/* nss_files_functions' 64 *fptr++ = f: a function past 255 nodes */
+static void
+many (long *p)
+{
+#define P8 *p++ = 1; *p++ = 2; *p++ = 3; *p++ = 4; *p++ = 5; *p++ = 6; *p++ = 7; *p++ = 8;
+  P8 P8 P8 P8 P8 P8 P8 P8
+}
+static long
+many_sum (void)
+{
+  long a[64], s = 0;
+  many (a);
+  for (int i = 0; i < 64; i++)
+    s += a[i];
+  return s;
+}
+
 #define LMAX 9223372036854775807L
 #define LMIN (-LMAX - 1)
 
@@ -98,6 +157,10 @@ main (void)
   f += vla_size (7) != 27;
   f += label_attr (3) != 3 || label_attr (0) != 5;
   f += arrlit () != 8;
+  f += const_counts () != 3 + 4 * (0 + 10 + 20) + 3 * (0 + 1 + 2 + 3);
+  f += tag_names (0) != 0 || tag_names (1) != 36 + 7;
+  f += LATER_A != -2 || LATER_C != 0 || later_p != 0;
+  f += many_sum () != 8 * 36;
   /* string/ffs.c on x86_64 */
   f += __builtin_ffs (8) != 4 || __builtin_ffs (0) != 0;
   f += __builtin_ffsl (1L << 40) != 41 || __builtin_ffsll (LMIN) != 64;

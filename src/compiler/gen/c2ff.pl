@@ -99,6 +99,7 @@ my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
 my %owntd;                 # a unit's own typedefs, where another unit's came first
+my %constint;              # a unit's const integer globals of a number (tst-random's const int nseq = 3): the counts of arrays
 my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
 my %errorfn;                # functions of the error attribute (by unit and id): no call of them
@@ -129,6 +130,12 @@ sub is_fieldname {
 # A C type string to a list of ff words. A pointer to a function names a
 # function type of its own (fn1:, fn2:, ...), made once per spelling.
 our $ctype_depth = 0;
+# an array's count that is a const integer global of the unit: its number
+sub constcounts {
+    my ($t) = @_;
+    return $t unless $cur_unit && $constint{$cur_unit} && $t =~ /\[[A-Za-z_]/;
+    $t =~ s/\[([A-Za-z_]\w*)\]/'[' . ($constint{$cur_unit}{$1} \/\/ $1) . ']'/ger;
+}
 sub ctype {
     my ($t) = @_;
     local $ctype_depth = $ctype_depth + 1;
@@ -148,6 +155,7 @@ sub ctype {
     $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
     $t = trim($t);
     $t =~ s/\s+/ /g;
+    $t = constcounts($t);
     # (T *__seg_fs: the pointer in fs; __seg_fs T: T in fs, after the
     # pointers below, which bind first: __seg_fs struct p * is (__seg_fs
     # struct p) *)
@@ -466,14 +474,23 @@ sub enum_value {
     $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
     $e && $e->{kind} eq 'ConstantExpr' ? $e->{value} : undef;
 }
+# (an enum's definition, its constants: not a declaration of it that came
+# first, nss_status's in a header that only names it)
+sub enum_consts { grep { $_->{kind} eq 'EnumConstantDecl' } @{ $_[0]{inner} || [] } }
+sub set_enumd {
+    my ($tag, $d) = @_;
+    $enumd{$tag} = $d if !$enumd{$tag} || !enum_consts($enumd{$tag}) && enum_consts($d);
+}
 sub index_enum {
     my ($d) = @_;
     $enumid{$d->{id}} = $d;
     my @c = grep { $_->{kind} eq 'EnumConstantDecl' } @{ $d->{inner} || [] };
     my $tag = defined $d->{name} ? "enum $d->{name}" : @c ? "enum $c[0]{name} enum" : undef;
     return unless defined $tag;
-    $enumd{$tag} //= $d;
-    $tagname{$tag} //= defined $d->{name} ? ffname($d->{name}) : "$c[0]{name} enum";
+    set_enumd($tag, $d);
+    # (a named one's name ctype gives, once every local's name is known: a
+    # tag that is also a local's takes its kind, wordexp's enum action action)
+    $tagname{$tag} //= "$c[0]{name} enum" unless defined $d->{name};
     $enumof{ $_->{name} } //= $tag for @c;
     # the constants' values: clang's ConstantExpr where C gives one, else the
     # one before and 1
@@ -647,6 +664,14 @@ for my $u (@units) {
             }
         } elsif ($d->{kind} eq 'VarDecl') {
             if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
+            # (a const integer global of a number: in C not a constant, so an
+            # array of it as count is of variable length, the same as of the
+            # number; tst-random's long rnd[nseq][nrnd])
+            if (qt($d) =~ /^const (?:(?:unsigned |signed )?(?:char|short|int|long|long long)(?: int)?|unsigned)$/ && ($d->{init} // '') eq 'c'
+                && (my ($i) = grep { $_->{kind} !~ /Attr$/ } @in)) {
+                my $v = int_const($i);
+                $constint{$u}{$name} = $v if defined $v;
+            }
             if (($d->{storageClass} // '') ne 'extern' || $zero{$name}) {
                 my $k = own_name(\%var, $name, $d, $u);
                 # (a global of a named section: reached with the section's bounds)
@@ -656,7 +681,7 @@ for my $u (@units) {
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
             reg_rec("$d->{tagUsed} $name", $d, $u) and anon_fields($d, $name);
         } elsif ($d->{kind} eq 'EnumDecl') {
-            $enumd{"enum $name"} //= $d;
+            set_enumd("enum $name", $d);
         }
     }
 }
@@ -672,7 +697,7 @@ sub anon_fields {
             $last = $k;
             # a named record or enum inside a record is seen as one outside it, as in C
             if (($k->{name} // '') ne '') {
-                if ($k->{kind} eq 'EnumDecl') { $enumd{"enum $k->{name}"} //= $k }
+                if ($k->{kind} eq 'EnumDecl') { set_enumd("enum $k->{name}", $k) }
                 elsif ($k->{completeDefinition}) { $rec{"$k->{tagUsed} $k->{name}"} //= $k; anon_fields($k, $k->{name}) }
             }
             next;
@@ -2514,7 +2539,7 @@ sub decl {
     $v->{kind} eq 'VarDecl' or stop('a declaration of ' . $v->{kind}, $v);
     # a variable-length array (iofwide's wchar_t to_buf[max]): array, the
     # element's type and the count, which clang has only as text in the type
-    if (!$global && qt($v) =~ /^(.*?) ?\[([^\[\]]*[A-Za-z_][^\[\]]*)\]$/) {
+    if (!$global && constcounts(qt($v)) =~ /^(.*?) ?\[([^\[\]]*[A-Za-z_][^\[\]]*)\]$/) {
         my ($elem, $count) = ($1, $2);
         my @c = vla_count($count, $v);
         # (a count of one name in a : too: a global's name alone there, as
@@ -2771,6 +2796,8 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
             or do { warn "c2ff: no definition of $tag\n"; next };
         my ($kind) = $tag =~ /^(\S+)/;
         if ($kind eq 'enum') {
+            # (its name, where no ctype of it gave it yet: index_enum leaves it)
+            ctype($tag) unless defined $tagname{$tag};
             # a constant keeps its value where C gives it one (clang has worked it out)
             unshift @types, node($tagname{$tag} . ':', node('enum'), grouped(254, map {
                 my $v = enum_value($_);

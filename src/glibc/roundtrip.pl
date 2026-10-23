@@ -62,6 +62,7 @@ our $typeof_depth = 0;     # (tstr through typeof_expr, at most 8 deep)
 our %typeof;               # what its typeof (expression) types are, where clang says
 our %declty;               # the types of its functions and globals, for typeof (name)
 our %errordecl;            # functions of gcc's error attribute declared in a function (by id): a call of one is none, as c2ff has it
+our %constint;             # glibc's side: the unit's const integer globals of a number, an array's count as c2ff takes them (tst-random's long rnd[nseq][nrnd])
 my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'short' => 'i16', 'unsigned short' => 'u16',
     'int' => 'i32', 'unsigned int' => 'u32', 'long' => 'i64', 'long long' => 'i64', 'unsigned long' => 'u64',
     'unsigned long long' => 'u64', '_Bool' => 'u8', 'float' => 'float', 'double' => 'double',
@@ -75,6 +76,7 @@ sub tstr {
     $s =~ s/^ | $//g;
     $s =~ s/ (\*|\[)/$1/g;
     $s =~ s/\bsigned (char)\b/signed $1/;
+    $s =~ s/\[([A-Za-z_]\w*)\]/'[' . ($constint{$1} \/\/ $1) . ']'/ge if %constint;
     $s =~ s/\b(?:long int)\b/long/g;
     $s =~ s/\b(?:short int)\b/short/g;
     $s =~ s/\bunsigned\b(?! (?:char|short|int|long))/unsigned int/g;
@@ -818,6 +820,11 @@ for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
     local %typeof = typeofs($ast);
     local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
     local %errordecl = errordecls($ast);
+    local %constint = map {
+        my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($_);
+        $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr)$/;
+        $e && $e->{kind} eq 'IntegerLiteral' ? ($_->{name} => $e->{value}) : ()
+    } grep { $_->{kind} eq 'VarDecl' && ($_->{type}{qualType} // '') =~ /^const (?:(?:unsigned |signed )?(?:char|short|int|long|long long)(?: int)?|unsigned)$/ && ($_->{init} // '') eq 'c' } kids($ast);
     my %def;
     for my $d (kids($ast)) {
         if ($d->{kind} eq 'VarDecl' && ($d->{storageClass} // '') eq 'register' && (my ($l) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($d))) {
