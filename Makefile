@@ -110,7 +110,8 @@ patch:
 # followed by its round trip, and the generic program's), aarch64's (the
 # same for its milestones, LINKED_aarch64, and its asm check) and x86_64's
 # (units-ready, its milestones of LINKED_x86_64 as aarch64's, then the
-# generic program's; its asm check). Each step
+# generic program's; its asm check) and arm's (units-ready, LINKED_arm's
+# milestones, its asm check). Each step
 # prints PASS or FAIL and its time as it ends, its output in
 # CHECKLOG/<step>.log, and at the end all of them in order; make fails if
 # one did. Each heavy command takes a slot of its own
@@ -134,9 +135,11 @@ PC_MS := $(shell sed -n 's/^MILESTONES := //p' src/glibc/Makefile)
 PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$(1)) $(if $(1),GTARGET=$(1))
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
+PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
 PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 \
 	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 \
-	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64
+	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 \
+	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
 # with its time and how much of it its commands waited for a slot
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
@@ -163,7 +166,7 @@ pc-compiler-check: pc-bootstrap
 # the BUILDs, where they are not there yet
 pc-gbuild:
 	@test "$(abspath $(GBUILD))" != "$(abspath $(GLIBC_REF))" || { echo "ports-check: GBUILD is the shared $(GLIBC_REF): give it a folder of its own"; exit 1; }
-	@for t in riscv64 aarch64 x86_64; do \
+	@for t in riscv64 aarch64 x86_64 arm; do \
 	    d=$(GBUILD)$$(test $$t = riscv64 || echo /$$t); s=$(GLIBC_REF)$$(test $$t = riscv64 || echo /$$t); \
 	    test -e $$d/obj && continue; \
 	    mkdir -p $$d && ln -sfn $$(readlink -f $$s/obj) $$d/obj || exit 1; \
@@ -206,6 +209,19 @@ pc-generic-x86_64: pc-units-x86_64
 	$(call pc_step,generic-x86_64,$(call PC_GLIBC,x86_64) generic-check generic-roundtrip)
 pc-asm-x86_64: pc-bootstrap pc-gbuild
 	$(call pc_step,asm-x86_64,$(call PC_GLIBC,x86_64) asm-check)
+# arm: its milestones of LINKED_arm, as x86_64's, and its asm check (no
+# generic program: progs/generic.c takes a long for 64 bits)
+pc-units-arm: pc-bootstrap pc-gbuild
+	$(call pc_step,units-arm,$(call PC_GLIBC,arm) units-ready)
+define pc_arm
+pc-$(1)-arm: pc-units-arm
+	$$(call pc_step,$(1)-arm,$$(call PC_GLIBC,arm) $(1)-check)
+pc-$(1)-roundtrip-arm: pc-$(1)-arm
+	$$(call pc_step,$(1)-roundtrip-arm,$$(call PC_GLIBC,arm) $(1)-roundtrip)
+endef
+$(foreach m,$(PC_ARM),$(eval $(call pc_arm,$(m))))
+pc-asm-arm: pc-bootstrap pc-gbuild
+	$(call pc_step,asm-arm,$(call PC_GLIBC,arm) asm-check)
 .PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
 
 clean:

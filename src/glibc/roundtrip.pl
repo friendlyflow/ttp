@@ -3,8 +3,10 @@
 # function of a milestone, clang's AST of what ff2c.pl writes back from the ff
 # must be clang's AST of the function in glibc's .i, both normalized alike.
 #
-#   perl roundtrip.pl names.txt back.json unit.json ...
+#   perl roundtrip.pl [--target t] names.txt back.json unit.json ...
 #
+# --target arm: arm's unsigned long is a u32 (c2ff's), and its
+# INTERNAL_SYSCALL the register variables r0 ... r6 and r7, swi 0x0.
 # The globals too: each glibc global of the ff, its type and its items,
 # against its definition in glibc's units (unit.json ...: the milestone's).
 # names.txt is ff2c's (each body's C name, its name in glibc and its .i;
@@ -33,8 +35,10 @@ use strict;
 use warnings;
 my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 
+our $target = '';
+if (@ARGV >= 2 && $ARGV[0] eq '--target') { (undef, $target) = splice @ARGV, 0, 2 }
 my ($namesfile, $backjson, @unitjson) = @ARGV;
-die "usage: roundtrip.pl names.txt back.json [unit.json ...]\n" unless defined $backjson;
+die "usage: roundtrip.pl [--target t] names.txt back.json [unit.json ...]\n" unless defined $backjson;
 
 my (@bodies, %orig, %asmfn, @globals);
 open my $h, '<', $namesfile or die "roundtrip: $namesfile: $!\n";
@@ -62,6 +66,7 @@ my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'sh
     'int' => 'i32', 'unsigned int' => 'u32', 'long' => 'i64', 'long long' => 'i64', 'unsigned long' => 'u64',
     'unsigned long long' => 'u64', '_Bool' => 'u8', 'float' => 'float', 'double' => 'double',
     'long double' => 'ldouble', '__float128' => 'ldouble', 'void' => 'void', '__builtin_va_list' => 'va', 'va_list' => 'va', '__va_list_tag' => 'va');
+$cls{'unsigned long'} = 'u32' if $target eq 'arm';
 sub tstr {
     my ($s) = @_;
     $s = noattr($s);
@@ -97,7 +102,7 @@ sub tstr {
     return $cls{$s} if exists $cls{$s};
     return 'rec' if $s =~ /^(?:struct|union)\b/;
     return 'enum' if $s =~ /^enum\b/;
-    return 'u64' if $s eq 'unsigned long int';
+    return $target eq 'arm' ? 'u32' : 'u64' if $s eq 'unsigned long int';
     "?$s";
 }
 sub tcls { my ($n) = @_; my $t = $n->{type} or return '-'; tstr($t->{desugaredQualType} // $t->{qualType}) }
@@ -171,6 +176,7 @@ sub E {
         # (nor of a value made of one, + 1, on either side: aarch64's string
         # functions are asm, and __builtin_thread_pointer)
         return E($c) if $ck =~ /^(BitCast|IntegralToPointer|PointerToIntegral|IntegralCast|NoOp)$/ && asm_valued($c);
+        return E($c) if $ck eq 'IntegralCast' && is_syscallv($c);
         # (an int literal of a 32-bit type, that int or its unsigned, is its
         # value: aarch64's wchar_t is unsigned, L'\n' 10 either way)
         return E($c) if $ck eq 'IntegralCast' && tcls($n) =~ /^[iu]32$/ && small_literal($c);
@@ -296,6 +302,19 @@ sub str {
 sub is_atomiccall { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') =~ /^__atomic_\w+_\d+$/ }
 sub is_mempcpy { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') eq '__builtin_mempcpy' }
 sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $d = (strip((kids($s))[0]) // {})->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
+# (arm's syscall, whose value c2ff has as a long, glibc's an int: its
+# conversions to either are not compared)
+sub is_syscallv {
+    my ($n) = @_;
+    return 0 unless $target eq 'arm';
+    my $s = unparen($n);
+    $s = unparen((kids($s))[0]) while ($s->{kind} // '') eq 'ImplicitCastExpr' && ($s->{castKind} // '') eq 'IntegralCast';
+    my $k = $s->{kind} // '';
+    return $side eq 'glibc' && defined syscall_idiom((kids($s))[0]) if $k eq 'StmtExpr';
+    return 0 unless $k eq 'CallExpr';
+    my $d = (strip((kids($s))[0]) // {})->{referencedDecl} or return 0;
+    ($d->{name} // '') eq '__ff_syscall';
+}
 sub asm_valued {
     my ($n) = @_;
     my $s = unparen($n);
@@ -408,6 +427,7 @@ sub init {
 # ... the arguments (x0 set by an assignment after its declaration), svc 0
 sub syscall_idiom {
     my ($cs) = @_;
+    return syscall_idiom_arm($cs) if $target eq 'arm';
     my $x86 = syscall_idiom_x86($cs);
     return $x86 if defined $x86;
     my @st = kids($cs);
@@ -487,9 +507,57 @@ sub syscall_idiom_x86 {
     }
     '(syscall ' . join(' ', E(strip($ops[@$oc + $num])), @a) . ')';
 }
+our ($unit_i, $itext_of, $itext) = ('', '', '');
+# arm's INTERNAL_SYSCALL, as c2ff's syscall_idiom_arm takes it: register
+# variables r0 (or a1), a2 a3 a4 v1 v2 v3 the arguments, r7 the number, each
+# set by its declaration or an assignment after it (from the _aNtmp before
+# them), the asm swi 0x0 with the output "=r"
+sub syscall_idiom_arm {
+    my ($cs) = @_;
+    my @st = kids($cs);
+    my @asm = grep { $_->{kind} eq 'GCCAsmStmt' } @st;
+    return undef unless @asm == 1;
+    my ($template, $oc) = asm_text($asm[0]);
+    return undef unless defined $template && $template =~ /^\s*swi\s+0x0\b/ && @$oc == 1 && $oc->[0] eq '=r';
+    my %argno = (r0 => 0, a1 => 0, r1 => 1, a2 => 1, r2 => 2, a3 => 2, r3 => 3, a4 => 3, r4 => 4, v1 => 4, r5 => 5, v2 => 5, r6 => 6, v3 => 6);
+    my (%regof, %reg, %l);
+    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st) {
+        for my $v (kids($s)) {
+            my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
+            my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+            if ($lab) { my $r = asm_label($lab) // next; $regof{ $v->{name} } = $r; $reg{$r} = $init if $init }
+            elsif ($init && defined $v->{name}) { $l{ $v->{name} } = $init }
+        }
+    }
+    for my $s (grep { $_->{kind} eq 'BinaryOperator' && ($_->{opcode} // '') eq '=' } @st) {
+        my ($lhs, $rhs) = kids($s);
+        $lhs = strip($lhs);
+        next unless ($lhs->{kind} // '') eq 'DeclRefExpr' && defined $regof{ $lhs->{referencedDecl}{name} // '' };
+        $reg{ $regof{ $lhs->{referencedDecl}{name} } } = $rhs;
+    }
+    return undef unless defined $reg{r7};
+    my %byno = map { ($argno{$_} => $reg{$_}) } grep { defined $argno{$_} } keys %reg;
+    my @a;
+    for my $i (0 .. 6) {
+        my $e = $byno{$i} or last;
+        my $s = strip($e);
+        $e = $l{ $s->{referencedDecl}{name} } if ($s->{kind} // '') eq 'DeclRefExpr' && $l{ $s->{referencedDecl}{name} };
+        push @a, E(strip($e));
+    }
+    '(syscall ' . join(' ', E(strip($reg{r7})), @a) . ')';
+}
+# a register variable's register: from the .i where its attribute begins,
+# asm ("r0") or "r0" (clang's AST has no label)
+sub asm_label {
+    my ($a) = @_;
+    return $a->{label} if defined $a->{label};
+    my $b = $a->{range}{begin}{offset} // ($a->{range}{begin}{expansionLoc} // {})->{offset};
+    return undef unless defined $b && $unit_i ne '' && -e $unit_i;
+    if ($itext_of ne $unit_i) { open my $h, '<', $unit_i or return undef; local $/; $itext = <$h>; $itext_of = $unit_i }
+    substr($itext, $b, 80) =~ /^(?:(?:__asm__|__asm|asm)\s*\(\s*)?"(\w+)"/ ? $1 : undef;
+}
 # An asm statement's template and constraints, from the unit's .i (next to
 # its AST, at the offset clang gives), as c2ff reads them (asm_parts).
-our ($unit_i, $itext_of, $itext) = ('', '', '');
 sub asm_text {
     my ($n) = @_;
     my $b = $n->{range}{begin}{offset} // ($n->{range}{begin}{expansionLoc} // {})->{offset};
