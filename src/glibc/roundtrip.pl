@@ -23,6 +23,8 @@
 # long, and arguments have no C type), an atomic builtin a
 # call of libatomic's function, offsetof the address of the field of a
 # null pointer, a conversion of a floating value to _Bool a compare with 0,
+# a call of a function of gcc's error attribute declared in a function
+# (__errordecl) none, (void) 0,
 # a function's statics globals of their own. Names come back through
 # names.txt (c2ff's own names for a unit's statics, ' after reserved words).
 #
@@ -55,6 +57,7 @@ our %tdef;                 # the typedefs of the AST at hand
 our $typeof_depth = 0;     # (tstr through typeof_expr, at most 8 deep)
 our %typeof;               # what its typeof (expression) types are, where clang says
 our %declty;               # the types of its functions and globals, for typeof (name)
+our %errordecl;            # functions of gcc's error attribute declared in a function (by id): a call of one is none, as c2ff has it
 my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'short' => 'i16', 'unsigned short' => 'u16',
     'int' => 'i32', 'unsigned int' => 'u32', 'long' => 'i64', 'long long' => 'i64', 'unsigned long' => 'u64',
     'unsigned long long' => 'u64', '_Bool' => 'u8', 'float' => 'float', 'double' => 'double',
@@ -319,6 +322,18 @@ sub is_offsetof {
     $s = unparen((kids($s))[0]) while $s->{kind} =~ /^(MemberExpr|ArraySubscriptExpr)$/;
     $s->{kind} =~ /CastExpr$/ && (strip($s)->{kind} // '') eq 'IntegerLiteral' && strip($s)->{value} == 0;
 }
+# The functions of gcc's error attribute declared in a function (__errordecl:
+# alloc_buffer's asserts, __libc_message_wrapper's __libc_message_error), by id
+sub errordecls {
+    my ($ast) = @_;
+    my (%e, @q);
+    @q = map { kids($_) } kids($ast);
+    while (my $n = shift @q) {
+        push @q, kids($n);
+        $e{ $n->{id} } = 1 if ($n->{kind} // '') eq 'FunctionDecl' && grep { ($_->{kind} // '') eq 'ErrorAttr' } kids($n);
+    }
+    %e;
+}
 sub call {
     my ($n) = @_;
     my ($callee, @args) = kids($n);
@@ -328,6 +343,7 @@ sub call {
     if (defined $name) {
         if ($side eq 'glibc') {
             return E($args[0]) if $name eq '__builtin_expect';
+            return '(cast ToVoid void (int 0 i32))' if $errordecl{ $c->{referencedDecl}{id} // '' };
             # __builtin_mempcpy (d, s, n): memcpy (d, s, n) + n, as gcc makes
             # it and c2ff writes it (the unit's memcpy; n without its
             # conversion to size_t)
@@ -733,6 +749,7 @@ for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
     local %tdef = typedefs($ast);
     local %typeof = typeofs($ast);
     local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
+    local %errordecl = errordecls($ast);
     my %def;
     for my $d (kids($ast)) {
         if ($d->{kind} eq 'VarDecl' && ($d->{storageClass} // '') eq 'register' && (my ($l) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($d))) {

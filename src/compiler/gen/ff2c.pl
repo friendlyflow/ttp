@@ -311,6 +311,9 @@ sub sig {
     my $f = $fn{$n} or return undef;
     return sig($f->{target}) if $f->{kind} eq 'alias';
     return $f->{sig} if $f->{sig};
+    # (libatomic's functions, asm where the target has real ones: C's types, as
+    # the one-thread C ones have them, so that the round trip sees the same calls)
+    if ($f->{kind} eq 'asm' && $n =~ /^__atomic_(\w+)_([1248])$/) { my $s = atomic_sig($1, 8 * $2); return $f->{sig} = $s if $s }
     if ($f->{kind} eq 'asm') { return $f->{sig} = { ret => [scalar => 'long'], params => undef } }
     my @l = kids($f->{node});
     my $i = $f->{from};
@@ -331,6 +334,16 @@ sub sig {
         $i++;
     }
     $f->{sig} = { ret => $ret, params => \@p, va => $va, body => $i };
+}
+sub atomic_sig {
+    my ($op, $bits) = @_;
+    my ($u, $int) = ([scalar => "u$bits"], [scalar => 'int']);
+    my ($p, $o) = (['p', [ptr => $u]], ['order', $int]);
+    return { ret => $u, params => [$p, $o] } if $op eq 'load';
+    return { ret => [scalar => 'void'], params => [$p, ['v', $u], $o] } if $op eq 'store';
+    return { ret => $int, params => [$p, ['e', [ptr => $u]], ['d', $u], ['success', $int], ['failure', $int]] } if $op eq 'compare_exchange';
+    return { ret => $u, params => [$p, ['v', $u], $o] } if $op =~ /^(?:exchange|fetch_\w+|\w+_fetch)$/;
+    undef;
 }
 sub fnptr_sig {
     my ($t) = @_;
