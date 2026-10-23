@@ -97,6 +97,7 @@ my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of ta
 my %owntd;                 # a unit's own typedefs, where another unit's came first
 my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
+my %errorfn;                # functions of the error attribute (by unit and id): no call of them
 my %desugar;                # a typeof (expression) as clang writes it, and the type it is
 my %enumval;                # an enum constant's value, by name
 my %typeof;                 # declared names and their types, for typeof
@@ -1650,6 +1651,7 @@ sub expr {
             return @p;
         }
         $c->{kind} eq 'DeclRefExpr' or stop('a call through ' . $c->{kind}, $n);
+        return cast_node(['void'], node('0')) if $errorfn{"$cur_unit $c->{referencedDecl}{id}"};
         my $name = $c->{referencedDecl}{name};
         # (its value a long, as its first argument is made one)
         return cast_node([ctype(qt($n))], item(expr($args[0]))) if $name eq '__builtin_expect';
@@ -2234,8 +2236,15 @@ sub stmt {
             # unit, named for its place as an anonymous one is, where used
             ();
         } elsif (($d->{storageClass} // '') eq 'extern') {
-            $weak{ $d->{name} } //= $d if grep { $_->{kind} =~ /^(WeakAttr|ErrorAttr)$/ } @{ $d->{inner} || [] };
-            want($d->{name});
+            # (gcc's __errordecl, a function of the error attribute: a call of
+            # it is an error where gcc does not take it away, so a call that
+            # stays is never reached: none (alloc_buffer's asserts, whose
+            # __builtin_constant_p is 0 here: they called glibc's error ())
+            if (grep { $_->{kind} eq 'ErrorAttr' } @{ $d->{inner} || [] }) { $errorfn{"$cur_unit $d->{id}"} = 1 }
+            else {
+                $weak{ $d->{name} } //= $d if grep { $_->{kind} eq 'WeakAttr' } @{ $d->{inner} || [] };
+                want($d->{name});
+            }
             ();
         } elsif (($d->{storageClass} // '') eq 'static' && !holds($d, 'AddrLabelExpr')) {
             # a static of a function lives as long as the program: a global,
