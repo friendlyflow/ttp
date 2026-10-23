@@ -165,7 +165,7 @@ trimmed to riscv64's section (and the host's) for building ttpc3.
   `if:` / `condition` / `body`, `else if:`, `long:` / `value`, `+:` / `left` /
   `right`, ...), in scope, so that each is defined before it is called. ttpc
   takes these calls itself and never runs the declarations. `make decls`
-  (`gen/decls.pl`, in `make check`) fails when a word, operator or type of
+  (`tools/decls.ff`, as `gen/decls.pl`, in `make check`) fails when a word, operator or type of
   ttpc has no declaration there: they are what an editor offers as calls. In asm a C word
   is a function with an empty body: a stray `if` expands to nothing.
 - **Range checks** (pass 2): every operand must fit its slices, sign- or
