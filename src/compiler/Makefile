@@ -624,13 +624,13 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # a section per target, macros/<target>.ff.txt. A target's forms are an ff
 # page (isa/<target>.ff, as isa/<target>.pl) that tools/isa.ff (gen/ISA.pm's
 # builder) makes the section's groups of; MKFFLIB are those pages. Of a
-# target not yet in ff (x86_64 and arm for now) mkff takes the section
-# of the shared page it replaces (./shared.ff) as it is, so `make refresh`
-# stays mkff.pl until all four are; tools-check runs both and compares. mkff
+# target not yet in ff (x86_64 for now) mkff takes the section of the
+# shared page it replaces (./shared.ff) as it is, so `make refresh` stays
+# mkff.pl until all four are; tools-check runs both and compares. mkff
 # runs after stage2 exists (it builds it): the chain reads the committed
 # shared.ff and never makes it.
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff
-MKFFLIB := tools/isa.ff isa/riscv64.ff isa/aarch64.ff
+MKFFLIB := tools/isa.ff isa/riscv64.ff isa/aarch64.ff isa/arm.ff
 TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
@@ -698,7 +698,7 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
 	$(RUN_$(1)) $(TL)/$(1)/mkff | cmp - $(TL)/$(1).shared.pl; \
 	perl gen/mkff.pl gen/license.ff.txt macros/riscv64.ff.txt > $(TL)/$(1).shared.pl; \
 	$(RUN_$(1)) $(TL)/$(1)/mkff gen/license.ff.txt macros/riscv64.ff.txt | cmp - $(TL)/$(1).shared.pl
-	@echo "tools-check-$(1): mkff and mkff.pl make the same shared page (riscv64's and aarch64's sections from isa/riscv64.ff and isa/aarch64.ff), and the same tree of pages"
+	@echo "tools-check-$(1): mkff and mkff.pl make the same shared page (the sections of riscv64, aarch64 and arm from isa/riscv64.ff, isa/aarch64.ff and isa/arm.ff), and the same tree of pages"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
