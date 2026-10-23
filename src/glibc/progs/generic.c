@@ -156,6 +156,18 @@ specials_bad (void)
          + (__builtin_isinf_sign (specials[2].f) != -1) + (__builtin_isinf_sign (specials[2].l) != -1);
 }
 
+/* gconv's const unsigned char *inptr = *inptrp: a char or u8 pointer set
+   from a dereference or an address, not a text */
+static int
+text_ptr (unsigned char **pp)
+{
+  const unsigned char *p = *pp;
+  char *q = (char *) *pp;
+  unsigned char c = 5;
+  unsigned char *r = &c;
+  return p[0] + q[1] + *r;
+}
+
 #define LMAX 9223372036854775807L
 #define LMIN (-LMAX - 1)
 
@@ -178,6 +190,10 @@ main (void)
   f += LATER_A != -2 || LATER_C != 0 || later_p != 0;
   f += many_sum () != 8 * 36;
   f += specials_bad ();
+  {
+    unsigned char b[2] = { 30, 7 }, *bp = b;
+    f += text_ptr (&bp) != 42;
+  }
   /* string/ffs.c on x86_64 */
   f += __builtin_ffs (8) != 4 || __builtin_ffs (0) != 0;
   f += __builtin_ffsl (1L << 40) != 41 || __builtin_ffsll (LMIN) != 64;
