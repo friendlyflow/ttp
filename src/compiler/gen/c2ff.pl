@@ -239,6 +239,15 @@ sub typeof_expr {
     }
     # a cast: (T) then its operand
     return trim($1) if $e =~ /^(\((?:[^()]++|(?1))*\))/ && $e =~ /^\(([^()]*\*)\s*\)\s*\S/;
+    # an element, x[i]: of an array its element (the first count gone), of
+    # an address what it points to (array_foreach's __typeof ((array)[0]))
+    if ($e =~ /^(.*?\S)\s*(\[(?:[^\[\]]++|(?2))*\])$/s) {
+        my $t = typeof_expr($1) // return undef;
+        $t = expand($t);
+        return trim("$1 $2") if $t =~ /^([^\[]*?)\s*\[[^\[\]]*\]\s*(.*)$/;
+        return $1 if $t =~ /^(.*?)\s*\*$/;
+        return undef;
+    }
     undef;
 }
 sub typeof_subst {
@@ -2378,7 +2387,10 @@ sub decl {
     if (!$global && qt($v) =~ /^(.*?) ?\[([^\[\]]*[A-Za-z_][^\[\]]*)\]$/) {
         my ($elem, $count) = ($1, $2);
         my @c = vla_count($count, $v);
-        return node(ffname($v->{name}) . ':', node('array'), map({ node($_) } ctype($elem)), @c > 1 ? node(':', @c) : @c);
+        # (a count of one name in a : too: a global's name alone there, as
+        # arc4random-thread's static outer_threads, ttpc takes for a constant,
+        # its address, which moves between its passes)
+        return node(ffname($v->{name}) . ':', node('array'), map({ node($_) } ctype($elem)), @c > 1 || $c[0]{content} !~ /^\d+$/ ? node(':', @c) : @c);
     }
     my @t = ctype(qt($v));
     my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
