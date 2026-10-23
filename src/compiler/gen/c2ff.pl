@@ -515,6 +515,9 @@ for my $u (@units) {
     for my $d (@{ $ast->{inner} }) {
         $file = $d->{loc}{file} if $d->{loc} && $d->{loc}{file};
         $file = $d->{loc}{expansionLoc}{file} if $d->{loc} && $d->{loc}{expansionLoc} && $d->{loc}{expansionLoc}{file};
+        # (the unit's own .i where its AST was made: a BUILD moved since
+        # keeps its pass, which names the .i of then)
+        $file = $u->{i} if $file ne $u->{i} && $file =~ m{/i/(.+?)(\.clang)?\.i$} && $u->{i} =~ m{/i/\Q$1\E(?:\.clang)?\.i$};
         $d->{file} = $file;
         next if $d->{isImplicit};
         $recid{$d->{id}} = $d if $d->{kind} eq 'RecordDecl' && $d->{completeDefinition};
@@ -1023,6 +1026,8 @@ sub asm_once {
 my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
 $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int';
 $ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long';
+# (and builtins-arm.ff.txt's, of arm's 32-bit size_t)
+my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 sub asm_ins {
     my ($n, $op, @a) = @_;
@@ -1182,8 +1187,8 @@ sub asm_stmt {
 # around it), passes through a register as it is; in a template with
 # instructions (libm's fma: vfmadd213sd), one of a float or a double is an
 # xmm register of its own, through its address.
-my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9)]);
-my %retreg = (aarch64 => 'x0', x86_64 => 'rax');
+my %argregs = (aarch64 => [map { "x$_" } 0 .. 7], x86_64 => [qw(rdi rsi rdx rcx r8 r9)], arm => [map { "r$_" } 0 .. 3]);
+my %retreg = (aarch64 => 'x0', x86_64 => 'rax', arm => 'r0');
 # aarch64's system registers as mrs and msr take them: op0 op1 CRn CRm op2
 # in 16 bits (tpidr_el0 56962), by name or as GNU's s3_3_c13_c0_2
 my %sysreg = (fpcr => [3, 3, 4, 4, 0], fpsr => [3, 3, 4, 4, 1], tpidr_el0 => [3, 3, 13, 0, 2],
@@ -1217,6 +1222,18 @@ sub asm_ins_other {
             stop("the asm instruction $op @a", $n) unless "@a" =~ /^$w\d+ $w\d+ $w\d+$/;
             return node("$op.$w", node($a[2]), node($a[1]), node($a[0]));
         }
+    } elsif ($target eq 'arm') {
+        # A32's instructions on registers alone (string-fza.h's uqsub8, sel,
+        # uadd8; clz, rev): isa/arm.pl's operands, GNU's reversed
+        return node($op, map { node($_) } reverse @a)
+            if $op =~ /^(?:uqsub8|uadd8|sel|clz|rev|rev16|rbit)$/ && @a >= 2 && !grep { !/^r\d+$/ } @a;
+        # data processing with its last register shifted by an amount
+        # (string-fzi's eor %0, %1, %1, ror #16): x.ror sh rm rn rd
+        return node("$op.$a[3]", node($1), map { node($_) } reverse @a[0 .. 2])
+            if $op =~ /^(?:and|eor|orr|bic|add|sub|rsb)$/ && @a == 5 && !grep { !/^r\d+$/ } @a[0 .. 2] && $a[3] =~ /^(?:lsl|lsr|asr|ror)$/ && $a[4] =~ /^#(\d+)$/;
+        # the FP status and control register (get_rounding_mode, fesetround)
+        return node('vmrs', node($a[0])) if $op eq 'vmrs' && @a == 2 && $a[0] =~ /^r\d+$/ && $a[1] eq 'fpscr';
+        return node('vmsr', node($a[1])) if $op eq 'vmsr' && @a == 2 && $a[0] eq 'fpscr' && $a[1] =~ /^r\d+$/;
     } elsif ($target eq 'x86_64') {
         # instructions without operands (ABORT_INSTRUCTION's hlt, the spin
         # loops' pause, cpuid with its fixed registers)
@@ -1509,7 +1526,8 @@ sub expr {
         @part == 2 or stop('an offsetof of ' . scalar(@part) . ' parts', $n);
         my ($type, $member) = map { s/^\s+|\s+$//gr } @part;
         my @path = map { /^\[(\d+)\]$/ ? node($1) : node(ffname($_)) } $member =~ /(\w+|\[\d+\])/g;
-        return node('cast:', node('u64'),
+        # (a size_t: arm's a u32)
+        return node('cast:', node($target eq 'arm' ? 'u32' : 'u64'),
             node('address', node('address', (map { node($_) } ctype($type)), node('0'), node('.'), @path)));
     }
     if ($k eq 'BinaryOperator' || $k eq 'CompoundAssignOperator') {
@@ -1665,7 +1683,7 @@ sub expr {
         if ($name =~ /^__builtin_(add|sub|mul)_overflow$/) {
             my @t = map { tword_int($_) } @args;
             my $sig = "@t" =~ /^(\S+) (\S+) address (\S+)$/ ? "$1 $2 $3" : '';
-            $ovf{"$name $sig"} or stop("$name on @t", $n);
+            $ovf{"$name $sig"} || ($target eq 'arm' && $ovf_arm{"$name $sig"}) or stop("$name on @t", $n);
             return node("$name $sig", map { item(expr($_)) } @args);
         }
         # gcc's type-generic float classification, in builtins.ff.txt, one
@@ -1685,6 +1703,16 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
+        # (arm's C23 bit functions of a 4-byte value, builtins-arm.ff.txt's:
+        # builtins.ff.txt's are of u64, whose leading zeros, width, ceiling
+        # and rotations are not those of 32 bits)
+        if ($target eq 'arm' && $name =~ /^__builtin_stdc_(leading_zeros|trailing_zeros|count_ones|bit_width|has_single_bit|bit_ceil|rotate_left|rotate_right)$/) {
+            my $w = tword_int($args[0]);
+            return node("$name u32", map { item(expr($_)) } @args) if $w =~ /^(u32|i32|int|long)$/;
+            stop("$name on $w", $n) unless $w =~ /^(u64|i64)$/;
+        }
+        # (arm's __builtin_add_overflow_p on its words, unsigned ints)
+        return node("$name u32", map { item(expr($_)) } @args) if $name eq '__builtin_add_overflow_p' && $target eq 'arm';
         return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
@@ -1747,6 +1775,15 @@ sub expr {
             push @out, [$cur_unit, decl({ kind => 'VarDecl', type => $n->{type}, inner => [kids($n)] }, 1, $g)];
             return node($g);
         }
+        # (one of constants that holds an anonymous union, arm's mutex
+        # initializer _RTLD_LOCK_RECURSIVE_INITIALIZER, whose __spins and
+        # __list ttpc takes in a global's items, not in a temporary's: a
+        # global of its own, the value copied from it)
+        if ($cur_fn ne '' && anon_union_init((kids($n))[0]) && const_init((kids($n))[0])) {
+            my $g = ffname($cur_fn) . ' literal ' . ++$literals{$cur_fn};
+            push @out, [$cur_unit, decl({ kind => 'VarDecl', type => $n->{type}, inner => [kids($n)] }, 1, $g)];
+            return node($g);
+        }
         my @t = ctype(qt($n));
         # of an array (popen's (char *const[]){ "sh", "-c", ... }): as a typed
         # literal, the type's first word on top, the rest of the type and then
@@ -1777,6 +1814,23 @@ sub expr {
         stop("the trait $w", $n);
     }
     stop($k, $n);
+}
+
+# Whether an initializer list holds one of an anonymous union, and whether
+# all its items are constants (numbers, enum constants, zeros).
+sub anon_union_init {
+    my ($n) = @_;
+    return 0 unless ($n->{kind} // '') eq 'InitListExpr';
+    return 1 if qt($n) =~ /^union .*\((?:unnamed|anonymous)\b/;
+    grep { anon_union_init($_) } kids($n);
+}
+sub const_init {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    return !grep { !const_init($_) } kids($n) if $k eq 'InitListExpr';
+    return 1 if $k eq 'ImplicitValueInitExpr' || defined int_const($n);
+    my $s = strip($n);
+    ($s->{kind} // '') eq 'DeclRefExpr' && ($s->{referencedDecl}{kind} // '') eq 'EnumConstantDecl';
 }
 
 # The call of libatomic's function for an atomic builtin
@@ -2096,6 +2150,7 @@ sub locals { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n
 sub syscall_idiom {
     my ($cs) = @_;
     return syscall_idiom_x86($cs) if $target eq 'x86_64';
+    return syscall_idiom_arm($cs) if $target eq 'arm';
     my ($nr, $ar) = $target eq 'aarch64' ? ('x8', 'x') : ('a7', 'a');
     my @st = kids($cs);
     my ($inner) = grep { $_->{kind} eq 'CompoundStmt' } @st;
@@ -2133,6 +2188,53 @@ sub syscall_idiom {
         push @args, item(expr($e));
     }
     node('syscall', item(expr($reg{$nr})), @args);
+}
+# a register variable's register (clang's AST has no label of an
+# AsmLabelAttr: from the .i, asm ("r0") or "r0" where the attribute begins)
+sub asm_label {
+    my ($a) = @_;
+    return $a->{label} if defined $a->{label};
+    my $b = $a->{range}{begin}{offset} // $a->{range}{begin}{expansionLoc}{offset};
+    return undef unless defined $b && $cur_unit;
+    substr($cur_unit->{text}, $b, 80) =~ /^(?:(?:__asm__|__asm|asm)\s*\(\s*)?"(\w+)"/ ? $1 : undef;
+}
+# arm's (sysdeps/unix/sysv/linux/arm/sysdep.h): register variables r0 (or
+# a1), a2 a3 a4 v1 v2 v3 (r1 ... r6) the arguments, r7 the number, each set
+# by its declaration or by an assignment after it (from the _aNtmp before
+# them), the asm swi 0x0 with the output "=r" r0, the result that output.
+sub syscall_idiom_arm {
+    my ($cs) = @_;
+    my @st = kids($cs);
+    my ($asm) = grep { $_->{kind} eq 'GCCAsmStmt' } @st;
+    return () unless $asm;
+    my ($template, $oc, $ic, $ops) = asm_parts($asm);
+    return () unless $template =~ /^\s*swi\s+0x0\b/ && @$oc == 1 && $oc->[0] eq '=r';
+    my %argno = (r0 => 0, a1 => 0, r1 => 1, a2 => 1, r2 => 2, a3 => 2, r3 => 3, a4 => 3, r4 => 4, v1 => 4, r5 => 5, v2 => 5, r6 => 6, v3 => 6);
+    my (%regof, %reg, %local);
+    for my $s (grep { $_->{kind} eq 'DeclStmt' } @st) {
+        for my $v (kids($s)) {
+            my ($lab) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($v);
+            my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+            if ($lab) { my $r = asm_label($lab) // next; $regof{ $v->{name} } = $r; $reg{$r} = $init if $init }
+            elsif ($init && defined $v->{name}) { $local{ $v->{name} } = $init }
+        }
+    }
+    for my $s (grep { $_->{kind} eq 'BinaryOperator' && $_->{opcode} eq '=' } @st) {
+        my ($l, $r) = kids($s);
+        $l = strip($l);
+        next unless $l->{kind} eq 'DeclRefExpr' && defined $regof{ $l->{referencedDecl}{name} };
+        $reg{ $regof{ $l->{referencedDecl}{name} } } = $r;
+    }
+    defined $reg{r7} or stop('a syscall without its number', $asm);
+    my @args;
+    my %byno = map { ($argno{$_} => $reg{$_}) } grep { defined $argno{$_} } keys %reg;
+    for my $i (0 .. 6) {
+        my $e = $byno{$i} or last;
+        my $s = strip($e);
+        $e = $local{ $s->{referencedDecl}{name} } if $s->{kind} eq 'DeclRefExpr' && $local{ $s->{referencedDecl}{name} };
+        push @args, item(expr($e));
+    }
+    node('syscall', item(expr($reg{r7})), @args);
 }
 # x86_64's: register variables rdi rsi rdx r10 r8 r9 = the arguments (from
 # the __argN before them), the asm syscall with the number its input in the
@@ -2597,7 +2699,18 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
             # a bitfield: its type run, then its width (one with no name, padding,
             # takes its bits under a name of its own)
             my $pad = 0;
-            unshift @types, node($tagname{$tag} . ':', node($kind), align_node(max_align(align_attr($d), $d->{ff_align})), map {
+            # (a bitfield of width 0 last, unwind-arm-common.h's long long
+            # int :0, aligns the record as its type: no field, the record's
+            # align)
+            my @fd = grep { $_->{kind} eq 'FieldDecl' } kids($d);
+            my $zalign;
+            while (@fd && $fd[-1]{isBitfield} && !(defined $fd[-1]{name} && $fd[-1]{name} ne '')
+                && grep { $_->{kind} eq 'ConstantExpr' && defined $_->{value} && $_->{value} == 0 } kids($fd[-1])) {
+                my %size = (char => 1, i8 => 1, u8 => 1, short => 2, i16 => 2, u16 => 2, int => 4, i32 => 4, u32 => 4, i64 => 8, u64 => 8, long => $target eq 'arm' ? 4 : 8);
+                my $t = join ' ', ctype(qt(pop @fd));
+                $zalign = max_align($zalign, $size{$t} // stop("a bitfield of width 0 of a $t", $d));
+            }
+            unshift @types, node($tagname{$tag} . ':', node($kind), align_node(max_align(max_align(align_attr($d), $d->{ff_align}), $zalign)), map {
                 my $f = $_;
                 my @w;
                 if ($f->{isBitfield}) {
@@ -2610,7 +2723,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
                 # or union, its fields the record's own: : as before)
                 my $name = defined $f->{name} && $f->{name} ne '' ? ffname($f->{name}) : $f->{isBitfield} ? 'padding ' . ++$pad : undef;
                 node((defined $name ? "$name:" : ':'), align_node(align_attr($f)), (map { node($_) } ctype(qt($f))), @w)
-            } grep { $_->{kind} eq 'FieldDecl' } kids($d));
+            } @fd);
         }
     }
 }

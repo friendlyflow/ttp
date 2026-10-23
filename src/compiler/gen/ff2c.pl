@@ -34,9 +34,13 @@ use FF ();
 use Header ();
 
 my %only;      # --pages a,b: only these glibc pages' bodies and globals
-if (@ARGV && $ARGV[0] eq '--pages') { shift @ARGV; $only{$_} = 1 for split /,/, shift @ARGV }
+my $target = '';   # --target arm: a long is 4 bytes, u64 and i64 C's long long
+while (@ARGV && $ARGV[0] =~ /^--(pages|target)$/) {
+    my $o = shift @ARGV;
+    if ($o eq '--pages') { $only{$_} = 1 for split /,/, shift @ARGV } else { $target = shift @ARGV }
+}
 my ($in, $out, $namesout) = @ARGV;
-die "usage: ff2c.pl [--pages page,...] tree.ff.txt out.c names.txt\n" unless defined $namesout;
+die "usage: ff2c.pl [--pages page,...] [--target t] tree.ff.txt out.c names.txt\n" unless defined $namesout;
 my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt(<$h>, $in) };
 # The C words now (Words.pm): read in the words of before, which the rest of
 # ff2c knows; a : field of a scalar type (C's unnamed bitfield) is padding n:
@@ -49,6 +53,7 @@ my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt
     my $flat;
     $flat = sub { my ($n) = @_; $n->{children} = [map { FF::is_layer($_) ? @{ $flat->($_)->{children} } : $flat->($_) } @{ $n->{children} }]; $n };
     $flat->($_) for @top;
+    Words::long32() if $target eq 'arm';
     @top = Words::oldwords($t, @top);
     my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 u8 u16 u32 u64);
     my $pad;
@@ -96,6 +101,7 @@ my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
     va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
     'complex long double' => '_Complex long double');
+$scalar{u64} = 'unsigned long long' if $target eq 'arm';
 my (%rec, %enum, %fntype, %fn, %var, %econst, @order);
 my %glibcpage;   # functions of the glibc pages (their bodies are written)
 my @headers;    # the license of each file a page is made of: [its name, its lines]
@@ -607,7 +613,7 @@ sub operand {
     if (exists $scalar{$w} && !local_type($w)) {
         my $t = [scalar => $w];
         if (@k == 1 && leaf($k[0]) && c($k[0]) =~ /^\d+$|^0x[0-9a-f]+$/i) {
-            my $sfx = { u64 => 'UL', long => 'L', i64 => 'LL', u32 => 'U', int => '' }->{$w};
+            my $sfx = { u64 => $target eq 'arm' ? 'ULL' : 'UL', long => 'L', i64 => 'LL', u32 => 'U', int => '' }->{$w};
             return (c($k[0]) . $sfx, $t) if defined $sfx;
         }
         my ($v) = expr([@k]);

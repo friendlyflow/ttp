@@ -18,9 +18,9 @@ void *realloc (void *, unsigned long);
 void *calloc (unsigned long, unsigned long);
 void qsort (void *, unsigned long, unsigned long, int (*) (const void *, const void *));
 
-static unsigned long h = 1469598103934665603UL;
+static unsigned long long h = 1469598103934665603ULL;
 
-static void mix (unsigned long x) { h = (h ^ x) * 1099511628211UL; }
+static void mix (unsigned long x) { h = (h ^ x) * 1099511628211ULL; }
 
 static int
 cmp (const void *a, const void *b)
@@ -48,7 +48,7 @@ main (void)
       unsigned long n = i * 7 + 1;
       p[i] = malloc (n);
       mix (p[i] != 0);
-      mix (((unsigned long) p[i] & 15) == 0);
+      mix (((unsigned long) p[i] & (2 * sizeof (long) - 1)) == 0);
       for (unsigned long j = 0; j < n; j++)
         p[i][j] = (char) i;
     }
@@ -65,7 +65,7 @@ main (void)
   for (int i = 0; i < 200; i += 2)
     {
       p[i] = malloc (i + 3);
-      mix (((unsigned long) p[i] & 15) == 0);
+      mix (((unsigned long) p[i] & (2 * sizeof (long) - 1)) == 0);
     }
   for (int i = 1; i < 200; i += 2)
     mix (filled (p[i], i % 3 == 0 ? (i * 7 + 1) / 2 + 1 : i * 13 + 5, (char) (i + 1)));

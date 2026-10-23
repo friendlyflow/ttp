@@ -354,6 +354,7 @@ CSKIP_arm := cgnu
 # C tests of one target only, beside the portable ones
 CONLY_aarch64 := ctlsa64
 CONLY_x86_64 := ctlsx64 cfsx64 cvecx64
+CONLY_arm := ctlsarm
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per
 # page), which it reads lazily: never.ff, which it must not read, is no tree.

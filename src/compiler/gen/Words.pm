@@ -55,6 +55,8 @@ my %scalarword = map { $_ => 1 } ('char', 'short', 'int', 'long', 'i8', 'i16', '
 my @ops = qw(= += -= || && | ^ & == != < > <= >= << >> + - * / % ++ -- ! ~ *= /= %= &= |= ^= <<= >>= ?);
 my %opix = map { $ops[$_] => $_ } 0 .. $#ops;
 my %suffix = (U => 'u32', L => 'long', UL => 'u64', LL => 'i64', ULL => 'u64');
+# (on arm UL is 32 bits, as its unsigned long: ff2c --target arm sets it)
+sub long32 { $suffix{UL} = 'u32' }
 my %tosuffix = (u32 => 'U', long => 'L', u64 => 'ULL', i64 => 'LL');
 my $num = qr/^-?(?:\d+|0x[0-9a-fA-F]+)$/;
 
