@@ -202,7 +202,9 @@ sub ctype {
         # program's tag that its tree (--index) has too, whose code must keep
         # its own (the public headers' struct _IO_FILE has _lock as a void *,
         # libio's own an _IO_lock_t *)
-        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $localname{$2} || is_fieldname(ffname($2)) || $treedefs{ ffname($2) } ? "$2 $1" : ffname($2);
+        # (an alias's name too: glibc's weak alias sigaction of __sigaction,
+        # struct sigaction's tag took its name and a program's call of it)
+        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $alias{$2} || $localname{$2} || is_fieldname(ffname($2)) || $treedefs{ ffname($2) } ? "$2 $1" : ffname($2);
     }
     # glibc's array check (array_length): sizeof (struct { _Static_assert
     # (...); }), a struct clang writes no declaration of; it has no fields
@@ -2374,7 +2376,9 @@ sub alignas {
     my $t = $1;
     return $t + 0 if $t =~ /^\d+$/;
     my ($w, @more) = ctype($t);
-    my $n = !@more && ($target eq 'arm' && $w =~ /^(?:long|address)$/ ? 4 : $wsize{$w});
+    # (a floating type's too: tst-random-bz30584's _Alignas (double))
+    my %fl = (float => 4, double => 8, 'long double' => $target eq 'arm' ? 8 : 16);
+    my $n = !@more && ($target eq 'arm' && $w =~ /^(?:long|address)$/ ? 4 : $wsize{$w} // $fl{$w});
     $n or stop("_Alignas of $t, no scalar", $a);
     $n;
 }
