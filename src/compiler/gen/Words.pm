@@ -371,10 +371,13 @@ sub newlist {
 my %mark = map { $_ => 1 } ('thread local', 'weak', 'function', 'ifunc', 'section', 'alias', 'asm', 'struct', 'union', 'enum');
 # align n first: C's aligned attribute of a field or a global
 sub is_align { my ($n) = @_; $n && $n->{content} eq 'align' && @{ $n->{children} } == 1 && leaf($n->{children}[0]) }
+# cleanup / f first under a local, after its align: C's cleanup attribute
+sub is_cleanup { my ($n) = @_; $n && $n->{content} eq 'cleanup' && @{ $n->{children} } == 1 && leaf($n->{children}[0]) }
 sub marks {
     my ($k) = @_;
     my $i = 0;
     $i++ if is_align($k->[0]);
+    $i++ if $i < @$k && is_cleanup($k->[$i]);
     while ($i < @$k && leaf($k->[$i]) && $mark{ $k->[$i]{content} }) { $i += $k->[$i]{content} =~ /^(?:ifunc|section)$/ ? 2 : 1 }
     $i > @$k ? scalar @$k : $i;
 }

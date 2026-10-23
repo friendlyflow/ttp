@@ -1576,7 +1576,15 @@ sub expr {
             if ($base->{kind} eq 'MemberExpr') { unshift @path, node(ffname($base->{name})) if ($base->{name} // '') ne ''; $base = strip((kids($base))[0]); next }
             if ($base->{kind} eq 'ArraySubscriptExpr' && strip((kids($base))[0])->{kind} =~ /^(DeclRefExpr|MemberExpr|ArraySubscriptExpr)$/) {
                 my ($b, $i) = kids($base);
-                unshift @path, item(expr($i));
+                # (an element that is a record: an index other than a number
+                # in a : of its own, as a name there that is one of its
+                # fields would be read as that field, p x: arc4random-fork's
+                # indexes[run * processes + process_index] of struct index's
+                # run)
+                my @ix = item(expr($i));
+                @ix = node(':', @ix) if (@ix > 1 || $ix[0]{content} !~ /^\d/) && $ix[0]{content} ne ':'
+                    && ($base->{type}{desugaredQualType} // $base->{type}{qualType} // '') =~ /^(?:const |volatile )*(?:struct|union) /;
+                unshift @path, @ix;
                 $base = strip($b);
                 next;
             }
@@ -1601,7 +1609,10 @@ sub expr {
         }
         if ($k eq 'ArraySubscriptExpr' && $base == $n) {
             my ($b, $i) = kids($n);
-            return node('content', node(':', expr($b), node('+'), item(expr($i))));
+            # (an index of several nodes in a : of its own: p[a - b] is p + (a - b), not
+            # (p + a) - b, whose pointer arithmetic is another: memstream's
+            # (*mp->bufloc)[fp->_IO_write_ptr - fp->_IO_write_base])
+            return node('content', node(':', expr($b), node('+'), atom($i)));
         }
         stop('a path from ' . $base->{kind}, $n);
     }
@@ -2351,6 +2362,14 @@ sub alignas {
 }
 sub max_align { my ($a, $b) = @_; !defined $a ? $b : !defined $b ? $a : $a > $b ? $a : $b }
 sub align_node { my ($n) = @_; defined $n ? node('align', node($n)) : () }
+sub cleanup_node {
+    my ($v) = @_;
+    my ($a) = grep { $_->{kind} eq 'CleanupAttr' } @{ $v->{inner} || [] } or return ();
+    my $f = $a->{cleanup_function} or stop('a cleanup attribute without its function', $v);
+    my $g = own($f->{name});
+    want($g);
+    node('cleanup', node(ffname($g)));
+}
 sub decl {
     my ($v, $global, $name) = @_;
     $v->{kind} eq 'VarDecl' or stop('a declaration of ' . $v->{kind}, $v);
@@ -2383,6 +2402,10 @@ sub decl {
     # static program: no section there
     my ($sec) = $global ? grep { $_->{kind} eq 'SectionAttr' && $_->{section_name} =~ /^[A-Za-z_]\w*$/ } kids($v) : ();
     unshift @tls, node('section'), node($sec->{section_name}) if $sec;
+    # (a local's cleanup attribute: cleanup / f, after its align: f is
+    # called with its address at each exit of its block; glibc's
+    # _IO_acquire_lock, which unlocks a FILE so)
+    unshift @tls, cleanup_node($v) unless $global;
     # (an aligned attribute or _Alignas first: a global's, a local's,
     # qsort's _Alignas (uint64_t) char tmp[1024])
     unshift @tls, align_node(align_attr($v));

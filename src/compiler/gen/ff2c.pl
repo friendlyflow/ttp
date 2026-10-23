@@ -737,8 +737,10 @@ sub stmt_of {
     if (@$e == 1 && $w =~ /^(.+):$/ && $w ne ':' && $w ne 'cast:') {
         my $name = $1;
         my @k = kids($n);
-        # (a local's align n first: C's aligned attribute)
+        # (a local's align n first: C's aligned attribute; then its cleanup / f:
+        # C's cleanup attribute)
         my $j = @k > 1 && c($k[0]) eq 'align' && kids($k[0]) == 1 && leaf((kids($k[0]))[0]) ? 1 : 0;
+        $j++ if @k > $j + 1 && c($k[$j]) eq 'cleanup' && kids($k[$j]) == 1 && leaf((kids($k[$j]))[0]);
         if (@k > $j && leaf($k[$j]) && is_typeword(c($k[$j])) && !local_type(c($k[$j]))) { return ['decl', decl($name, $n)] }
         # a label: its statements after it
         my @s = map { stmt_of($_) } elements(@k);
@@ -770,6 +772,8 @@ sub decl {
     my $i = 0;
     my $al;
     if (c($k[0]) eq 'align' && !leaf($k[0])) { $al = c((kids($k[0]))[0]); $i = 1 }
+    my $cl;
+    if ($i < @k && c($k[$i]) eq 'cleanup' && !leaf($k[$i])) { $cl = c((kids($k[$i]))[0]); $i++ }
     my $t = ptype(\@k, \$i);
     my @init = @k[$i .. $#k];
     my $vla;
@@ -777,6 +781,7 @@ sub decl {
     $scope[-1]{$name} = $t;
     my $d = cdecl($t, cid_local($name));
     $d .= " __attribute__((aligned($al)))" if defined $al;
+    $d .= " __attribute__((cleanup(" . cid($cl) . ")))" if defined $cl;
     return "$d;" unless @init;
     if ($t->[0] eq 'arr' || ($t->[0] eq 'rec' && !copy_of($t, \@init))) { return "$d = " . init_list($t, \@init) . ';' }
     "$d = " . expr_item([@init]) . ';';
