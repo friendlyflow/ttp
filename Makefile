@@ -85,6 +85,10 @@ gcroots:
 # ff trees are binary; git diffs them as text (fftext.pl, as textconv) and
 # merges them as text (ffmerge.sh), the drivers .gitattributes names. The
 # commands run from the top of the worktree, each worktree its own copy.
+# src/compiler/tools/ffmerge.ff, built by stage2, does what ffmerge.sh does
+# (tools-check compares them); it can be the driver by hand once built:
+#   git config merge.ff.driver "build/compiler/tools/x86_64/ffmerge %O %A %B %P"
+# git-setup keeps ffmerge.sh, since a fresh worktree has no stage2 yet.
 git-setup:
 	git config diff.ff.textconv "perl src/compiler/gen/fftext.pl txt"
 	git config merge.ff.name "ff trees, merged as their text (src/compiler/gen/ffmerge.sh)"

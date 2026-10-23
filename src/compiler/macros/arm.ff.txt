@@ -3621,6 +3621,31 @@ linux:
       162
       zero
       a0
+  SYS_mkdirat:
+    addi
+      323
+      zero
+      a0
+  SYS_unlinkat:
+    addi
+      328
+      zero
+      a0
+  SYS_clone:
+    addi
+      120
+      zero
+      a0
+  SYS_execve:
+    addi
+      11
+      zero
+      a0
+  SYS_wait4:
+    addi
+      114
+      zero
+      a0
 rv64:
   comment
     rv64: ttpc's own instructions, RV64 in ff order (the destination last), in arm instructions (A32): what ttpc, written in RV64, is assembled with to run on arm. mkhost.pl renames each op of ttpc to rv.op and each register to rv.reg.
