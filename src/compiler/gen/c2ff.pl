@@ -2116,7 +2116,9 @@ sub pure {
 }
 sub cast_node {
     my ($t, @v) = @_;
-    @v = node(':', @v) if "@$t" =~ /^address (char|u8)$/ && @v == 1 && !@{ $v[0]{children} };
+    # (a value of one node that is a leaf in the words of now: content x
+    # and address x become x * pointer, x & address, whose x would be text)
+    @v = node(':', @v) if "@$t" =~ /^address (char|u8)$/ && @v == 1 && (!@{ $v[0]{children} } || $v[0]{content} =~ /^(?:content|address)$/);
     node('cast:', map({ node($_) } @$t), @v);
 }
 sub string_value {
@@ -2586,7 +2588,10 @@ sub decl {
     @i = node(':', @i) if $global && @i > 1 && strip($init)->{kind} ne 'InitListExpr' && !bare_string($init);
     # under address / char a leaf is text: a value that starts with a leaf goes
     # in a : (vfprintf's char *workend = work_buffer + WORK_BUFFER_SIZE)
-    @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i && !@{ $i[0]{children} } && !bare_string($init);
+    # (content x and address x too: in the words of now x * pointer and
+    # x & address, whose x is a leaf: gconv's const unsigned char *inptr =
+    # *inptrp was the text "inptrp", which its loops then wrote over)
+    @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i && (!@{ $i[0]{children} } || $i[0]{content} =~ /^(?:content|address)$/) && !bare_string($init);
     # a thread-local one, __thread, is ff's thread local (ttpc lays it out in
     # the TLS image, where the target has one)
     my @tls = $global && $v->{tls} ? node('thread local') : ();
