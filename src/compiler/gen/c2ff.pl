@@ -1738,17 +1738,21 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        # (arm's C23 bit functions of a 4-byte value, builtins-arm.ff.txt's:
-        # builtins.ff.txt's are of u64, whose leading zeros, width, ceiling
-        # and rotations are not those of 32 bits)
-        if ($target eq 'arm' && $name =~ /^__builtin_stdc_(leading_zeros|trailing_zeros|count_ones|bit_width|has_single_bit|bit_ceil|rotate_left|rotate_right)$/) {
-            my $w = tword_int($args[0]);
-            return node("$name u32", map { item(expr($_)) } @args) if $w =~ /^(u32|i32|int|long)$/;
-            stop("$name on $w", $n) unless $w =~ /^(u64|i64)$/;
+        # C23's bit functions, gcc's type-generic __builtin_stdc_*: one of
+        # stdbit.ff.txt for each width, named for the first argument's type
+        # (clang's overload of it, clang-prelude.h's; a unit whose pass was
+        # made with one of a word has the argument's conversion to it: the
+        # type under that)
+        if ($name =~ /^__builtin_stdc_(leading|trailing|first_leading|first_trailing|count)_(zeros?|ones?)$|^__builtin_stdc_(has_single_bit|bit_width|bit_floor|bit_ceil|rotate_left|rotate_right)$/) {
+            my $a = $args[0];
+            $a = (kids($a))[0] while ($a->{kind} // '') eq 'ImplicitCastExpr' && ($a->{castKind} // '') eq 'IntegralCast';
+            my $w = tword_int($a);
+            $w =~ /^u(8|16|32|64)$/ or stop("$name on $w", $n);
+            return node("$name $w", map { item(expr($_)) } @args);
         }
         # (arm's __builtin_add_overflow_p on its words, unsigned ints)
         return node("$name u32", map { item(expr($_)) } @args) if $name eq '__builtin_add_overflow_p' && $target eq 'arm';
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;

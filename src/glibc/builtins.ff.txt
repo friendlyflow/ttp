@@ -7,86 +7,6 @@ builtins:
     This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
     It comes with no warranty. See the file LICENSE for the full text.
   comment
-    gcc's __builtin_stdc_rotate_right (C23's stdc_rotate_right) on a word: x turned right by n bits; glibc's PTR_DEMANGLE uses it on a uintptr_t.
-  __builtin_stdc_rotate_right:
-    u64
-    x:
-      u64
-    n:
-      u32
-    return
-      :
-        x
-        >>
-        :
-          n
-          %
-          64
-      |
-      :
-        x
-        <<
-        :
-          :
-            64
-            -
-            :
-              n
-              %
-              64
-          %
-          64
-  comment
-    gcc's __builtin_stdc_rotate_left on a word: x turned left by n bits; glibc's PTR_MANGLE uses it.
-  __builtin_stdc_rotate_left:
-    u64
-    x:
-      u64
-    n:
-      u32
-    return
-      :
-        x
-        <<
-        :
-          n
-          %
-          64
-      |
-      :
-        x
-        >>
-        :
-          :
-            64
-            -
-            :
-              n
-              %
-              64
-          %
-          64
-  comment
-    gcc's __builtin_stdc_leading_zeros and __builtin_stdc_trailing_zeros (C23) on a word, which printf_fp uses on its limbs: clzl and ctzl, which give the width for 0, as C23 does.
-  __builtin_stdc_leading_zeros:
-    u32
-    x:
-      u64
-    return
-      cast
-        u32
-      __builtin_clzl
-        x
-  __builtin_stdc_trailing_zeros:
-    u32
-    x:
-      u64
-    return
-      cast
-        u32
-      __builtin_ctzl
-        x
-  comment
     gcc's __builtin_clz, clzl and clzll: how many zero bits are above the highest one of x (an unsigned int, long, long long); C leaves x = 0 undefined, here it gives the width.
   __builtin_clz:
     int
@@ -182,7 +102,7 @@ builtins:
     return
       n
   comment
-    gcc's __builtin_popcount, popcountl and popcountll, and C23's __builtin_stdc_count_ones (a word): how many bits of x are 1.
+    gcc's __builtin_popcount, popcountl and popcountll: how many bits of x are 1.
   __builtin_popcount:
     int
     x:
@@ -237,29 +157,6 @@ builtins:
       locals
     n:
       int
-      0
-    while
-      :
-        x
-      x
-      &=
-      :
-        x
-        -
-        1
-      n
-      +=
-      1
-    return
-      n
-  __builtin_stdc_count_ones:
-    u32
-    x:
-      u64
-    comment
-      locals
-    n:
-      u32
       0
     while
       :
@@ -533,65 +430,6 @@ builtins:
       8
       i
       +=
-      1
-    return
-      r
-  comment
-    C23's __builtin_stdc_bit_width (a word): the bits x takes, 0 for 0; __builtin_stdc_has_single_bit: whether x is a power of two; __builtin_stdc_bit_ceil: the least power of two not below x.
-  __builtin_stdc_bit_width:
-    u32
-    x:
-      u64
-    comment
-      locals
-    n:
-      u32
-      0
-    while
-      :
-        x
-      x
-      >>=
-      1
-      n
-      +=
-      1
-    return
-      n
-  __builtin_stdc_has_single_bit:
-    int
-    x:
-      u64
-    return
-      x
-      !=
-      0
-      &&
-      :
-        x
-        &
-        :
-          x
-          -
-          1
-      ==
-      0
-  __builtin_stdc_bit_ceil:
-    u64
-    x:
-      u64
-    comment
-      locals
-    r:
-      u64
-      1
-    while
-      :
-        r
-        <
-        x
-      r
-      <<=
       1
     return
       r

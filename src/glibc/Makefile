@@ -438,8 +438,9 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
 # its asm parts name from elsewhere: setjmp's tail __sigjmp_save), then
-# s2ff's of its asm parts, then the builtins written by hand and libatomic's
-# functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
+# s2ff's of its asm parts, then the builtins written by hand, C23's bit
+# functions (stdbit.ff.txt, from mkstdbit.pl: perl mkstdbit.pl >
+# stdbit.ff.txt) and libatomic's functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
 # atomics.ff.txt; a target with real atomics has its own, ATOMICS:
 # atomics-riscv64.ff.txt, perl mkatomics.pl riscv64). The asm parts share
 # one page, glibc asm: the trees a
@@ -451,7 +452,7 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
 	cp license.ff.txt $$(FF)/$(1).ff.txt
 	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
@@ -464,7 +465,7 @@ $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).asm.page.txt; \
 	done
 	$$(if $$(ASMS_all_$(1)),$$(LAYERS) $$(FF)/$(1).asm.page.txt >> $$(FF)/$(1).ff.txt)
-	cat builtins.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) >> $$(FF)/$(1).ff.txt
+	cat builtins.ff.txt stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) >> $$(FF)/$(1).ff.txt
 	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
 endef
 $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
@@ -640,7 +641,7 @@ glibc-roundtrip: floats-roundtrip
 # file it is made of. glibc-licenses checks every milestone made.
 LICENSES_PL := perl ../compiler/gen/licenses.pl
 licenses:
-	$(LICENSES_PL) --fragment builtins.ff.txt atomics.ff.txt $(wildcard atomics-*.ff.txt)
+	$(LICENSES_PL) --fragment builtins.ff.txt stdbit.ff.txt atomics.ff.txt $(wildcard atomics-*.ff.txt)
 	$(LICENSES_PL) license.ff.txt progs/strlen.ff
 define licenses
 $(1)-licenses: $$(FF)/$(1).ff $$(FF)/$(1)/index.ff $$(FF)/$(1)-prog.ff
@@ -661,12 +662,16 @@ glibc-licenses: licenses $(MILESTONES:%=%-licenses)
 # against a folder of them alone, with a _start of its own (c2ff --start)
 # on every target, and as every check with gcc + libc.a; generic-roundtrip
 # writes its ff back as C and compares the ASTs, as for a milestone.
-OWNSTART := generic
-$(FF)/generic.ff: builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
+# progs/stdbit.c, the same way: C23's bit functions (gcc's type-generic
+# __builtin_stdc_*, stdbit.ff.txt's) on each unsigned type, against plain
+# counts of the bits, on every target (arm too: stdbit-check).
+OWNSTART := generic stdbit
+$(FF)/generic.ff $(FF)/stdbit.ff: $(FF)/%.ff: builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
 	mkdir -p $(FF)
-	cat license.ff.txt builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) > $(FF)/generic.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(FF)/generic.ff.txt > $@
+	cat license.ff.txt builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) > $(FF)/$*.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/$*.ff.txt > $@
 $(eval $(call check,generic))
+$(eval $(call check,stdbit))
 GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit
 generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
@@ -805,7 +810,7 @@ $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
 	cp license.ff.txt $(FF)/glibc.ff.txt
 	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
@@ -817,7 +822,7 @@ $(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt $(wildcard builtins-$(GTARGET)
 	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
-	cat builtins.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) >> $(FF)/glibc.ff.txt
+	cat builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) >> $(FF)/glibc.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@
 
 # the list of a kind of object, for a look at it: make print-ALL_ASM

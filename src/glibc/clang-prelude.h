@@ -14,19 +14,46 @@ typedef long double _Float64x;
 /* gcc builtins clang does not have, used by inline helpers in glibc's headers. */
 extern int __builtin_va_arg_pack_len (void);
 extern int __builtin_va_arg_pack (void);
-/* gcc 15's C23 rotates, which clang 21 does not have (glibc's PTR_MANGLE, PTR_DEMANGLE);
-   glibc in ff has them in builtins.ff.txt. */
-extern unsigned long __builtin_stdc_rotate_right (unsigned long, unsigned int);
-extern unsigned long __builtin_stdc_rotate_left (unsigned long, unsigned int);
-/* gcc's C23 bit builtins and __builtin_add_overflow_p, which clang 21 does
-   not have (malloc: tcache's key, its bins, an alignment), on a word as
-   glibc uses them; glibc in ff has them in builtins.ff.txt. */
-extern unsigned int __builtin_stdc_count_ones (unsigned long);
-extern unsigned int __builtin_stdc_bit_width (unsigned long);
-extern unsigned int __builtin_stdc_leading_zeros (unsigned long);
-extern unsigned int __builtin_stdc_trailing_zeros (unsigned long);
-extern _Bool __builtin_stdc_has_single_bit (unsigned long);
-extern unsigned long __builtin_stdc_bit_ceil (unsigned long);
+/* gcc's C23 bit builtins (stdbit.h's, and glibc's own PTR_MANGLE, malloc's
+   tcache, printf_fp's limbs, libm's), which clang 21 does not have: they are
+   type-generic, of the width of their argument's type, and bit_floor,
+   bit_ceil and the rotations give that type (the tests' _Generic checks):
+   here functions overloaded on the five unsigned types (an argument of one
+   of them, as gcc takes no other). glibc in ff has one of each for each
+   width, stdbit.ff.txt's, which c2ff names a call of by its argument. */
+#define __ff_ov __attribute__ ((__overloadable__))
+#define __ff_stdc(r, f, ...) \
+  extern r (unsigned char) f (unsigned char __VA_ARGS__) __ff_ov; \
+  extern r (unsigned short) f (unsigned short __VA_ARGS__) __ff_ov; \
+  extern r (unsigned int) f (unsigned int __VA_ARGS__) __ff_ov; \
+  extern r (unsigned long) f (unsigned long __VA_ARGS__) __ff_ov; \
+  extern r (unsigned long long) f (unsigned long long __VA_ARGS__) __ff_ov;
+#define __ff_uint(t) unsigned int
+#define __ff_bool(t) _Bool
+#define __ff_same(t) t
+__ff_stdc (__ff_uint, __builtin_stdc_leading_zeros)
+__ff_stdc (__ff_uint, __builtin_stdc_leading_ones)
+__ff_stdc (__ff_uint, __builtin_stdc_trailing_zeros)
+__ff_stdc (__ff_uint, __builtin_stdc_trailing_ones)
+__ff_stdc (__ff_uint, __builtin_stdc_first_leading_zero)
+__ff_stdc (__ff_uint, __builtin_stdc_first_leading_one)
+__ff_stdc (__ff_uint, __builtin_stdc_first_trailing_zero)
+__ff_stdc (__ff_uint, __builtin_stdc_first_trailing_one)
+__ff_stdc (__ff_uint, __builtin_stdc_count_zeros)
+__ff_stdc (__ff_uint, __builtin_stdc_count_ones)
+__ff_stdc (__ff_bool, __builtin_stdc_has_single_bit)
+__ff_stdc (__ff_uint, __builtin_stdc_bit_width)
+__ff_stdc (__ff_same, __builtin_stdc_bit_floor)
+__ff_stdc (__ff_same, __builtin_stdc_bit_ceil)
+__ff_stdc (__ff_same, __builtin_stdc_rotate_left, , unsigned int)
+__ff_stdc (__ff_same, __builtin_stdc_rotate_right, , unsigned int)
+#undef __ff_ov
+#undef __ff_stdc
+#undef __ff_uint
+#undef __ff_bool
+#undef __ff_same
+/* and __builtin_add_overflow_p, as glibc uses it (malloc: an alignment),
+   on a word; builtins.ff.txt has it. */
 extern _Bool __builtin_add_overflow_p (unsigned long, unsigned long, unsigned long);
 /* and __builtin_mul_overflow_p, as gnulib's hash.c uses it: whether a
    product of two sizes fits a ptrdiff_t. */
