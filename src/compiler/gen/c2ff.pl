@@ -1495,7 +1495,7 @@ sub expr {
         # the long double literal of its value, which binary128 holds
         # exactly: ttpc has no conversion to run there, libm's zero = 0.0)
         my $e = strip((kids($n))[0]);
-        if ($in_global && defined(my $lit = special_float($e, $n))) { return node($lit) }
+        if ($in_global && defined(my $lit = special_float((kids($n))[0], $n))) { return node($lit) }
         if ($in_global && isld($n) && $e->{kind} eq 'FloatingLiteral' && (my $t = tword($e)) =~ /^(float|double)$/) {
             return node($target eq 'arm' || $t eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : ldround($e->{value}, 24, -149, 127));
         }
@@ -2170,7 +2170,8 @@ sub array_text {
 # of node t; else undef
 sub special_float {
     my ($n, $t) = @_;
-    my $s = strip($n);
+    my $s = $n;
+    $s = (kids($s))[0] while ($s->{kind} // '') =~ /^(ImplicitCastExpr|ConstantExpr|ParenExpr)$/;
     return unless ($s->{kind} // '') eq 'CallExpr';
     my ($c, @args) = kids($s);
     $c = strip($c);
