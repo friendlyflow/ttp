@@ -26,10 +26,21 @@ main (void)
   t += printf ("[%.3d] [%8.3d] [%-8.3d] [%.0d] [%.0x]\n", 7, 7, -7, 0, 0);
   t += printf ("[%s] [%.2s] [%6s] [%-6s] [%*s] [%-*s] [%.*s]\n", "abc", "abc", "abc", "abc", 4, "x", 4, "y", 1, "zz");
   t += printf ("[%*d] [%-*d] [%.*d]\n", -6, 1, 6, 2, 4, 3);
+#if __SIZEOF_LONG__ == 4
+  /* (a long of 4 bytes, arm's: the extremes of its own, and an intmax_t
+     for %jd) */
+  t += printf ("%ld %lu %lx %lld %llu\n", -2147483647L - 1, 4294967295UL,
+               0xcafeUL, -1LL, 12345678901234567890ULL);
+#else
   t += printf ("%ld %lu %lx %lld %llu\n", -9223372036854775807L - 1, 18446744073709551615UL,
                0xdeadbeefcafeUL, -1LL, 12345678901234567890ULL);
+#endif
   t += printf ("%hhd %hhu %hd %hu\n", 300, 300, 70000, 70000);
+#if __SIZEOF_LONG__ == 4
+  t += printf ("%zu %td %jd\n", (unsigned long) 99, (long) -5, (long long) 1 << 40);
+#else
   t += printf ("%zu %td %jd\n", (unsigned long) 99, (long) -5, (long) 1 << 40);
+#endif
   t += printf ("%c%c%c%n|\n", 'a', 'b', 'c', &n);
   t += printf ("n %d, %s\n", n, (char *) 0);
   t += printf ("%5c|%-3c|\n", 'q', 'r');
