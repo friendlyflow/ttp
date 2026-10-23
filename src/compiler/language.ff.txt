@@ -135,6 +135,7 @@ ff, the language ttpc compiles
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
       a long double literal has L after it, binary128's 113 bits: 0x1.921fb54442d18469898cc51701b8p+1L; a subnormal one is 0x0.<digits>p-16382L, zero 0x0p+0L
+      a hex float one exponent past its type's range is its IEEE bits: 0x1p+1024 is infinity (0x1p+128f, 0x1p+16384L), one with a fraction a NaN, 0x1.8p+1024 the quiet one (C's HUGE_VAL, INFINITY and NAN in a constant); minus infinity is : / - / 0x1p+1024
       + - * / and the comparisons work on them, - negates, cast: converts between them and to and from the integers, on every target
       a floating type larger than a word (long double; double on arm) is in memory as a struct is, a value of it the address of a temporary; arm works on its double with VFP
       long double's arithmetic calls soft-fp's functions, as gcc calls libgcc's: __addtf3 ... __getf2, __negtf2, __floatditf ... __trunctfdf2; the program has them (glibc's soft-fp)

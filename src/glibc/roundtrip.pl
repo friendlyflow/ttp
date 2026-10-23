@@ -151,11 +151,28 @@ my %castdrop = map { $_ => 1 } qw(LValueToRValue NoOp ArrayToPointerDecay Functi
 my %atomicop = map { $_ => 1 } qw(exchange load store compare_exchange fetch_add fetch_sub fetch_and fetch_or fetch_xor fetch_nand
     add_fetch sub_fetch and_fetch or_fetch xor_fetch nand_fetch);
 
+# inf or nan where n is a call of gcc's __builtin_huge_val, inf or nan ("")
+# (of any floating type), under floating conversions; else undef
+sub special_float {
+    my ($n) = @_;
+    $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr)$/
+        || ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($n->{castKind} // '') =~ /^(FloatingCast|NoOp)$/;
+    return unless $n && ($n->{kind} // '') eq 'CallExpr';
+    my $d = (strip((kids($n))[0]) // {})->{referencedDecl} or return;
+    my $name = $d->{name} // '';
+    return 'inf' if $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/;
+    return 'nan' if $name =~ /^__builtin_nan[fl]?$/;
+    return;
+}
 sub E {
     my ($n) = @_;
     return '-' unless $n && $n->{kind};
     my $k = $n->{kind};
     return E((kids($n))[0]) if $k =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
+    # (in a global's value gcc's infinity or NaN, converted or not, is the
+    # literal of its type there, as c2ff writes it; ff2c writes it back as
+    # the builtin of that type)
+    if ($in_global && (my $sp = special_float($n))) { return "(fspecial $sp " . tcls($n) . ')' }
     if ($k eq 'ImplicitCastExpr' || $k eq 'CStyleCastExpr') {
         my ($c) = kids($n);
         my $ck = $n->{castKind} // '';

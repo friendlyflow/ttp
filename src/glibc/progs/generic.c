@@ -140,6 +140,22 @@ many_sum (void)
   return s;
 }
 
+/* strtod's and strfrom's tests' tables: HUGE_VAL, INFINITY and NAN in a
+   global's value (gcc folds the builtins; ff has their literals) */
+static const struct { double d; float f; long double l; } specials[] = {
+  { __builtin_huge_val (), __builtin_inff (), __builtin_huge_vall () },
+  { -__builtin_huge_val (), __builtin_nanf (""), __builtin_nanl ("") },
+  { __builtin_nan (""), -__builtin_inff (), -__builtin_infl () },
+};
+static int
+specials_bad (void)
+{
+  return (__builtin_isinf_sign (specials[0].d) != 1) + (__builtin_isinf_sign (specials[0].f) != 1)
+         + (__builtin_isinf_sign (specials[0].l) != 1) + (__builtin_isinf_sign (specials[1].d) != -1)
+         + !__builtin_isnan (specials[1].f) + !__builtin_isnan (specials[1].l) + !__builtin_isnan (specials[2].d)
+         + (__builtin_isinf_sign (specials[2].f) != -1) + (__builtin_isinf_sign (specials[2].l) != -1);
+}
+
 #define LMAX 9223372036854775807L
 #define LMIN (-LMAX - 1)
 
@@ -161,6 +177,7 @@ main (void)
   f += tag_names (0) != 0 || tag_names (1) != 36 + 7;
   f += LATER_A != -2 || LATER_C != 0 || later_p != 0;
   f += many_sum () != 8 * 36;
+  f += specials_bad ();
   /* string/ffs.c on x86_64 */
   f += __builtin_ffs (8) != 4 || __builtin_ffs (0) != 0;
   f += __builtin_ffsl (1L << 40) != 41 || __builtin_ffsll (LMIN) != 64;

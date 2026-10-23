@@ -1495,6 +1495,7 @@ sub expr {
         # the long double literal of its value, which binary128 holds
         # exactly: ttpc has no conversion to run there, libm's zero = 0.0)
         my $e = strip((kids($n))[0]);
+        if ($in_global && defined(my $lit = special_float($e, $n))) { return node($lit) }
         if ($in_global && isld($n) && $e->{kind} eq 'FloatingLiteral' && (my $t = tword($e)) =~ /^(float|double)$/) {
             return node($target eq 'arm' || $t eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : ldround($e->{value}, 24, -149, 127));
         }
@@ -1711,6 +1712,9 @@ sub expr {
         my $name = $c->{referencedDecl}{name};
         # (its value a long, as its first argument is made one)
         return cast_node([ctype(qt($n))], item(expr($args[0]))) if $name eq '__builtin_expect';
+        # (in a global's value, gcc's infinity or NaN is its literal, as gcc
+        # folds it: ttpc's global items call nothing)
+        if ($in_global && defined(my $lit = special_float($n, $n))) { return node($lit) }
         if ($name eq '__builtin_constant_p') {
             # gcc's answer where it cannot tell is 0, and code that asks must
             # mean the same either way: 1 for a literal, else 0
@@ -2159,6 +2163,29 @@ sub array_text {
     @p ? map({ node($_) } @p) : map({ node($_) } unpack 'C*', $s);
 }
 # A string literal that sets a char array: under no decay to an address.
+# gcc's infinity or NaN builtin of a constant (__builtin_huge_val, inf, nan
+# (""): HUGE_VAL, INFINITY, NAN), as type t: the hex float one exponent
+# past its range (the user's choice A, 2026-10-23): 0x1p+1024 infinity,
+# 0x1.8p+1024 the quiet NaN (float 128f, long double 16384L), of the type
+# of node t; else undef
+sub special_float {
+    my ($n, $t) = @_;
+    my $s = strip($n);
+    return unless ($s->{kind} // '') eq 'CallExpr';
+    my ($c, @args) = kids($s);
+    $c = strip($c);
+    my $name = ($c->{kind} // '') eq 'DeclRefExpr' ? $c->{referencedDecl}{name} // '' : '';
+    my $nan = $name =~ /^__builtin_nan[fl]?$/ ? 1 : $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/ ? 0 : return;
+    if ($nan) {
+        return if @args != 1;
+        my $str = $args[0];
+        $str = (kids($str))[0] while ($str->{kind} // '') =~ /^(ImplicitCastExpr|ParenExpr)$/;
+        return if ($str->{kind} // '') ne 'StringLiteral' || ($str->{value} // '') ne '""';
+    } else { return if @args }
+    my $w = tword($t);
+    my $e = $w eq 'float' ? '128f' : $w eq 'double' ? '1024' : $w eq 'long double' ? '16384L' : return;
+    $nan ? "0x1.8p+$e" : "0x1p+$e";
+}
 sub bare_string {
     my ($n) = @_;
     $n = (kids($n))[0] while $n->{kind} eq 'ParenExpr' || ($n->{kind} eq 'ImplicitCastExpr' && ($n->{castKind} // '') ne 'ArrayToPointerDecay');
