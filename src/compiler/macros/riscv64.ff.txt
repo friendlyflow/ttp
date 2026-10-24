@@ -1583,3 +1583,28 @@ linux:
       101
       zero
       a0
+  SYS_mkdirat:
+    addi
+      34
+      zero
+      a0
+  SYS_unlinkat:
+    addi
+      35
+      zero
+      a0
+  SYS_clone:
+    addi
+      220
+      zero
+      a0
+  SYS_execve:
+    addi
+      221
+      zero
+      a0
+  SYS_wait4:
+    addi
+      260
+      zero
+      a0

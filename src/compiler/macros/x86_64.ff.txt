@@ -329,6 +329,31 @@ linux:
       35
       zero
       a0
+  SYS_mkdirat:
+    addi
+      258
+      zero
+      a0
+  SYS_unlinkat:
+    addi
+      263
+      zero
+      a0
+  SYS_clone:
+    addi
+      56
+      zero
+      a0
+  SYS_execve:
+    addi
+      59
+      zero
+      a0
+  SYS_wait4:
+    addi
+      61
+      zero
+      a0
 c:
   comment
     The C layer of ttpc, for x86_64: the primitives it emits, in its own terms. V is the value (rax), L the left operand (r10), X a scale or count (r11), FP the frame (rbp), SP the stack (rsp).

@@ -608,7 +608,8 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # each tool is a program with them: fftext as gen/fftext.pl, sha256sum as
 # coreutils', unlicense, trim, frozen, mkhost, mkwhole, mkff, decls,
 # licenses and insize as gen/unlicense.pl, trim.pl, frozen.pl, mkhost.pl,
-# mkwhole.pl, mkff.pl, decls.pl, licenses.pl and insize.pl.
+# mkwhole.pl, mkff.pl, decls.pl, licenses.pl and insize.pl, ffmerge as
+# gen/ffmerge.sh (git merge-file in a child process, each conversion in one).
 # $(TL)/<target>/<tool> is one for that target, TOOLT the target this machine runs natively (riscv64 under
 # qemu on another). The Perl versions stay, a second implementation:
 # tools-check runs sha256sum on NIST's vectors (and Digest::SHA on more),
@@ -617,14 +618,19 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # uses them, mkhost and mkwhole on every tree of the host chains, mkff on
 # the shared page and a tree of pages, decls and licenses on what `make
 # decls` and `make licenses` check and on trees that fail them, insize on
-# the inputs of the links before ttpc3, for each target here.
+# the inputs of the links before ttpc3, ffmerge and ffmerge.sh on merges
+# (clean, conflicts, a merged text that is not a tree, inputs that are not
+# trees, an empty or missing base, the same tree on both sides: the files,
+# messages and status), for each target here.
 # Which link compiles each: stage2 all of them ($(TL)); ttpc3 unlicense too,
 # from tools/old/ ($(BOOT)/unlicense, $(BUILD)/<host>/unlicense), for the
 # trees of the chain after it, and a host's ttpc3 mkhost ($(BUILD)/<host>/
 # mkhost), for its stage1's ttpc. trim, frozen and mkwhole, and mkhost for
 # ttpc2 and ttpc3, make only the committed copies of the links before
 # ttpc3 (boot/), so stage2's are enough; so is it for decls, licenses and
-# insize, which check the trees after the build.
+# insize, which check the trees after the build, and ffmerge (`make
+# git-setup` keeps gen/ffmerge.sh as the driver: a fresh worktree has no
+# stage2 yet).
 # mkff (tools/mkff.ff, as gen/mkff.pl) makes the shared page: shared.ff.txt,
 # a section per target, macros/<target>.ff.txt. A target's forms are an ff
 # page (isa/<target>.ff, as isa/<target>.pl) that tools/isa.ff (gen/ISA.pm's
@@ -635,7 +641,7 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # committed shared.ff and never makes it.
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff tools/files.ff
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -727,6 +733,25 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
 	for h in $(HOSTS); do same insize ttpc2 boot/$$$$h/shared1.ff boot/$$$$h/ttpc3.defs.ff boot/$$$$h/ttpc3.ff; done; \
 	same insize ttpc2 $(SHARED) $(SHARED); same insize ttpc2 $(SHARED) $$$$d/none
 	@echo "tools-check-$(1): insize agrees with insize.pl on the links before ttpc3, on too much and on a file that is not there"
+	@set -e; d=$(abspath $(TL))/$(1).fm; rm -rf $$$$d; mkdir -p $$$$d/in $$$$d/tmp; \
+	ff() { perl gen/fftext.pl ff /dev/stdin > $$$$d/in/$$$$1; }; \
+	printf 'a:\n  long\n  1\nb:\n  long\n  2\nc:\n  long\n  3\n' | ff base.ff; \
+	printf 'a:\n  long\n  10\nb:\n  long\n  2\nc:\n  long\n  3\n' | ff o.ff; \
+	printf 'a:\n  long\n  1\nb:\n  long\n  2\nc:\n  long\n  30\n' | ff t.ff; \
+	printf 'a:\n  long\n  11\nb:\n  long\n  2\nc:\n  long\n  3\n' | ff t2.ff; \
+	{ echo a; seq -f '  k%g' 254; } | ff b3.ff; { echo a; echo '  first'; seq -f '  k%g' 254; } | ff o3.ff; { echo a; seq -f '  k%g' 254; echo '  last'; } | ff t3.ff; \
+	printf 'not a tree\n' > $$$$d/in/bad.ff; : > $$$$d/in/empty.ff; head -c 40 $$$$d/in/o.ff > $$$$d/in/cut.ff; \
+	perl -Igen -MFF=node,write_ff -e 'binmode STDOUT; print write_ff(node("x", node("y")))' > $$$$d/in/root.ff; \
+	same() { for w in sh ff; do \
+	    rm -rf $$$$d/$$$$w; mkdir $$$$d/$$$$w; for f in "$$$$1" "$$$$2" "$$$$3"; do if test -e $$$$d/in/$$$$f; then cp $$$$d/in/$$$$f $$$$d/$$$$w/; fi; done; \
+	    if test $$$$w = sh; then c="sh $(abspath gen/ffmerge.sh)"; else c="$(RUN_$(1)) $(abspath $(TL))/$(1)/ffmerge"; fi; \
+	    s=0; (cd $$$$d/$$$$w && TMPDIR=$$$$d/tmp $$$$c "$$$$@" > out 2> err) || s=$$$$?; echo $$$$s > $$$$d/$$$$w/status; \
+	    sed -i 's|/ffmerge\.[A-Za-z0-9]*/|/T/|g' $$$$d/$$$$w/err; done; \
+	    diff -r $$$$d/sh $$$$d/ff > /dev/null && test -z "$$$$(ls $$$$d/tmp)" || { echo "tools-check-$(1): ffmerge $$$$*"; exit 1; }; }; \
+	same base.ff o.ff t.ff; same base.ff o.ff t2.ff; same base.ff o.ff t2.ff sub/o.ff; same b3.ff o3.ff t3.ff; \
+	same base.ff bad.ff t.ff; same bad.ff o.ff t.ff; same base.ff o.ff cut.ff; same base.ff root.ff t.ff; \
+	same empty.ff o.ff t.ff; same none.ff o.ff t.ff; same empty.ff o.ff t2.ff; same base.ff o.ff o.ff; same o.ff o.ff o.ff; same base.ff none.ff t.ff
+	@echo "tools-check-$(1): ffmerge agrees with ffmerge.sh on clean merges, conflicts, a merged text that is not a tree, inputs that are not trees, an empty or missing base and the same tree on both sides"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
