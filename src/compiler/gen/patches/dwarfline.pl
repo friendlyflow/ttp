@@ -185,7 +185,7 @@ $code .= cfn('dbgrowx', "dbgrow's work, t5 the bit 0 of its row", "
     ret
 ", 2);
 
-$code .= cfn('dbgrowf', "dbgrow for the C function a0 (kept, a1 to a7 too), its prologue at cur_pc: its row's bit 0 says so (the next row is where the prologue ends); the C place none, or the first line of the function's children if it names a file", "
+$code .= cfn('dbgrowf', "dbgrow for the C function a0 (kept, a1 to a5 too), its prologue at cur_pc: its row's bit 0 says so (the next row is where the prologue ends); the C place none, or the first line of the function's children if it names a file", "
     enter3
     addi -64 sp sp
     sd 0 a1 sp
@@ -193,8 +193,6 @@ $code .= cfn('dbgrowf', "dbgrow for the C function a0 (kept, a1 to a7 too), its 
     sd 16 a3 sp
     sd 24 a4 sp
     sd 32 a5 sp
-    sd 40 a6 sp
-    sd 48 a7 sp
     mv a0 s4
     la dbg_cst t0
     sd 0 zero t0
@@ -239,8 +237,6 @@ $code .= cfn('dbgrowf', "dbgrow for the C function a0 (kept, a1 to a7 too), its 
     ld 16 sp a3
     ld 24 sp a4
     ld 32 sp a5
-    ld 40 sp a6
-    ld 48 sp a7
     addi 64 sp sp
     leave3
 ", 2);
@@ -301,15 +297,15 @@ $code .= cfn('dbgcline', "with -g, outside the JIT: the line a0 (kept, a1 too) g
     ld 16 t6 t2
     bne rel:C4 t2 a5
     ld 8 t6 t2
-    li 0 a6
+    li 0 t0
     C3:
-    beq rel:C6 a6 a5
-    add a6 t2 a7
-    lbu 0 a7 a7
-    add a6 a4 t1
+    beq rel:C6 t0 a5
+    add t0 t2 a2
+    lbu 0 a2 a2
+    add t0 a4 t1
     lbu 0 t1 t1
-    bne rel:C4 t1 a7
-    addi 1 a6 a6
+    bne rel:C4 t1 a2
+    addi 1 t0 t0
     j C3
     C4:
     addi 1 t5 t5
@@ -397,8 +393,8 @@ $code .= cfn('dlsort', "dbg_lines' rows by address (an insertion sort: they come
     add t3 t0 t3
     ld 0 t3 a2
     ld 8 t3 a3
-    ld 16 t3 a6
-    ld 24 t3 a7
+    ld 16 t3 t4
+    ld 24 t3 t5
     O2:
     beq rel:O3 t0 t3
     ld -32 t3 a4
@@ -415,8 +411,8 @@ $code .= cfn('dlsort', "dbg_lines' rows by address (an insertion sort: they come
     O3:
     sd 0 a2 t3
     sd 8 a3 t3
-    sd 16 a6 t3
-    sd 24 a7 t3
+    sd 16 t4 t3
+    sd 24 t5 t3
     addi 1 t2 t2
     j O1
     O9:
@@ -436,15 +432,15 @@ $code .= cfn('dlkeep', "of dbg_lines' rows (by address) only those of the code s
     addi -1 t1 t1
     ld 0 t2 a4
     ld 8 t2 a5
-    ld 16 t2 a6
-    ld 24 t2 a7
+    ld 16 t2 t4
+    ld 24 t2 t5
     addi 32 t2 t2
     bltu rel:K1 a2 a4
     bgeu rel:K1 a3 a4
     sd 0 a4 t3
     sd 8 a5 t3
-    sd 16 a6 t3
-    sd 24 a7 t3
+    sd 16 t4 t3
+    sd 24 t5 t3
     addi 32 t3 t3
     j K1
     K3:
