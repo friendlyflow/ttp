@@ -163,6 +163,38 @@ static volatile double dmin = ((double) 2.22507385850720138309e-308L);
 static volatile float fthird = (float) 0.333333333333333333333333L;
 static volatile double dsub = 4.9406564584124654e-324L;
 
+/* a global's long double constants worked out as gcc folds them (soft-fp
+   has no code at compile time): strtod's and strfrom's tests' INFINITY +
+   0.0L, -NAN + 0.0L; a sum rounded, the zero's sign */
+static volatile long double ldnan = -__builtin_nanf ("") + 0.0L;
+static volatile long double ldinf = __builtin_inff () + 0.0L;
+static volatile long double ldsum = 1.0L + 0x1p-112L - 0x1p-114L;
+static volatile long double ldmz = -0.0L + -0.0L;
+static volatile long double ldpz = -0.0L + 0.0L;
+static volatile double dfold = (double) (1.0L + 0x1p-60L) - 1;
+
+/* (their bits: this program has no soft-fp; binary128's high word is the
+   second where long double is 16 bytes, little-endian) */
+static unsigned long long
+ldhi (volatile long double *x)
+{
+  return ((volatile unsigned long long *) x)[1];
+}
+static unsigned long long
+ldlo (volatile long double *x)
+{
+  return ((volatile unsigned long long *) x)[0];
+}
+static int
+ldfold_bad (void)
+{
+  if (sizeof (long double) != 16)
+    return 0;
+  return (ldhi (&ldnan) != 0xffff800000000000ULL) + (ldhi (&ldinf) != 0x7fff000000000000ULL)
+         + (ldhi (&ldsum) != 0x3fff000000000000ULL) + (ldlo (&ldsum) != 1) + (ldhi (&ldmz) != 0x8000000000000000ULL)
+         + (ldhi (&ldpz) != 0) + (dfold != 0);
+}
+
 /* gconv's const unsigned char *inptr = *inptrp: a char or u8 pointer set
    from a dereference or an address, not a text */
 static int
@@ -197,6 +229,7 @@ main (void)
   f += LATER_A != -2 || LATER_C != 0 || later_p != 0;
   f += many_sum () != 8 * 36;
   f += specials_bad ();
+  f += ldfold_bad ();
   f += dmin != 0x1p-1022 || fthird != 0x1.555556p-2f || dsub != 0x1p-1074;
   {
     unsigned char b[2] = { 30, 7 }, *bp = b;

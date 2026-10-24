@@ -33,6 +33,9 @@
 # A host tool, not part of ttpc.
 use strict;
 use warnings;
+use FindBin;
+use lib "$FindBin::Bin/../compiler/gen";
+use FFold;
 my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 
 our $target = '';
@@ -164,6 +167,14 @@ sub special_float {
     return 'nan' if $name =~ /^__builtin_nan[fl]?$/;
     return;
 }
+# a value of FFold's as E has the literal of its type
+sub fconst {
+    my ($v, $t) = @_;
+    my $x = $v->{k} ne 'num' ? "(fspecial $v->{k} " . tstr($t) . ')'
+        : $t eq 'long double' ? '(fltl ' . FFold::qlit($v->{q}, $v->{e}, 16383) . ')'
+        : '(flt ' . sprintf('%.17g', $v->{q}->numify * 2**$v->{e}) . ')';
+    $v->{neg} ? "(u- $x)" : $x;
+}
 sub E {
     my ($n) = @_;
     return '-' unless $n && $n->{kind};
@@ -173,6 +184,10 @@ sub E {
     # literal of its type there, as c2ff writes it; ff2c writes it back as
     # the builtin of that type)
     if ($in_global && (my $sp = special_float($n))) { return "(fspecial $sp " . tcls($n) . ')' }
+    # (a global's floating constant of long double, as c2ff works it out:
+    # FFold's, the same on both sides)
+    if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
+        && FFold::fty(FFold::ftype($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) { return fconst($v, FFold::ftype($n)) }
     if ($k eq 'ImplicitCastExpr' || $k eq 'CStyleCastExpr') {
         my ($c) = kids($n);
         my $ck = $n->{castKind} // '';
@@ -232,7 +247,11 @@ sub E {
     return '(u- (int ' . (2**32 - $n->{value}) . ' i32))' if $k eq 'CharacterLiteral' && $n->{value} >= 2**31 && (($n->{type} // {})->{qualType} // '') eq 'int';
     return '(int ' . $n->{value} . ' i32)' if $k eq 'CharacterLiteral';
     # (a long double literal, binary128: clang's decimal of it, every digit)
+    # (a long double literal, binary128: its exact hex, of clang's decimal
+    # of it; a float's its value as a float)
+    return '(fltl ' . FFold::ldround($n->{value}, 113, -16494, 16383) . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble' && $target ne 'arm';
     return '(fltl ' . $n->{value} . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble';
+    if ($k eq 'FloatingLiteral' && FFold::ftype($n) eq 'float' && (my $v = FFold::fold($n))) { return fconst($v, 'float') }
     return '(flt ' . flt($n->{value}) . ')' if $k eq 'FloatingLiteral';
     return '(str ' . str($n->{value}) . ')' if $k eq 'StringLiteral';
     return E((kids($n))[0]) if $k eq 'PredefinedExpr';

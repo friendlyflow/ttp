@@ -64,6 +64,7 @@ use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 use FF qw(node layers write_txt read_ff);
 use Words;
+use FFold qw(ldround ratq qlit);
 use Header qw(license_nodes header_of);
 use Digest::SHA;
 use POSIX ();
@@ -1036,7 +1037,7 @@ sub tgmath {
             : { kind => 'ImplicitCastExpr', type => { qualType => $t }, inner => [$a],
                 castKind => $isf->($t) ? ($isf->($from) ? 'FloatingCast' : 'IntegralToFloating') : 'IntegralCast' }
     } 0 .. $#v;
-    { kind => 'CallExpr', type => { qualType => $ret }, inner => [$f[$rank], @a] };
+    return { kind => 'CallExpr', type => { qualType => $ret }, inner => [$f[$rank], @a] };
 }
 sub strip {     # through what means nothing in ff
     my ($n) = @_;
@@ -1515,6 +1516,11 @@ sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
     softfp($n);
+    if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
+        && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
+        my @f = femit($v, tword($n));
+        return @f if @f;
+    }
     # GNU's &&L, the address of a label of the function
     return node('address', node(label_name($label{ $n->{labelDeclId} } // stop('the address of no label', $n)))) if $k eq 'AddrLabelExpr';
     # in a global's items, an array field that decays to its first element's
@@ -2046,59 +2052,7 @@ sub ldhexfloat {
     }
     ldround($s, 113, -16494, 16383) // die "c2ff: a long double literal past the largest: $s\n";
 }
-# The decimal $s to the nearest number of $p bits (ties to even), its
-# exponent no lower than $emin (the subnormals) and its top bit's no higher
-# than $emax, as binary128's exact hex float with L; undef past $emax.
-sub ldround {
-    my ($s, $p, $emin, $emax) = @_;
-    $s =~ /^([0-9]*)(?:\.([0-9]*))?(?:[eE]([-+]?[0-9]+))?$/ or die "c2ff: a long double literal that is no decimal: $s\n";
-    my ($i, $f, $e) = ($1, $2 // '', $3 // 0);
-    my $m = Math::BigInt->new(($i . $f) =~ s/^0+(?=.)//r);
-    my $e10 = $e - length $f;
-    return '0x0p+0L' if $m->is_zero;
-    my ($n, $d) = $e10 >= 0 ? ($m * Math::BigInt->new(10)->bpow($e10), Math::BigInt->new(1)) : ($m, Math::BigInt->new(10)->bpow(-$e10));
-    my $bits = sub { length($_[0]->as_bin) - 2 };
-    # e2: value / 2^e2 in [2^(p-1), 2^p)
-    my $e2 = $bits->($n) - $bits->($d) - $p;
-    my $q;
-    my $div = sub {
-        my ($e2) = @_;
-        my ($nn, $dd) = ($n->copy, $d->copy);
-        if ($e2 >= 0) { $dd->blsft($e2) } else { $nn->blsft(-$e2) }
-        my ($qq, $r) = $nn->copy->bdiv($dd);
-        # round to nearest, ties to even
-        my $c = ($r * 2)->bcmp($dd);
-        $qq->binc if $c > 0 || ($c == 0 && $qq->is_odd);
-        $qq;
-    };
-    my $top = Math::BigInt->new(2)->bpow($p - 1);
-    my $over = Math::BigInt->new(2)->bpow($p);
-    $e2++ while ($div->($e2))->bcmp($over) >= 0;
-    $e2-- while ($div->($e2))->bcmp($top) < 0 && $e2 > $emin;
-    $e2 = $emin if $e2 < $emin;
-    $q = $div->($e2);
-    if ($q->bcmp($over) >= 0) { $e2++; $q = $div->($e2) }
-    return '0x0p+0L' if $q->is_zero;
-    # q * 2^e2, as binary128 writes it: its top bit the leading 1, or, below
-    # binary128's normal range, a subnormal 0x0.<digits>p-16382
-    my $lead = length($q->as_bin) - 3;
-    my $exp = $e2 + $lead;
-    return undef if $exp > $emax;
-    my $g = $q->copy;
-    if ($exp >= -16382) {
-        $g->bsub(Math::BigInt->new(2)->bpow($lead));
-        $g->blsft(112 - $lead);
-        my $hex = substr($g->as_hex, 2);
-        $hex = ('0' x (28 - length $hex)) . $hex;
-        $hex =~ s/0+$//;
-        return sprintf "0x1%sp%+dL", ($hex eq '0' || $hex eq '' ? '' : ".$hex"), $exp;
-    }
-    $g->blsft($e2 + 16494);
-    my $hex = substr($g->as_hex, 2);
-    $hex = ('0' x (28 - length $hex)) . $hex;
-    $hex =~ s/0+$//;
-    sprintf "0x0.%sp-16382L", $hex;
-}
+# (ldround, ratq, qlit: FFold.pm's)
 # (in a global's value, a long double literal made double or float is the
 # literal of its value rounded to that type, as gcc folds it: glibc's
 # DBL_MIN is ((double) 2.2250738585072014e-308L), tst-strtod-underflow's
@@ -2112,6 +2066,18 @@ sub narrowlit {
     return undef unless defined $l;
     $l =~ s/L$/$to eq 'float' ? 'f' : ''/e;
     $l;
+}
+# A global's value of floating constants that involves long double (riscv64,
+# x86_64, aarch64: soft-fp, whose functions compile time has no code of)
+# worked out here, as gcc folds it (FFold.pm's fold: strtod's and strfrom's
+# tests' INFINITY + 0.0L, -NAN + 0.0L), written as the literal of its type
+# (- before it where it is negative)
+sub femit {
+    my ($v, $t) = @_;
+    my (undef, undef, $emax, $suf, $sp) = @{ FFold::fty($t) };
+    my $l = $v->{k} eq 'nan' ? "0x1.8p+$sp" : $v->{k} eq 'inf' ? "0x1p+$sp"
+        : $v->{q}->is_zero ? "0x0p+0$suf" : (qlit($v->{q}, $v->{e}, $emax) // return) =~ s/L$/$suf/r;
+    $v->{neg} ? node(':', node('-'), node($l)) : node($l);
 }
 sub fail_float { die "c2ff: a constant with no hex form: $_[0]\n" }
 
