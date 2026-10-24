@@ -12,6 +12,13 @@ comment
   To ttpc a license is a comment, anywhere one may stand; make licenses checks that every tree has one, with a known SPDX id.
 comment:
   text
+comment
+  line file number: C, where the statements after it come from in the C the tree was made from, as c2ff writes it from clang's places (C's #line N "file"); line number alone is in the file of the line before it.
+  It makes no code, as a comment; in a C function it stands where a statement does, the first one after the function's head (its comment) naming the file.
+  With -g the line table has the C file and line of the code of those statements (the C view); where a tree has none, the line of each node in the tree's text (the ff view).
+line:
+  file
+  number
 license:
   spdx
   notice

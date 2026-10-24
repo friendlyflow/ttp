@@ -508,6 +508,8 @@ ff, the language ttpc compiles
             99
       syscall number arguments: number SYS_write, SYS_exit, ... of the target
       comment text
+      line file number, line number: where the statements after it come from in the C the tree was made from (C's #line N "file", #line N; c2ff writes them); no code, as a comment; a line with no children is a name
+        with -g the line table has that file and line for their code (the C view), elsewhere each node's line in the tree's text (the ff view)
     scope
       the program page's functions and globals are seen everywhere on it, above and below their definition (two passes)
       a parameter is seen in its function's body
