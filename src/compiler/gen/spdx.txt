@@ -1,4 +1,4 @@
-# The SPDX ids `make licenses` (gen/licenses.pl) knows: licenses, then the
+# The SPDX ids `make licenses` (tools/licenses.ff, as gen/licenses.pl) knows: licenses, then the
 # exceptions (after WITH), from the SPDX License List (spdx.org/licenses).
 # One id per line; add one when a source file brings a new license.
 0BSD
