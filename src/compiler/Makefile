@@ -311,10 +311,14 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # chello for riscv64 and for x86_64 and cexit with the name it gets without
 # set output (next to cws.ff), each the bytes the command line makes.
 # cwsdebug.ff makes chello twice, with set debug (as -g) and without; run
-# with -g, both as -g. cinclude is chello including its shared page,
+# with -g, both as -g (gsame). cinclude is chello including its shared page,
 # --print prints a tree as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
+# gsame A B: the -g file A is B up to B's .debug_abbrev (past the ELF
+# header: its program, symbols and their names; the line table names the
+# trees by their paths, which differ in a build file)
+gsame = n=$$(readelf -SW $(2) | sed -n 's/.* \.debug_abbrev  *PROGBITS  *[0-9a-f]* \([0-9a-f]*\) .*/\1/p'); test -n "$$n" && cmp -i 64 -n $$((0x$$n - 64)) $(1) $(2) && readelf -SW $(1) | grep -q ' \.debug_line '
 cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	rm -f progs/cexit
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cws.ff > cws.lst
@@ -325,11 +329,11 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
 	$(QEMU) $(BOOT)/stage2 -g $(SHARED) progs/chello.ff $(P)/chello.g > $(P)/chello.g.lst
 	cmp $(P)/cwsdebug $(P)/chello.celf
-	cmp $(P)/cwsdebug-g $(P)/chello.g
+	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
 	rm $(P)/cwsdebug $(P)/cwsdebug-g
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -g $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
-	cmp $(P)/cwsdebug $(P)/chello.g
-	cmp $(P)/cwsdebug-g $(P)/chello.g
+	$(call gsame,$(P)/cwsdebug,$(P)/chello.g)
+	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
 	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
