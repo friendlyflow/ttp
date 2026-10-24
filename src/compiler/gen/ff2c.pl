@@ -731,7 +731,7 @@ sub init_item {
 # ---- statements -------------------------------------------------------------
 
 my %stmtword = map { $_ => 1 } ('if', 'else', 'else if', 'while', 'do while', 'for', 'switch', 'case', 'default',
-    'return', 'goto', 'break', 'continue', 'comment');
+    'return', 'goto', 'break', 'continue', 'comment', 'line');
 
 # The elements of a body: statement nodes, declarations, labels, and
 # expression items.
@@ -830,6 +830,9 @@ sub control {
     return 'break;' if $w eq 'break';
     return 'continue;' if $w eq 'continue';
     return '' if $w eq 'comment';
+    # (line / file / n, line / n: where c2ff found the statement after it,
+    # C's #line; the round trip compares the code, which it is not)
+    return '' if $w eq 'line';
     if ($w eq 'return') { return @k ? 'return ' . expr_item([@k]) . ';' : 'return;' }
     if ($w eq 'goto') {
         return 'goto *' . expr_item([kids($k[0])]) . ';' if c($k[0]) eq 'content';

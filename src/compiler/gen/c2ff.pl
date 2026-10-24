@@ -373,7 +373,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor fs vector zero ra sp gp tp fp pc
+    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor fs vector line zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -2421,13 +2421,70 @@ sub syscall_idiom_x86 {
 # function comes from ends them.)
 sub body {
     my ($cs) = @_;
-    map { stmt($_) } kids($cs);
+    map { lstmt($_) } kids($cs);
 }
+
+# ---- the C places of statements -------------------------------------------------
+# Before a statement of a list (a block, a function's body, a case, an if's
+# or a loop's body of one statement) a line says where it begins in the C
+# (ttpc -g's line table, the C view): line / file / number where the file is
+# not the one before (the first of a function always), line / number where
+# only the line is. The place is the .i's line of its offset as the .i's
+# line markers (# N "file") make it; none for a statement without an offset
+# or before any marker. A block of more than a node holds keeps its own
+# statements without them.
+our ($lfile, $lline) = ('', 0);   # the place of the line before, in this function
+sub iplace {
+    my ($off) = @_;
+    my $u = $cur_unit;
+    return unless defined $off && $u && defined $u->{text};
+    unless ($u->{nl}) {
+        my $t = $u->{text};
+        my @nl = (0);
+        push @nl, pos($t) while $t =~ /\n/g;
+        my @m;
+        while ($t =~ /^# (\d+) "((?:[^"\\]|\\.)*)"/mg) { push @m, [lindex(\@nl, $-[0]), $1, $2] }
+        @$u{qw(nl marks)} = (\@nl, \@m);
+    }
+    my $li = lindex($u->{nl}, $off);
+    my $m = $u->{marks};
+    my ($lo, $hi) = (0, scalar @$m);
+    while ($lo < $hi) { my $mid = ($lo + $hi) >> 1; if ($m->[$mid][0] < $li) { $lo = $mid + 1 } else { $hi = $mid } }
+    return unless $lo;
+    my ($k, $n, $f) = @{ $m->[$lo - 1] };
+    $f =~ s/\\(.)/$1/g;
+    ($f, $n + $li - $k - 1);
+}
+# (the index of the line that holds offset off: the last start at or before it)
+sub lindex {
+    my ($nl, $off) = @_;
+    my ($lo, $hi) = (0, scalar @$nl);
+    while ($lo < $hi) { my $mid = ($lo + $hi) >> 1; if ($nl->[$mid] <= $off) { $lo = $mid + 1 } else { $hi = $mid } }
+    $lo - 1;
+}
+sub offset_of { my ($l) = @_; $l && ($l->{offset} // ($l->{expansionLoc} // {})->{offset}) }
+sub line_at {
+    my ($off) = @_;
+    my ($f, $n) = iplace($off) or return ();
+    return () if length($f) > 255 || ($f eq $lfile && $n == $lline);
+    my @l = $f eq $lfile ? node('line', node($n)) : node('line', node($f), node($n));
+    ($lfile, $lline) = ($f, $n);
+    @l;
+}
+sub lstmt {
+    my ($n) = @_;
+    (line_at(offset_of($n->{range}{begin})), stmt($n));
+}
+sub is_line { my ($n) = @_; $n->{content} eq 'line' && @{ $n->{children} } }
 
 sub stmt {
     my ($n) = @_;
     my $k = $n->{kind};
-    return node(':', body($n)) if $k eq 'CompoundStmt';
+    if ($k eq 'CompoundStmt') {
+        my @b = body($n);
+        if (@b > 255) { @b = grep { !is_line($_) } @b; $lfile = '' }
+        return node(':', @b);
+    }
     # a local extern declaration names the global: nothing of its own
     return map {
         my $d = $_;
@@ -2538,7 +2595,7 @@ sub cases {
             push @pre, stmt($s);
             next;
         }
-        push @{ $out[-1]{children} }, stmt($s);
+        push @{ $out[-1]{children} }, lstmt($s);
     }
     (@pre, @out);
 }
@@ -2553,10 +2610,10 @@ sub labelled {
         : @k == 2 ? node('case', item(expr($k[0])), node('...'), item(expr($k[1])))
         : node('case', item(expr($k[0])));
     return (@head, labelled($sub)) if $sub->{kind} eq 'CaseStmt' || $sub->{kind} eq 'DefaultStmt';
-    push @{ $head[0]{children} }, stmt($sub);
+    push @{ $head[0]{children} }, lstmt($sub);
     @head;
 }
-sub sub_body { my ($s) = @_; $s->{kind} eq 'CompoundStmt' ? body($s) : stmt($s) }
+sub sub_body { my ($s) = @_; $s->{kind} eq 'CompoundStmt' ? body($s) : lstmt($s) }
 sub ifs {
     my ($word, $n) = @_;
     my @k = kids($n);
@@ -2749,7 +2806,10 @@ sub function {
     # choice, 2026-10-21)
     my $c = $ctor{$name};
     unshift @head, node($c->[0], defined $c->[1] ? node($c->[1]) : ()) if $c;
-    node(ffname($name) . ':', @head, stmt_layers(scalar @head, map { [stmt($_)] } kids($cs)));
+    # (the function's place first, with its file: where its name is)
+    local ($lfile, $lline) = ('', 0);
+    my @at = line_at(offset_of($d->{loc}));
+    node(ffname($name) . ':', @head, stmt_layers(scalar @head, (@at ? [@at] : ()), map { [lstmt($_)] } kids($cs)));
 }
 # A function's statements, each a run of nodes: past what a node holds
 # (255, with the head before them), in layers 0: 1: ... of whole

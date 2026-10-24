@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/x86_64/hex0.s as hex0 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then its file offset and the line. hex0 reads only the
+# hex digits before each '#'.
+#
+# hex0 for x86_64 Linux: hex pairs in, bytes out. The first link of the
+# bootstrap: everything after it is built from text by programs built from
+# text. Its bytes are hosts/x86_64/hex0.hex0, made from this file once by
+# gen/mkhex.pl (a dev aid); the chain never reads this file.
+#
+#   hex0 < file.hex0 > file
+#
+# Each pair of hex digits (0-9, A-F, a-f) is one byte, the first digit its
+# high half. '#' and ';' start a comment to the end of the line. Every
+# other byte (spaces, newlines, ...) is skipped. At the end of stdin the
+# status is 0 (a lone last digit is dropped); a failed read or write ends
+# with status 1.
+#
+# One flat file, loaded whole at BASE by its one program header: no
+# sections, no linker. Only the stack is written. The registers:
+#   %r13  the high half of the byte being read, or -1 before its first digit
+
+#     .equ BASE, 0x600000
+
+# 0000  ehdr:                                   # the ELF header, 64 bytes
+7F454C46                # 0000      .byte 0x7f, 0x45, 0x4c, 0x46        # e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                      # 0004      .byte 2                             # EI_CLASS: ELFCLASS64
+01                      # 0005      .byte 1                             # EI_DATA: ELFDATA2LSB, little endian
+01                      # 0006      .byte 1                             # EI_VERSION: EV_CURRENT
+00                      # 0007      .byte 0                             # EI_OSABI: System V
+0000000000000000        # 0008      .byte 0, 0, 0, 0, 0, 0, 0, 0        # EI_ABIVERSION 0, then padding to 16
+0200                    # 0010      .word 2                             # e_type: ET_EXEC, an executable
+3E00                    # 0012      .word 0x3e                          # e_machine: EM_X86_64
+01000000                # 0014      .long 1                             # e_version: EV_CURRENT
+7800600000000000        # 0018      .quad BASE + _start - ehdr          # e_entry: the address of _start
+4000000000000000        # 0020      .quad phdr - ehdr                   # e_phoff: the program header follows
+0000000000000000        # 0028      .quad 0                             # e_shoff: no section headers
+00000000                # 0030      .long 0                             # e_flags: none on x86_64
+4000                    # 0034      .word 64                            # e_ehsize: this header's size
+3800                    # 0036      .word 56                            # e_phentsize: a program header's size
+0100                    # 0038      .word 1                             # e_phnum: one program header
+0000                    # 003a      .word 0                             # e_shentsize: no section headers
+0000                    # 003c      .word 0                             # e_shnum: none
+0000                    # 003e      .word 0                             # e_shstrndx: none
+# 0040  phdr:                                   # the program header, 56 bytes
+01000000                # 0040      .long 1                             # p_type: PT_LOAD
+05000000                # 0044      .long 5                             # p_flags: PF_R | PF_X, read and run
+0000000000000000        # 0048      .quad 0                             # p_offset: from the file's first byte
+0000600000000000        # 0050      .quad BASE                          # p_vaddr: loaded at BASE
+0000600000000000        # 0058      .quad BASE                          # p_paddr: the same
+FF00000000000000        # 0060      .quad end - ehdr                    # p_filesz: the whole file
+FF00000000000000        # 0068      .quad end - ehdr                    # p_memsz: the same, no bss
+0010000000000000        # 0070      .quad 0x1000                        # p_align: a page
+
+# 0078  _start:
+4983CDFF                # 0078      or      $-1, %r13                   # no high half yet
+# 007c  next:                                   # the next byte of stdin
+E841000000              # 007c      call    getc
+3C23                    # 0081      cmp     $0x23, %al                  # '#': a comment
+7432                    # 0083      je      comment
+3C3B                    # 0085      cmp     $0x3b, %al                  # ';': a comment
+742E                    # 0087      je      comment
+3C30                    # 0089      cmp     $0x30, %al                  # below '0': skipped
+72EF                    # 008b      jb      next
+3C39                    # 008d      cmp     $0x39, %al                  # '0'-'9'
+760C                    # 008f      jbe     decimal
+0C20                    # 0091      or      $0x20, %al                  # 'A'-'F' to 'a'-'f'
+3C61                    # 0093      cmp     $0x61, %al                  # below 'a': skipped
+72E5                    # 0095      jb      next
+3C66                    # 0097      cmp     $0x66, %al                  # above 'f': skipped
+77E1                    # 0099      ja      next
+2C27                    # 009b      sub     $0x27, %al                  # 'a'-'f' to 0x3a-0x3f, as if after '9'
+# 009d  decimal:
+2C30                    # 009d      sub     $0x30, %al                  # the digit's value, 0-15
+4D85ED                  # 009f      test    %r13, %r13                  # the first digit of a pair?
+780E                    # 00a2      js      high
+41C1E504                # 00a4      shl     $4, %r13d                   # the second: high half, then this one
+4409E8                  # 00a8      or      %r13d, %eax
+E828000000              # 00ab      call    putc
+EBC6                    # 00b0      jmp     _start                      # the next pair
+# 00b2  high:
+4189C5                  # 00b2      mov     %eax, %r13d                 # keep it for the second digit
+EBC5                    # 00b5      jmp     next
+# 00b7  comment:                                # skip to the end of the line
+E806000000              # 00b7      call    getc
+3C0A                    # 00bc      cmp     $0x0a, %al                  # '\n'
+75F7                    # 00be      jne     comment
+EBBA                    # 00c0      jmp     next
+
+# 00c2  getc:                                   # %eax = the next byte of stdin
+31C0                    # 00c2      xor     %eax, %eax                  # SYS_read
+50                      # 00c4      push    %rax                        # 8 zero bytes: the byte lands in the lowest
+31FF                    # 00c5      xor     %edi, %edi                  # fd 0, stdin
+4889E6                  # 00c7      mov     %rsp, %rsi                  # into the stack
+8D5001                  # 00ca      lea     1(%rax), %edx               # 1 byte
+0F05                    # 00cd      syscall
+4885C0                  # 00cf      test    %rax, %rax
+7C1F                    # 00d2      jl      fail                        # a failed read
+7419                    # 00d4      je      done                        # the end of stdin
+58                      # 00d6      pop     %rax                        # the byte, zero-extended
+C3                      # 00d7      ret
+
+# 00d8  putc:                                   # writes %al to stdout
+50                      # 00d8      push    %rax
+B801000000              # 00d9      mov     $1, %eax                    # SYS_write
+89C7                    # 00de      mov     %eax, %edi                  # fd 1, stdout
+4889E6                  # 00e0      mov     %rsp, %rsi                  # from the stack
+89C2                    # 00e3      mov     %eax, %edx                  # 1 byte
+0F05                    # 00e5      syscall
+5F                      # 00e7      pop     %rdi
+4883F801                # 00e8      cmp     $1, %rax                    # written?
+7505                    # 00ec      jne     fail
+C3                      # 00ee      ret
+
+# 00ef  done:
+31FF                    # 00ef      xor     %edi, %edi                  # status 0
+EB05                    # 00f1      jmp     exit
+# 00f3  fail:
+BF01000000              # 00f3      mov     $1, %edi                    # status 1
+# 00f8  exit:
+B83C000000              # 00f8      mov     $60, %eax                   # SYS_exit
+0F05                    # 00fd      syscall
+# 00ff  end:

@@ -41,7 +41,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -309,10 +309,16 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # else on the command line, here from the build folder (its paths are from
 # its own folder): it includes ../shared.ff and makes three workspaces,
 # chello for riscv64 and for x86_64 and cexit with the name it gets without
-# set output (next to cws.ff), each the bytes the command line makes. cinclude is chello including its shared page, --print prints a tree
-# as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
+# set output (next to cws.ff), each the bytes the command line makes.
+# cwsdebug.ff makes chello twice, with set debug (as -g) and without; run
+# with -g, both as -g (gsame). cinclude is chello including its shared page,
+# --print prints a tree as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
+# gsame A B: the -g file A is B up to B's .debug_abbrev (past the ELF
+# header: its program, symbols and their names; the line table names the
+# trees by their paths, which differ in a build file)
+gsame = n=$$(readelf -SW $(2) | sed -n 's/.* \.debug_abbrev  *PROGBITS  *[0-9a-f]* \([0-9a-f]*\) .*/\1/p'); test -n "$$n" && cmp -i 64 -n $$((0x$$n - 64)) $(1) $(2) && readelf -SW $(1) | grep -q ' \.debug_line '
 cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	rm -f progs/cexit
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cws.ff > cws.lst
@@ -320,6 +326,14 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	cmp $(P)/cws-riscv64 $(P)/chello.celf
 	cmp $(P)/cws-x86_64 $(P)/x86_64/chello.celf
 	cmp $(P)/cws-cexit $(P)/cexit.celf
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	$(QEMU) $(BOOT)/stage2 -g $(SHARED) progs/chello.ff $(P)/chello.g > $(P)/chello.g.lst
+	cmp $(P)/cwsdebug $(P)/chello.celf
+	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
+	rm $(P)/cwsdebug $(P)/cwsdebug-g
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -g $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	$(call gsame,$(P)/cwsdebug,$(P)/chello.g)
+	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
 	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
@@ -339,7 +353,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # C tests of one target only, beside the portable ones
@@ -429,7 +443,8 @@ abi: $(BOOT)/stage2 $(SHARED)
 
 # -g (gen/patches/debug.pl, ehframe.pl): the section headers, symbols and
 # frames of progs/cdebug.ff (and ctls, csection, cdatasep), as readelf,
-# objdump, gdb and libgcc's unwinder read them (progs/debug/run.sh), on
+# objdump, gdb and libgcc's unwinder read them (progs/debug/run.sh), and its
+# line table (dwarfline.pl) as gdb's break, list and addr2line read it, on
 # every target: gdb natively on x86_64, under qemu -g on the others.
 DEBUG_TARGETS := riscv64 x86_64 aarch64 arm
 debug: $(BOOT)/stage2 $(SHARED)
@@ -468,9 +483,23 @@ RUNNABLE := $(foreach h,$(HOSTS),$(if $(call can,$(h)),$(h)))
 SEEDCROSS_x86_64 := $(call native_or,x86_64,x86_64-elf-)
 SEEDCROSS_aarch64 := $(call native_or,aarch64,aarch64-none-elf-)
 SEEDCROSS_arm := $(call native_or,armv7l,arm-none-eabi-)
-SASFLAGS_x86_64 :=
+SASFLAGS_x86_64 := -mx86-used-note=no
 SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
+SLDFLAGS_x86_64 := -s -z noseparate-code
+# The hex seed (lane H): on the hosts of HEXHOSTS the chain builds the seed
+# without binutils, from hosts/<host>/hex0, a binary of a few hundred bytes
+# that is its commented text hex0.hex0 (make hex checks both): hex0 makes
+# hex2 of hex2.hex0, hex2 makes M1 of M1.hex2, M1 and hex2 make asm of
+# asm.M1, and asm assembles the readable seed ttpc.s into the seed.
+# SEED=hex: hex2 makes the seed of ttpc.hex2 instead (the stepping stone);
+# SEED=gnu: binutils' as and ld make it of ttpc.s, as on the other hosts.
+# All three give the same bytes (make hex): on x86_64 as and ld without
+# the GNU property note, the symbols (which name the object file) and the
+# page of its own for the code, so that the cross and the native binutils
+# agree.
+SEED ?= asm
+HEXHOSTS := x86_64
 SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
 
 # the NL trees a host's chain makes with its own unlicense
@@ -481,9 +510,12 @@ define host
 $(BUILD)/$(1):
 	mkdir -p $$@
 
-$(BUILD)/$(1)/seed: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
+$(BUILD)/$(1)/seed.gnu: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
 	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
-	$(SEEDCROSS_$(1))ld -static -e _start $$@.o -o $$@
+	$(SEEDCROSS_$(1))ld -static $(SLDFLAGS_$(1)) -e _start $$@.o -o $$@
+
+$(BUILD)/$(1)/seed: $(BUILD)/$(1)/seed.$(if $(filter $(1),$(HEXHOSTS)),$(SEED),gnu)
+	cp $$< $$@
 
 # The links before the host's ttpc3 read committed copies (boot/<host>/,
 # see NL above): its seed the whole tree of ttpc2 (whole.ff), its ttpc2
@@ -589,6 +621,68 @@ chello-$(1): $(BUILD)/$(1)/stage2
 .PHONY: seed-$(1) bootstrap-$(1) chello-$(1)
 endef
 $(foreach h,$(HOSTS),$(eval $(call host,$(h))))
+
+# The hex seed of a host of HEXHOSTS: hex0 makes hex2, hex2 the seed of
+# ttpc.hex2 and M1 of M1.hex2 (a macro assembler, as stage0-posix's), M1
+# the hex2 text of asm.M1 and hex2 of it asm, the seed's assembler, and
+# asm the seed of ttpc.s. hex-<host> checks hex0 and hex2 against their
+# texts without comments (what a person can check by hand: the hex digits
+# before each '#' or ';', as od prints the binary), that hex0 makes itself
+# of hex0.hex0, that M1 and asm are what binutils makes of their sources
+# gen/hex/<host>/M1.s and asm.s (dev aids, which gen/mkhex.pl made M1.hex2
+# and asm.M1 of), and that the seeds of ttpc.hex2 and of asm are the one
+# binutils makes of ttpc.s.
+define hexhost
+
+$(BUILD)/$(1)/hex2: hosts/$(1)/hex0 hosts/$(1)/hex2.hex0 | $(BUILD)/$(1)
+	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex2.hex0 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/M1: $(BUILD)/$(1)/hex2 hosts/$(1)/M1.hex2
+	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/M1.hex2 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/asm: $(BUILD)/$(1)/M1 $(BUILD)/$(1)/hex2 hosts/$(1)/asm.M1
+	$(RUN_$(1)) $(BUILD)/$(1)/M1 < hosts/$(1)/asm.M1 > $$@.hex2
+	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < $$@.hex2 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/seed.asm: $(BUILD)/$(1)/asm hosts/$(1)/ttpc.s
+	$(RUN_$(1)) $(BUILD)/$(1)/asm < hosts/$(1)/ttpc.s > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/seed.hex: $(BUILD)/$(1)/hex2 hosts/$(1)/ttpc.hex2
+	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/ttpc.hex2 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/M1 $(BUILD)/$(1)/asm $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
+	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
+	for f in hex0 hex2; do sed 's/[#;].*//' hosts/$(1)/$$$$f.hex0 | tr -cd 0-9A-Fa-f | tr A-F a-f > $$$$d/$$$$f.text; done; \
+	od -An -v -tx1 hosts/$(1)/hex0 | tr -cd 0-9a-f | cmp - $$$$d/hex0.text; \
+	echo "hex-$(1): hex0 ($$$$(wc -c < hosts/$(1)/hex0) bytes) is hex0.hex0 without its comments"; \
+	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex0.hex0 > $$$$d/hex0.self; cmp $$$$d/hex0.self hosts/$(1)/hex0; \
+	echo "hex-$(1): hex0 makes itself of hex0.hex0"; \
+	od -An -v -tx1 $(BUILD)/$(1)/hex2 | tr -cd 0-9a-f | cmp - $$$$d/hex2.text; \
+	echo "hex-$(1): hex2 ($$$$(wc -c < $(BUILD)/$(1)/hex2) bytes), made by hex0, is hex2.hex0 without its comments"; \
+	for f in M1 asm; do $(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
+	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.o $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
+	echo "hex-$(1): M1 ($$$$(wc -c < $(BUILD)/$(1)/M1) bytes), made by hex2 of M1.hex2 ($$$$(wc -l < hosts/$(1)/M1.hex2) lines), is what binutils makes of gen/hex/$(1)/M1.s"; \
+	echo "hex-$(1): asm ($$$$(wc -c < $(BUILD)/$(1)/asm) bytes), made by M1 and hex2 of asm.M1 ($$$$(wc -l < hosts/$(1)/asm.M1) lines), is what binutils makes of gen/hex/$(1)/asm.s"; \
+	cmp $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu; \
+	echo "hex-$(1): hex2 makes of ttpc.hex2 ($$$$(wc -l < hosts/$(1)/ttpc.hex2) lines) the seed binutils makes of ttpc.s ($$$$(wc -c < $(BUILD)/$(1)/seed.gnu) bytes)"; \
+	cmp $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu; \
+	echo "hex-$(1): asm makes of ttpc.s ($$$$(wc -l < hosts/$(1)/ttpc.s) lines) that seed too"
+
+.PHONY: hex-$(1)
+endef
+$(foreach h,$(HEXHOSTS),$(eval $(call hexhost,$(h))))
+hex: $(foreach h,$(HEXHOSTS),$(if $(call can,$(h)),hex-$(h)))
+	@echo "hex: $(foreach h,$(HEXHOSTS),$(if $(call can,$(h)),$(h)))"
 
 # seeds needs ttpc.s to compare with; bootstraps is riscv64 (make bootstrap)
 # and every other host this machine runs, from its own seed.
@@ -885,4 +979,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean licenses abi debug tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))
+.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds hex bootstraps refresh patch clean licenses abi debug tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))

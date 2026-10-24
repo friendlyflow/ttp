@@ -14,6 +14,14 @@ hosts/riscv64/ttpc.s  GPL-3.0-only
 hosts/x86_64/ttpc.s   GPL-3.0-only
 hosts/aarch64/ttpc.s  GPL-3.0-only
 hosts/arm/ttpc.s      GPL-3.0-only
+# The hex seed of lane H: hex0, a binary without room for a license, and
+# the hex texts, which carry theirs as a comment at their top too.
+hosts/x86_64/hex0       GPL-3.0-only
+hosts/x86_64/hex0.hex0  GPL-3.0-only
+hosts/x86_64/hex2.hex0  GPL-3.0-only
+hosts/x86_64/ttpc.hex2  GPL-3.0-only
+hosts/x86_64/M1.hex2    GPL-3.0-only
+hosts/x86_64/asm.M1     GPL-3.0-only
 ttpc1.ff              GPL-3.0-only
 ttpc2.ff              GPL-3.0-only
 ttpc2.defs.ff         GPL-3.0-only
