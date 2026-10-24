@@ -483,9 +483,20 @@ RUNNABLE := $(foreach h,$(HOSTS),$(if $(call can,$(h)),$(h)))
 SEEDCROSS_x86_64 := $(call native_or,x86_64,x86_64-elf-)
 SEEDCROSS_aarch64 := $(call native_or,aarch64,aarch64-none-elf-)
 SEEDCROSS_arm := $(call native_or,armv7l,arm-none-eabi-)
-SASFLAGS_x86_64 :=
+SASFLAGS_x86_64 := -mx86-used-note=no
 SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
+SLDFLAGS_x86_64 := -s -z noseparate-code
+# The hex seed (lane H): on the hosts of HEXHOSTS the chain builds the seed
+# without binutils, from hosts/<host>/hex0, a binary of a few hundred bytes
+# that is its commented text hex0.hex0 (make hex checks both): hex0 makes
+# hex2 of hex2.hex0, hex2 makes the seed of ttpc.hex2. SEED=gnu builds it
+# with binutils' as and ld from ttpc.s instead, as on the other hosts. Both
+# give the same bytes (make hex): on x86_64 as and ld without the GNU
+# property note, the symbols (which name the object file) and the page of
+# its own for the code, so that the cross and the native binutils agree.
+SEED ?= hex
+HEXHOSTS := x86_64
 SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
 
 # the NL trees a host's chain makes with its own unlicense
@@ -496,9 +507,12 @@ define host
 $(BUILD)/$(1):
 	mkdir -p $$@
 
-$(BUILD)/$(1)/seed: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
+$(BUILD)/$(1)/seed.gnu: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
 	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
-	$(SEEDCROSS_$(1))ld -static -e _start $$@.o -o $$@
+	$(SEEDCROSS_$(1))ld -static $(SLDFLAGS_$(1)) -e _start $$@.o -o $$@
+
+$(BUILD)/$(1)/seed: $(BUILD)/$(1)/seed.$(if $(filter $(1),$(HEXHOSTS)),$(SEED),gnu)
+	cp $$< $$@
 
 # The links before the host's ttpc3 read committed copies (boot/<host>/,
 # see NL above): its seed the whole tree of ttpc2 (whole.ff), its ttpc2
@@ -604,6 +618,41 @@ chello-$(1): $(BUILD)/$(1)/stage2
 .PHONY: seed-$(1) bootstrap-$(1) chello-$(1)
 endef
 $(foreach h,$(HOSTS),$(eval $(call host,$(h))))
+
+# The hex seed of a host of HEXHOSTS: hex0 makes hex2, hex2 the seed.
+# hex-<host> checks hex0 and hex2 against their texts without comments
+# (what a person can check by hand: the hex digits before each '#' or ';',
+# as od prints the binary), that hex0 makes itself of hex0.hex0, and that
+# the seed from ttpc.hex2 is the one binutils makes of ttpc.s.
+define hexhost
+
+$(BUILD)/$(1)/hex2: hosts/$(1)/hex0 hosts/$(1)/hex2.hex0 | $(BUILD)/$(1)
+	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex2.hex0 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/seed.hex: $(BUILD)/$(1)/hex2 hosts/$(1)/ttpc.hex2
+	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/ttpc.hex2 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
+	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
+	for f in hex0 hex2; do sed 's/[#;].*//' hosts/$(1)/$$$$f.hex0 | tr -cd 0-9A-Fa-f | tr A-F a-f > $$$$d/$$$$f.text; done; \
+	od -An -v -tx1 hosts/$(1)/hex0 | tr -cd 0-9a-f | cmp - $$$$d/hex0.text; \
+	echo "hex-$(1): hex0 ($$$$(wc -c < hosts/$(1)/hex0) bytes) is hex0.hex0 without its comments"; \
+	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex0.hex0 > $$$$d/hex0.self; cmp $$$$d/hex0.self hosts/$(1)/hex0; \
+	echo "hex-$(1): hex0 makes itself of hex0.hex0"; \
+	od -An -v -tx1 $(BUILD)/$(1)/hex2 | tr -cd 0-9a-f | cmp - $$$$d/hex2.text; \
+	echo "hex-$(1): hex2 ($$$$(wc -c < $(BUILD)/$(1)/hex2) bytes), made by hex0, is hex2.hex0 without its comments"; \
+	cmp $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu; \
+	echo "hex-$(1): hex2 makes of ttpc.hex2 ($$$$(wc -l < hosts/$(1)/ttpc.hex2) lines) the seed binutils makes of ttpc.s ($$$$(wc -c < $(BUILD)/$(1)/seed.gnu) bytes)"
+
+.PHONY: hex-$(1)
+endef
+$(foreach h,$(HEXHOSTS),$(eval $(call hexhost,$(h))))
+hex: $(foreach h,$(HEXHOSTS),$(if $(call can,$(h)),hex-$(h)))
+	@echo "hex: $(foreach h,$(HEXHOSTS),$(if $(call can,$(h)),$(h)))"
 
 # seeds needs ttpc.s to compare with; bootstraps is riscv64 (make bootstrap)
 # and every other host this machine runs, from its own seed.
@@ -900,4 +949,4 @@ patch: | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds bootstraps refresh patch clean licenses abi debug tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))
+.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds hex bootstraps refresh patch clean licenses abi debug tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))

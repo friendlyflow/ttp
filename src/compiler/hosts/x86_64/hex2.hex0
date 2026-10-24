@@ -1,0 +1,375 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/x86_64/hex2.s as hex0 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then its file offset and the line. hex0 reads only the
+# hex digits before each '#'.
+#
+# hex2 for x86_64 Linux: hex0 with labels. The second link of the
+# bootstrap, built by hex0 from hosts/x86_64/hex2.hex0 (made from this
+# file once by gen/mkhex.pl, a dev aid; the chain never reads this file).
+# It builds the seed, ttpc, from hosts/x86_64/ttpc.hex2.
+#
+#   hex2 < file.hex2 > file
+#
+# As hex0: each pair of hex digits is a byte, '#' and ';' start a comment
+# to the end of the line, every other byte is skipped. And the address of
+# the next byte, which starts at 0 and counts every byte written:
+#   :name    defines the label name, at that address
+#   %name    4 bytes, little endian: name's address minus the address
+#            after them (a rel32 of x86_64's jumps, calls and (%rip))
+#   !name    1 byte: the same (a rel8 of the short jumps)
+#   &name    4 bytes: name's address (an abs32; a .quad's low half)
+#   ^hex     the address of the next byte is this hex number (where a
+#            file's addresses jump: its next segment, the labels of a bss)
+# A name is every byte after the sign up to a space, tab or newline. The
+# input is read whole, then twice: the first pass gives every label its
+# address, the second writes. Each reference must fit in its bytes. On an
+# unknown label, a label defined twice, a reference out of range, a full
+# table or input and a failed read or write it says so on stderr and
+# ends with status 1; else with 0.
+#
+# One flat file, loaded at BASE by its first program header, read and
+# run; the second maps the memory it writes, LABELS to the end of INPUT.
+# The registers:
+#   %r12  the next byte of the input        %r13  the end of the input
+#   %r14  the address of the next byte      %r15  the pass, 1 or 2
+#   %rbx  the high half of a byte, or -1    %rbp  the next free label
+# A label is 24 bytes: the address of its name in the input, the name's
+# length, its address.
+
+#     .equ BASE, 0x600000
+#     .equ LABELS, 0x700000               # 65536 labels of 24 bytes
+#     .equ LABELS_END, LABELS + 0x10000 * 24
+#     .equ INPUT, 0x900000                # 16 MiB of input
+#     .equ INPUT_END, INPUT + 0x1000000
+
+# 0000  ehdr:                                   # the ELF header, 64 bytes
+7F454C46                # 0000      .byte 0x7f, 0x45, 0x4c, 0x46        # e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                      # 0004      .byte 2                             # EI_CLASS: ELFCLASS64
+01                      # 0005      .byte 1                             # EI_DATA: ELFDATA2LSB, little endian
+01                      # 0006      .byte 1                             # EI_VERSION: EV_CURRENT
+00                      # 0007      .byte 0                             # EI_OSABI: System V
+0000000000000000        # 0008      .byte 0, 0, 0, 0, 0, 0, 0, 0        # EI_ABIVERSION 0, then padding to 16
+0200                    # 0010      .word 2                             # e_type: ET_EXEC, an executable
+3E00                    # 0012      .word 0x3e                          # e_machine: EM_X86_64
+01000000                # 0014      .long 1                             # e_version: EV_CURRENT
+B000600000000000        # 0018      .quad BASE + _start - ehdr          # e_entry: the address of _start
+4000000000000000        # 0020      .quad phdr - ehdr                   # e_phoff: the program headers follow
+0000000000000000        # 0028      .quad 0                             # e_shoff: no section headers
+00000000                # 0030      .long 0                             # e_flags: none on x86_64
+4000                    # 0034      .word 64                            # e_ehsize: this header's size
+3800                    # 0036      .word 56                            # e_phentsize: a program header's size
+0200                    # 0038      .word 2                             # e_phnum: two program headers
+0000                    # 003a      .word 0                             # e_shentsize: no section headers
+0000                    # 003c      .word 0                             # e_shnum: none
+0000                    # 003e      .word 0                             # e_shstrndx: none
+# 0040  phdr:                                   # the program: 56 bytes
+01000000                # 0040      .long 1                             # p_type: PT_LOAD
+05000000                # 0044      .long 5                             # p_flags: PF_R | PF_X, read and run
+0000000000000000        # 0048      .quad 0                             # p_offset: from the file's first byte
+0000600000000000        # 0050      .quad BASE                          # p_vaddr: loaded at BASE
+0000600000000000        # 0058      .quad BASE                          # p_paddr: the same
+0704000000000000        # 0060      .quad end - ehdr                    # p_filesz: the whole file
+0704000000000000        # 0068      .quad end - ehdr                    # p_memsz: the same
+0010000000000000        # 0070      .quad 0x1000                        # p_align: a page
+                                        # its memory: 56 bytes
+01000000                # 0078      .long 1                             # p_type: PT_LOAD
+06000000                # 007c      .long 6                             # p_flags: PF_R | PF_W, read and write
+0000000000000000        # 0080      .quad 0                             # p_offset: none of the file
+0000700000000000        # 0088      .quad LABELS                        # p_vaddr: the labels, then the input
+0000700000000000        # 0090      .quad LABELS                        # p_paddr: the same
+0000000000000000        # 0098      .quad 0                             # p_filesz: none, all zero
+0000200100000000        # 00a0      .quad INPUT_END - LABELS            # p_memsz: to the end of the input
+0010000000000000        # 00a8      .quad 0x1000                        # p_align: a page
+
+# 00b0  _start:                                 # read all of stdin into INPUT
+41BD00009000            # 00b0      mov     $INPUT, %r13d               # the end of what is read
+# 00b6  read:
+BA00009001              # 00b6      mov     $INPUT_END, %edx
+4429EA                  # 00bb      sub     %r13d, %edx                 # the room left
+0F8446020000            # 00be      jz      too_large
+31C0                    # 00c4      xor     %eax, %eax                  # SYS_read
+31FF                    # 00c6      xor     %edi, %edi                  # fd 0, stdin
+4C89EE                  # 00c8      mov     %r13, %rsi                  # after what is read
+0F05                    # 00cb      syscall
+4885C0                  # 00cd      test    %rax, %rax
+0F8C43020000            # 00d0      jl      read_failed
+7405                    # 00d6      je      read_all                    # the end of stdin
+4901C5                  # 00d8      add     %rax, %r13
+EBD9                    # 00db      jmp     read
+# 00dd  read_all:
+BD00007000              # 00dd      mov     $LABELS, %ebp               # no labels yet
+41BF01000000            # 00e2      mov     $1, %r15d                   # pass 1
+# 00e8  pass:
+41BC00009000            # 00e8      mov     $INPUT, %r12d               # from the first byte
+4531F6                  # 00ee      xor     %r14d, %r14d                # at address 0
+4883CBFF                # 00f1      or      $-1, %rbx                   # no high half
+# 00f5  loop:                                   # the next byte of the input
+4D39EC                  # 00f5      cmp     %r13, %r12
+7366                    # 00f8      jae     pass_end
+410FB60424              # 00fa      movzbl  (%r12), %eax
+49FFC4                  # 00ff      inc     %r12
+3C23                    # 0102      cmp     $0x23, %al                  # '#': a comment
+7448                    # 0104      je      comment
+3C3B                    # 0106      cmp     $0x3b, %al                  # ';': a comment
+7444                    # 0108      je      comment
+3C3A                    # 010a      cmp     $0x3a, %al                  # ':': a label
+7466                    # 010c      je      define
+3C25                    # 010e      cmp     $0x25, %al                  # '%': rel32
+0F84A1000000            # 0110      je      rel32
+3C21                    # 0116      cmp     $0x21, %al                  # '!': rel8
+0F8491000000            # 0118      je      rel8
+3C26                    # 011e      cmp     $0x26, %al                  # '&': abs32
+0F849D000000            # 0120      je      abs32
+3C5E                    # 0126      cmp     $0x5e, %al                  # '^': an address
+0F84E8000000            # 0128      je      origin
+E80B010000              # 012e      call    hexval
+72C0                    # 0133      jc      loop                        # not a hex digit: skipped
+4885DB                  # 0135      test    %rbx, %rbx                  # the first digit of a pair?
+7810                    # 0138      js      high
+C1E304                  # 013a      shl     $4, %ebx                    # the second: high half, then this one
+09D8                    # 013d      or      %ebx, %eax
+E86A010000              # 013f      call    emit
+4883CBFF                # 0144      or      $-1, %rbx                   # the next pair
+EBAB                    # 0148      jmp     loop
+# 014a  high:
+89C3                    # 014a      mov     %eax, %ebx                  # keep it for the second digit
+EBA7                    # 014c      jmp     loop
+# 014e  comment:                                # skip to the end of the line
+4D39EC                  # 014e      cmp     %r13, %r12
+73A2                    # 0151      jae     loop
+418A0424                # 0153      mov     (%r12), %al
+49FFC4                  # 0157      inc     %r12
+3C0A                    # 015a      cmp     $0x0a, %al                  # '\n'
+75F0                    # 015c      jne     comment
+EB95                    # 015e      jmp     loop
+# 0160  pass_end:
+41FFC7                  # 0160      inc     %r15d
+4183FF02                # 0163      cmp     $2, %r15d                   # after pass 1, pass 2
+0F847BFFFFFF            # 0167      je      pass
+31FF                    # 016d      xor     %edi, %edi                  # after pass 2, status 0
+E9ED010000              # 016f      jmp     exit
+
+# 0174  define:                                 # :name
+E8DE000000              # 0174      call    name
+4183FF01                # 0179      cmp     $1, %r15d                   # only in pass 1
+0F8572FFFFFF            # 017d      jne     loop
+E8EA000000              # 0183      call    find
+0F834F010000            # 0188      jnc     twice
+81FD00008800            # 018e      cmp     $LABELS_END, %ebp
+0F8361010000            # 0194      jae     too_many
+48897500                # 019a      mov     %rsi, (%rbp)                # its name
+48895508                # 019e      mov     %rdx, 8(%rbp)               # its length
+4C897510                # 01a2      mov     %r14, 16(%rbp)              # its address
+4883C518                # 01a6      add     $24, %rbp
+E946FFFFFF              # 01aa      jmp     loop
+
+# 01af  rel8:                                   # !name
+41B901000000            # 01af      mov     $1, %r9d                    # 1 byte
+EB06                    # 01b5      jmp     relative
+# 01b7  rel32:                                  # %name
+41B904000000            # 01b7      mov     $4, %r9d                    # 4 bytes
+# 01bd  relative:
+4F8D140E                # 01bd      lea     (%r14,%r9), %r10            # minus the address after them
+EB09                    # 01c1      jmp     ref
+# 01c3  abs32:                                  # &name
+41B904000000            # 01c3      mov     $4, %r9d                    # 4 bytes
+4531D2                  # 01c9      xor     %r10d, %r10d                # minus nothing
+# 01cc  ref:                                    # %r9 bytes of name's address - %r10
+E886000000              # 01cc      call    name
+4183FF01                # 01d1      cmp     $1, %r15d                   # pass 1 only counts them
+7437                    # 01d5      je      skip
+E896000000              # 01d7      call    find
+0F82EC000000            # 01dc      jc      unknown
+4C29D0                  # 01e2      sub     %r10, %rax
+4D85D2                  # 01e5      test    %r10, %r10                  # abs32: fits in 32 bits, unsigned
+740F                    # 01e8      jz      unsigned
+480FBEC8                # 01ea      movsbq  %al, %rcx                   # rel8: fits in 8 bits, signed
+4183F901                # 01ee      cmp     $1, %r9d
+7407                    # 01f2      je      fits
+4863C8                  # 01f4      movslq  %eax, %rcx                  # rel32: fits in 32 bits, signed
+EB02                    # 01f7      jmp     fits
+# 01f9  unsigned:
+89C1                    # 01f9      mov     %eax, %ecx
+# 01fb  fits:
+4839C1                  # 01fb      cmp     %rax, %rcx                  # the same when cut to its bytes?
+0F85E8000000            # 01fe      jne     range
+E894000000              # 0204      call    emitn
+E9E7FEFFFF              # 0209      jmp     loop
+# 020e  skip:
+4D01CE                  # 020e      add     %r9, %r14
+E9DFFEFFFF              # 0211      jmp     loop
+
+# 0216  origin:                                 # ^hex: the address of the next byte
+4531F6                  # 0216      xor     %r14d, %r14d
+# 0219  origin_digit:
+4D39EC                  # 0219      cmp     %r13, %r12
+0F83D3FEFFFF            # 021c      jae     loop
+410FB60424              # 0222      movzbl  (%r12), %eax
+E812000000              # 0227      call    hexval
+0F82C3FEFFFF            # 022c      jc      loop                        # its end
+49FFC4                  # 0232      inc     %r12
+49C1E604                # 0235      shl     $4, %r14
+4909C6                  # 0239      or      %rax, %r14
+EBDB                    # 023c      jmp     origin_digit
+
+# 023e  hexval:                                 # %al = the value of hex digit %al; CF if none
+3C30                    # 023e      cmp     $0x30, %al                  # below '0'
+7213                    # 0240      jb      no_digit
+3C39                    # 0242      cmp     $0x39, %al                  # '0'-'9'
+760C                    # 0244      jbe     decimal
+0C20                    # 0246      or      $0x20, %al                  # 'A'-'F' to 'a'-'f'
+3C61                    # 0248      cmp     $0x61, %al                  # below 'a'
+7209                    # 024a      jb      no_digit
+3C66                    # 024c      cmp     $0x66, %al                  # above 'f'
+7705                    # 024e      ja      no_digit
+2C27                    # 0250      sub     $0x27, %al                  # 'a'-'f' to 0x3a-0x3f, as if after '9'
+# 0252  decimal:
+2C30                    # 0252      sub     $0x30, %al                  # 0-15, no carry
+C3                      # 0254      ret
+# 0255  no_digit:
+F9                      # 0255      stc
+C3                      # 0256      ret
+
+# 0257  name:                                   # %rsi, %rdx = the name at %r12, after it
+4C89E6                  # 0257      mov     %r12, %rsi
+# 025a  name_byte:
+4D39EC                  # 025a      cmp     %r13, %r12
+730C                    # 025d      jae     name_end
+41803C2420              # 025f      cmpb    $0x20, (%r12)               # ends at a space, tab, newline
+7605                    # 0264      jbe     name_end
+49FFC4                  # 0266      inc     %r12
+EBEF                    # 0269      jmp     name_byte
+# 026b  name_end:
+4C89E2                  # 026b      mov     %r12, %rdx
+4829F2                  # 026e      sub     %rsi, %rdx
+C3                      # 0271      ret
+
+# 0272  find:                                   # %rax = the address of name %rsi, %rdx; CF if none
+41B800007000            # 0272      mov     $LABELS, %r8d
+# 0278  find_next:
+4939E8                  # 0278      cmp     %rbp, %r8
+7318                    # 027b      jae     not_found
+493B5008                # 027d      cmp     8(%r8), %rdx                # the same length
+750C                    # 0281      jne     find_on
+498B38                  # 0283      mov     (%r8), %rdi
+4889D1                  # 0286      mov     %rdx, %rcx
+56                      # 0289      push    %rsi
+F3A6                    # 028a      repe cmpsb                          # and the same bytes
+5E                      # 028c      pop     %rsi
+7408                    # 028d      je      found
+# 028f  find_on:
+4983C018                # 028f      add     $24, %r8
+EBE3                    # 0293      jmp     find_next
+# 0295  not_found:
+F9                      # 0295      stc
+C3                      # 0296      ret
+# 0297  found:
+498B4010                # 0297      mov     16(%r8), %rax
+F8                      # 029b      clc
+C3                      # 029c      ret
+
+# 029d  emitn:                                  # writes the %r9 low bytes of %rax
+50                      # 029d      push    %rax
+E80B000000              # 029e      call    emit
+58                      # 02a3      pop     %rax
+48C1E808                # 02a4      shr     $8, %rax
+41FFC9                  # 02a8      dec     %r9d
+75F0                    # 02ab      jnz     emitn
+C3                      # 02ad      ret
+
+# 02ae  emit:                                   # writes %al in pass 2, counts it
+49FFC6                  # 02ae      inc     %r14
+4183FF01                # 02b1      cmp     $1, %r15d
+7416                    # 02b5      je      emitted
+50                      # 02b7      push    %rax
+B801000000              # 02b8      mov     $1, %eax                    # SYS_write
+89C7                    # 02bd      mov     %eax, %edi                  # fd 1, stdout
+4889E6                  # 02bf      mov     %rsp, %rsi                  # from the stack
+89C2                    # 02c2      mov     %eax, %edx                  # 1 byte
+0F05                    # 02c4      syscall
+5F                      # 02c6      pop     %rdi
+4883F801                # 02c7      cmp     $1, %rax                    # written?
+755B                    # 02cb      jne     write_failed
+# 02cd  emitted:
+C3                      # 02cd      ret
+
+# 02ce  unknown:
+4C8D05A0000000          # 02ce      lea     msg_unknown(%rip), %r8
+41B915000000            # 02d5      mov     $msg_unknown_len, %r9d
+EB5A                    # 02db      jmp     die
+# 02dd  twice:
+4C8D05A6000000          # 02dd      lea     msg_twice(%rip), %r8
+41B91B000000            # 02e4      mov     $msg_twice_len, %r9d
+EB4B                    # 02ea      jmp     die
+# 02ec  range:
+4C8D05B2000000          # 02ec      lea     msg_range(%rip), %r8
+41B914000000            # 02f3      mov     $msg_range_len, %r9d
+EB3C                    # 02f9      jmp     die
+# 02fb  too_many:
+4C8D05B7000000          # 02fb      lea     msg_many(%rip), %r8
+41B915000000            # 0302      mov     $msg_many_len, %r9d
+EB2B                    # 0308      jmp     die_plain
+# 030a  too_large:
+4C8D05BD000000          # 030a      lea     msg_large(%rip), %r8
+41B915000000            # 0311      mov     $msg_large_len, %r9d
+EB1C                    # 0317      jmp     die_plain
+# 0319  read_failed:
+4C8D05C3000000          # 0319      lea     msg_read(%rip), %r8
+41B911000000            # 0320      mov     $msg_read_len, %r9d
+EB0D                    # 0326      jmp     die_plain
+# 0328  write_failed:
+4C8D05C5000000          # 0328      lea     msg_write(%rip), %r8
+41B912000000            # 032f      mov     $msg_write_len, %r9d
+# 0335  die_plain:
+31D2                    # 0335      xor     %edx, %edx                  # no name
+# 0337  die:                                    # message %r8, %r9, then name %rsi, %rdx
+52                      # 0337      push    %rdx
+56                      # 0338      push    %rsi
+4C89C6                  # 0339      mov     %r8, %rsi
+4C89CA                  # 033c      mov     %r9, %rdx
+E824000000              # 033f      call    ewrite
+5E                      # 0344      pop     %rsi
+5A                      # 0345      pop     %rdx
+E81D000000              # 0346      call    ewrite
+488D35B4000000          # 034b      lea     newline(%rip), %rsi
+BA01000000              # 0352      mov     $1, %edx
+E80C000000              # 0357      call    ewrite
+BF01000000              # 035c      mov     $1, %edi                    # status 1
+# 0361  exit:
+B83C000000              # 0361      mov     $60, %eax                   # SYS_exit
+0F05                    # 0366      syscall
+# 0368  ewrite:                                 # writes %rsi, %rdx to stderr
+B801000000              # 0368      mov     $1, %eax                    # SYS_write
+BF02000000              # 036d      mov     $2, %edi                    # fd 2, stderr
+0F05                    # 0372      syscall
+C3                      # 0374      ret
+
+686578323A20756E6B6E6F776E206C61 # 0375  msg_unknown:    .ascii "hex2: unknown label: "
+62656C3A20
+#     .equ msg_unknown_len, . - msg_unknown
+686578323A206C6162656C2064656669 # 038a  msg_twice:      .ascii "hex2: label defined twice: "
+6E65642074776963653A20
+#     .equ msg_twice_len, . - msg_twice
+686578323A206F7574206F662072616E # 03a5  msg_range:      .ascii "hex2: out of range: "
+67653A20
+#     .equ msg_range_len, . - msg_range
+686578323A20746F6F206D616E79206C # 03b9  msg_many:       .ascii "hex2: too many labels"
+6162656C73
+#     .equ msg_many_len, . - msg_many
+686578323A20696E70757420746F6F20 # 03ce  msg_large:      .ascii "hex2: input too large"
+6C61726765
+#     .equ msg_large_len, . - msg_large
+686578323A2072656164206661696C65 # 03e3  msg_read:       .ascii "hex2: read failed"
+64
+#     .equ msg_read_len, . - msg_read
+686578323A207772697465206661696C # 03f4  msg_write:      .ascii "hex2: write failed"
+6564
+#     .equ msg_write_len, . - msg_write
+0A                      # 0406  newline:        .ascii "\n"
+# 0407  end:
