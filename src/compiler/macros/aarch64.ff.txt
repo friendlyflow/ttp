@@ -2546,6 +2546,81 @@ c:
     mov
       x17
       x0
+opt:
+  comment
+    -O (gen/patches/opt.pl): cc_ldfp_* off: V = the local at FP + off, as cc_li off V, cc_addfp, cc_load_* do; cc_stfp_* off: [FP + off] = V, as cc_li off L, cc_addfp_l, cc_store_* (L is not set); off in -255..255, one instruction.
+  cc_ldfp_i8:
+    off
+    ldursb
+      off
+      x29
+      x0
+  cc_ldfp_i16:
+    off
+    ldursh
+      off
+      x29
+      x0
+  cc_ldfp_i32:
+    off
+    ldursw
+      off
+      x29
+      x0
+  cc_ldfp_i64:
+    off
+    ldur
+      off
+      x29
+      x0
+  cc_ldfp_u8:
+    off
+    ldurb
+      off
+      x29
+      x0
+  cc_ldfp_u16:
+    off
+    ldurh
+      off
+      x29
+      x0
+  cc_ldfp_u32:
+    off
+    ldurw
+      off
+      x29
+      x0
+  cc_ldfp_u64:
+    off
+    ldur
+      off
+      x29
+      x0
+  cc_stfp_8:
+    off
+    sturb
+      off
+      x29
+      x0
+  cc_stfp_16:
+    off
+    sturh
+      off
+      x29
+      x0
+  cc_stfp_32:
+    off
+    sturw
+      off
+      x29
+      x0
+  cc_stfp_64:
+    off
+    stur
+      off
+      x29
+      x0
 linux:
   comment
     The Linux system calls by name, for syscall: aarch64 has the generic numbers, as riscv64.
