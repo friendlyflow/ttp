@@ -993,6 +993,51 @@ my %prec = ('=' => 1, '+=' => 1, '-=' => 1, '*=' => 1, '/=' => 1, '%=' => 1, '&=
 my %isop = map { $_ => 1 } (keys %prec, qw(! ~ ++ --));
 
 sub kids { @{ $_[0]{inner} || [] } }
+# gcc's __builtin_tgmath (tgmath.h's): its functions, then the arguments; the
+# call is the one of the function of the type of the arguments that differ
+# in type between the functions (float, double, else long double; an
+# integer is a double), so ldexp (v, exp) of a float v is ldexpf. clang-
+# prelude.h declares it without parameters, so clang made a float argument
+# a double: the call made again, of the chosen function, with the
+# arguments' own values converted to its parameters.
+sub tgmath {
+    my ($n, @args) = @_;
+    my @f;
+    push @f, shift @args while @args && strip($args[0])->{kind} eq 'DeclRefExpr' && qt(strip($args[0])) =~ /\(/;
+    @f >= 3 && @args or stop('__builtin_tgmath without functions and arguments', $n);
+    my @ft = map { qt(strip($_)) } @f;
+    my $params = sub { $_[0] =~ /\((.*)\)$/ ? split(/, /, $1) : () };
+    my @p0 = $params->($ft[0]);
+    my @p1 = $params->($ft[1]);
+    $ft[0] =~ /^float \(/ && $ft[1] =~ /^double \(/ && $ft[2] =~ /^long double \(/ && @p0 == @args && @p1 == @args
+        or stop('__builtin_tgmath of other functions than of float, double, long double', $n);
+    my $bare = sub { (my $t = qt($_[0])) =~ s/\b(const|volatile)\s+//g; $t };
+    # an argument's value before the promotion of an unprototyped call
+    my @v = map {
+        my $a = $_;
+        $a = (kids($a))[0] while $a->{kind} eq 'ImplicitCastExpr' && ($a->{castKind} // '') eq 'FloatingCast' && $bare->((kids($a))[0]) eq 'float';
+        $a
+    } @args;
+    my $rank = 0;
+    for my $i (0 .. $#v) {
+        next if $p0[$i] eq $p1[$i];
+        my $t = $bare->($v[$i]);
+        stop('__builtin_tgmath of a complex argument', $n) if $t =~ /_Complex/;
+        my $r = $t eq 'float' ? 0 : $t eq 'long double' ? 2 : 1;
+        $rank = $r if $r > $rank;
+    }
+    my @p = $params->($ft[$rank]);
+    my ($ret) = $ft[$rank] =~ /^(.*?) \(/;
+    my $isf = sub { $_[0] =~ /^(float|double|long double)$/ };
+    my @a = map {
+        my ($a, $t) = ($v[$_], $p[$_]);
+        my $from = $bare->($a);
+        $from eq $t ? $a
+            : { kind => 'ImplicitCastExpr', type => { qualType => $t }, inner => [$a],
+                castKind => $isf->($t) ? ($isf->($from) ? 'FloatingCast' : 'IntegralToFloating') : 'IntegralCast' }
+    } 0 .. $#v;
+    { kind => 'CallExpr', type => { qualType => $ret }, inner => [$f[$rank], @a] };
+}
 sub strip {     # through what means nothing in ff
     my ($n) = @_;
     $n = (kids($n))[0] while $n->{kind} =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
@@ -1712,6 +1757,7 @@ sub expr {
         my $name = $c->{referencedDecl}{name};
         # (its value a long, as its first argument is made one)
         return cast_node([ctype(qt($n))], item(expr($args[0]))) if $name eq '__builtin_expect';
+        return expr(tgmath($n, @args)) if $name eq '__builtin_tgmath';
         # (in a global's value, gcc's infinity or NaN is its literal, as gcc
         # folds it: ttpc's global items call nothing)
         if ($in_global && defined(my $lit = special_float($n, $n))) { return node($lit) }
@@ -2097,7 +2143,8 @@ sub texts {
 }
 # A string literal as a value: address / char / its text. But a text that ff
 # reads as something else (an operator: __dcigettext's "/", a word ff
-# reserves), holds a NUL (which a node's text cannot) or is longer than a
+# reserves), holds a NUL (which a node's text cannot), bytes that are not UTF-8
+# (tst-sprintf's, tst-grouping_iterator's) or is longer than a
 # node's 255 bytes (a __PRETTY_FUNCTION__: a value is one text) is a global
 # char array of its own, text 1, 2, ..., and the value the address of its
 # first char.
@@ -2124,7 +2171,7 @@ sub cast_node {
 sub string_value {
     my ($n) = @_;
     my $s = bytes($n);
-    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255;
+    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255 || !pieces($s);
     my $name = 'text ' . ++$ntext;
     my @c = (unpack('C*', $s), 0);
     push @out, [$cur_unit, node("$name:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];

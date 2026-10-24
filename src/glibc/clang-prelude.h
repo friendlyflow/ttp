@@ -1,19 +1,24 @@
-/* For clang reading glibc .i made by gcc: the _FloatN types gcc has built in. */
-typedef float _Float32;
-typedef double _Float64;
+/* For clang reading glibc .i made by gcc: the _FloatN types gcc has built in,
+   as macros, so that _Complex _Float32 reads (cmathcalls.h's, in the tests
+   of scanf's formats); a typedef cannot follow _Complex. */
+#define _Float32 float
+#define _Float64 double
 #ifdef __x86_64__
 /* x86_64: gcc's _Float128 is a type of its own beside long double (glibc's
    _Generic lists both); __float128 is clang's, as long double is binary128
    here too (-mlong-double-128); a macro, so that _Complex _Float128 reads */
 #define _Float128 __float128
 #else
-typedef long double _Float128;
+#define _Float128 long double
 #endif
-typedef double _Float32x;
-typedef long double _Float64x;
+#define _Float32x double
+#define _Float64x long double
 /* gcc builtins clang does not have, used by inline helpers in glibc's headers. */
 extern int __builtin_va_arg_pack_len (void);
 extern int __builtin_va_arg_pack (void);
+/* gcc's tgmath.h builtin: its functions, then the arguments; c2ff calls the
+   function of the arguments' type (tgmath) */
+extern double __builtin_tgmath ();
 /* gcc's C23 bit builtins (stdbit.h's, and glibc's own PTR_MANGLE, malloc's
    tcache, printf_fp's limbs, libm's), which clang 21 does not have: they are
    type-generic, of the width of their argument's type, and bit_floor,
