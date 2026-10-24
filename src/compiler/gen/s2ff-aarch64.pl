@@ -113,7 +113,7 @@ my %computed = (shr16 => sub { 16 - $_[0] }, shr128 => sub { 128 - $_[0] });
     my $section = do "$FindBin::Bin/../isa/aarch64.pl";
     die "s2ff: isa/aarch64.pl: $@" if $@;
     for my $g (@{ $section->{children} }) {
-        next if $g->{content} =~ /^(registers|slices|macros|elf|c|linux|rv64):$/;
+        next if $g->{content} =~ /^(registers|slices|macros|elf|c|opt|linux|rv64):$/;
         for my $d (@{ $g->{children} }) {
             my ($name) = $d->{content} =~ /^(.+):$/ or next;
             next if $name =~ /\[/;     # a field's function (shr16[6:0])
