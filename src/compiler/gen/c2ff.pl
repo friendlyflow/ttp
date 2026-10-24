@@ -1544,6 +1544,7 @@ sub expr {
         if ($in_global && isld($n) && $e->{kind} eq 'FloatingLiteral' && (my $t = tword($e)) =~ /^(float|double)$/) {
             return node($target eq 'arm' || $t eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : ldround($e->{value}, 24, -149, 127));
         }
+        if ($in_global && defined(my $lit = narrowlit($n, $e))) { return node($lit) }
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
     # C's conversion to _Bool (in ff a u8) gives 0 or 1: the value compared
@@ -1663,6 +1664,7 @@ sub expr {
         stop("the operator $op", $n);
     }
     if ($k eq 'CStyleCastExpr') {
+        if ($in_global && defined(my $lit = narrowlit($n, strip((kids($n))[0])))) { return node($lit) }
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
     # C11's _Generic: generic / x / an association per type (its type words
@@ -2096,6 +2098,20 @@ sub ldround {
     $hex = ('0' x (28 - length $hex)) . $hex;
     $hex =~ s/0+$//;
     sprintf "0x0.%sp-16382L", $hex;
+}
+# (in a global's value, a long double literal made double or float is the
+# literal of its value rounded to that type, as gcc folds it: glibc's
+# DBL_MIN is ((double) 2.2250738585072014e-308L), tst-strtod-underflow's
+# volatile double d = DBL_MIN; ttpc would convert it by soft-fp's
+# __trunctfdf2, which compile time has no code of)
+sub narrowlit {
+    my ($n, $e) = @_;
+    return undef unless $e->{kind} eq 'FloatingLiteral' && isld($e) && $target ne 'arm';
+    my $to = tword($n);
+    my $l = $to eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : $to eq 'float' ? ldround($e->{value}, 24, -149, 127) : undef;
+    return undef unless defined $l;
+    $l =~ s/L$/$to eq 'float' ? 'f' : ''/e;
+    $l;
 }
 sub fail_float { die "c2ff: a constant with no hex form: $_[0]\n" }
 

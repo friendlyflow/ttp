@@ -156,6 +156,13 @@ specials_bad (void)
          + (__builtin_isinf_sign (specials[2].f) != -1) + (__builtin_isinf_sign (specials[2].l) != -1);
 }
 
+/* a long double literal made double or float in a global's value, as
+   glibc's DBL_MIN ((double) 2.2250738585072014e-308L): its value rounded
+   to the type (gcc folds it; ttpc has no conversion at compile time) */
+static volatile double dmin = ((double) 2.22507385850720138309e-308L);
+static volatile float fthird = (float) 0.333333333333333333333333L;
+static volatile double dsub = 4.9406564584124654e-324L;
+
 /* gconv's const unsigned char *inptr = *inptrp: a char or u8 pointer set
    from a dereference or an address, not a text */
 static int
@@ -190,6 +197,7 @@ main (void)
   f += LATER_A != -2 || LATER_C != 0 || later_p != 0;
   f += many_sum () != 8 * 36;
   f += specials_bad ();
+  f += dmin != 0x1p-1022 || fthird != 0x1.555556p-2f || dsub != 0x1p-1074;
   {
     unsigned char b[2] = { 30, 7 }, *bp = b;
     f += text_ptr (&bp) != 42;
