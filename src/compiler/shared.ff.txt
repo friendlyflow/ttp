@@ -369,6 +369,10 @@ comment
 set debug:
   w
 comment
+  set optimise w: compile time, workspace w compiles with -O (the peephole on the C layer's primitives, rewritten the same for every target); without it, as this compile was run: with -O, every workspace is.
+set optimise:
+  w
+comment
   add file w path: compile time, a tree for workspace w; the last one is its program, the ones before it its definitions, as on the command line.
 add file:
   w

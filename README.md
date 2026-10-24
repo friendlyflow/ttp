@@ -36,7 +36,10 @@ unwinder, and a DWARF 5 line table (`.debug_line`): each statement and
 instruction at the line of its node in the tree's text (`X.ff.txt`, as
 `gen/fftext.pl txt X.ff` writes it), or, where c2ff wrote `line` nodes
 (C's `#line`), at the line of the C it came from, for gdb's `list` and
-`break file:line` and addr2line; without `-g` every byte stays as it was. It runs on
+`break file:line` and addr2line; without `-g` every byte stays as it was.
+`ttpc -O ...` (the same places as `-g`; `set optimise` / w in a build file)
+rewrites the C layer's primitives by a peephole, the same for every target
+(push ... pop as a move); without `-O` every byte stays as it was. It runs on
 riscv64 itself, under `qemu-riscv64` elsewhere; see
 [src/compiler/PLAN.md](src/compiler/PLAN.md).
 
