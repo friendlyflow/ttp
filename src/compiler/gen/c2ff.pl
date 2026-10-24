@@ -221,7 +221,12 @@ sub ctype {
         # libio's own an _IO_lock_t *)
         # (an alias's name too: glibc's weak alias sigaction of __sigaction,
         # struct sigaction's tag took its name and a program's call of it)
-        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $alias{$2} || $localname{$2} || is_fieldname(ffname($2)) || $treedefs{ ffname($2) } ? "$2 $1" : ffname($2);
+        # (a program's, with --index, "name kind prog": glibc's units name
+        # theirs so too, unit-local, and a unit found the program's:
+        # tst-grouping_iterator's lc_ctype_data struct, whose fcts field was
+        # the program's empty gconv_fcts struct)
+        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $alias{$2} || $localname{$2} || is_fieldname(ffname($2)) || $treedefs{ ffname($2) }
+            ? (%treedefs ? "$2 $1 prog" : "$2 $1") : ffname($2);
     }
     # glibc's array check (array_length): sizeof (struct { _Static_assert
     # (...); }), a struct clang writes no declaration of; it has no fields
@@ -1739,8 +1744,15 @@ sub expr {
     if ($k eq 'CallExpr') {
         my ($callee, @args) = kids($n);
         my $c = strip($callee);
-        # (*f) (...) calls what f points at, as f (...) does
-        $c = strip((kids($c))[0]) while $c->{kind} eq 'ParenExpr' || ($c->{kind} eq 'UnaryOperator' && $c->{opcode} eq '*');
+        # (*f) (...) calls what f points at, as f (...) does; a _Generic's
+        # call is of the association clang selected (tst-scanf-format-real.h's
+        # _Generic (v, float: strtof, ...) (s, &e))
+        while (1) {
+            $c = strip((kids($c))[0]) while $c->{kind} eq 'ParenExpr' || ($c->{kind} eq 'UnaryOperator' && $c->{opcode} eq '*');
+            last unless $c->{kind} eq 'GenericSelectionExpr';
+            my ($as) = grep { $_->{selected} } kids($c) or stop('a _Generic with no association selected', $n);
+            $c = strip((kids($as))[-1]);
+        }
         if ($c->{kind} =~ /^(MemberExpr|ArraySubscriptExpr)$/) {
             # through a function pointer at the end of a path: p / fn / x is
             # p->fn (x), its arguments after the path's fields and indexes

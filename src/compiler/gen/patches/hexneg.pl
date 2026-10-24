@@ -2,7 +2,9 @@
 # a hex float without the L (0x...): a global double of - 0x1p+1024 (-inf,
 # C's -HUGE_VAL) on arm, where a double is in memory, went to the compile
 # time JIT, which there gave its temporary's address as the value
-# (chexinf's gdm on the arm host). Test: chexinf (bootstrap's chello-arm).
+# (chexinf's gdm on the arm host). Only a group of - and the literal: one
+# of more (: - 1.0 / 3.0, tst-printf-round's) was its first literal negated.
+# Test: chexinf (bootstrap's chello-arm), cldneg.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 edit(\$t, 'gval', asm(12, "lbu -1 t0 t0\nli 76 t1\nbne rel:LGN t1 t0\n") => asm(12, "
@@ -16,4 +18,5 @@ edit(\$t, 'gval', asm(12, "lbu -1 t0 t0\nli 76 t1\nbne rel:LGN t1 t0\n") => asm(
     li 120 t1
     bne rel:LGN t1 t0
 "));
+edit(\$t, 'gval', asm(10, "LGT:\nlbu NODE_children_len s5 t0\nli 2 t1\nbltu rel:LGN t1 t0\n") => asm(10, "LGT:\nlbu NODE_children_len s5 t0\nli 2 t1\nbne rel:LGN t1 t0\n"));
 save();
