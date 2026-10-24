@@ -2153,7 +2153,7 @@ sub cast_node {
 sub string_value {
     my ($n) = @_;
     my $s = bytes($n);
-    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255 || !pieces($s);
+    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255 || ($s ne '' && !pieces($s));
     my $name = 'text ' . ++$ntext;
     my @c = (unpack('C*', $s), 0);
     push @out, [$cur_unit, node("$name:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
@@ -2771,6 +2771,10 @@ sub leave_out {
     (my $why = $@) =~ s/\n+$//;
     warn "c2ff: left out: $name: $why\n";
 }
+# (a program's own texts, text N and wide text N, from 100001: glibc's units
+# have theirs from 1, and a unit's text 5 found the program's, which was
+# another: C-numeric's decimal point "." was "" in tst-strtod2)
+($ntext, $nwide) = (100000, 100000) if defined $program;
 # (an object's constructors and destructors are roots: the start code runs
 # them, whatever names the object: tst-putenv's module of a constructor alone)
 want($_) for map { @{ $ctors_of{$_} // [] } } grep { $_->{object} } @units;
