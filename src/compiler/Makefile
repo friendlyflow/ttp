@@ -309,8 +309,10 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # else on the command line, here from the build folder (its paths are from
 # its own folder): it includes ../shared.ff and makes three workspaces,
 # chello for riscv64 and for x86_64 and cexit with the name it gets without
-# set output (next to cws.ff), each the bytes the command line makes. cinclude is chello including its shared page, --print prints a tree
-# as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
+# set output (next to cws.ff), each the bytes the command line makes.
+# cwsdebug.ff makes chello twice, with set debug (as -g) and without; run
+# with -g, both as -g. cinclude is chello including its shared page,
+# --print prints a tree as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
 cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
@@ -320,6 +322,14 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	cmp $(P)/cws-riscv64 $(P)/chello.celf
 	cmp $(P)/cws-x86_64 $(P)/x86_64/chello.celf
 	cmp $(P)/cws-cexit $(P)/cexit.celf
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	$(QEMU) $(BOOT)/stage2 -g $(SHARED) progs/chello.ff $(P)/chello.g > $(P)/chello.g.lst
+	cmp $(P)/cwsdebug $(P)/chello.celf
+	cmp $(P)/cwsdebug-g $(P)/chello.g
+	rm $(P)/cwsdebug $(P)/cwsdebug-g
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -g $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	cmp $(P)/cwsdebug $(P)/chello.g
+	cmp $(P)/cwsdebug-g $(P)/chello.g
 	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print

@@ -27,7 +27,8 @@ ttpc builds for four targets: `ttpc --target x86_64 shared.ff prog.ff out`
 (riscv64, x86_64, aarch64, arm; riscv64 without `--target`). `ttpc build.ff`
 runs a build file, which says itself what to build (`include`, `workspace`,
 `add file`, `compile`, as in Jai). `ttpc -g ...` (first, or after
-`--target t`; a build file run with it compiles its workspaces with it)
+`--target t`; a build file run with it compiles its workspaces with it,
+and `set debug` / w in a build file gives it to workspace w)
 adds debug information past an ELF file's bytes: section headers, a symbol
 per function and global, and the C functions' frames (`.eh_frame`,
 `.eh_frame_hdr`, on arm also `.ARM.exidx`) for gdb, perf and libgcc's
