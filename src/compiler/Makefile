@@ -41,7 +41,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup cdebug
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup cdebug cline
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -309,10 +309,16 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # else on the command line, here from the build folder (its paths are from
 # its own folder): it includes ../shared.ff and makes three workspaces,
 # chello for riscv64 and for x86_64 and cexit with the name it gets without
-# set output (next to cws.ff), each the bytes the command line makes. cinclude is chello including its shared page, --print prints a tree
-# as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
+# set output (next to cws.ff), each the bytes the command line makes.
+# cwsdebug.ff makes chello twice, with set debug (as -g) and without; run
+# with -g, both as -g (gsame). cinclude is chello including its shared page,
+# --print prints a tree as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
+# gsame A B: the -g file A is B up to B's .debug_abbrev (past the ELF
+# header: its program, symbols and their names; the line table names the
+# trees by their paths, which differ in a build file)
+gsame = n=$$(readelf -SW $(2) | sed -n 's/.* \.debug_abbrev  *PROGBITS  *[0-9a-f]* \([0-9a-f]*\) .*/\1/p'); test -n "$$n" && cmp -i 64 -n $$((0x$$n - 64)) $(1) $(2) && readelf -SW $(1) | grep -q ' \.debug_line '
 cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	rm -f progs/cexit
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cws.ff > cws.lst
@@ -320,6 +326,14 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	cmp $(P)/cws-riscv64 $(P)/chello.celf
 	cmp $(P)/cws-x86_64 $(P)/x86_64/chello.celf
 	cmp $(P)/cws-cexit $(P)/cexit.celf
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	$(QEMU) $(BOOT)/stage2 -g $(SHARED) progs/chello.ff $(P)/chello.g > $(P)/chello.g.lst
+	cmp $(P)/cwsdebug $(P)/chello.celf
+	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
+	rm $(P)/cwsdebug $(P)/cwsdebug-g
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -g $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	$(call gsame,$(P)/cwsdebug,$(P)/chello.g)
+	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
 	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
@@ -339,7 +353,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup cdebug
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup cdebug cline
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # C tests of one target only, beside the portable ones
@@ -429,7 +443,8 @@ abi: $(BOOT)/stage2 $(SHARED)
 
 # -g (gen/patches/debug.pl, ehframe.pl): the section headers, symbols and
 # frames of progs/cdebug.ff (and ctls, csection, cdatasep), as readelf,
-# objdump, gdb and libgcc's unwinder read them (progs/debug/run.sh), on
+# objdump, gdb and libgcc's unwinder read them (progs/debug/run.sh), and its
+# line table (dwarfline.pl) as gdb's break, list and addr2line read it, on
 # every target: gdb natively on x86_64, under qemu -g on the others.
 DEBUG_TARGETS := riscv64 x86_64 aarch64 arm
 debug: $(BOOT)/stage2 $(SHARED)

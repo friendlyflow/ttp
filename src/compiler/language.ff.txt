@@ -508,6 +508,8 @@ ff, the language ttpc compiles
             99
       syscall number arguments: number SYS_write, SYS_exit, ... of the target
       comment text
+      line file number, line number: where the statements after it come from in the C the tree was made from (C's #line N "file", #line N; c2ff writes them); no code, as a comment; a line with no children is a name
+        with -g the line table has that file and line for their code (the C view), elsewhere each node's line in the tree's text (the ff view)
     scope
       the program page's functions and globals are seen everywhere on it, above and below their definition (two passes)
       a parameter is seen in its function's body
@@ -607,6 +609,6 @@ ff, the language ttpc compiles
               rbx
   build files
     ttpc build.ff, one tree and no output: runs its top level compile time lambdas, writes nothing of its own
-    workspace makes one; set target w section, set output w path, add file w path (the last is the program), compile w queues it
+    workspace makes one; set target w section, set output w path, set debug w (as -g), add file w path (the last is the program), compile w queues it
     a workspace is a long: w:, long, workspace
     paths are from the folder of the file whose code runs the word

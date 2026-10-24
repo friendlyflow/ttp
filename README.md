@@ -27,11 +27,16 @@ ttpc builds for four targets: `ttpc --target x86_64 shared.ff prog.ff out`
 (riscv64, x86_64, aarch64, arm; riscv64 without `--target`). `ttpc build.ff`
 runs a build file, which says itself what to build (`include`, `workspace`,
 `add file`, `compile`, as in Jai). `ttpc -g ...` (first, or after
-`--target t`; a build file run with it compiles its workspaces with it)
+`--target t`; a build file run with it compiles its workspaces with it,
+and `set debug` / w in a build file gives it to workspace w)
 adds debug information past an ELF file's bytes: section headers, a symbol
 per function and global, and the C functions' frames (`.eh_frame`,
 `.eh_frame_hdr`, on arm also `.ARM.exidx`) for gdb, perf and libgcc's
-unwinder; without `-g` every byte stays as it was. It runs on
+unwinder, and a DWARF 5 line table (`.debug_line`): each statement and
+instruction at the line of its node in the tree's text (`X.ff.txt`, as
+`gen/fftext.pl txt X.ff` writes it), or, where c2ff wrote `line` nodes
+(C's `#line`), at the line of the C it came from, for gdb's `list` and
+`break file:line` and addr2line; without `-g` every byte stays as it was. It runs on
 riscv64 itself, under `qemu-riscv64` elsewhere; see
 [src/compiler/PLAN.md](src/compiler/PLAN.md).
 
