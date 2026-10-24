@@ -604,15 +604,23 @@ chello-$(1): $(BUILD)/$(1)/stage2
 endef
 $(foreach h,$(HOSTS),$(eval $(call host,$(h))))
 
-# The hex seed of a host of HEXHOSTS: hex0 makes hex2, hex2 the seed.
+# The hex seed of a host of HEXHOSTS: hex0 makes hex2, hex2 the seed of
+# ttpc.hex2 and M1 of M1.hex2 (a macro assembler, as stage0-posix's).
 # hex-<host> checks hex0 and hex2 against their texts without comments
 # (what a person can check by hand: the hex digits before each '#' or ';',
-# as od prints the binary), that hex0 makes itself of hex0.hex0, and that
-# the seed from ttpc.hex2 is the one binutils makes of ttpc.s.
+# as od prints the binary), that hex0 makes itself of hex0.hex0, that M1
+# is what binutils makes of its source gen/hex/<host>/M1.s (a dev aid,
+# which gen/mkhex.pl made M1.hex2 of), and that the seed from ttpc.hex2 is
+# the one binutils makes of ttpc.s.
 define hexhost
 
 $(BUILD)/$(1)/hex2: hosts/$(1)/hex0 hosts/$(1)/hex2.hex0 | $(BUILD)/$(1)
 	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex2.hex0 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/M1: $(BUILD)/$(1)/hex2 hosts/$(1)/M1.hex2
+	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/M1.hex2 > $$@.tmp
 	chmod +x $$@.tmp
 	mv $$@.tmp $$@
 
@@ -621,7 +629,7 @@ $(BUILD)/$(1)/seed.hex: $(BUILD)/$(1)/hex2 hosts/$(1)/ttpc.hex2
 	chmod +x $$@.tmp
 	mv $$@.tmp $$@
 
-hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
+hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/M1 $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
 	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
 	for f in hex0 hex2; do sed 's/[#;].*//' hosts/$(1)/$$$$f.hex0 | tr -cd 0-9A-Fa-f | tr A-F a-f > $$$$d/$$$$f.text; done; \
 	od -An -v -tx1 hosts/$(1)/hex0 | tr -cd 0-9a-f | cmp - $$$$d/hex0.text; \
@@ -630,6 +638,9 @@ hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
 	echo "hex-$(1): hex0 makes itself of hex0.hex0"; \
 	od -An -v -tx1 $(BUILD)/$(1)/hex2 | tr -cd 0-9a-f | cmp - $$$$d/hex2.text; \
 	echo "hex-$(1): hex2 ($$$$(wc -c < $(BUILD)/$(1)/hex2) bytes), made by hex0, is hex2.hex0 without its comments"; \
+	for f in M1; do $(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
+	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.o $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
+	echo "hex-$(1): M1 ($$$$(wc -c < $(BUILD)/$(1)/M1) bytes), made by hex2 of M1.hex2 ($$$$(wc -l < hosts/$(1)/M1.hex2) lines), is what binutils makes of gen/hex/$(1)/M1.s"; \
 	cmp $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu; \
 	echo "hex-$(1): hex2 makes of ttpc.hex2 ($$$$(wc -l < hosts/$(1)/ttpc.hex2) lines) the seed binutils makes of ttpc.s ($$$$(wc -c < $(BUILD)/$(1)/seed.gnu) bytes)"
 

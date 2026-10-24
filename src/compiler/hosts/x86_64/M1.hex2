@@ -1,0 +1,563 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/x86_64/M1.s as hex2 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then the line. :label defines a label at the address
+# of the next byte (from 0, the file's first byte); %label is the 4
+# bytes of label minus the address after them (rel32), !label the same
+# in 1 byte (rel8). hex2 reads only what is before each '#'.
+#
+# M1 for x86_64 Linux: a macro assembler, hex2 with names. The third link
+# of the bootstrap, built by hex2 from hosts/x86_64/M1.hex2 (made from
+# this file once by gen/mkhex.pl, a dev aid; the chain never reads this
+# file). It turns hosts/x86_64/asm.M1 into hex2 text, which hex2 makes
+# into asm, the assembler of the seed's asm. As stage0-posix's M1.
+#
+#   M1 < file.M1 > file.hex2
+#
+# The input is tokens: bytes up to a space, tab or newline (any byte up to
+# 0x20). '#' and ';' start a comment to the end of the line. A token
+#   DEFINE name value   makes name a macro: every other token name, before
+#                       or after, becomes the text value (hex digits)
+#   "text"              the hex of the bytes of text, then 00 (a C string;
+#                       text is every byte up to the next '"')
+#   'text'              text as it is (raw hex2 text, spaces too)
+#   !n @n %n            the number n in 1, 2 or 4 bytes, little endian, as
+#                       hex: decimal, or hex after 0x, '-' before it for a
+#                       negative one; it must fit, signed or unsigned
+#   :name %name !name &name ^hex
+#                       hex2's labels, references and addresses, as they are
+#   a macro's name      its value
+#   hex digits          as they are (raw hex2 text)
+# Anything else is an error. Out go the tokens' texts, each followed by a
+# space, and a newline for each newline of the input: hex2 text, line by
+# line as the input. The input is read whole, then twice: the first pass
+# collects the macros, the second writes. On an unknown macro, a macro
+# defined twice, a number that is none or does not fit, a string without
+# its end, a full table, input or output and a failed read or write it
+# says so on stderr and ends with status 1; else with 0.
+#
+# One flat file, loaded at BASE by its first program header, read and
+# run; the second maps the memory it writes, MACROS to the end of OUTPUT.
+# The registers:
+#   %r12  the next byte of the input        %r13  the end of the input
+#   %rbx  the next byte of the output       %r15  the pass, 1 or 2
+#   %rbp  the next free macro
+# A macro is 32 bytes: the address of its name in the input, the name's
+# length, the address of its value, the value's length.
+
+#     .equ BASE, 0x600000
+#     .equ MACROS, 0x700000               # 65536 macros of 32 bytes
+#     .equ MACROS_END, MACROS + 0x10000 * 32
+#     .equ INPUT, 0x900000                # 16 MiB of input
+#     .equ INPUT_END, INPUT + 0x1000000
+#     .equ OUTPUT, 0x1900000              # 64 MiB of output
+#     .equ OUTPUT_END, OUTPUT + 0x4000000
+
+:ehdr                                   # ehdr:                                   # the ELF header, 64 bytes
+7F454C46                                #     .byte 0x7f, 0x45, 0x4c, 0x46        # e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                                      #     .byte 2                             # EI_CLASS: ELFCLASS64
+01                                      #     .byte 1                             # EI_DATA: ELFDATA2LSB, little endian
+01                                      #     .byte 1                             # EI_VERSION: EV_CURRENT
+00                                      #     .byte 0                             # EI_OSABI: System V
+0000000000000000                        #     .byte 0, 0, 0, 0, 0, 0, 0, 0        # EI_ABIVERSION 0, then padding to 16
+0200                                    #     .word 2                             # e_type: ET_EXEC, an executable
+3E00                                    #     .word 0x3e                          # e_machine: EM_X86_64
+01000000                                #     .long 1                             # e_version: EV_CURRENT
+B000600000000000                        #     .quad BASE + _start - ehdr          # e_entry: the address of _start
+4000000000000000                        #     .quad phdr - ehdr                   # e_phoff: the program headers follow
+0000000000000000                        #     .quad 0                             # e_shoff: no section headers
+00000000                                #     .long 0                             # e_flags: none on x86_64
+4000                                    #     .word 64                            # e_ehsize: this header's size
+3800                                    #     .word 56                            # e_phentsize: a program header's size
+0200                                    #     .word 2                             # e_phnum: two program headers
+0000                                    #     .word 0                             # e_shentsize: no section headers
+0000                                    #     .word 0                             # e_shnum: none
+0000                                    #     .word 0                             # e_shstrndx: none
+:phdr                                   # phdr:                                   # the program: 56 bytes
+01000000                                #     .long 1                             # p_type: PT_LOAD
+05000000                                #     .long 5                             # p_flags: PF_R | PF_X, read and run
+0000000000000000                        #     .quad 0                             # p_offset: from the file's first byte
+0000600000000000                        #     .quad BASE                          # p_vaddr: loaded at BASE
+0000600000000000                        #     .quad BASE                          # p_paddr: the same
+5206000000000000                        #     .quad end - ehdr                    # p_filesz: the whole file
+5206000000000000                        #     .quad end - ehdr                    # p_memsz: the same
+0010000000000000                        #     .quad 0x1000                        # p_align: a page
+                                        # its memory: 56 bytes
+01000000                                #     .long 1                             # p_type: PT_LOAD
+06000000                                #     .long 6                             # p_flags: PF_R | PF_W, read and write
+0000000000000000                        #     .quad 0                             # p_offset: none of the file
+0000700000000000                        #     .quad MACROS                        # p_vaddr: the macros, input, output
+0000700000000000                        #     .quad MACROS                        # p_paddr: the same
+0000000000000000                        #     .quad 0                             # p_filesz: none, all zero
+0000200500000000                        #     .quad OUTPUT_END - MACROS           # p_memsz: to the end of the output
+0010000000000000                        #     .quad 0x1000                        # p_align: a page
+
+:_start                                 # _start:                                 # read all of stdin into INPUT
+41BD00009000                            #     mov     $INPUT, %r13d               # the end of what is read
+:read                                   # read:
+BA00009001                              #     mov     $INPUT_END, %edx
+4429EA                                  #     sub     %r13d, %edx                 # the room left
+0F84 %too_large                         #     jz      too_large
+31C0                                    #     xor     %eax, %eax                  # SYS_read
+31FF                                    #     xor     %edi, %edi                  # fd 0, stdin
+4C89EE                                  #     mov     %r13, %rsi                  # after what is read
+0F05                                    #     syscall
+4885C0                                  #     test    %rax, %rax
+0F8C %read_failed                       #     jl      read_failed
+74 !read_all                            #     je      read_all                    # the end of stdin
+4901C5                                  #     add     %rax, %r13
+EB !read                                #     jmp     read
+:read_all                               # read_all:
+BD00007000                              #     mov     $MACROS, %ebp               # no macros yet
+BB00009001                              #     mov     $OUTPUT, %ebx               # no output yet
+41BF01000000                            #     mov     $1, %r15d                   # pass 1
+:pass                                   # pass:
+41BC00009000                            #     mov     $INPUT, %r12d               # from the first byte
+:loop                                   # loop:                                   # the next token
+E8 %token                               #     call    token
+0F82 %pass_end                          #     jc      pass_end
+4883FA06                                #     cmp     $6, %rdx                    # DEFINE?
+75 !not_define                          #     jne     not_define
+488D3D %str_define                      #     lea     str_define(%rip), %rdi
+4989F0                                  #     mov     %rsi, %r8
+4889D1                                  #     mov     %rdx, %rcx
+F3A6                                    #     repe cmpsb
+4C89C6                                  #     mov     %r8, %rsi
+0F84 %define                            #     je      define
+:not_define                             # not_define:
+4183FF01                                #     cmp     $1, %r15d                   # pass 1 only looks for DEFINE
+74 !loop                                #     je      loop
+0FB606                                  #     movzbl  (%rsi), %eax                # its first byte
+3C22                                    #     cmp     $0x22, %al                  # '"': a string
+0F84 %string                            #     je      string
+3C27                                    #     cmp     $0x27, %al                  # "'": raw text
+0F84 %raw                               #     je      raw
+41B901000000                            #     mov     $1, %r9d                    # '!': 1 byte
+3C21                                    #     cmp     $0x21, %al
+0F84 %sized                             #     je      sized
+41B904000000                            #     mov     $4, %r9d                    # '%': 4 bytes
+3C25                                    #     cmp     $0x25, %al
+0F84 %sized                             #     je      sized
+41B902000000                            #     mov     $2, %r9d                    # '@': 2 bytes, a number only
+3C40                                    #     cmp     $0x40, %al
+0F84 %sized                             #     je      sized
+3C3A                                    #     cmp     $0x3a, %al                  # ':' '&' '^': for hex2
+74 !copy                                #     je      copy
+3C26                                    #     cmp     $0x26, %al
+74 !copy                                #     je      copy
+3C5E                                    #     cmp     $0x5e, %al
+74 !copy                                #     je      copy
+E8 %find                                #     call    find                        # a macro: its value
+73 !expand                              #     jnc     expand
+4889F7                                  #     mov     %rsi, %rdi                  # else only hex digits, as they are
+4889D1                                  #     mov     %rdx, %rcx
+:hex_only                               # hex_only:
+0FB607                                  #     movzbl  (%rdi), %eax
+E8 %hexval                              #     call    hexval
+0F82 %unknown                           #     jc      unknown
+48FFC7                                  #     inc     %rdi
+48FFC9                                  #     dec     %rcx
+75 !hex_only                            #     jnz     hex_only
+:copy                                   # copy:                                   # the token as it is, then a space
+E8 %put_text                            #     call    put_text
+E9 %loop                                #     jmp     loop
+:expand                                 # expand:
+4889C6                                  #     mov     %rax, %rsi                  # its value
+4889CA                                  #     mov     %rcx, %rdx
+EB !copy                                #     jmp     copy
+
+:define                                 # define:                                 # DEFINE name value
+E8 %token                               #     call    token                       # the name
+0F82 %no_value                          #     jc      no_value
+4989F2                                  #     mov     %rsi, %r10
+4989D3                                  #     mov     %rdx, %r11
+E8 %token                               #     call    token                       # the value
+0F82 %no_value                          #     jc      no_value
+4183FF01                                #     cmp     $1, %r15d                   # stored in pass 1, skipped in pass 2
+0F85 %loop                              #     jne     loop
+4987F2                                  #     xchg    %rsi, %r10                  # the name in %rsi, %rdx again
+4987D3                                  #     xchg    %rdx, %r11
+E8 %find                                #     call    find
+0F83 %twice                             #     jnc     twice
+81FD00009000                            #     cmp     $MACROS_END, %ebp
+0F83 %too_many                          #     jae     too_many
+48897500                                #     mov     %rsi, (%rbp)                # its name
+48895508                                #     mov     %rdx, 8(%rbp)               # its length
+4C895510                                #     mov     %r10, 16(%rbp)              # its value
+4C895D18                                #     mov     %r11, 24(%rbp)              # its length
+4883C520                                #     add     $32, %rbp
+E9 %loop                                #     jmp     loop
+
+:string                                 # string:                                 # "text": its bytes as hex, then 00
+48FFC6                                  #     inc     %rsi                        # after the '"'
+4883EA02                                #     sub     $2, %rdx                    # without both '"'
+74 !string_end                          #     jz      string_end
+:string_byte                            # string_byte:
+0FB606                                  #     movzbl  (%rsi), %eax
+E8 %put_hex                             #     call    put_hex
+48FFC6                                  #     inc     %rsi
+48FFCA                                  #     dec     %rdx
+75 !string_byte                         #     jnz     string_byte
+:string_end                             # string_end:
+31C0                                    #     xor     %eax, %eax                  # the 00
+E8 %put_hex                             #     call    put_hex
+B020                                    #     mov     $0x20, %al
+E8 %put                                 #     call    put
+E9 %loop                                #     jmp     loop
+
+:raw                                    # raw:                                    # 'text': text as it is
+48FFC6                                  #     inc     %rsi
+4883EA02                                #     sub     $2, %rdx
+E8 %put_text                            #     call    put_text
+E9 %loop                                #     jmp     loop
+
+:sized                                  # sized:                                  # !n @n %n: %r9 bytes of n; else a label
+0FB64601                                #     movzbl  1(%rsi), %eax               # a digit or '-' after the sign
+3C2D                                    #     cmp     $0x2d, %al
+74 !number                              #     je      number
+2C30                                    #     sub     $0x30, %al
+3C09                                    #     cmp     $9, %al
+76 !number                              #     jbe     number
+4183F902                                #     cmp     $2, %r9d                    # '@' only with a number
+0F84 %unknown                           #     je      unknown
+E9 %copy                                #     jmp     copy                        # %name !name: for hex2
+:number                                 # number:
+56                                      #     push    %rsi
+52                                      #     push    %rdx
+48FFC6                                  #     inc     %rsi                        # after the sign
+48FFCA                                  #     dec     %rdx
+E8 %parse                               #     call    parse
+5A                                      #     pop     %rdx
+5E                                      #     pop     %rsi
+0F82 %bad_number                        #     jc      bad_number
+4489C9                                  #     mov     %r9d, %ecx                  # fits: -2^(8n-1) <= n < 2^(8n)
+C1E103                                  #     shl     $3, %ecx
+41BA01000000                            #     mov     $1, %r10d
+49D3E2                                  #     shl     %cl, %r10                   # 2^(8n)
+4D89D3                                  #     mov     %r10, %r11
+49D1EB                                  #     shr     $1, %r11                    # 2^(8n-1)
+4A8D0C18                                #     lea     (%rax,%r11), %rcx           # + 2^(8n-1): from 0 ...
+4D01D3                                  #     add     %r10, %r11                  # ... to below 2^(8n) + 2^(8n-1)
+4C39D9                                  #     cmp     %r11, %rcx
+0F83 %range                             #     jae     range
+:number_byte                            # number_byte:                            # the low byte first
+50                                      #     push    %rax
+E8 %put_hex                             #     call    put_hex
+58                                      #     pop     %rax
+48C1E808                                #     shr     $8, %rax
+41FFC9                                  #     dec     %r9d
+75 !number_byte                         #     jnz     number_byte
+B020                                    #     mov     $0x20, %al
+E8 %put                                 #     call    put
+E9 %loop                                #     jmp     loop
+
+:pass_end                               # pass_end:
+41FFC7                                  #     inc     %r15d
+4183FF02                                #     cmp     $2, %r15d                   # after pass 1, pass 2
+0F84 %pass                              #     je      pass
+BE00009001                              #     mov     $OUTPUT, %esi               # after pass 2, write the output
+:write                                  # write:
+4889DA                                  #     mov     %rbx, %rdx
+4829F2                                  #     sub     %rsi, %rdx                  # what is left
+74 !done                                #     jz      done
+B801000000                              #     mov     $1, %eax                    # SYS_write
+89C7                                    #     mov     %eax, %edi                  # fd 1, stdout
+0F05                                    #     syscall
+4885C0                                  #     test    %rax, %rax
+0F8E %write_failed                      #     jle     write_failed
+4801C6                                  #     add     %rax, %rsi
+EB !write                               #     jmp     write
+:done                                   # done:
+31FF                                    #     xor     %edi, %edi                  # status 0
+E9 %exit                                #     jmp     exit
+
+:token                                  # token:                                  # the next token: %rsi, %rdx; CF at the end
+4D39EC                                  #     cmp     %r13, %r12
+73 !no_token                            #     jae     no_token
+410FB60424                              #     movzbl  (%r12), %eax
+3C23                                    #     cmp     $0x23, %al                  # '#': a comment
+74 !comment                             #     je      comment
+3C3B                                    #     cmp     $0x3b, %al                  # ';': a comment
+74 !comment                             #     je      comment
+3C20                                    #     cmp     $0x20, %al                  # a space, tab, newline, ...
+77 !word                                #     ja      word
+49FFC4                                  #     inc     %r12
+3C0A                                    #     cmp     $0x0a, %al                  # a newline goes out in pass 2
+75 !token                               #     jne     token
+4183FF01                                #     cmp     $1, %r15d
+74 !token                               #     je      token
+E8 %put                                 #     call    put
+EB !token                               #     jmp     token
+:comment                                # comment:                                # skip to the newline
+49FFC4                                  #     inc     %r12
+4D39EC                                  #     cmp     %r13, %r12
+73 !no_token                            #     jae     no_token
+41803C240A                              #     cmpb    $0x0a, (%r12)
+75 !comment                             #     jne     comment
+EB !token                               #     jmp     token
+:word                                   # word:
+4C89E6                                  #     mov     %r12, %rsi                  # its first byte
+49FFC4                                  #     inc     %r12
+3C22                                    #     cmp     $0x22, %al                  # '"' or "'": to the same again
+74 !quoted                              #     je      quoted
+3C27                                    #     cmp     $0x27, %al
+74 !quoted                              #     je      quoted
+:word_byte                              # word_byte:
+4D39EC                                  #     cmp     %r13, %r12
+73 !word_end                            #     jae     word_end
+41803C2420                              #     cmpb    $0x20, (%r12)               # ends at a space, tab, newline
+76 !word_end                            #     jbe     word_end
+49FFC4                                  #     inc     %r12
+EB !word_byte                           #     jmp     word_byte
+:quoted                                 # quoted:
+4D39EC                                  #     cmp     %r13, %r12
+0F83 %unterminated                      #     jae     unterminated
+413A0424                                #     cmp     (%r12), %al
+74 !quoted_end                          #     je      quoted_end
+49FFC4                                  #     inc     %r12
+EB !quoted                              #     jmp     quoted
+:quoted_end                             # quoted_end:
+49FFC4                                  #     inc     %r12                        # after the closing one
+:word_end                               # word_end:
+4C89E2                                  #     mov     %r12, %rdx
+4829F2                                  #     sub     %rsi, %rdx
+F8                                      #     clc
+C3                                      #     ret
+:no_token                               # no_token:
+F9                                      #     stc
+C3                                      #     ret
+
+:parse                                  # parse:                                  # %rax = the number %rsi, %rdx; CF if none
+31C0                                    #     xor     %eax, %eax
+4531C0                                  #     xor     %r8d, %r8d                  # 1 if negative
+4885D2                                  #     test    %rdx, %rdx
+74 !not_number                          #     jz      not_number
+803E2D                                  #     cmpb    $0x2d, (%rsi)               # '-'
+75 !parse_base                          #     jne     parse_base
+41FFC0                                  #     inc     %r8d
+48FFC6                                  #     inc     %rsi
+48FFCA                                  #     dec     %rdx
+74 !not_number                          #     jz      not_number
+:parse_base                             # parse_base:
+4883FA02                                #     cmp     $2, %rdx                    # 0x: hex
+76 !decimal_digit                       #     jbe     decimal_digit
+803E30                                  #     cmpb    $0x30, (%rsi)
+75 !decimal_digit                       #     jne     decimal_digit
+0FB64E01                                #     movzbl  1(%rsi), %ecx
+80C920                                  #     or      $0x20, %cl                  # 'X' as 'x'
+80F978                                  #     cmp     $0x78, %cl
+75 !decimal_digit                       #     jne     decimal_digit
+4883C602                                #     add     $2, %rsi
+4883EA02                                #     sub     $2, %rdx
+:hex_digit                              # hex_digit:
+4889C1                                  #     mov     %rax, %rcx
+0FB606                                  #     movzbl  (%rsi), %eax
+E8 %hexval                              #     call    hexval
+72 !not_number                          #     jc      not_number
+48C1E104                                #     shl     $4, %rcx
+4809C8                                  #     or      %rcx, %rax
+48FFC6                                  #     inc     %rsi
+48FFCA                                  #     dec     %rdx
+75 !hex_digit                           #     jnz     hex_digit
+EB !parse_sign                          #     jmp     parse_sign
+:decimal_digit                          # decimal_digit:
+0FB60E                                  #     movzbl  (%rsi), %ecx
+83E930                                  #     sub     $0x30, %ecx                 # '0'-'9'
+83F909                                  #     cmp     $9, %ecx
+77 !not_number                          #     ja      not_number
+486BC00A                                #     imul    $10, %rax, %rax
+4801C8                                  #     add     %rcx, %rax
+48FFC6                                  #     inc     %rsi
+48FFCA                                  #     dec     %rdx
+75 !decimal_digit                       #     jnz     decimal_digit
+:parse_sign                             # parse_sign:
+4585C0                                  #     test    %r8d, %r8d
+74 !parsed                              #     jz      parsed
+48F7D8                                  #     neg     %rax
+:parsed                                 # parsed:
+F8                                      #     clc
+C3                                      #     ret
+:not_number                             # not_number:
+F9                                      #     stc
+C3                                      #     ret
+
+:hexval                                 # hexval:                                 # %al = the value of hex digit %al; CF if none
+3C30                                    #     cmp     $0x30, %al                  # below '0'
+72 !no_digit                            #     jb      no_digit
+3C39                                    #     cmp     $0x39, %al                  # '0'-'9'
+76 !decimal                             #     jbe     decimal
+0C20                                    #     or      $0x20, %al                  # 'A'-'F' to 'a'-'f'
+3C61                                    #     cmp     $0x61, %al                  # below 'a'
+72 !no_digit                            #     jb      no_digit
+3C66                                    #     cmp     $0x66, %al                  # above 'f'
+77 !no_digit                            #     ja      no_digit
+2C27                                    #     sub     $0x27, %al                  # 'a'-'f' to 0x3a-0x3f, as if after '9'
+:decimal                                # decimal:
+2C30                                    #     sub     $0x30, %al                  # 0-15, no carry
+C3                                      #     ret
+:no_digit                               # no_digit:
+F9                                      #     stc
+C3                                      #     ret
+
+:find                                   # find:                                   # %rax, %rcx = the value of macro %rsi, %rdx; CF if none
+41B800007000                            #     mov     $MACROS, %r8d
+:find_next                              # find_next:
+4939E8                                  #     cmp     %rbp, %r8
+73 !not_found                           #     jae     not_found
+493B5008                                #     cmp     8(%r8), %rdx                # the same length
+75 !find_on                             #     jne     find_on
+498B38                                  #     mov     (%r8), %rdi
+4889D1                                  #     mov     %rdx, %rcx
+56                                      #     push    %rsi
+F3A6                                    #     repe cmpsb                          # and the same bytes
+5E                                      #     pop     %rsi
+74 !found                               #     je      found
+:find_on                                # find_on:
+4983C020                                #     add     $32, %r8
+EB !find_next                           #     jmp     find_next
+:not_found                              # not_found:
+F9                                      #     stc
+C3                                      #     ret
+:found                                  # found:
+498B4010                                #     mov     16(%r8), %rax
+498B4818                                #     mov     24(%r8), %rcx
+F8                                      #     clc
+C3                                      #     ret
+
+:put_text                               # put_text:                               # writes %rsi, %rdx, then a space
+4885D2                                  #     test    %rdx, %rdx
+74 !put_space                           #     jz      put_space
+0FB606                                  #     movzbl  (%rsi), %eax
+E8 %put                                 #     call    put
+48FFC6                                  #     inc     %rsi
+48FFCA                                  #     dec     %rdx
+EB !put_text                            #     jmp     put_text
+:put_space                              # put_space:
+B020                                    #     mov     $0x20, %al
+:put                                    # put:                                    # writes the byte %al
+81FB00009005                            #     cmp     $OUTPUT_END, %ebx
+0F83 %too_long                          #     jae     too_long
+8803                                    #     mov     %al, (%rbx)
+48FFC3                                  #     inc     %rbx
+C3                                      #     ret
+
+:put_hex                                # put_hex:                                # writes the byte %al as two hex digits
+50                                      #     push    %rax
+C0E804                                  #     shr     $4, %al
+E8 %put_digit                           #     call    put_digit
+58                                      #     pop     %rax
+240F                                    #     and     $15, %al
+:put_digit                              # put_digit:
+488D0D %digits                          #     lea     digits(%rip), %rcx
+0FB6C0                                  #     movzbl  %al, %eax
+8A0401                                  #     mov     (%rcx,%rax), %al
+EB !put                                 #     jmp     put
+
+:unknown                                # unknown:
+4C8D05 %msg_unknown                     #     lea     msg_unknown(%rip), %r8
+41B913000000                            #     mov     $msg_unknown_len, %r9d
+E9 %die                                 #     jmp     die
+:twice                                  # twice:
+4C8D05 %msg_twice                       #     lea     msg_twice(%rip), %r8
+41B919000000                            #     mov     $msg_twice_len, %r9d
+E9 %die                                 #     jmp     die
+:range                                  # range:
+4C8D05 %msg_range                       #     lea     msg_range(%rip), %r8
+41B919000000                            #     mov     $msg_range_len, %r9d
+EB !die                                 #     jmp     die
+:bad_number                             # bad_number:
+4C8D05 %msg_number                      #     lea     msg_number(%rip), %r8
+41B912000000                            #     mov     $msg_number_len, %r9d
+EB !die                                 #     jmp     die
+:unterminated                           # unterminated:
+4C8D05 %msg_string                      #     lea     msg_string(%rip), %r8
+41B91A000000                            #     mov     $msg_string_len, %r9d
+EB !die_plain                           #     jmp     die_plain
+:no_value                               # no_value:
+4C8D05 %msg_value                       #     lea     msg_value(%rip), %r8
+41B91C000000                            #     mov     $msg_value_len, %r9d
+EB !die_plain                           #     jmp     die_plain
+:too_many                               # too_many:
+4C8D05 %msg_many                        #     lea     msg_many(%rip), %r8
+41B913000000                            #     mov     $msg_many_len, %r9d
+EB !die_plain                           #     jmp     die_plain
+:too_large                              # too_large:
+4C8D05 %msg_large                       #     lea     msg_large(%rip), %r8
+41B913000000                            #     mov     $msg_large_len, %r9d
+EB !die_plain                           #     jmp     die_plain
+:too_long                               # too_long:
+4C8D05 %msg_long                        #     lea     msg_long(%rip), %r8
+41B914000000                            #     mov     $msg_long_len, %r9d
+EB !die_plain                           #     jmp     die_plain
+:read_failed                            # read_failed:
+4C8D05 %msg_read                        #     lea     msg_read(%rip), %r8
+41B90F000000                            #     mov     $msg_read_len, %r9d
+EB !die_plain                           #     jmp     die_plain
+:write_failed                           # write_failed:
+4C8D05 %msg_write                       #     lea     msg_write(%rip), %r8
+41B910000000                            #     mov     $msg_write_len, %r9d
+:die_plain                              # die_plain:
+31D2                                    #     xor     %edx, %edx                  # no token
+:die                                    # die:                                    # message %r8, %r9, then token %rsi, %rdx
+52                                      #     push    %rdx
+56                                      #     push    %rsi
+4C89C6                                  #     mov     %r8, %rsi
+4C89CA                                  #     mov     %r9, %rdx
+E8 %ewrite                              #     call    ewrite
+5E                                      #     pop     %rsi
+5A                                      #     pop     %rdx
+E8 %ewrite                              #     call    ewrite
+488D35 %digits                          #     lea     digits(%rip), %rsi          # digits ends with the newline
+4883C610                                #     add     $16, %rsi
+BA01000000                              #     mov     $1, %edx
+E8 %ewrite                              #     call    ewrite
+BF01000000                              #     mov     $1, %edi                    # status 1
+:exit                                   # exit:
+B83C000000                              #     mov     $60, %eax                   # SYS_exit
+0F05                                    #     syscall
+:ewrite                                 # ewrite:                                 # writes %rsi, %rdx to stderr
+B801000000                              #     mov     $1, %eax                    # SYS_write
+BF02000000                              #     mov     $2, %edi                    # fd 2, stderr
+0F05                                    #     syscall
+C3                                      #     ret
+
+:str_define 444546494E45                # str_define:     .ascii "DEFINE"
+:digits 30313233343536373839414243444546 # digits:         .ascii "0123456789ABCDEF\n"
+0A
+:msg_unknown 4D313A20756E6B6E6F776E206D616372 # msg_unknown:    .ascii "M1: unknown macro: "
+6F3A20
+#     .equ msg_unknown_len, . - msg_unknown
+:msg_twice 4D313A206D6163726F20646566696E65 # msg_twice:      .ascii "M1: macro defined twice: "
+642074776963653A20
+#     .equ msg_twice_len, . - msg_twice
+:msg_range 4D313A206E756D626572206F7574206F # msg_range:      .ascii "M1: number out of range: "
+662072616E67653A20
+#     .equ msg_range_len, . - msg_range
+:msg_number 4D313A206E6F742061206E756D626572 # msg_number:     .ascii "M1: not a number: "
+3A20
+#     .equ msg_number_len, . - msg_number
+:msg_string 4D313A20737472696E6720776974686F # msg_string:     .ascii "M1: string without its end"
+75742069747320656E64
+#     .equ msg_string_len, . - msg_string
+:msg_value 4D313A20444546494E4520776974686F # msg_value:      .ascii "M1: DEFINE without its value"
+7574206974732076616C7565
+#     .equ msg_value_len, . - msg_value
+:msg_many 4D313A20746F6F206D616E79206D6163 # msg_many:       .ascii "M1: too many macros"
+726F73
+#     .equ msg_many_len, . - msg_many
+:msg_large 4D313A20696E70757420746F6F206C61 # msg_large:      .ascii "M1: input too large"
+726765
+#     .equ msg_large_len, . - msg_large
+:msg_long 4D313A206F757470757420746F6F206C # msg_long:       .ascii "M1: output too large"
+61726765
+#     .equ msg_long_len, . - msg_long
+:msg_read 4D313A2072656164206661696C6564 # msg_read:       .ascii "M1: read failed"
+#     .equ msg_read_len, . - msg_read
+:msg_write 4D313A207772697465206661696C6564 # msg_write:      .ascii "M1: write failed"
+#     .equ msg_write_len, . - msg_write
+:end                                    # end:

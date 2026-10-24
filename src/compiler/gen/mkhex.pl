@@ -4,6 +4,8 @@
 #
 #   perl gen/mkhex.pl hex0 <prog.s> > <prog>.hex0
 #   perl gen/mkhex.pl hex2 <ttpc.s> > ttpc.hex2
+#   perl gen/mkhex.pl flat <prog.s> > <prog>.hex2
+#   perl gen/mkhex.pl m1 <prog.s> > <prog>.M1
 #
 # hex0: <prog.s> is a flat program that writes its own ELF header (one
 # section, no relocations, see gen/hex/x86_64/); the text is its bytes,
@@ -14,15 +16,21 @@
 # field, each section's lines (labels as :label, rel32 references as
 # %label, rel8 as !label, absolute ones as &label, the rest written out),
 # ^address where the addresses jump (the data segment, the labels of the
-# bss), the section names and headers. The hex0 and hex2 programs read
-# the texts in the chain; this script and binutils are only how they were
-# made (and checked: make hex). A dev aid (core Perl, binutils), not in
-# the chain.
+# bss), the section names and headers. flat: <prog.s> as for hex0, the
+# text hex2 (hex2 makes M1 of M1.hex2): its lines with labels and
+# references as for hex2. m1: <prog.s> as for hex0, the text M1 (M1 makes
+# hex2 text of asm.M1): a DEFINE for each instruction form it uses (its
+# name the instruction with its fields as $i8 $i32 d8 d32 rel, its value
+# the opcode bytes before them, with a comment of what they are), then its
+# lines with the fields as M1 numbers and labels. hex0, hex2 and M1 read
+# the texts in the chain;
+# this script and binutils are only how they were made (and checked: make
+# hex). A dev aid (core Perl, binutils), not in the chain.
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
 
-die "usage: mkhex.pl hex0|hex2 <prog.s>\n" unless @ARGV == 2 && $ARGV[0] =~ /^hex[02]$/;
+die "usage: mkhex.pl hex0|hex2|flat|m1 <prog.s>\n" unless @ARGV == 2 && $ARGV[0] =~ /^(hex[02]|flat|m1)$/;
 my ($mode, $src) = @ARGV;
 my $t = tempdir(CLEANUP => 1);
 sub run { system(@_) == 0 or die "mkhex: @_ failed\n" }
@@ -31,7 +39,7 @@ sub slurp { open my $f, '<:raw', $_[0] or die "mkhex: $_[0]: $!\n"; local $/; <$
 
 run('as', '-mx86-used-note=no', "-aln=$t/l", '--listing-cont-lines=1000000', $src, '-o', "$t/o");
 my $bin;
-if ($mode eq 'hex0') {
+if ($mode ne 'hex2') {
     run('objcopy', '-O', 'binary', '-j', '.text', "$t/o", "$t/bin");
 } else {
     run('ld', '-static', '-z', 'noseparate-code', '-e', '_start', "$t/o", '-o', "$t/u");
@@ -41,7 +49,7 @@ $bin = slurp("$t/bin");
 
 # the sections: name -> [addr, file offset, size, nobits]
 my (%sec, @order);
-if ($mode eq 'hex0') {
+if ($mode ne 'hex2') {
     %sec = ('.text' => [0, 0, length $bin, 0]);
     @order = ('.text');
 } else {
@@ -258,6 +266,148 @@ if ($mode eq 'hex0') {
     push @out, "# $src as hex0 text, made by gen/mkhex.pl: each line the bytes of",
         "# one asm line, then its file offset and the line. hex0 reads only the",
         "# hex digits before each '#'.", '#';
+    push @out, section_rows('.text');
+    print "$_\n" for @out;
+    exit 0;
+}
+
+
+# m1: an instruction's bytes split as x86_64 encodes them: the prefixes,
+# REX, the opcode, ModRM and SIB (the DEFINE's value), then the
+# displacement, then the immediate or a jump's rel (the fields).
+my %nomodrm = map { $_ => 1 } (0x50 .. 0x5f, 0x70 .. 0x7f, 0x90 .. 0x99, 0xa4 .. 0xa9, 0xb0 .. 0xbf,
+    0xc3, 0xc9, 0xe8, 0xe9, 0xeb, 0xf8, 0xf9, 0xfc, map { ($_ * 8 + 4, $_ * 8 + 5) } 0 .. 7);
+sub decode {
+    my ($b) = @_;
+    my @b = map { ord } split //, $b;
+    my ($i, @why) = (0);
+    while ($i < @b && $b[$i] =~ /^(102|242|243)$/) { push @why, sprintf('%02X %s', $b[$i], { 102 => 'operand size', 242 => 'repne', 243 => 'rep' }->{ $b[$i] }); $i++ }
+    if ($i < @b && $b[$i] >= 0x40 && $b[$i] <= 0x4f) {
+        my $r = $b[$i++];
+        push @why, 'REX' . join('', map { $r & $_->[0] ? ".$_->[1]" : '' } [8, 'W'], [4, 'R'], [2, 'X'], [1, 'B']);
+    }
+    my ($op, $two) = ($b[$i], 0);
+    if ($op == 0x0f) { $two = 1; $op = $b[$i + 1]; $i += 2; push @why, sprintf '0F %02X', $op }
+    else { $i++; push @why, sprintf '%02X', $op }
+    my ($disp, $rel, $rip) = (0, 0, 0);
+    my $modrm = $two ? !($op == 0x05 || ($op >= 0x80 && $op <= 0x8f)) : !$nomodrm{$op};
+    $rel = 1 if !$two && ($op >= 0x70 && $op <= 0x7f || $op == 0xe8 || $op == 0xe9 || $op == 0xeb);
+    $rel = 1 if $two && $op >= 0x80 && $op <= 0x8f;
+    if ($modrm) {
+        my $m = $b[$i++];
+        my ($mod, $reg, $rm) = ($m >> 6, ($m >> 3) & 7, $m & 7);
+        push @why, sprintf 'ModRM %02b %03b %03b', $mod, $reg, $rm;
+        if ($mod != 3 && $rm == 4) {
+            my $s = $b[$i++];
+            push @why, sprintf 'SIB %02b %03b %03b', $s >> 6, ($s >> 3) & 7, $s & 7;
+            $disp = 4 if $mod == 0 && ($s & 7) == 5;
+        }
+        $disp = 1 if $mod == 1;
+        $disp = 4 if $mod == 2;
+        ($disp, $rip) = (4, 1) if $mod == 0 && $rm == 5;
+    }
+    return ($i, $disp, @b - $i - $disp, $rel, $rip, join(', ', @why));
+}
+
+sub m1num {
+    my ($v, $n) = @_;
+    my $sign = { 1 => '!', 2 => '@', 4 => '%' }->{$n} // die "mkhex: a field of $n bytes\n";
+    return $sign . ($v < 0 ? ($v > -4096 ? $v : sprintf '-0x%x', -$v) : $v < 4096 ? $v : sprintf '0x%x', $v);
+}
+
+if ($mode eq 'm1') {
+    my (%def, @rows);
+    my ($addr, $foff) = (0, 0);
+    for my $l (@{ $bysec{'.text'} }) {
+        my $t = $l->{text};
+        die "mkhex: line $l->{n}: a local label\n" if grep { defined $_->{num} } @{ $l->{labels} };
+        my $defs = join ' ', map { ":$_->{name}" } @{ $l->{labels} };
+        if (!defined $l->{off}) {
+            push @rows, $defs ne '' ? row($defs, $t) : $t eq '' ? '' : cm($t);
+            next;
+        }
+        my $b = substr $bin, $l->{off}, $l->{end} - $l->{off};
+        if ($l->{mn} =~ /^\./) {
+            my $str = $l->{mn} eq '.asciz' && $l->{ops} =~ /^"([^"\\]*)"$/ ? $1 : undef;
+            if (defined $str && "$str\0" eq $b && $str !~ /[\s'"]/) { push @rows, row(join(' ', grep { $_ ne '' } $defs, "\"$str\""), $t); next }
+            my @h = unpack '(H32)*', $b;
+            push @rows, row(join(' ', grep { $_ ne '' } $defs, uc shift @h), $t), map { uc } @h;
+            next;
+        }
+        my ($n, $d, $k, $rel, $rip, $why) = decode($b);
+        my @ops = split /,\s*(?![^()]*\))/, $l->{ops};
+        my $name = $l->{mn};
+        my @tok;
+        if ($rel) {
+            my $tgt = $l->{end} + sx(rd($l->{end} - $k, $k), $k);
+            my $lab = name_at($tgt, $l->{ops}) // die "mkhex: line $l->{n}: no label at the target of $t\n";
+            $name .= $k == 1 ? '8' : '32' unless $name eq 'call';
+            @tok = (($k == 1 ? '!' : '%') . $lab);
+            @ops = ();
+            $why .= ", then rel$k: " . ($k == 1 ? '!' : '%') . 'label';
+        } else {
+            if ($d) {
+                if ($rip) {
+                    die "mkhex: line $l->{n}: (%rip) with an immediate after it\n" if $k;
+                    my $tgt = $l->{end} + sx(rd($l->{off} + $n, 4), 4);
+                    my $lab = name_at($tgt, $l->{ops}) // die "mkhex: line $l->{n}: no label at the (%rip) of $t\n";
+                    push @tok, "%$lab";
+                    $why .= ', then rel32 from the end: %label';
+                } else {
+                    push @tok, m1num(sx(rd($l->{off} + $n, $d), $d), $d);
+                    $why .= ", then disp" . 8 * $d;
+                }
+            }
+            if ($k) {
+                if ($k == 8) { push @tok, m1num(sx(rd($l->{off} + $n + $d, 4), 4), 4), m1num(sx(rd($l->{off} + $n + $d + 4, 4), 4), 4) }
+                else { push @tok, m1num(sx(rd($l->{off} + $n + $d, $k), $k), $k) }
+                $why .= ", then imm" . 8 * $k;
+            }
+        }
+        for (@ops) {
+            if (/^\*?%(\w+)$/) { s/%//; next }
+            next if /^[a-z]+$/ && $l->{mn} =~ /^rep/;    # rep movsb, repe cmpsb
+            if (/^\$(.*)$/) { $_ = $k ? '$i' . 8 * $k : "\$$1"; next }
+            if (/^\*?(.*?)\((.*)\)$/) {
+                my ($x, $r) = ($1, $2);
+                $r =~ s/%//g;
+                $r =~ s/\s+//g;
+                my $star = /^\*/ ? '*' : '';
+                $_ = $star . ($rip ? 'rel' : $d ? 'd' . 8 * $d : '') . "($r)";
+                next;
+            }
+            die "mkhex: line $l->{n}: operand $_ of $t\n";
+        }
+        $name .= '_' . join(',', @ops) if @ops;
+        $name =~ s/\s+/_/g;
+        my $v = uc unpack 'H*', substr $b, 0, $n;
+        die "mkhex: $name is $def{$name}[0] and $v\n" if $def{$name} && $def{$name}[0] ne $v;
+        $def{$name} //= [$v, $why];
+        push @rows, row(join(' ', grep { $_ ne '' } $defs, $name, @tok), $t);
+    }
+    push @out, "# $src as M1 text, made by gen/mkhex.pl. First a DEFINE for each",
+        "# instruction form it uses: its name is the instruction (the registers",
+        "# without %), its fields named by their size: \$i8 \$i32 an immediate, d8",
+        "# d32 a displacement, rel(rip) a displacement to a label, and jcc8 jcc32",
+        "# a jump with its rel8 or rel32; its value is the bytes before the",
+        "# fields, with what they are as a comment (the Intel manual's names).",
+        "# Then each asm line: :label for its labels, the DEFINE's name, then its",
+        "# fields in their order: !n \@n %n a number of 1, 2 or 4 bytes, %label a",
+        "# rel32 to label from the end of the field, !label a rel8. Data is hex",
+        "# or a \"string\" (its bytes, then 00). M1 reads only what is before",
+        "# each '#'; M1's hex2 text is made by hex2.", '#';
+    push @out, map { row("DEFINE $_ $def{$_}[0]", $def{$_}[1]) } sort keys %def;
+    push @out, '#', @rows;
+    print "$_\n" for @out;
+    exit 0;
+}
+
+if ($mode eq 'flat') {
+    push @out, "# $src as hex2 text, made by gen/mkhex.pl: each line the bytes of",
+        "# one asm line, then the line. :label defines a label at the address",
+        "# of the next byte (from 0, the file's first byte); %label is the 4",
+        "# bytes of label minus the address after them (rel32), !label the same",
+        "# in 1 byte (rel8). hex2 reads only what is before each '#'.", '#';
     push @out, section_rows('.text');
     print "$_\n" for @out;
     exit 0;
