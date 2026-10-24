@@ -19,6 +19,7 @@ hosts/arm/ttpc.s      GPL-3.0-only
 hosts/x86_64/hex0       GPL-3.0-only
 hosts/x86_64/hex0.hex0  GPL-3.0-only
 hosts/x86_64/hex2.hex0  GPL-3.0-only
+hosts/x86_64/ttpc.hex2  GPL-3.0-only
 ttpc1.ff              GPL-3.0-only
 ttpc2.ff              GPL-3.0-only
 ttpc2.defs.ff         GPL-3.0-only
