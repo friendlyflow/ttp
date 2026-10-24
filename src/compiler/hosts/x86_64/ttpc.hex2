@@ -1,0 +1,2251 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# hosts/x86_64/ttpc.s as hex2 text, made by gen/mkhex.pl from GNU as's and ld's output:
+# the whole executable in the order of its bytes. :label defines a label
+# at the address of the next byte; %label is the 4 bytes of label minus
+# the address after them (rel32), !label the same in 1 byte (rel8),
+# &label label's address in 4 bytes (abs32, the low half of a .quad);
+# ^address sets the address of the next byte (where the file and the
+# addresses part: the data segment, the labels of the bss). Every other
+# pair of hex digits is a byte; '#' and ';' start a comment to the end of
+# the line. A reference that is not to a label alone (label+8, or with
+# an immediate after it) is written out. Each line is followed by the asm
+# line of hosts/x86_64/ttpc.s it comes from; hex2 reads only what is before the '#'.
+#
+^00400000                               # the first byte of the file is at this address
+#
+# The ELF header
+7F454C46020101000000000000000000        # e_ident: the magic 7f "ELF", ELFCLASS64, little endian, EV_CURRENT, System V, padding
+0200                                    # e_type = 0x2: ET_EXEC, an executable
+3E00                                    # e_machine = 0x3e: EM_X86_64
+01000000                                # e_version = 0x1: EV_CURRENT
+B000400000000000                        # e_entry = 0x4000b0: the address of _start
+4000000000000000                        # e_phoff = 0x40: the program headers follow
+C01C000000000000                        # e_shoff = 0x1cc0: the section headers, at the end
+00000000                                # e_flags = 0x0: none on x86_64
+4000                                    # e_ehsize = 0x40: this header
+3800                                    # e_phentsize = 0x38: a program header
+0200                                    # e_phnum = 0x2: program headers
+4000                                    # e_shentsize = 0x40: a section header
+0600                                    # e_shnum = 0x6: section headers
+0500                                    # e_shstrndx = 0x5: the section of the section names
+#
+# Program header 0
+01000000                                # p_type = 0x1: 1: PT_LOAD
+05000000                                # p_flags = 0x5: 4 R, 2 W, 1 X
+0000000000000000                        # p_offset = 0x0: from this file offset
+0000400000000000                        # p_vaddr = 0x400000: to this address
+0000400000000000                        # p_paddr = 0x400000: the same
+3E1B000000000000                        # p_filesz = 0x1b3e: bytes of the file
+3E1B000000000000                        # p_memsz = 0x1b3e: bytes of memory, the rest zero
+0010000000000000                        # p_align = 0x1000: a page
+#
+# Program header 1
+01000000                                # p_type = 0x1: 1: PT_LOAD
+06000000                                # p_flags = 0x6: 4 R, 2 W, 1 X
+401B000000000000                        # p_offset = 0x1b40: from this file offset
+402B400000000000                        # p_vaddr = 0x402b40: to this address
+402B400000000000                        # p_paddr = 0x402b40: the same
+5801000000000000                        # p_filesz = 0x158: bytes of the file
+7004540000000000                        # p_memsz = 0x540470: bytes of memory, the rest zero
+0010000000000000                        # p_align = 0x1000: a page
+#
+# The section .text, from here its lines of hosts/x86_64/ttpc.s
+# hosts/x86_64/ttpc.s — ttpc.s, the trust project compiler, ported to
+# x86_64 assembly, without libc.
+#
+# FROZEN: this is stage0 of the bootstrap on an x86_64 host (see PLAN.md),
+# a port of ttpc.s (riscv64), function by function: the same labels in the
+# same order, the same comments, constants, messages, tables and memory
+# layout. It must agree with ttpc.s byte for byte: for every input the same
+# stdout, stderr, output file and exit status. ttpc.s is fully interpretive
+# (the ISA it assembles for comes from the tree, exec context runs on vregs
+# through exec_ops), so the port is a pure translation. Read it side by side
+# with ttpc.s.
+#
+# ONE deliberate difference: OUT_SIZE is 1 << 20 (1 MiB) instead of
+# 1 << 16, so that it can write the larger x86_64 ttpc (~95 KB). For an
+# output that fits in 64 KiB nothing differs; a bigger one, where ttpc.s
+# says "ttpc: output too large", is assembled here.
+#
+# A static Linux x86_64 program. It talks to the kernel only through
+# syscall: it opens the ff file named by its first argument and loads it
+# into memory as a tree of NODEs.
+#
+#   ttpc <file.ff>          prints the tree, one node per line
+#   ttpc <file.ff> <out>    assembles it into the static executable <out>
+#
+# Assembling: a node whose content ends in ':' is a function, its leading
+# children that are leaves are its parameters. Any other node is a call, its
+# children are the arguments. The root's children are pages. The functions
+# on every page but the last are definitions: instructions, macros,
+# constants. The last page is the program: its functions are placed, they
+# are labels whose children are emitted where they stand (nested ones are
+# local labels, found innermost scope first), and its calls are emitted in
+# order. Pass 1 finds every label's address, pass 2 emits.
+#
+# A function whose body (the children after its parameters) holds only
+# fields, fixed fields (funct3:, ...) and slice calls (imm[11:0] imm), is an
+# encoding: an instruction or a data word of 8 to 64 bits. A call runs in
+# one of three contexts:
+#
+#   code   a call of an encoding is encoded and emitted, a call of any
+#          other function expands its body in code context.
+#   field  encoding: the fields, MSB first. A fixed field is its bits; a
+#          slice call runs in exec context and leaves its value in a0, its
+#          width is in its name.
+#   exec   runs at assemble time on vregs. The ops of exec_ops are built
+#          in, the seed; everything else is defined by the tree.
+#
+# An argument with children is a call, run in exec context: its value is
+# a0. A leaf argument is a decimal or 0x number, a parameter, a register
+# (its number in code context, its vreg in exec context), pc, a label (its
+# address) or a constant (a function without parameters, run in exec
+# context). The builtins: ascii, align, reserve, origin, bss (see
+# code_call) and size (see exec_call).
+#
+# Registers are the functions "x10 a0:", their number is their child "01010".
+# The output file is exactly what the program emits: its ELF header is ff
+# too (elf_header in macros.ff.txt).
+#
+# ff on disk, one node, depth-first (children inline, before the content):
+#   hash          byte[32]
+#   children_len  u8
+#   children      node × children_len
+#   content_len   u8
+#   content       byte × content_len    // no NUL termination: may be binary
+#
+# NODE in memory (64 bytes, naturally aligned):
+#   0   hash          byte[32]
+#   32  children_len  int8
+#   40  children      NODE**            // -> pointer array in ptrs
+#   48  content_len   int8
+#   56  content       char*             // -> into buf, not copied
+#
+# The register map. The comments speak of ttpc.s's registers (a0, s4, t0,
+# ...); each one is, here:
+#
+#   s0  %r12    parse cursor in buf             live across the whole
+#   s1  %r13    end of the loaded bytes         program, as in ttpc.s
+#   s2  %r14    next free NODE in nodes
+#   s3  %r15    next free slot in ptrs
+#   s4  %rbx    callee-saved: a function that uses it saves it at 8(%rsp)
+#   s5  %rbp    callee-saved: saved at 16(%rsp)
+#   s6..s11     no register: the frame slot where ttpc.s saves them, s6
+#               24(%rsp), s7 32, s8 40, s9 48, s10 56, s11 64. Every
+#               function has its own slots, so they need no saving.
+#   a0..a4  %rdi %rsi %rdx %rcx %r8     arguments; results in a0 (%rdi) and
+#               a1 (%rsi). This is ttpc's own convention, NOT System V.
+#   t0 t1 t2    %rax %r10 %r11          scratch
+#   t3 t4 t5 t6 %rcx %r8 %r9 %rdx       scratch, only where a3 a4 a2 are dead
+#   ra          the return address that call pushes. A frame is
+#               "sub $N, %rsp" with ttpc.s's N and offsets, ra's slot
+#               0(%rsp) left unused.
+#   a7          %rax, the syscall number. syscall takes a0 a1 a2 a3 in %rdi
+#               %rsi %rdx %r10, returns in %rax (not a0) and clobbers %rcx
+#               and %r11.
+#
+# Branches: blt/bge/bgt/ble are jl/jge/jg/jle, bltu/bgeu/bgtu are jb/jae/ja;
+# lbu is movzbq.
+
+#     .code64
+
+#     .equ SYS_openat, 257
+#     .equ SYS_close, 3
+#     .equ SYS_read, 0
+#     .equ SYS_write, 1
+#     .equ SYS_exit, 60
+
+#     .equ AT_FDCWD, -100
+#     .equ O_RDONLY, 0
+#     .equ O_CREAT_WRONLY_TRUNC, 01 | 0100 | 01000
+#     .equ MODE_0755, 0755
+#     .equ STDOUT, 1
+#     .equ STDERR, 2
+
+#     .equ CH_space, 32
+#     .equ CH_minus, 45
+#     .equ CH_zero, 48
+#     .equ CH_colon, 58
+#     .equ CH_lbracket, 91
+#     .equ CH_rbracket, 93
+#     .equ CH_bar, 124
+#     .equ CH_a, 97
+#     .equ CH_x, 120
+
+    # A frame binds the parameters of a call: count, then (param NODE*,
+    # value) pairs.
+#     .equ MAX_PARAMS, 8
+#     .equ FRAME_count, 0
+#     .equ FRAME_params, 8
+#     .equ FRAME_size, 8 + MAX_PARAMS * 16
+
+#     .equ VREG_a0, 10
+#     .equ OUT_SIZE, 1 << 20              # ttpc.s: 1 << 16 (see the header)
+#     .equ MAX_DEPTH, 64                  # nesting of placed functions
+
+    # A label: a placed function, its address and the address after it.
+#     .equ LABEL_node, 0
+#     .equ LABEL_addr, 8
+#     .equ LABEL_end, 16
+#     .equ LABEL_size, 24
+
+    # An exec op: its name, NUL-padded, and its code.
+#     .equ OP_name, 0
+#     .equ OP_code, 8
+#     .equ OP_size, 16
+
+#     .equ NODE_hash, 0
+#     .equ NODE_children_len, 32
+#     .equ NODE_children, 40
+#     .equ NODE_content_len, 48
+#     .equ NODE_content, 56
+#     .equ NODE_size, 64
+
+#     .equ BUF_SIZE, 1 << 20
+    # Every node takes at least 34 bytes on disk, so a full buf holds fewer
+    # than MAX_NODES nodes: the node and pointer arenas cannot overflow.
+    # MAX_NODES is BUF_SIZE / 32: '/' starts a comment in x86_64-elf gas.
+#     .equ MAX_NODES, BUF_SIZE >> 5
+
+#     .section .text
+#     .globl _start
+:_start                                 # _start:
+488B0424                                #     mov     0(%rsp), %rax               # argc
+4883F802                                #     cmp     $2, %rax
+0F8C %usage                             #     jl      usage
+4883F803                                #     cmp     $3, %rax
+0F8F %usage                             #     jg      usage
+7C !_start.1                            #     jl      1f
+4C8B542418                              #     mov     24(%rsp), %r10              # argv[2]
+4C8915 %out_path                        #     mov     %r10, out_path(%rip)
+:_start.1 488B742410                    # 1:  mov     16(%rsp), %rsi              # argv[1]
+
+48C7C79CFFFFFF                          #     mov     $AT_FDCWD, %rdi
+BA00000000                              #     mov     $O_RDONLY, %edx
+41BA00000000                            #     mov     $0, %r10d                   # a3
+B801010000                              #     mov     $SYS_openat, %eax
+0F05                                    #     syscall
+4885C0                                  #     test    %rax, %rax
+0F88 %open_failed                       #     js      open_failed
+4889C3                                  #     mov     %rax, %rbx                  # fd (s4)
+
+    # Read the whole file into buf.
+4C8D25 %buf                             #     lea     buf(%rip), %r12
+4D89E5                                  #     mov     %r12, %r13
+B800001000                              #     mov     $BUF_SIZE, %eax
+498D2C04                                #     lea     (%r12,%rax), %rbp           # end of buf (s5)
+:read_loop                              # read_loop:
+4939ED                                  #     cmp     %rbp, %r13
+0F84 %too_large                         #     je      too_large
+4889DF                                  #     mov     %rbx, %rdi
+4C89EE                                  #     mov     %r13, %rsi
+4889EA                                  #     mov     %rbp, %rdx
+4C29EA                                  #     sub     %r13, %rdx
+B800000000                              #     mov     $SYS_read, %eax
+0F05                                    #     syscall
+4885C0                                  #     test    %rax, %rax
+0F88 %read_failed                       #     js      read_failed
+74 !read_done                           #     jz      read_done
+4901C5                                  #     add     %rax, %r13
+EB !read_loop                           #     jmp     read_loop
+:read_done                              # read_done:
+4889DF                                  #     mov     %rbx, %rdi
+B803000000                              #     mov     $SYS_close, %eax
+0F05                                    #     syscall
+
+4C8D35 %nodes                           #     lea     nodes(%rip), %r14
+4C8D3D %ptrs                            #     lea     ptrs(%rip), %r15
+E8 %parse_node                          #     call    parse_node
+4D39EC                                  #     cmp     %r13, %r12
+0F85 %trailing                          #     jne     trailing
+488B05 %out_path                        #     mov     out_path(%rip), %rax
+4885C0                                  #     test    %rax, %rax
+75 !assemble                            #     jnz     assemble
+BE00000000                              #     mov     $0, %esi
+E8 %print_node                          #     call    print_node
+
+BF00000000                              #     mov     $0, %edi
+E9 %exit                                #     jmp     exit
+
+# assemble: places the last page of root a0, the program, twice: pass 1
+# finds the address of every label, pass 2 emits with them. Then writes
+# the output file.
+:assemble                               # assemble:
+4883EC30                                #     sub     $48, %rsp                   # slots for s6 s7 s8; it never returns
+48897C2418                              #     mov     %rdi, 24(%rsp)              # root (s6)
+E8 %collect_syms                        #     call    collect_syms
+4C8B5C2418                              #     mov     24(%rsp), %r11
+490FB64320                              #     movzbq  NODE_children_len(%r11), %rax
+4885C0                                  #     test    %rax, %rax
+0F84 %assemble.2                        #     jz      2f
+4D8B5328                                #     mov     NODE_children(%r11), %r10
+48C1E003                                #     shl     $3, %rax
+4901C2                                  #     add     %rax, %r10
+498B42F8                                #     mov     -8(%r10), %rax
+4889442420                              #     mov     %rax, 32(%rsp)              # the program page (s7)
+48C744242801000000                      #     movq    $1, 40(%rsp)                # pass (s8)
+:assemble.1 488B442428                  # 1:  mov     40(%rsp), %rax
+488905 %pass                            #     mov     %rax, pass(%rip)
+48C705A629000000000000                  #     movq    $0, cur_pc(%rip) (written out: rel32 to cur_pc, from the end of the instruction, 4 bytes after the field)
+48C705A329000000000000                  #     movq    $0, in_bss(%rip) (written out: rel32 to in_bss, from the end of the instruction, 4 bytes after the field)
+4C8D15 %outbuf                          #     lea     outbuf(%rip), %r10
+4C8915 %out_end                         #     mov     %r10, out_end(%rip)
+4C8D15 %labels                          #     lea     labels(%rip), %r10
+4C8915 %label_next                      #     mov     %r10, label_next(%rip)
+488B442420                              #     mov     32(%rsp), %rax              # the page is the outermost scope
+488905 %scopes                          #     mov     %rax, scopes(%rip)
+48C7057829000001000000                  #     movq    $1, scope_depth(%rip) (written out: rel32 to scope_depth, from the end of the instruction, 4 bytes after the field)
+488B7C2420                              #     mov     32(%rsp), %rdi
+E8 %run_placed                          #     call    run_placed
+48FF442428                              #     incq    40(%rsp)
+48837C242803                            #     cmpq    $3, 40(%rsp)
+75 !assemble.1                          #     jne     1b
+:assemble.2 E8 %write_output            # 2:  call    write_output
+BF00000000                              #     mov     $0, %edi
+E9 %exit                                #     jmp     exit
+
+# The errors of loading, where ttpc.s has them (within branch reach of
+# _start and parse_node there).
+:usage                                  # usage:
+488D35 %msg_usage                       #     lea     msg_usage(%rip), %rsi
+BA1E000000                              #     mov     $msg_usage_len, %edx
+E9 %die                                 #     jmp     die
+:open_failed                            # open_failed:
+488D35 %msg_open                        #     lea     msg_open(%rip), %rsi
+BA17000000                              #     mov     $msg_open_len, %edx
+E9 %die                                 #     jmp     die
+:read_failed                            # read_failed:
+488D35 %msg_read                        #     lea     msg_read(%rip), %rsi
+BA12000000                              #     mov     $msg_read_len, %edx
+E9 %die                                 #     jmp     die
+:too_large                              # too_large:
+488D35 %msg_large                       #     lea     msg_large(%rip), %rsi
+BA15000000                              #     mov     $msg_large_len, %edx
+E9 %die                                 #     jmp     die
+:truncated                              # truncated:
+488D35 %msg_truncated                   #     lea     msg_truncated(%rip), %rsi
+BA15000000                              #     mov     $msg_truncated_len, %edx
+E9 %die                                 #     jmp     die
+:trailing                               # trailing:
+488D35 %msg_trailing                    #     lea     msg_trailing(%rip), %rsi
+BA29000000                              #     mov     $msg_trailing_len, %edx
+E9 %die                                 #     jmp     die
+
+# parse_node: reads the node at s0 into a new NODE, recursing on its
+# children, and leaves s0 just past it. Returns the NODE in a0.
+:parse_node                             # parse_node:
+4883EC20                                #     sub     $32, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # this NODE (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next slot in its children array (s5)
+                                        # 24(%rsp): children left to parse (s6)
+
+498D442421                              #     lea     33(%r12), %rax              # hash + children_len
+4C39E8                                  #     cmp     %r13, %rax
+77 !truncated                           #     ja      truncated
+4C89F3                                  #     mov     %r14, %rbx
+4983C640                                #     add     $NODE_size, %r14
+
+41BA20000000                            #     mov     $32, %r10d                  # copy the hash
+4989DB                                  #     mov     %rbx, %r11
+:parse_node.1 490FB60C24                # 1:  movzbq  0(%r12), %rcx
+41880B                                  #     mov     %cl, NODE_hash(%r11)
+49FFC4                                  #     inc     %r12
+49FFC3                                  #     inc     %r11
+49FFCA                                  #     dec     %r10
+75 !parse_node.1                        #     jnz     1b
+
+490FB60424                              #     movzbq  0(%r12), %rax
+4889442418                              #     mov     %rax, 24(%rsp)
+49FFC4                                  #     inc     %r12
+884320                                  #     mov     %al, NODE_children_len(%rbx)
+4C89FD                                  #     mov     %r15, %rbp
+48896B28                                #     mov     %rbp, NODE_children(%rbx)
+48C1E003                                #     shl     $3, %rax
+4901C7                                  #     add     %rax, %r15
+:parse_node.2 48837C241800              # 2:  cmpq    $0, 24(%rsp)
+74 !parse_node.3                        #     je      3f
+E8 %parse_node                          #     call    parse_node
+48897D00                                #     mov     %rdi, 0(%rbp)
+4883C508                                #     add     $8, %rbp
+48FF4C2418                              #     decq    24(%rsp)
+EB !parse_node.2                        #     jmp     2b
+
+:parse_node.3 4D39EC                    # 3:  cmp     %r13, %r12
+0F83 %truncated                         #     jae     truncated
+490FB60424                              #     movzbq  0(%r12), %rax
+49FFC4                                  #     inc     %r12
+884330                                  #     mov     %al, NODE_content_len(%rbx)
+4C896338                                #     mov     %r12, NODE_content(%rbx)
+4901C4                                  #     add     %rax, %r12
+4D39EC                                  #     cmp     %r13, %r12
+0F87 %truncated                         #     ja      truncated
+
+4889DF                                  #     mov     %rbx, %rdi
+488B5C2408                              #     mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C420                                #     add     $32, %rsp
+C3                                      #     ret
+
+# print_node: prints NODE a0 at depth a1 as "<hash[0..4] in hex>  <indent>
+# <content>", then its children one level deeper.
+:print_node                             # print_node:
+4883EC30                                #     sub     $48, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # this NODE (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # depth (s5)
+                                        # 24(%rsp): counter (s6)
+                                        # 32(%rsp): next child pointer (s7)
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+
+488D05 %hexbuf                          #     lea     hexbuf(%rip), %rax
+4C8D15 %hexdigits                       #     lea     hexdigits(%rip), %r10
+41BB04000000                            #     mov     $4, %r11d
+4889D9                                  #     mov     %rbx, %rcx
+:print_node.1 4C0FB601                  # 1:  movzbq  NODE_hash(%rcx), %r8
+4D89C1                                  #     mov     %r8, %r9
+49C1E904                                #     shr     $4, %r9
+4D01D1                                  #     add     %r10, %r9
+4D0FB609                                #     movzbq  0(%r9), %r9
+448808                                  #     mov     %r9b, 0(%rax)
+4983E00F                                #     and     $15, %r8
+4D01D0                                  #     add     %r10, %r8
+4D0FB600                                #     movzbq  0(%r8), %r8
+44884001                                #     mov     %r8b, 1(%rax)
+4883C002                                #     add     $2, %rax
+48FFC1                                  #     inc     %rcx
+49FFCB                                  #     dec     %r11
+75 !print_node.1                        #     jnz     1b
+488D35 %hexbuf                          #     lea     hexbuf(%rip), %rsi
+BA0A000000                              #     mov     $10, %edx
+E8 %write_out                           #     call    write_out
+
+48896C2418                              #     mov     %rbp, 24(%rsp)
+:print_node.2 48837C241800              # 2:  cmpq    $0, 24(%rsp)
+74 !print_node.3                        #     je      3f
+488D35 %indent                          #     lea     indent(%rip), %rsi
+BA02000000                              #     mov     $2, %edx
+E8 %write_out                           #     call    write_out
+48FF4C2418                              #     decq    24(%rsp)
+EB !print_node.2                        #     jmp     2b
+
+:print_node.3 488B7338                  # 3:  mov     NODE_content(%rbx), %rsi
+480FB65330                              #     movzbq  NODE_content_len(%rbx), %rdx
+E8 %write_out                           #     call    write_out
+488D35 %newline                         #     lea     newline(%rip), %rsi
+BA01000000                              #     mov     $1, %edx
+E8 %write_out                           #     call    write_out
+
+480FB64320                              #     movzbq  NODE_children_len(%rbx), %rax
+4889442418                              #     mov     %rax, 24(%rsp)
+488B4328                                #     mov     NODE_children(%rbx), %rax
+4889442420                              #     mov     %rax, 32(%rsp)
+:print_node.4 48837C241800              # 4:  cmpq    $0, 24(%rsp)
+74 !print_node.5                        #     je      5f
+488B442420                              #     mov     32(%rsp), %rax
+488B38                                  #     mov     0(%rax), %rdi
+488D7501                                #     lea     1(%rbp), %rsi
+E8 %print_node                          #     call    print_node
+488344242008                            #     addq    $8, 32(%rsp)
+48FF4C2418                              #     decq    24(%rsp)
+EB !print_node.4                        #     jmp     4b
+
+:print_node.5 488B5C2408                # 5:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C430                                #     add     $48, %rsp
+C3                                      #     ret
+
+# ---------------------------------------------------------------------------
+# Names
+# ---------------------------------------------------------------------------
+
+# streq: a0 = 1 when the a1 bytes at a0 equal the a3 bytes at a2, else 0.
+:streq                                  # streq:
+4839CE                                  #     cmp     %rcx, %rsi
+75 !streq.2                             #     jne     2f
+:streq.1 4885F6                         # 1:  test    %rsi, %rsi
+74 !streq.3                             #     jz      3f
+480FB607                                #     movzbq  0(%rdi), %rax
+4C0FB612                                #     movzbq  0(%rdx), %r10
+4C39D0                                  #     cmp     %r10, %rax
+75 !streq.2                             #     jne     2f
+48FFC7                                  #     inc     %rdi
+48FFC2                                  #     inc     %rdx
+48FFCE                                  #     dec     %rsi
+EB !streq.1                             #     jmp     1b
+:streq.2 BF00000000                     # 2:  mov     $0, %edi
+C3                                      #     ret
+:streq.3 BF01000000                     # 3:  mov     $1, %edi
+C3                                      #     ret
+
+# is_fn: a0 = 1 when NODE a0 is a function (its content ends in ':'), else 0.
+:is_fn                                  # is_fn:
+480FB64730                              #     movzbq  NODE_content_len(%rdi), %rax
+4885C0                                  #     test    %rax, %rax
+74 !is_fn.1                             #     jz      1f
+4C8B5738                                #     mov     NODE_content(%rdi), %r10
+4901C2                                  #     add     %rax, %r10
+4D0FB652FF                              #     movzbq  -1(%r10), %r10
+31FF                                    #     xor     %edi, %edi
+4983FA3A                                #     cmp     $CH_colon, %r10
+400F94C7                                #     sete    %dil
+C3                                      #     ret
+:is_fn.1 BF00000000                     # 1:  mov     $0, %edi
+C3                                      #     ret
+
+# param_count: a0 = the number of parameters of function NODE a0: its
+# leading children that are leaves and no function.
+:param_count                            # param_count:
+4883EC20                                #     sub     $32, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # children left (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next child (s5)
+                                        # 24(%rsp): count (s6)
+480FB65F20                              #     movzbq  NODE_children_len(%rdi), %rbx
+488B6F28                                #     mov     NODE_children(%rdi), %rbp
+48C744241800000000                      #     movq    $0, 24(%rsp)
+:param_count.1 4885DB                   # 1:  test    %rbx, %rbx
+74 !param_count.2                       #     jz      2f
+488B7D00                                #     mov     0(%rbp), %rdi
+480FB64720                              #     movzbq  NODE_children_len(%rdi), %rax
+4885C0                                  #     test    %rax, %rax
+75 !param_count.2                       #     jnz     2f
+E8 %is_fn                               #     call    is_fn
+4885FF                                  #     test    %rdi, %rdi
+75 !param_count.2                       #     jnz     2f
+48FF442418                              #     incq    24(%rsp)
+4883C508                                #     add     $8, %rbp
+48FFCB                                  #     dec     %rbx
+EB !param_count.1                       #     jmp     1b
+:param_count.2 488B7C2418               # 2:  mov     24(%rsp), %rdi
+488B5C2408                              #     mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C420                                #     add     $32, %rsp
+C3                                      #     ret
+
+# is_insn: a0 = 1 when function NODE a0 is an encoding (an instruction or
+# a data word), else 0: its body, the children after its parameters, is not
+# empty and holds only fields, fixed fields (functions) and slice calls (a
+# '[' in the name).
+:is_insn                                # is_insn:
+4883EC20                                #     sub     $32, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # fields left (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next field (s5)
+                                        # 24(%rsp): the function (s6)
+48897C2418                              #     mov     %rdi, 24(%rsp)
+E8 %param_count                         #     call    param_count
+488B442418                              #     mov     24(%rsp), %rax
+480FB65820                              #     movzbq  NODE_children_len(%rax), %rbx
+4829FB                                  #     sub     %rdi, %rbx
+488B6828                                #     mov     NODE_children(%rax), %rbp
+48C1E703                                #     shl     $3, %rdi
+4801FD                                  #     add     %rdi, %rbp
+BF00000000                              #     mov     $0, %edi
+4885DB                                  #     test    %rbx, %rbx
+74 !is_insn.3                           #     jz      3f
+:is_insn.1 BF01000000                   # 1:  mov     $1, %edi
+4885DB                                  #     test    %rbx, %rbx
+74 !is_insn.3                           #     jz      3f
+488B7D00                                #     mov     0(%rbp), %rdi
+E8 %is_fn                               #     call    is_fn
+4885FF                                  #     test    %rdi, %rdi
+75 !is_insn.2                           #     jnz     2f
+488B4500                                #     mov     0(%rbp), %rax
+488B7838                                #     mov     NODE_content(%rax), %rdi
+480FB67030                              #     movzbq  NODE_content_len(%rax), %rsi
+BA5B000000                              #     mov     $CH_lbracket, %edx
+E8 %has_byte                            #     call    has_byte
+4885FF                                  #     test    %rdi, %rdi
+74 !is_insn.3                           #     jz      3f
+:is_insn.2 4883C508                     # 2:  add     $8, %rbp
+48FFCB                                  #     dec     %rbx
+EB !is_insn.1                           #     jmp     1b
+:is_insn.3 488B5C2408                   # 3:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C420                                #     add     $32, %rsp
+C3                                      #     ret
+
+# has_byte: a0 = 1 when byte a2 is among the a1 bytes at a0, else 0.
+:has_byte                               # has_byte:
+:has_byte.1 4885F6                      # 1:  test    %rsi, %rsi
+74 !has_byte.2                          #     jz      2f
+480FB607                                #     movzbq  0(%rdi), %rax
+4839D0                                  #     cmp     %rdx, %rax
+74 !has_byte.3                          #     je      3f
+48FFC7                                  #     inc     %rdi
+48FFCE                                  #     dec     %rsi
+EB !has_byte.1                          #     jmp     1b
+:has_byte.2 BF00000000                  # 2:  mov     $0, %edi
+C3                                      #     ret
+:has_byte.3 BF01000000                  # 3:  mov     $1, %edi
+C3                                      #     ret
+
+# collect_syms: stores every function among the children of the pages of
+# root a0 in syms, but for the last page: the program, it is placed.
+:collect_syms                           # collect_syms:
+4883EC40                                #     sub     $64, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # pages left (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next page (s5)
+                                        # 24(%rsp): next free slot in syms (s6)
+                                        # 32(%rsp): children of the page left (s7)
+                                        # 40(%rsp): next child (s8)
+480FB65F20                              #     movzbq  NODE_children_len(%rdi), %rbx
+488B6F28                                #     mov     NODE_children(%rdi), %rbp
+488D05 %syms                            #     lea     syms(%rip), %rax
+4889442418                              #     mov     %rax, 24(%rsp)
+4885DB                                  #     test    %rbx, %rbx
+74 !collect_syms.4                      #     jz      4f
+48FFCB                                  #     dec     %rbx                        # not the last page: it is placed
+:collect_syms.1 4885DB                  # 1:  test    %rbx, %rbx
+74 !collect_syms.4                      #     jz      4f
+488B4500                                #     mov     0(%rbp), %rax
+4C0FB65020                              #     movzbq  NODE_children_len(%rax), %r10
+4C89542420                              #     mov     %r10, 32(%rsp)
+4C8B5028                                #     mov     NODE_children(%rax), %r10
+4C89542428                              #     mov     %r10, 40(%rsp)
+:collect_syms.2 48837C242000            # 2:  cmpq    $0, 32(%rsp)
+74 !collect_syms.3                      #     je      3f
+488B442428                              #     mov     40(%rsp), %rax
+488B38                                  #     mov     0(%rax), %rdi
+E8 %is_fn                               #     call    is_fn
+4885FF                                  #     test    %rdi, %rdi
+74 !collect_syms.5                      #     jz      5f
+488B442428                              #     mov     40(%rsp), %rax
+488B00                                  #     mov     0(%rax), %rax
+4C8B542418                              #     mov     24(%rsp), %r10
+498902                                  #     mov     %rax, 0(%r10)
+488344241808                            #     addq    $8, 24(%rsp)
+:collect_syms.5 488344242808            # 5:  addq    $8, 40(%rsp)
+48FF4C2420                              #     decq    32(%rsp)
+EB !collect_syms.2                      #     jmp     2b
+:collect_syms.3 4883C508                # 3:  add     $8, %rbp
+48FFCB                                  #     dec     %rbx
+EB !collect_syms.1                      #     jmp     1b
+:collect_syms.4 488B442418              # 4:  mov     24(%rsp), %rax
+488905 %syms_end                        #     mov     %rax, syms_end(%rip)
+488B5C2408                              #     mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C440                                #     add     $64, %rsp
+C3                                      #     ret
+
+# find_fn: a0 = the function named by the a1 bytes at a0 (its content
+# without the ':'), or 0.
+:find_fn                                # find_fn:
+4883EC30                                #     sub     $48, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # next sym (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # end of syms (s5)
+                                        # 24(%rsp): name (s6)
+                                        # 32(%rsp): name length (s7)
+48897C2418                              #     mov     %rdi, 24(%rsp)
+4889742420                              #     mov     %rsi, 32(%rsp)
+488D1D %syms                            #     lea     syms(%rip), %rbx
+488B2D %syms_end                        #     mov     syms_end(%rip), %rbp
+:find_fn.1 BF00000000                   # 1:  mov     $0, %edi
+4839EB                                  #     cmp     %rbp, %rbx
+74 !find_fn.2                           #     je      2f
+488B03                                  #     mov     0(%rbx), %rax
+488B5038                                #     mov     NODE_content(%rax), %rdx
+480FB64830                              #     movzbq  NODE_content_len(%rax), %rcx
+48FFC9                                  #     dec     %rcx
+488B7C2418                              #     mov     24(%rsp), %rdi
+488B742420                              #     mov     32(%rsp), %rsi
+E8 %streq                               #     call    streq
+4883C308                                #     add     $8, %rbx
+4885FF                                  #     test    %rdi, %rdi
+74 !find_fn.1                           #     jz      1b
+488B7BF8                                #     mov     -8(%rbx), %rdi
+:find_fn.2 488B5C2408                   # 2:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C430                                #     add     $48, %rsp
+C3                                      #     ret
+
+# find_reg: a0 = the number of the register named by the a1 bytes at a0, or
+# -1. A register is a function of two words, "x10 a0:", either one is its
+# name; its number is the bits of its child.
+:find_reg                               # find_reg:
+4883EC50                                #     sub     $80, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # next sym (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # end of syms (s5)
+                                        # 24(%rsp): name (s6)
+                                        # 32(%rsp): name length (s7)
+                                        # 40(%rsp): the sym (s8)
+                                        # 48(%rsp): its content (s9)
+                                        # 56(%rsp): its length without the ':' (s10)
+                                        # 64(%rsp): length of its first word (s11)
+48897C2418                              #     mov     %rdi, 24(%rsp)
+4889742420                              #     mov     %rsi, 32(%rsp)
+488D1D %syms                            #     lea     syms(%rip), %rbx
+488B2D %syms_end                        #     mov     syms_end(%rip), %rbp
+:find_reg.1 4839EB                      # 1:  cmp     %rbp, %rbx
+0F84 %find_reg.5                        #     je      5f
+4C8B1B                                  #     mov     0(%rbx), %r11
+4C895C2428                              #     mov     %r11, 40(%rsp)
+4883C308                                #     add     $8, %rbx
+490FB64320                              #     movzbq  NODE_children_len(%r11), %rax
+4885C0                                  #     test    %rax, %rax
+74 !find_reg.1                          #     jz      1b
+498B4338                                #     mov     NODE_content(%r11), %rax
+4889442430                              #     mov     %rax, 48(%rsp)
+490FB64330                              #     movzbq  NODE_content_len(%r11), %rax
+48FFC8                                  #     dec     %rax
+4889442438                              #     mov     %rax, 56(%rsp)
+48C744244000000000                      #     movq    $0, 64(%rsp)                # find the space
+:find_reg.2 488B442440                  # 2:  mov     64(%rsp), %rax
+483B442438                              #     cmp     56(%rsp), %rax
+74 !find_reg.1                          #     je      1b
+4803442430                              #     add     48(%rsp), %rax
+480FB600                                #     movzbq  0(%rax), %rax
+4883F820                                #     cmp     $CH_space, %rax
+74 !find_reg.3                          #     je      3f
+48FF442440                              #     incq    64(%rsp)
+EB !find_reg.2                          #     jmp     2b
+:find_reg.3 488B7C2418                  # 3:  mov     24(%rsp), %rdi
+488B742420                              #     mov     32(%rsp), %rsi
+488B542430                              #     mov     48(%rsp), %rdx
+488B4C2440                              #     mov     64(%rsp), %rcx
+E8 %streq                               #     call    streq
+4885FF                                  #     test    %rdi, %rdi
+75 !find_reg.4                          #     jnz     4f
+488B7C2418                              #     mov     24(%rsp), %rdi
+488B742420                              #     mov     32(%rsp), %rsi
+488B542430                              #     mov     48(%rsp), %rdx
+4803542440                              #     add     64(%rsp), %rdx
+48FFC2                                  #     inc     %rdx
+488B4C2438                              #     mov     56(%rsp), %rcx
+482B4C2440                              #     sub     64(%rsp), %rcx
+48FFC9                                  #     dec     %rcx
+E8 %streq                               #     call    streq
+4885FF                                  #     test    %rdi, %rdi
+0F84 %find_reg.1                        #     jz      1b
+:find_reg.4 488B442428                  # 4:  mov     40(%rsp), %rax
+488B4028                                #     mov     NODE_children(%rax), %rax
+488B00                                  #     mov     0(%rax), %rax
+488B7838                                #     mov     NODE_content(%rax), %rdi
+480FB67030                              #     movzbq  NODE_content_len(%rax), %rsi
+E8 %parse_bits                          #     call    parse_bits
+EB !find_reg.6                          #     jmp     6f
+:find_reg.5 48C7C7FFFFFFFF              # 5:  mov     $-1, %rdi
+:find_reg.6 488B5C2408                  # 6:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C450                                #     add     $80, %rsp
+C3                                      #     ret
+
+# ---------------------------------------------------------------------------
+# Numbers
+# ---------------------------------------------------------------------------
+
+# parse_bits: a0 = the a1 binary digits at a0 ("0010011") as a number.
+:parse_bits                             # parse_bits:
+B800000000                              #     mov     $0, %eax
+:parse_bits.1 4885F6                    # 1:  test    %rsi, %rsi
+74 !parse_bits.2                        #     jz      2f
+4C0FB617                                #     movzbq  0(%rdi), %r10
+4983EA30                                #     sub     $CH_zero, %r10
+48D1E0                                  #     shl     $1, %rax
+4C09D0                                  #     or      %r10, %rax
+48FFC7                                  #     inc     %rdi
+48FFCE                                  #     dec     %rsi
+EB !parse_bits.1                        #     jmp     1b
+:parse_bits.2 4889C7                    # 2:  mov     %rax, %rdi
+C3                                      #     ret
+
+# parse_dec: reads the decimal digits from a0 up to at most a1; a0 = their
+# value, a1 = just past them.
+:parse_dec                              # parse_dec:
+B800000000                              #     mov     $0, %eax
+41BB0A000000                            #     mov     $10, %r11d
+:parse_dec.1 4839F7                     # 1:  cmp     %rsi, %rdi
+74 !parse_dec.2                         #     je      2f
+4C0FB617                                #     movzbq  0(%rdi), %r10
+4983EA30                                #     sub     $CH_zero, %r10
+4D39DA                                  #     cmp     %r11, %r10
+73 !parse_dec.2                         #     jae     2f
+490FAFC3                                #     imul    %r11, %rax
+4C01D0                                  #     add     %r10, %rax
+48FFC7                                  #     inc     %rdi
+EB !parse_dec.1                         #     jmp     1b
+:parse_dec.2 4889FE                     # 2:  mov     %rdi, %rsi
+4889C7                                  #     mov     %rax, %rdi
+C3                                      #     ret
+
+# parse_hex: reads the hex digits (0-9, a-f) from a0 up to at most a1;
+# a0 = their value, a1 = just past them.
+:parse_hex                              # parse_hex:
+B800000000                              #     mov     $0, %eax
+:parse_hex.1 4839F7                     # 1:  cmp     %rsi, %rdi
+74 !parse_hex.3                         #     je      3f
+4C0FB617                                #     movzbq  0(%rdi), %r10
+4D8D5AD0                                #     lea     -CH_zero(%r10), %r11
+B90A000000                              #     mov     $10, %ecx
+4939CB                                  #     cmp     %rcx, %r11
+72 !parse_hex.2                         #     jb      2f
+4D8D5A9F                                #     lea     -CH_a(%r10), %r11
+B906000000                              #     mov     $6, %ecx
+4939CB                                  #     cmp     %rcx, %r11
+73 !parse_hex.3                         #     jae     3f
+4983C30A                                #     add     $10, %r11
+:parse_hex.2 48C1E004                   # 2:  shl     $4, %rax
+4C09D8                                  #     or      %r11, %rax
+48FFC7                                  #     inc     %rdi
+EB !parse_hex.1                         #     jmp     1b
+:parse_hex.3 4889FE                     # 3:  mov     %rdi, %rsi
+4889C7                                  #     mov     %rax, %rdi
+C3                                      #     ret
+
+# parse_num: a0 = the a1 bytes at a0 as a number, decimal or 0x hex, with
+# an optional '-', and a1 = 1; or a1 = 0 when they are no number.
+:parse_num                              # parse_num:
+4883EC20                                #     sub     $32, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # negative? (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # first digit (s5)
+                                        # 24(%rsp): end (s6)
+4801FE                                  #     add     %rdi, %rsi
+4889742418                              #     mov     %rsi, 24(%rsp)
+BB00000000                              #     mov     $0, %ebx
+4839F7                                  #     cmp     %rsi, %rdi
+74 !parse_num.2                         #     je      2f
+480FB607                                #     movzbq  0(%rdi), %rax
+4883F82D                                #     cmp     $CH_minus, %rax
+75 !parse_num.1                         #     jne     1f
+BB01000000                              #     mov     $1, %ebx
+48FFC7                                  #     inc     %rdi
+:parse_num.1 4889FD                     # 1:  mov     %rdi, %rbp
+4889F0                                  #     mov     %rsi, %rax
+4829F8                                  #     sub     %rdi, %rax                  # 0x and a digit at least?
+4883F803                                #     cmp     $3, %rax
+7C !parse_num.5                         #     jl      5f
+480FB607                                #     movzbq  0(%rdi), %rax
+4883F830                                #     cmp     $CH_zero, %rax
+75 !parse_num.5                         #     jne     5f
+480FB64701                              #     movzbq  1(%rdi), %rax
+4883F878                                #     cmp     $CH_x, %rax
+75 !parse_num.5                         #     jne     5f
+4883C702                                #     add     $2, %rdi
+4883C502                                #     add     $2, %rbp
+E8 %parse_hex                           #     call    parse_hex
+EB !parse_num.6                         #     jmp     6f
+:parse_num.5 E8 %parse_dec              # 5:  call    parse_dec
+:parse_num.6 4839EE                     # 6:  cmp     %rbp, %rsi
+74 !parse_num.2                         #     je      2f                          # no digits
+483B742418                              #     cmp     24(%rsp), %rsi
+75 !parse_num.2                         #     jne     2f                          # something after them
+4885DB                                  #     test    %rbx, %rbx
+74 !parse_num.3                         #     jz      3f
+48F7DF                                  #     neg     %rdi
+:parse_num.3 BE01000000                 # 3:  mov     $1, %esi
+EB !parse_num.4                         #     jmp     4f
+:parse_num.2 BE00000000                 # 2:  mov     $0, %esi
+:parse_num.4 488B5C2408                 # 4:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C420                                #     add     $32, %rsp
+C3                                      #     ret
+
+# slice_width: a0 = the width of the slice named by the a1 bytes at a0: the
+# sum of hi-lo+1 over the segments of "imm[20|10:1|11|19:12]".
+:slice_width                            # slice_width:
+4883EC40                                #     sub     $64, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # cursor (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # end (s5)
+                                        # 24(%rsp): name (s6)
+                                        # 32(%rsp): name length (s7)
+                                        # 40(%rsp): width (s8)
+48897C2418                              #     mov     %rdi, 24(%rsp)
+4889742420                              #     mov     %rsi, 32(%rsp)
+4889FB                                  #     mov     %rdi, %rbx
+488D2C37                                #     lea     (%rdi,%rsi), %rbp
+48C744242800000000                      #     movq    $0, 40(%rsp)
+:slice_width.1 4839EB                   # 1:  cmp     %rbp, %rbx
+0F84 %slice_width.9                     #     je      9f                          # skip to just past the '['
+480FB603                                #     movzbq  0(%rbx), %rax
+48FFC3                                  #     inc     %rbx
+4883F85B                                #     cmp     $CH_lbracket, %rax
+75 !slice_width.1                       #     jne     1b
+:slice_width.2 4889DF                   # 2:  mov     %rbx, %rdi                  # a segment: hi or hi:lo
+4889EE                                  #     mov     %rbp, %rsi
+E8 %parse_dec                           #     call    parse_dec
+4839DE                                  #     cmp     %rbx, %rsi
+74 !slice_width.9                       #     je      9f
+4889F3                                  #     mov     %rsi, %rbx
+48FF442428                              #     incq    40(%rsp)
+4839EB                                  #     cmp     %rbp, %rbx
+74 !slice_width.9                       #     je      9f
+480FB603                                #     movzbq  0(%rbx), %rax
+4883F83A                                #     cmp     $CH_colon, %rax
+75 !slice_width.3                       #     jne     3f
+48897C2430                              #     mov     %rdi, 48(%rsp)              # hi
+48FFC3                                  #     inc     %rbx
+4889DF                                  #     mov     %rbx, %rdi
+4889EE                                  #     mov     %rbp, %rsi
+E8 %parse_dec                           #     call    parse_dec
+4839DE                                  #     cmp     %rbx, %rsi
+74 !slice_width.9                       #     je      9f
+4889F3                                  #     mov     %rsi, %rbx
+488B442430                              #     mov     48(%rsp), %rax
+4829F8                                  #     sub     %rdi, %rax
+4801442428                              #     add     %rax, 40(%rsp)
+4839EB                                  #     cmp     %rbp, %rbx
+74 !slice_width.9                       #     je      9f
+480FB603                                #     movzbq  0(%rbx), %rax
+:slice_width.3 48FFC3                   # 3:  inc     %rbx
+4883F87C                                #     cmp     $CH_bar, %rax
+74 !slice_width.2                       #     je      2b
+4883F85D                                #     cmp     $CH_rbracket, %rax
+75 !slice_width.9                       #     jne     9f
+4839EB                                  #     cmp     %rbp, %rbx
+75 !slice_width.9                       #     jne     9f
+488B7C2428                              #     mov     40(%rsp), %rdi
+488B5C2408                              #     mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C440                                #     add     $64, %rsp
+C3                                      #     ret
+:slice_width.9 488D35 %msg_slice        # 9:  lea     msg_slice(%rip), %rsi
+BA11000000                              #     mov     $msg_slice_len, %edx
+488B4C2418                              #     mov     24(%rsp), %rcx
+4C8B442420                              #     mov     32(%rsp), %r8
+E9 %die_name                            #     jmp     die_name
+
+# ---------------------------------------------------------------------------
+# Calls
+# ---------------------------------------------------------------------------
+
+# frame_lookup: looks up the parameter named by the a2 bytes at a1 in frame
+# a0 (0: none). a0 = 1 and a1 = its value when found, else a0 = 0.
+:frame_lookup                           # frame_lookup:
+4883EC30                                #     sub     $48, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # pairs left (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next pair (s5)
+                                        # 24(%rsp): name (s6)
+                                        # 32(%rsp): name length (s7)
+4885FF                                  #     test    %rdi, %rdi
+74 !frame_lookup.2                      #     jz      2f
+4889742418                              #     mov     %rsi, 24(%rsp)
+4889542420                              #     mov     %rdx, 32(%rsp)
+488B1F                                  #     mov     FRAME_count(%rdi), %rbx
+488D6F08                                #     lea     FRAME_params(%rdi), %rbp
+:frame_lookup.1 4885DB                  # 1:  test    %rbx, %rbx
+74 !frame_lookup.2                      #     jz      2f
+488B4500                                #     mov     0(%rbp), %rax
+488B5038                                #     mov     NODE_content(%rax), %rdx
+480FB64830                              #     movzbq  NODE_content_len(%rax), %rcx
+488B7C2418                              #     mov     24(%rsp), %rdi
+488B742420                              #     mov     32(%rsp), %rsi
+E8 %streq                               #     call    streq
+4885FF                                  #     test    %rdi, %rdi
+75 !frame_lookup.3                      #     jnz     3f
+4883C510                                #     add     $16, %rbp
+48FFCB                                  #     dec     %rbx
+EB !frame_lookup.1                      #     jmp     1b
+:frame_lookup.2 BF00000000              # 2:  mov     $0, %edi
+EB !frame_lookup.4                      #     jmp     4f
+:frame_lookup.3 488B7508                # 3:  mov     8(%rbp), %rsi
+:frame_lookup.4 488B5C2408              # 4:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C430                                #     add     $48, %rsp
+C3                                      #     ret
+
+# eval_arg: a0 = the value of argument NODE a1 in frame a0, in context a2
+# (0 code, 1 exec). An argument with children is a call that runs in exec
+# context, its value is what it leaves in a0. A leaf is, in this order: a
+# decimal or 0x number, a parameter, a register (its number in code
+# context, its vreg in exec context), pc (the address being assembled), a
+# label (its address) or a constant (a function without parameters, run in
+# exec context).
+:eval_arg                               # eval_arg:
+4883EC40                                #     sub     $64, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # frame (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # the argument (s5)
+                                        # 24(%rsp): context (s6)
+                                        # 32(%rsp): its name (s7)
+                                        # 40(%rsp): name length (s8)
+                                        # 48(%rsp): a function of that name (s9)
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+4889542418                              #     mov     %rdx, 24(%rsp)
+480FB64520                              #     movzbq  NODE_children_len(%rbp), %rax
+4885C0                                  #     test    %rax, %rax
+74 !eval_arg.1                          #     jz      1f
+4889EF                                  #     mov     %rbp, %rdi                  # a call
+4889DE                                  #     mov     %rbx, %rsi
+E8 %exec_call                           #     call    exec_call
+E9 %eval_arg.7                          #     jmp     7f
+:eval_arg.1 488B4538                    # 1:  mov     NODE_content(%rbp), %rax
+4889442420                              #     mov     %rax, 32(%rsp)
+480FB64530                              #     movzbq  NODE_content_len(%rbp), %rax
+4889442428                              #     mov     %rax, 40(%rsp)
+488B7C2420                              #     mov     32(%rsp), %rdi
+488B742428                              #     mov     40(%rsp), %rsi
+E8 %parse_num                           #     call    parse_num
+4885F6                                  #     test    %rsi, %rsi
+0F85 %eval_arg.9                        #     jnz     9f
+4889DF                                  #     mov     %rbx, %rdi
+488B742420                              #     mov     32(%rsp), %rsi
+488B542428                              #     mov     40(%rsp), %rdx
+E8 %frame_lookup                        #     call    frame_lookup
+4885FF                                  #     test    %rdi, %rdi
+74 !eval_arg.2                          #     jz      2f
+4889F7                                  #     mov     %rsi, %rdi
+E9 %eval_arg.9                          #     jmp     9f
+:eval_arg.2 488B7C2420                  # 2:  mov     32(%rsp), %rdi
+488B742428                              #     mov     40(%rsp), %rsi
+E8 %find_reg                            #     call    find_reg
+4885FF                                  #     test    %rdi, %rdi
+78 !eval_arg.3                          #     js      3f
+48837C241800                            #     cmpq    $0, 24(%rsp)
+0F84 %eval_arg.9                        #     je      9f
+488D05 %vregs                           #     lea     vregs(%rip), %rax
+48C1E703                                #     shl     $3, %rdi
+4801F8                                  #     add     %rdi, %rax
+488B38                                  #     mov     0(%rax), %rdi
+E9 %eval_arg.9                          #     jmp     9f
+:eval_arg.3 488B7C2420                  # 3:  mov     32(%rsp), %rdi
+488B742428                              #     mov     40(%rsp), %rsi
+488D15 %str_pc                          #     lea     str_pc(%rip), %rdx
+B902000000                              #     mov     $2, %ecx
+E8 %streq                               #     call    streq
+4885FF                                  #     test    %rdi, %rdi
+74 !eval_arg.4                          #     jz      4f
+488B3D %cur_pc                          #     mov     cur_pc(%rip), %rdi
+EB !eval_arg.9                          #     jmp     9f
+:eval_arg.4 488B7C2420                  # 4:  mov     32(%rsp), %rdi
+488B742428                              #     mov     40(%rsp), %rsi
+E8 %find_label                          #     call    find_label
+4885FF                                  #     test    %rdi, %rdi
+74 !eval_arg.5                          #     jz      5f
+E8 %label_addr                          #     call    label_addr
+EB !eval_arg.9                          #     jmp     9f
+:eval_arg.5 488B7C2420                  # 5:  mov     32(%rsp), %rdi
+488B742428                              #     mov     40(%rsp), %rsi
+E8 %find_fn                             #     call    find_fn
+4885FF                                  #     test    %rdi, %rdi
+74 !eval_arg.8                          #     jz      8f
+48897C2430                              #     mov     %rdi, 48(%rsp)
+E8 %is_insn                             #     call    is_insn
+4885FF                                  #     test    %rdi, %rdi
+75 !eval_arg.8                          #     jnz     8f
+488B7C2430                              #     mov     48(%rsp), %rdi
+E8 %param_count                         #     call    param_count
+4885FF                                  #     test    %rdi, %rdi
+75 !eval_arg.8                          #     jnz     8f
+4889EF                                  #     mov     %rbp, %rdi                  # a constant
+4889DE                                  #     mov     %rbx, %rsi
+E8 %exec_call                           #     call    exec_call
+:eval_arg.7 488B3D7C233400              # 7:  mov     vregs+VREG_a0*8(%rip), %rdi (written out: rel32 to 0x742ee8)
+:eval_arg.9 488B5C2408                  # 9:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C440                                #     add     $64, %rsp
+C3                                      #     ret
+:eval_arg.8 488D35 %msg_name            # 8:  lea     msg_name(%rip), %rsi
+BA14000000                              #     mov     $msg_name_len, %edx
+488B4C2420                              #     mov     32(%rsp), %rcx
+4C8B442428                              #     mov     40(%rsp), %r8
+E9 %die_name                            #     jmp     die_name
+
+# bind: fills frame a4 for call a1 of function a0: each parameter with the
+# value of its argument, evaluated in frame a2 and context a3.
+:bind                                   # bind:
+4883EC40                                #     sub     $64, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # next parameter (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next argument (s5)
+                                        # 24(%rsp): caller's frame (s6)
+                                        # 32(%rsp): context (s7)
+                                        # 40(%rsp): next pair in the new frame (s8)
+                                        # 48(%rsp): parameters left (s9)
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+4889542418                              #     mov     %rdx, 24(%rsp)
+48894C2420                              #     mov     %rcx, 32(%rsp)
+4C89442428                              #     mov     %r8, 40(%rsp)
+E8 %param_count                         #     call    param_count
+48897C2430                              #     mov     %rdi, 48(%rsp)
+480FB64520                              #     movzbq  NODE_children_len(%rbp), %rax
+488D35 %msg_args                        #     lea     msg_args(%rip), %rsi
+BA21000000                              #     mov     $msg_args_len, %edx
+483B442430                              #     cmp     48(%rsp), %rax
+0F85 %bind.3                            #     jne     3f
+488D35 %msg_params                      #     lea     msg_params(%rip), %rsi
+BA1B000000                              #     mov     $msg_params_len, %edx
+48837C243008                            #     cmpq    $MAX_PARAMS, 48(%rsp)
+77 !bind.3                              #     ja      3f
+488B442430                              #     mov     48(%rsp), %rax
+4C8B542428                              #     mov     40(%rsp), %r10
+498902                                  #     mov     %rax, FRAME_count(%r10)
+488344242808                            #     addq    $FRAME_params, 40(%rsp)
+488B5B28                                #     mov     NODE_children(%rbx), %rbx
+488B6D28                                #     mov     NODE_children(%rbp), %rbp
+:bind.1 48837C243000                    # 1:  cmpq    $0, 48(%rsp)
+74 !bind.2                              #     je      2f
+488B03                                  #     mov     0(%rbx), %rax
+4C8B542428                              #     mov     40(%rsp), %r10
+498902                                  #     mov     %rax, 0(%r10)
+488B7C2418                              #     mov     24(%rsp), %rdi
+488B7500                                #     mov     0(%rbp), %rsi
+488B542420                              #     mov     32(%rsp), %rdx
+E8 %eval_arg                            #     call    eval_arg
+4C8B542428                              #     mov     40(%rsp), %r10
+49897A08                                #     mov     %rdi, 8(%r10)
+4883C308                                #     add     $8, %rbx
+4883C508                                #     add     $8, %rbp
+488344242810                            #     addq    $16, 40(%rsp)
+48FF4C2430                              #     decq    48(%rsp)
+EB !bind.1                              #     jmp     1b
+:bind.2 488B5C2408                      # 2:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C440                                #     add     $64, %rsp
+C3                                      #     ret
+:bind.3 488B4D38                        # 3:  mov     NODE_content(%rbp), %rcx
+4C0FB64530                              #     movzbq  NODE_content_len(%rbp), %r8
+E9 %die_name                            #     jmp     die_name
+
+# run_body: calls a2 (code_call or exec_call) with frame a1 on each child
+# of NODE a0 from child a3 on, skipping the functions (definitions).
+:run_body                               # run_body:
+4883EC30                                #     sub     $48, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # children left (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next child (s5)
+                                        # 24(%rsp): frame (s6)
+                                        # 32(%rsp): handler (s7)
+480FB65F20                              #     movzbq  NODE_children_len(%rdi), %rbx
+4829CB                                  #     sub     %rcx, %rbx
+488B6F28                                #     mov     NODE_children(%rdi), %rbp
+4889C8                                  #     mov     %rcx, %rax
+48C1E003                                #     shl     $3, %rax
+4801C5                                  #     add     %rax, %rbp
+4889742418                              #     mov     %rsi, 24(%rsp)
+4889542420                              #     mov     %rdx, 32(%rsp)
+:run_body.1 4885DB                      # 1:  test    %rbx, %rbx
+74 !run_body.3                          #     jz      3f
+488B7D00                                #     mov     0(%rbp), %rdi
+E8 %is_fn                               #     call    is_fn
+4885FF                                  #     test    %rdi, %rdi
+75 !run_body.2                          #     jnz     2f
+488B7D00                                #     mov     0(%rbp), %rdi
+488B742418                              #     mov     24(%rsp), %rsi
+488B442420                              #     mov     32(%rsp), %rax
+FFD0                                    #     call    *%rax
+:run_body.2 4883C508                    # 2:  add     $8, %rbp
+48FFCB                                  #     dec     %rbx
+EB !run_body.1                          #     jmp     1b
+:run_body.3 488B5C2408                  # 3:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C430                                #     add     $48, %rsp
+C3                                      #     ret
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+
+# run_placed: runs the children of NODE a0, the program page or a placed
+# function, in order: a function is placed, a call runs in code context.
+:run_placed                             # run_placed:
+4883EC20                                #     sub     $32, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # children left (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # next child (s5)
+480FB65F20                              #     movzbq  NODE_children_len(%rdi), %rbx
+488B6F28                                #     mov     NODE_children(%rdi), %rbp
+:run_placed.1 4885DB                    # 1:  test    %rbx, %rbx
+74 !run_placed.4                        #     jz      4f
+488B7D00                                #     mov     0(%rbp), %rdi
+E8 %is_fn                               #     call    is_fn
+4885FF                                  #     test    %rdi, %rdi
+74 !run_placed.2                        #     jz      2f
+488B7D00                                #     mov     0(%rbp), %rdi
+E8 %place                               #     call    place
+EB !run_placed.3                        #     jmp     3f
+:run_placed.2 488B7D00                  # 2:  mov     0(%rbp), %rdi
+BE00000000                              #     mov     $0, %esi                    # no frame: placed code has no parameters
+E8 %code_call                           #     call    code_call
+:run_placed.3 4883C508                  # 3:  add     $8, %rbp
+48FFCB                                  #     dec     %rbx
+EB !run_placed.1                        #     jmp     1b
+:run_placed.4 488B5C2408                # 4:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C420                                #     add     $32, %rsp
+C3                                      #     ret
+
+# place: places function a0 at cur_pc. Pass 1 adds it to labels, pass 2
+# checks that it is still there; then its children run in its scope, and
+# its end is recorded.
+:place                                  # place:
+4883EC20                                #     sub     $32, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # the function (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # its LABEL (s5)
+4889FB                                  #     mov     %rdi, %rbx
+488D05 %scope_depth                     #     lea     scope_depth(%rip), %rax     # push its scope
+4C8B10                                  #     mov     0(%rax), %r10
+4983FA40                                #     cmp     $MAX_DEPTH, %r10
+0F84 %place.3                           #     je      3f
+4C8D1D %scopes                          #     lea     scopes(%rip), %r11
+4C89D1                                  #     mov     %r10, %rcx
+48C1E103                                #     shl     $3, %rcx
+4901CB                                  #     add     %rcx, %r11
+49891B                                  #     mov     %rbx, 0(%r11)
+49FFC2                                  #     inc     %r10
+4C8910                                  #     mov     %r10, 0(%rax)
+4C8B05 %cur_pc                          #     mov     cur_pc(%rip), %r8           # t4
+488B05 %pass                            #     mov     pass(%rip), %rax
+4883F801                                #     cmp     $1, %rax
+75 !place.1                             #     jne     1f
+488D05 %labels_end                      #     lea     labels_end(%rip), %rax      # pass 1: a new label
+488B28                                  #     mov     0(%rax), %rbp
+4C8D5518                                #     lea     LABEL_size(%rbp), %r10
+4C8910                                  #     mov     %r10, 0(%rax)
+48895D00                                #     mov     %rbx, LABEL_node(%rbp)
+4C894508                                #     mov     %r8, LABEL_addr(%rbp)
+EB !place.2                             #     jmp     2f
+:place.1 488D05 %label_next             # 1:  lea     label_next(%rip), %rax      # pass 2: the same, at the same place
+488B28                                  #     mov     0(%rax), %rbp
+4C8D5518                                #     lea     LABEL_size(%rbp), %r10
+4C8910                                  #     mov     %r10, 0(%rax)
+4C8B5500                                #     mov     LABEL_node(%rbp), %r10
+4939DA                                  #     cmp     %rbx, %r10
+75 !place.4                             #     jne     4f
+4C8B5508                                #     mov     LABEL_addr(%rbp), %r10
+4D39C2                                  #     cmp     %r8, %r10
+75 !place.4                             #     jne     4f
+:place.2 4889DF                         # 2:  mov     %rbx, %rdi
+E8 %run_placed                          #     call    run_placed
+488B05 %cur_pc                          #     mov     cur_pc(%rip), %rax
+48894510                                #     mov     %rax, LABEL_end(%rbp)
+48FF0D %scope_depth                     #     decq    scope_depth(%rip)
+488B5C2408                              #     mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C420                                #     add     $32, %rsp
+C3                                      #     ret
+:place.3 488D35 %msg_depth              # 3:  lea     msg_depth(%rip), %rsi
+BA17000000                              #     mov     $msg_depth_len, %edx
+EB !place.5                             #     jmp     5f
+:place.4 488D35 %msg_moved              # 4:  lea     msg_moved(%rip), %rsi
+BA26000000                              #     mov     $msg_moved_len, %edx
+:place.5 488B4B38                       # 5:  mov     NODE_content(%rbx), %rcx
+4C0FB64330                              #     movzbq  NODE_content_len(%rbx), %r8
+E9 %die_name                            #     jmp     die_name
+
+# find_label: a0 = the placed function named by the a1 bytes at a0, or 0:
+# among the functions in the innermost scope first, then outward to the
+# program page.
+:find_label                             # find_label:
+4883EC30                                #     sub     $48, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # name (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # name length (s5)
+                                        # 24(%rsp): just past the scope being searched (s6)
+                                        # 32(%rsp): its children left (s7)
+                                        # 40(%rsp): next child (s8)
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+488B05 %scope_depth                     #     mov     scope_depth(%rip), %rax
+48C1E003                                #     shl     $3, %rax
+4C8D15 %scopes                          #     lea     scopes(%rip), %r10
+4901C2                                  #     add     %rax, %r10
+4C89542418                              #     mov     %r10, 24(%rsp)
+:find_label.1 488D05 %scopes            # 1:  lea     scopes(%rip), %rax
+4839442418                              #     cmp     %rax, 24(%rsp)
+74 !find_label.4                        #     je      4f
+48836C241808                            #     subq    $8, 24(%rsp)
+488B442418                              #     mov     24(%rsp), %rax
+488B00                                  #     mov     0(%rax), %rax
+4C0FB65020                              #     movzbq  NODE_children_len(%rax), %r10
+4C89542420                              #     mov     %r10, 32(%rsp)
+4C8B5028                                #     mov     NODE_children(%rax), %r10
+4C89542428                              #     mov     %r10, 40(%rsp)
+:find_label.2 48837C242000              # 2:  cmpq    $0, 32(%rsp)
+74 !find_label.1                        #     je      1b
+488B442428                              #     mov     40(%rsp), %rax
+488B38                                  #     mov     0(%rax), %rdi
+E8 %is_fn                               #     call    is_fn
+4885FF                                  #     test    %rdi, %rdi
+74 !find_label.3                        #     jz      3f
+488B442428                              #     mov     40(%rsp), %rax
+488B00                                  #     mov     0(%rax), %rax
+488B5038                                #     mov     NODE_content(%rax), %rdx
+480FB64830                              #     movzbq  NODE_content_len(%rax), %rcx
+48FFC9                                  #     dec     %rcx
+4889DF                                  #     mov     %rbx, %rdi
+4889EE                                  #     mov     %rbp, %rsi
+E8 %streq                               #     call    streq
+4885FF                                  #     test    %rdi, %rdi
+74 !find_label.3                        #     jz      3f
+488B442428                              #     mov     40(%rsp), %rax
+488B38                                  #     mov     0(%rax), %rdi
+EB !find_label.5                        #     jmp     5f
+:find_label.3 488344242808              # 3:  addq    $8, 40(%rsp)
+48FF4C2420                              #     decq    32(%rsp)
+EB !find_label.2                        #     jmp     2b
+:find_label.4 BF00000000                # 4:  mov     $0, %edi
+:find_label.5 488B5C2408                # 5:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C430                                #     add     $48, %rsp
+C3                                      #     ret
+
+# label_entry: a0 = the LABEL of placed function a0, or 0 when pass 1 has
+# not met it yet.
+:label_entry                            # label_entry:
+488D05 %labels                          #     lea     labels(%rip), %rax
+4C8B15 %labels_end                      #     mov     labels_end(%rip), %r10
+:label_entry.1 4C39D0                   # 1:  cmp     %r10, %rax
+74 !label_entry.2                       #     je      2f
+4C8B18                                  #     mov     LABEL_node(%rax), %r11
+4939FB                                  #     cmp     %rdi, %r11
+74 !label_entry.3                       #     je      3f
+4883C018                                #     add     $LABEL_size, %rax
+EB !label_entry.1                       #     jmp     1b
+:label_entry.2 BF00000000               # 2:  mov     $0, %edi
+C3                                      #     ret
+:label_entry.3 4889C7                   # 3:  mov     %rax, %rdi
+C3                                      #     ret
+
+# label_addr: a0 = the address of placed function a0 (0 when pass 1 has
+# not met it yet).
+:label_addr                             # label_addr:
+4883EC10                                #     sub     $16, %rsp
+E8 %label_entry                         #     call    label_entry
+4885FF                                  #     test    %rdi, %rdi
+74 !label_addr.1                        #     jz      1f
+488B7F08                                #     mov     LABEL_addr(%rdi), %rdi
+:label_addr.1 4883C410                  # 1:  add     $16, %rsp
+C3                                      #     ret
+
+# lookup_call: a0 = the function that call a0 calls; dies when unknown.
+:lookup_call                            # lookup_call:
+4883EC10                                #     sub     $16, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # the call (s4)
+4889FB                                  #     mov     %rdi, %rbx
+488B7B38                                #     mov     NODE_content(%rbx), %rdi
+480FB67330                              #     movzbq  NODE_content_len(%rbx), %rsi
+E8 %find_fn                             #     call    find_fn
+4885FF                                  #     test    %rdi, %rdi
+74 !lookup_call.1                       #     jz      1f
+488B5C2408                              #     mov     8(%rsp), %rbx
+4883C410                                #     add     $16, %rsp
+C3                                      #     ret
+:lookup_call.1 488D35 %msg_function     # 1:  lea     msg_function(%rip), %rsi
+BA18000000                              #     mov     $msg_function_len, %edx
+488B4B38                                #     mov     NODE_content(%rbx), %rcx
+4C0FB64330                              #     movzbq  NODE_content_len(%rbx), %r8
+E9 %die_name                            #     jmp     die_name
+
+#     .equ CALL_frame, 32                 # the new frame on the stack
+#     .equ CALL_stack, (CALL_frame + FRAME_size + 15) & ~15
+
+# code_call: runs call a0 in code context, in frame a1: an instruction is
+# encoded and emitted, any other function expands its body. The builtins:
+#   ascii <bytes>   emits the content of its argument as it is
+#   align n         pads with zeros up to a multiple of n
+#   reserve n       n zero bytes
+#   origin n        the address of what follows
+#   bss             from here on align and reserve only move the address
+:code_call                              # code_call:
+4881ECB0000000                          #     sub     $CALL_stack, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # the call (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # caller's frame (s5)
+                                        # 24(%rsp): the function (s6)
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+488D35 %str_ascii                       #     lea     str_ascii(%rip), %rsi
+BA05000000                              #     mov     $5, %edx
+E8 %is_named                            #     call    is_named
+4885FF                                  #     test    %rdi, %rdi
+0F85 %code_call.3                       #     jnz     3f
+4889DF                                  #     mov     %rbx, %rdi
+488D35 %str_align                       #     lea     str_align(%rip), %rsi
+BA05000000                              #     mov     $5, %edx
+E8 %is_named                            #     call    is_named
+4885FF                                  #     test    %rdi, %rdi
+0F85 %code_call.4                       #     jnz     4f
+4889DF                                  #     mov     %rbx, %rdi
+488D35 %str_reserve                     #     lea     str_reserve(%rip), %rsi
+BA07000000                              #     mov     $7, %edx
+E8 %is_named                            #     call    is_named
+4885FF                                  #     test    %rdi, %rdi
+0F85 %code_call.5                       #     jnz     5f
+4889DF                                  #     mov     %rbx, %rdi
+488D35 %str_origin                      #     lea     str_origin(%rip), %rsi
+BA06000000                              #     mov     $6, %edx
+E8 %is_named                            #     call    is_named
+4885FF                                  #     test    %rdi, %rdi
+0F85 %code_call.6                       #     jnz     6f
+4889DF                                  #     mov     %rbx, %rdi
+488D35 %str_bss                         #     lea     str_bss(%rip), %rsi
+BA03000000                              #     mov     $3, %edx
+E8 %is_named                            #     call    is_named
+4885FF                                  #     test    %rdi, %rdi
+0F85 %code_call.7                       #     jnz     7f
+4889DF                                  #     mov     %rbx, %rdi
+E8 %lookup_call                         #     call    lookup_call
+48897C2418                              #     mov     %rdi, 24(%rsp)
+4889DE                                  #     mov     %rbx, %rsi
+4889EA                                  #     mov     %rbp, %rdx
+B900000000                              #     mov     $0, %ecx
+4C8D442420                              #     lea     CALL_frame(%rsp), %r8
+E8 %bind                                #     call    bind
+488B7C2418                              #     mov     24(%rsp), %rdi
+E8 %is_insn                             #     call    is_insn
+4885FF                                  #     test    %rdi, %rdi
+74 !code_call.1                         #     jz      1f
+488B7C2418                              #     mov     24(%rsp), %rdi
+488D742420                              #     lea     CALL_frame(%rsp), %rsi
+E8 %encode                              #     call    encode
+4889DA                                  #     mov     %rbx, %rdx
+E8 %emit                                #     call    emit
+EB !code_call.2                         #     jmp     2f
+:code_call.1 488B7C2418                 # 1:  mov     24(%rsp), %rdi
+E8 %param_count                         #     call    param_count
+4889F9                                  #     mov     %rdi, %rcx
+488B7C2418                              #     mov     24(%rsp), %rdi
+488D742420                              #     lea     CALL_frame(%rsp), %rsi
+488D15 %code_call                       #     lea     code_call(%rip), %rdx
+E8 %run_body                            #     call    run_body
+:code_call.2 488B5C2408                 # 2:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4881C4B0000000                          #     add     $CALL_stack, %rsp
+C3                                      #     ret
+:code_call.3 480FB64320                 # 3:  movzbq  NODE_children_len(%rbx), %rax   # ascii
+4883F801                                #     cmp     $1, %rax
+0F85 %wrong_args                        #     jne     wrong_args
+488B4328                                #     mov     NODE_children(%rbx), %rax
+488B00                                  #     mov     0(%rax), %rax
+488B7838                                #     mov     NODE_content(%rax), %rdi
+480FB67030                              #     movzbq  NODE_content_len(%rax), %rsi
+E8 %emit_raw                            #     call    emit_raw
+EB !code_call.2                         #     jmp     2b
+:code_call.4 4889DF                     # 4:  mov     %rbx, %rdi                  # align
+4889EE                                  #     mov     %rbp, %rsi
+E8 %one_arg                             #     call    one_arg
+488B05 %cur_pc                          #     mov     cur_pc(%rip), %rax
+4989C2                                  #     mov     %rax, %r10                  # remu t1, t0, a0: RISC-V gives t0 for
+4885FF                                  #     test    %rdi, %rdi                  # a0 = 0 where div would trap
+74 !code_call.8                         #     jz      8f
+31D2                                    #     xor     %edx, %edx
+48F7F7                                  #     div     %rdi
+4989D2                                  #     mov     %rdx, %r10
+:code_call.8 4D85D2                     # 8:  test    %r10, %r10
+74 !code_call.2                         #     jz      2b
+4C29D7                                  #     sub     %r10, %rdi
+E8 %skip                                #     call    skip
+EB !code_call.2                         #     jmp     2b
+:code_call.5 4889DF                     # 5:  mov     %rbx, %rdi                  # reserve
+4889EE                                  #     mov     %rbp, %rsi
+E8 %one_arg                             #     call    one_arg
+E8 %skip                                #     call    skip
+EB !code_call.2                         #     jmp     2b
+:code_call.6 4889DF                     # 6:  mov     %rbx, %rdi                  # origin
+4889EE                                  #     mov     %rbp, %rsi
+E8 %one_arg                             #     call    one_arg
+48893D %cur_pc                          #     mov     %rdi, cur_pc(%rip)
+E9 %code_call.2                         #     jmp     2b
+:code_call.7 480FB64320                 # 7:  movzbq  NODE_children_len(%rbx), %rax   # bss
+4885C0                                  #     test    %rax, %rax
+75 !wrong_args                          #     jnz     wrong_args
+48C7056F1A000001000000                  #     movq    $1, in_bss(%rip) (written out: rel32 to in_bss, from the end of the instruction, 4 bytes after the field)
+E9 %code_call.2                         #     jmp     2b
+
+# wrong_args: dies about call s4 having the wrong number of arguments.
+:wrong_args                             # wrong_args:
+488D35 %msg_args                        #     lea     msg_args(%rip), %rsi
+BA21000000                              #     mov     $msg_args_len, %edx
+488B4B38                                #     mov     NODE_content(%rbx), %rcx
+4C0FB64330                              #     movzbq  NODE_content_len(%rbx), %r8
+E9 %die_name                            #     jmp     die_name
+
+# one_arg: a0 = the value of the one argument of builtin call a0, in frame
+# a1 and code context.
+:one_arg                                # one_arg:
+4883EC10                                #     sub     $16, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # the call (s4)
+4889FB                                  #     mov     %rdi, %rbx
+480FB64320                              #     movzbq  NODE_children_len(%rbx), %rax
+4883F801                                #     cmp     $1, %rax
+75 !wrong_args                          #     jne     wrong_args
+4889F7                                  #     mov     %rsi, %rdi
+488B7328                                #     mov     NODE_children(%rbx), %rsi
+488B36                                  #     mov     0(%rsi), %rsi
+BA00000000                              #     mov     $0, %edx
+E8 %eval_arg                            #     call    eval_arg
+488B5C2408                              #     mov     8(%rsp), %rbx
+4883C410                                #     add     $16, %rsp
+C3                                      #     ret
+
+# is_named: a0 = 1 when the content of NODE a0 is the a2 bytes at a1.
+:is_named                               # is_named:
+4889D1                                  #     mov     %rdx, %rcx
+4889F2                                  #     mov     %rsi, %rdx
+480FB67730                              #     movzbq  NODE_content_len(%rdi), %rsi
+488B7F38                                #     mov     NODE_content(%rdi), %rdi
+E9 %streq                               #     jmp     streq
+
+# exec_call: runs call a0 in exec context, in frame a1: an instruction is
+# executed on vregs, any other function runs its body. The builtin
+# size <label> leaves the size of the label in a0.
+:exec_call                              # exec_call:
+4881ECB0000000                          #     sub     $CALL_stack, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # the call (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # caller's frame (s5)
+                                        # 24(%rsp): the function (s6)
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+488D35 %str_size                        #     lea     str_size(%rip), %rsi
+BA04000000                              #     mov     $4, %edx
+E8 %is_named                            #     call    is_named
+4885FF                                  #     test    %rdi, %rdi
+75 !exec_call.3                         #     jnz     3f
+4889DF                                  #     mov     %rbx, %rdi
+E8 %lookup_call                         #     call    lookup_call
+48897C2418                              #     mov     %rdi, 24(%rsp)
+E8 %is_insn                             #     call    is_insn
+4885FF                                  #     test    %rdi, %rdi
+74 !exec_call.1                         #     jz      1f
+488B7C2418                              #     mov     24(%rsp), %rdi
+4889DE                                  #     mov     %rbx, %rsi
+4889EA                                  #     mov     %rbp, %rdx
+E8 %execute                             #     call    execute
+EB !exec_call.2                         #     jmp     2f
+:exec_call.1 488B7C2418                 # 1:  mov     24(%rsp), %rdi
+4889DE                                  #     mov     %rbx, %rsi
+4889EA                                  #     mov     %rbp, %rdx
+B901000000                              #     mov     $1, %ecx
+4C8D442420                              #     lea     CALL_frame(%rsp), %r8
+E8 %bind                                #     call    bind
+488B7C2418                              #     mov     24(%rsp), %rdi
+E8 %param_count                         #     call    param_count
+4889F9                                  #     mov     %rdi, %rcx
+488B7C2418                              #     mov     24(%rsp), %rdi
+488D742420                              #     lea     CALL_frame(%rsp), %rsi
+488D15 %exec_call                       #     lea     exec_call(%rip), %rdx
+E8 %run_body                            #     call    run_body
+:exec_call.2 488B5C2408                 # 2:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4881C4B0000000                          #     add     $CALL_stack, %rsp
+C3                                      #     ret
+:exec_call.3 480FB64320                 # 3:  movzbq  NODE_children_len(%rbx), %rax   # size
+4883F801                                #     cmp     $1, %rax
+0F85 %wrong_args                        #     jne     wrong_args
+488B4328                                #     mov     NODE_children(%rbx), %rax
+488B00                                  #     mov     0(%rax), %rax
+4889442418                              #     mov     %rax, 24(%rsp)              # the label
+488B7838                                #     mov     NODE_content(%rax), %rdi
+480FB67030                              #     movzbq  NODE_content_len(%rax), %rsi
+E8 %find_label                          #     call    find_label
+4885FF                                  #     test    %rdi, %rdi
+74 !exec_call.5                         #     jz      5f
+E8 %label_entry                         #     call    label_entry
+B800000000                              #     mov     $0, %eax                    # not met yet in pass 1
+4885FF                                  #     test    %rdi, %rdi
+74 !exec_call.4                         #     jz      4f
+488B4710                                #     mov     LABEL_end(%rdi), %rax
+4C8B5708                                #     mov     LABEL_addr(%rdi), %r10
+4C29D0                                  #     sub     %r10, %rax
+:exec_call.4 488905731C3400             # 4:  mov     %rax, vregs+VREG_a0*8(%rip) (written out: rel32 to 0x742ee8)
+EB !exec_call.2                         #     jmp     2b
+:exec_call.5 488D35 %msg_name           # 5:  lea     msg_name(%rip), %rsi
+BA14000000                              #     mov     $msg_name_len, %edx
+488B442418                              #     mov     24(%rsp), %rax
+488B4838                                #     mov     NODE_content(%rax), %rcx
+4C0FB64030                              #     movzbq  NODE_content_len(%rax), %r8
+E9 %die_name                            #     jmp     die_name
+
+# execute: executes call a1 of instruction a0 in frame a2, on vregs: the
+# parameter rd names the destination register, the other two give the
+# values v0 and v1 in parameter order, and rd = v1 op v0, op found by name
+# in exec_ops (the seed).
+:execute                                # execute:
+4883EC60                                #     sub     $96, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # the call (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # frame (s5)
+                                        # 24(%rsp): next parameter (s6)
+                                        # 32(%rsp): next argument (s7)
+                                        # 40(%rsp): parameters left (s8)
+                                        # 48(%rsp): destination register (s9)
+                                        # 56(%rsp): values so far (s10)
+    # 64(%rsp), 72(%rsp): v0, v1
+4889F3                                  #     mov     %rsi, %rbx
+4889D5                                  #     mov     %rdx, %rbp
+48897C2418                              #     mov     %rdi, 24(%rsp)
+E8 %param_count                         #     call    param_count
+48897C2428                              #     mov     %rdi, 40(%rsp)
+480FB64320                              #     movzbq  NODE_children_len(%rbx), %rax
+483B442428                              #     cmp     40(%rsp), %rax
+0F85 %execute.8                         #     jne     8f
+488B442418                              #     mov     24(%rsp), %rax
+488B4028                                #     mov     NODE_children(%rax), %rax
+4889442418                              #     mov     %rax, 24(%rsp)
+488B4328                                #     mov     NODE_children(%rbx), %rax
+4889442420                              #     mov     %rax, 32(%rsp)
+48C744243000000000                      #     movq    $0, 48(%rsp)
+48C744243800000000                      #     movq    $0, 56(%rsp)
+:execute.1 48837C242800                 # 1:  cmpq    $0, 40(%rsp)
+0F84 %execute.3                         #     je      3f
+488B442418                              #     mov     24(%rsp), %rax
+488B00                                  #     mov     0(%rax), %rax
+488B7838                                #     mov     NODE_content(%rax), %rdi
+480FB67030                              #     movzbq  NODE_content_len(%rax), %rsi
+488D15 %str_rd                          #     lea     str_rd(%rip), %rdx
+B902000000                              #     mov     $2, %ecx
+E8 %streq                               #     call    streq
+4885FF                                  #     test    %rdi, %rdi
+74 !execute.2                           #     jz      2f
+488B442420                              #     mov     32(%rsp), %rax              # rd: a register name
+488B00                                  #     mov     0(%rax), %rax
+488B7838                                #     mov     NODE_content(%rax), %rdi
+480FB67030                              #     movzbq  NODE_content_len(%rax), %rsi
+E8 %find_reg                            #     call    find_reg
+4885FF                                  #     test    %rdi, %rdi
+0F88 %execute.7                         #     js      7f
+48897C2430                              #     mov     %rdi, 48(%rsp)
+EB !execute.6                           #     jmp     6f
+:execute.2 48837C243802                 # 2:  cmpq    $2, 56(%rsp)
+0F84 %execute.9                         #     je      9f                          # more than two values: no seed op
+4889EF                                  #     mov     %rbp, %rdi
+488B742420                              #     mov     32(%rsp), %rsi
+488B36                                  #     mov     0(%rsi), %rsi
+BA01000000                              #     mov     $1, %edx
+E8 %eval_arg                            #     call    eval_arg
+488B442438                              #     mov     56(%rsp), %rax
+48C1E003                                #     shl     $3, %rax
+4801E0                                  #     add     %rsp, %rax
+48897840                                #     mov     %rdi, 64(%rax)
+48FF442438                              #     incq    56(%rsp)
+:execute.6 488344241808                 # 6:  addq    $8, 24(%rsp)
+488344242008                            #     addq    $8, 32(%rsp)
+48FF4C2428                              #     decq    40(%rsp)
+E9 %execute.1                           #     jmp     1b
+:execute.3 48837C243802                 # 3:  cmpq    $2, 56(%rsp)
+0F85 %execute.9                         #     jne     9f
+488B4338                                #     mov     NODE_content(%rbx), %rax    # find the op by name
+4889442418                              #     mov     %rax, 24(%rsp)
+480FB64330                              #     movzbq  NODE_content_len(%rbx), %rax
+4889442420                              #     mov     %rax, 32(%rsp)
+4883F808                                #     cmp     $8, %rax
+0F87 %execute.9                         #     ja      9f
+488D05 %exec_ops                        #     lea     exec_ops(%rip), %rax
+4889442428                              #     mov     %rax, 40(%rsp)
+:execute.10 488D05 %exec_ops_end        # 10: lea     exec_ops_end(%rip), %rax
+4839442428                              #     cmp     %rax, 40(%rsp)
+74 !execute.9                           #     je      9f
+488B7C2418                              #     mov     24(%rsp), %rdi
+488B742420                              #     mov     32(%rsp), %rsi
+488B542428                              #     mov     40(%rsp), %rdx
+488B4C2420                              #     mov     32(%rsp), %rcx
+E8 %streq                               #     call    streq
+4885FF                                  #     test    %rdi, %rdi
+74 !execute.11                          #     jz      11f
+488B442420                              #     mov     32(%rsp), %rax              # and the op's name ends there
+4883F808                                #     cmp     $8, %rax
+74 !execute.12                          #     je      12f
+4803442428                              #     add     40(%rsp), %rax
+480FB600                                #     movzbq  0(%rax), %rax
+4885C0                                  #     test    %rax, %rax
+74 !execute.12                          #     jz      12f
+:execute.11 488344242810                # 11: addq    $OP_size, 40(%rsp)
+EB !execute.10                          #     jmp     10b
+:execute.12 488B442440                  # 12: mov     64(%rsp), %rax
+4C8B542448                              #     mov     72(%rsp), %r10
+488B4C2428                              #     mov     40(%rsp), %rcx
+488B4908                                #     mov     OP_code(%rcx), %rcx
+FFE1                                    #     jmp     *%rcx
+:execute.7 488D35 %msg_register         # 7:  lea     msg_register(%rip), %rsi
+BA16000000                              #     mov     $msg_register_len, %edx
+488B442420                              #     mov     32(%rsp), %rax
+488B00                                  #     mov     0(%rax), %rax
+488B4838                                #     mov     NODE_content(%rax), %rcx
+4C0FB64030                              #     movzbq  NODE_content_len(%rax), %r8
+E9 %die_name                            #     jmp     die_name
+:execute.8 E9 %wrong_args               # 8:  jmp     wrong_args
+:execute.9 488D35 %msg_execute          # 9:  lea     msg_execute(%rip), %rsi
+BA16000000                              #     mov     $msg_execute_len, %edx
+488B4B38                                #     mov     NODE_content(%rbx), %rcx
+4C0FB64330                              #     movzbq  NODE_content_len(%rbx), %r8
+E9 %die_name                            #     jmp     die_name
+
+# The ops of exec_ops: t2 = t1 op t0, then exec_store, still in the frame
+# of execute. RV64 semantics: 64-bit, mul keeps the low 64 bits, the shifts
+# take the amount mod 64 (as shl/shr/sar by %cl do).
+:op_add                                 # op_add:
+4D89D3                                  #     mov     %r10, %r11
+4901C3                                  #     add     %rax, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_sub                                 # op_sub:
+4D89D3                                  #     mov     %r10, %r11
+4929C3                                  #     sub     %rax, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_and                                 # op_and:
+4D89D3                                  #     mov     %r10, %r11
+4921C3                                  #     and     %rax, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_or                                  # op_or:
+4D89D3                                  #     mov     %r10, %r11
+4909C3                                  #     or      %rax, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_xor                                 # op_xor:
+4D89D3                                  #     mov     %r10, %r11
+4931C3                                  #     xor     %rax, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_sll                                 # op_sll:
+4889C1                                  #     mov     %rax, %rcx
+4D89D3                                  #     mov     %r10, %r11
+49D3E3                                  #     shl     %cl, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_srl                                 # op_srl:
+4889C1                                  #     mov     %rax, %rcx
+4D89D3                                  #     mov     %r10, %r11
+49D3EB                                  #     shr     %cl, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_sra                                 # op_sra:
+4889C1                                  #     mov     %rax, %rcx
+4D89D3                                  #     mov     %r10, %r11
+49D3FB                                  #     sar     %cl, %r11
+EB !exec_store                          #     jmp     exec_store
+:op_mul                                 # op_mul:
+4D89D3                                  #     mov     %r10, %r11
+4C0FAFD8                                #     imul    %rax, %r11
+# exec_store: stores t2 in the destination vreg s9 and returns from execute.
+:exec_store                             # exec_store:
+4C8B542430                              #     mov     48(%rsp), %r10
+4D85D2                                  #     test    %r10, %r10
+74 !exec_store.1                        #     jz      1f                          # x0 stays 0
+488D05 %vregs                           #     lea     vregs(%rip), %rax
+49C1E203                                #     shl     $3, %r10
+4C01D0                                  #     add     %r10, %rax
+4C8918                                  #     mov     %r11, 0(%rax)
+:exec_store.1 488B5C2408                # 1:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C460                                #     add     $96, %rsp
+C3                                      #     ret
+
+# ---------------------------------------------------------------------------
+# Encoding and output
+# ---------------------------------------------------------------------------
+
+# encode: encodes instruction a0, its parameters bound in frame a1: a0 =
+# the word, a1 = its width in bits (8, 16, 32 or 64). The fields come MSB
+# first: word = word << width | value.
+:encode                                 # encode:
+4883EC50                                #     sub     $80, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # the instruction (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # frame (s5)
+                                        # 24(%rsp): fields left (s6)
+                                        # 32(%rsp): next field (s7)
+                                        # 40(%rsp): word (s8)
+                                        # 48(%rsp): width so far (s9)
+                                        # 56(%rsp): width of this field (s10)
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+E8 %param_count                         #     call    param_count
+480FB64320                              #     movzbq  NODE_children_len(%rbx), %rax
+4829F8                                  #     sub     %rdi, %rax
+4889442418                              #     mov     %rax, 24(%rsp)
+488B4328                                #     mov     NODE_children(%rbx), %rax
+48C1E703                                #     shl     $3, %rdi
+4801F8                                  #     add     %rdi, %rax
+4889442420                              #     mov     %rax, 32(%rsp)
+48C744242800000000                      #     movq    $0, 40(%rsp)
+48C744243000000000                      #     movq    $0, 48(%rsp)
+:encode.1 48837C241800                  # 1:  cmpq    $0, 24(%rsp)
+0F84 %encode.4                          #     je      4f
+488B442420                              #     mov     32(%rsp), %rax
+488B38                                  #     mov     0(%rax), %rdi
+E8 %is_fn                               #     call    is_fn
+488B442420                              #     mov     32(%rsp), %rax
+488B00                                  #     mov     0(%rax), %rax
+4885FF                                  #     test    %rdi, %rdi
+74 !encode.2                            #     jz      2f
+4C0FB65020                              #     movzbq  NODE_children_len(%rax), %r10   # a fixed field: its child is its bits
+4D85D2                                  #     test    %r10, %r10
+0F84 %encode.8                          #     jz      8f
+4C8B5028                                #     mov     NODE_children(%rax), %r10
+4D8B12                                  #     mov     0(%r10), %r10
+498B7A38                                #     mov     NODE_content(%r10), %rdi
+490FB67230                              #     movzbq  NODE_content_len(%r10), %rsi
+4889742438                              #     mov     %rsi, 56(%rsp)
+E8 %parse_bits                          #     call    parse_bits
+EB !encode.3                            #     jmp     3f
+:encode.2 4889C7                        # 2:  mov     %rax, %rdi                  # a slice call: run it, value in a0
+4889EE                                  #     mov     %rbp, %rsi
+E8 %exec_call                           #     call    exec_call
+488B442420                              #     mov     32(%rsp), %rax
+488B00                                  #     mov     0(%rax), %rax
+488B7838                                #     mov     NODE_content(%rax), %rdi
+480FB67030                              #     movzbq  NODE_content_len(%rax), %rsi
+E8 %slice_width                         #     call    slice_width
+48897C2438                              #     mov     %rdi, 56(%rsp)
+488B3D3A193400                          #     mov     vregs+VREG_a0*8(%rip), %rdi (written out: rel32 to 0x742ee8)
+:encode.3 48837C243840                  # 3:  cmpq    $64, 56(%rsp)
+74 !encode.10                           #     je      10f                         # a 64-bit field is the whole word
+488B4C2438                              #     mov     56(%rsp), %rcx              # sll by s10: the amount mod 64
+B801000000                              #     mov     $1, %eax
+48D3E0                                  #     shl     %cl, %rax
+48FFC8                                  #     dec     %rax
+4821C7                                  #     and     %rax, %rdi
+48D3642428                              #     shlq    %cl, 40(%rsp)
+:encode.10 48097C2428                   # 10: or      %rdi, 40(%rsp)
+488B442438                              #     mov     56(%rsp), %rax
+4801442430                              #     add     %rax, 48(%rsp)
+488344242008                            #     addq    $8, 32(%rsp)
+48FF4C2418                              #     decq    24(%rsp)
+E9 %encode.1                            #     jmp     1b
+:encode.4 488B442430                    # 4:  mov     48(%rsp), %rax
+4883F808                                #     cmp     $8, %rax
+74 !encode.5                            #     je      5f
+4883F810                                #     cmp     $16, %rax
+74 !encode.5                            #     je      5f
+4883F820                                #     cmp     $32, %rax
+74 !encode.5                            #     je      5f
+4883F840                                #     cmp     $64, %rax
+75 !encode.9                            #     jne     9f
+:encode.5 488B7C2428                    # 5:  mov     40(%rsp), %rdi
+488B742430                              #     mov     48(%rsp), %rsi
+488B5C2408                              #     mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C450                                #     add     $80, %rsp
+C3                                      #     ret
+:encode.8 488D35 %msg_field             # 8:  lea     msg_field(%rip), %rsi
+BA20000000                              #     mov     $msg_field_len, %edx
+488B4838                                #     mov     NODE_content(%rax), %rcx
+4C0FB64030                              #     movzbq  NODE_content_len(%rax), %r8
+E9 %die_name                            #     jmp     die_name
+:encode.9 488D35 %msg_width             # 9:  lea     msg_width(%rip), %rsi
+BA29000000                              #     mov     $msg_width_len, %edx
+488B4B38                                #     mov     NODE_content(%rbx), %rcx
+4C0FB64330                              #     movzbq  NODE_content_len(%rbx), %r8
+E9 %die_name                            #     jmp     die_name
+
+# emit: emits the a1-bit word a0, little endian, and in pass 2 prints it
+# as "<hex>  <name of call a2>".
+:emit                                   # emit:
+4883EC30                                #     sub     $48, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # word (s4)
+48896C2410                              #     mov     %rbp, 16(%rsp)              # width (s5)
+                                        # 24(%rsp): the call (s6)
+    # 32(%rsp): the word in memory
+4889FB                                  #     mov     %rdi, %rbx
+4889F5                                  #     mov     %rsi, %rbp
+4889542418                              #     mov     %rdx, 24(%rsp)
+48895C2420                              #     mov     %rbx, 32(%rsp)
+488D7C2420                              #     lea     32(%rsp), %rdi
+4889EE                                  #     mov     %rbp, %rsi
+48C1EE03                                #     shr     $3, %rsi
+E8 %emit_raw                            #     call    emit_raw
+488B05 %pass                            #     mov     pass(%rip), %rax
+4883F802                                #     cmp     $2, %rax
+0F85 %emit.5                            #     jne     5f
+488D05 %linebuf                         #     lea     linebuf(%rip), %rax
+4C8D15 %hexdigits                       #     lea     hexdigits(%rip), %r10
+4989EB                                  #     mov     %rbp, %r11
+49C1EB02                                #     shr     $2, %r11                    # hex digits
+488D4DFC                                #     lea     -4(%rbp), %rcx              # shift of the next one
+:emit.3 4D85DB                          # 3:  test    %r11, %r11
+74 !emit.4                              #     jz      4f
+4989D8                                  #     mov     %rbx, %r8
+49D3E8                                  #     shr     %cl, %r8
+4983E00F                                #     and     $15, %r8
+4D01D0                                  #     add     %r10, %r8
+4D0FB600                                #     movzbq  0(%r8), %r8
+448800                                  #     mov     %r8b, 0(%rax)
+48FFC0                                  #     inc     %rax
+4883E904                                #     sub     $4, %rcx
+49FFCB                                  #     dec     %r11
+EB !emit.3                              #     jmp     3b
+:emit.4 41B820000000                    # 4:  mov     $CH_space, %r8d
+448800                                  #     mov     %r8b, 0(%rax)
+44884001                                #     mov     %r8b, 1(%rax)
+4883C002                                #     add     $2, %rax
+488D35 %linebuf                         #     lea     linebuf(%rip), %rsi
+4889C2                                  #     mov     %rax, %rdx
+4829F2                                  #     sub     %rsi, %rdx
+E8 %write_out                           #     call    write_out
+488B442418                              #     mov     24(%rsp), %rax
+488B7038                                #     mov     NODE_content(%rax), %rsi
+480FB65030                              #     movzbq  NODE_content_len(%rax), %rdx
+E8 %write_out                           #     call    write_out
+488D35 %newline                         #     lea     newline(%rip), %rsi
+BA01000000                              #     mov     $1, %edx
+E8 %write_out                           #     call    write_out
+:emit.5 488B5C2408                      # 5:  mov     8(%rsp), %rbx
+488B6C2410                              #     mov     16(%rsp), %rbp
+4883C430                                #     add     $48, %rsp
+C3                                      #     ret
+
+# emit_raw: appends the a1 bytes at a0 to outbuf and moves cur_pc past
+# them.
+:emit_raw                               # emit_raw:
+488B05 %in_bss                          #     mov     in_bss(%rip), %rax
+4885C0                                  #     test    %rax, %rax
+0F85 %emitted_in_bss                    #     jnz     emitted_in_bss
+488D15 %out_end                         #     lea     out_end(%rip), %rdx         # t6
+488B02                                  #     mov     0(%rdx), %rax
+4C8D15 %outbuf                          #     lea     outbuf(%rip), %r10
+41BB00001000                            #     mov     $OUT_SIZE, %r11d
+4D01DA                                  #     add     %r11, %r10
+488D0C30                                #     lea     (%rax,%rsi), %rcx
+4C39D1                                  #     cmp     %r10, %rcx
+0F87 %out_full                          #     ja      out_full
+4C8D05 %cur_pc                          #     lea     cur_pc(%rip), %r8
+4D8B08                                  #     mov     0(%r8), %r9
+4901F1                                  #     add     %rsi, %r9
+4D8908                                  #     mov     %r9, 0(%r8)
+:emit_raw.1 4885F6                      # 1:  test    %rsi, %rsi
+74 !emit_raw.2                          #     jz      2f
+4C0FB61F                                #     movzbq  0(%rdi), %r11
+448818                                  #     mov     %r11b, 0(%rax)
+48FFC7                                  #     inc     %rdi
+48FFC0                                  #     inc     %rax
+48FFCE                                  #     dec     %rsi
+EB !emit_raw.1                          #     jmp     1b
+:emit_raw.2 488902                      # 2:  mov     %rax, 0(%rdx)
+C3                                      #     ret
+
+# skip: moves cur_pc a0 bytes on: by emitting zero bytes, or after bss
+# only the address.
+:skip                                   # skip:
+4883EC10                                #     sub     $16, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # bytes left (s4)
+4889FB                                  #     mov     %rdi, %rbx
+488B05 %in_bss                          #     mov     in_bss(%rip), %rax
+4885C0                                  #     test    %rax, %rax
+74 !skip.1                              #     jz      1f
+488D05 %cur_pc                          #     lea     cur_pc(%rip), %rax
+4C8B10                                  #     mov     0(%rax), %r10
+4901DA                                  #     add     %rbx, %r10
+4C8910                                  #     mov     %r10, 0(%rax)
+EB !skip.2                              #     jmp     2f
+:skip.1 4885DB                          # 1:  test    %rbx, %rbx
+74 !skip.2                              #     jz      2f
+488D3D %zero_byte                       #     lea     zero_byte(%rip), %rdi
+BE01000000                              #     mov     $1, %esi
+E8 %emit_raw                            #     call    emit_raw
+48FFCB                                  #     dec     %rbx
+EB !skip.1                              #     jmp     1b
+:skip.2 488B5C2408                      # 2:  mov     8(%rsp), %rbx
+4883C410                                #     add     $16, %rsp
+C3                                      #     ret
+
+# write_output: writes outbuf, everything emitted, to the file out_path.
+:write_output                           # write_output:
+4883EC10                                #     sub     $16, %rsp
+48895C2408                              #     mov     %rbx, 8(%rsp)               # fd (s4)
+48C7C79CFFFFFF                          #     mov     $AT_FDCWD, %rdi
+488B35 %out_path                        #     mov     out_path(%rip), %rsi
+BA41020000                              #     mov     $O_CREAT_WRONLY_TRUNC, %edx
+41BAED010000                            #     mov     $MODE_0755, %r10d           # a3
+B801010000                              #     mov     $SYS_openat, %eax
+0F05                                    #     syscall
+4885C0                                  #     test    %rax, %rax
+78 !create_failed                       #     js      create_failed
+4889C3                                  #     mov     %rax, %rbx
+4889C7                                  #     mov     %rax, %rdi                  # a0: the fd, as ecall leaves it
+488D35 %outbuf                          #     lea     outbuf(%rip), %rsi
+488B15 %out_end                         #     mov     out_end(%rip), %rdx
+4829F2                                  #     sub     %rsi, %rdx
+E8 %write_all                           #     call    write_all
+4889DF                                  #     mov     %rbx, %rdi
+B803000000                              #     mov     $SYS_close, %eax
+0F05                                    #     syscall
+488B5C2408                              #     mov     8(%rsp), %rbx
+4883C410                                #     add     $16, %rsp
+C3                                      #     ret
+
+# write_all: writes the a2 bytes at a1 to fd a0, however many writes it
+# takes. (The fd stays in a0: syscall does not change %rdi.)
+:write_all                              # write_all:
+:write_all.1 4885D2                     # 1:  test    %rdx, %rdx
+74 !write_all.2                         #     jz      2f
+B801000000                              #     mov     $SYS_write, %eax
+0F05                                    #     syscall
+4885C0                                  #     test    %rax, %rax
+7E !write_failed                        #     jle     write_failed
+4801C6                                  #     add     %rax, %rsi
+4829C2                                  #     sub     %rax, %rdx
+EB !write_all.1                         #     jmp     1b
+:write_all.2 C3                         # 2:  ret
+
+# write_out: writes a2 bytes at a1 to stdout.
+:write_out                              # write_out:
+BF01000000                              #     mov     $STDOUT, %edi
+B801000000                              #     mov     $SYS_write, %eax
+0F05                                    #     syscall
+C3                                      #     ret
+
+:create_failed                          # create_failed:
+488D35 %msg_create                      #     lea     msg_create(%rip), %rsi
+BA20000000                              #     mov     $msg_create_len, %edx
+EB !die                                 #     jmp     die
+:write_failed                           # write_failed:
+488D35 %msg_write                       #     lea     msg_write(%rip), %rsi
+BA13000000                              #     mov     $msg_write_len, %edx
+EB !die                                 #     jmp     die
+:out_full                               # out_full:
+488D35 %msg_full                        #     lea     msg_full(%rip), %rsi
+BA17000000                              #     mov     $msg_full_len, %edx
+EB !die                                 #     jmp     die
+:emitted_in_bss                         # emitted_in_bss:
+488D35 %msg_bss                         #     lea     msg_bss(%rip), %rsi
+BA18000000                              #     mov     $msg_bss_len, %edx
+EB !die                                 #     jmp     die
+
+# die_name: writes the a2-byte message at a1 and the a4-byte name at a3 to
+# stderr, then a newline, and exits with status 1.
+:die_name                               # die_name:
+4889CB                                  #     mov     %rcx, %rbx                  # syscall clobbers %rcx
+4C89C5                                  #     mov     %r8, %rbp
+BF02000000                              #     mov     $STDERR, %edi
+B801000000                              #     mov     $SYS_write, %eax
+0F05                                    #     syscall
+BF02000000                              #     mov     $STDERR, %edi
+4889DE                                  #     mov     %rbx, %rsi
+4889EA                                  #     mov     %rbp, %rdx
+B801000000                              #     mov     $SYS_write, %eax
+0F05                                    #     syscall
+488D35 %newline                         #     lea     newline(%rip), %rsi
+BA01000000                              #     mov     $1, %edx
+
+# die: writes the a2-byte message at a1 to stderr and exits with status 1.
+:die                                    # die:
+BF02000000                              #     mov     $STDERR, %edi
+B801000000                              #     mov     $SYS_write, %eax
+0F05                                    #     syscall
+BF01000000                              #     mov     $1, %edi
+:exit                                   # exit:
+B83C000000                              #     mov     $SYS_exit, %eax
+0F05                                    #     syscall
+#
+# The section .rodata, from here its lines of hosts/x86_64/ttpc.s
+#     .section .rodata
+:msg_usage 75736167653A2074747063203C66696C # msg_usage:      .ascii "usage: ttpc <file.ff> [<out>]\n"
+652E66663E205B3C6F75743E5D0A
+#     .equ msg_usage_len, . - msg_usage
+:msg_open 747470633A2063616E6E6F74206F7065 # msg_open:       .ascii "ttpc: cannot open file\n"
+6E2066696C650A
+#     .equ msg_open_len, . - msg_open
+:msg_read 747470633A2072656164206661696C65 # msg_read:       .ascii "ttpc: read failed\n"
+640A
+#     .equ msg_read_len, . - msg_read
+:msg_large 747470633A2066696C6520746F6F206C # msg_large:      .ascii "ttpc: file too large\n"
+617267650A
+#     .equ msg_large_len, . - msg_large
+:msg_truncated 747470633A207472756E636174656420 # msg_truncated:  .ascii "ttpc: truncated node\n"
+6E6F64650A
+#     .equ msg_truncated_len, . - msg_truncated
+:msg_trailing 747470633A20747261696C696E672062 # msg_trailing:   .ascii "ttpc: trailing bytes after the root node\n"
+79746573206166746572207468652072
+6F6F74206E6F64650A
+#     .equ msg_trailing_len, . - msg_trailing
+:msg_create 747470633A2063616E6E6F7420637265 # msg_create:     .ascii "ttpc: cannot create output file\n"
+617465206F75747075742066696C650A
+#     .equ msg_create_len, . - msg_create
+:msg_write 747470633A207772697465206661696C # msg_write:      .ascii "ttpc: write failed\n"
+65640A
+#     .equ msg_write_len, . - msg_write
+:msg_full 747470633A206F757470757420746F6F # msg_full:       .ascii "ttpc: output too large\n"
+206C617267650A
+#     .equ msg_full_len, . - msg_full
+# Followed by the name they are about:
+:msg_function 747470633A20756E6B6E6F776E206675 # msg_function:   .ascii "ttpc: unknown function: "
+6E6374696F6E3A20
+#     .equ msg_function_len, . - msg_function
+:msg_name 747470633A20756E6B6E6F776E206E61 # msg_name:       .ascii "ttpc: unknown name: "
+6D653A20
+#     .equ msg_name_len, . - msg_name
+:msg_args 747470633A2077726F6E67206E756D62 # msg_args:       .ascii "ttpc: wrong number of arguments: "
+6572206F6620617267756D656E74733A
+20
+#     .equ msg_args_len, . - msg_args
+:msg_params 747470633A20746F6F206D616E792070 # msg_params:     .ascii "ttpc: too many parameters: "
+6172616D65746572733A20
+#     .equ msg_params_len, . - msg_params
+:msg_register 747470633A206E6F7420612072656769 # msg_register:   .ascii "ttpc: not a register: "
+737465723A20
+#     .equ msg_register_len, . - msg_register
+:msg_execute 747470633A2063616E6E6F7420657865 # msg_execute:    .ascii "ttpc: cannot execute: "
+637574653A20
+#     .equ msg_execute_len, . - msg_execute
+:msg_field 747470633A206669786564206669656C # msg_field:      .ascii "ttpc: fixed field without bits: "
+6420776974686F757420626974733A20
+#     .equ msg_field_len, . - msg_field
+:msg_slice 747470633A2062616420736C6963653A # msg_slice:      .ascii "ttpc: bad slice: "
+20
+#     .equ msg_slice_len, . - msg_slice
+:msg_width 747470633A207769647468206973206E # msg_width:      .ascii "ttpc: width is not 8, 16, 32 or 64 bits: "
+6F7420382C2031362C203332206F7220
+363420626974733A20
+#     .equ msg_width_len, . - msg_width
+:msg_moved 747470633A206C6162656C206D6F7665 # msg_moved:      .ascii "ttpc: label moved between the passes: "
+64206265747765656E20746865207061
+737365733A20
+#     .equ msg_moved_len, . - msg_moved
+:msg_depth 747470633A206E657374656420746F6F # msg_depth:      .ascii "ttpc: nested too deep: "
+20646565703A20
+#     .equ msg_depth_len, . - msg_depth
+:msg_bss 747470633A20656D6974746564206166 # msg_bss:        .ascii "ttpc: emitted after bss\n"
+746572206273730A
+#     .equ msg_bss_len, . - msg_bss
+:hexdigits 30313233343536373839616263646566 # hexdigits:      .ascii "0123456789abcdef"
+:indent 2020                            # indent:         .ascii "  "
+:newline 0A                             # newline:        .ascii "\n"
+:str_rd 7264                            # str_rd:         .ascii "rd"
+:str_pc 7063                            # str_pc:         .ascii "pc"
+:str_size 73697A65                      # str_size:       .ascii "size"
+:str_ascii 6173636969                   # str_ascii:      .ascii "ascii"
+:str_align 616C69676E                   # str_align:      .ascii "align"
+:str_reserve 72657365727665             # str_reserve:    .ascii "reserve"
+:str_origin 6F726967696E                # str_origin:     .ascii "origin"
+:str_bss 627373                         # str_bss:        .ascii "bss"
+:zero_byte 00                           # zero_byte:      .byte 0
+
+0000                                    # padding to .data's file offset
+^00402B40                               # .data is at this address (another segment)
+#
+# The section .data, from here its lines of hosts/x86_64/ttpc.s
+#     .section .data
+:hexbuf 30303030303030302020            # hexbuf:         .ascii "00000000  "         # hash prefix of a printed line
+000000000000                            #     .balign 8
+:out_path 0000000000000000              # out_path:       .quad 0                     # argv[2], 0 when only printing
+:out_end &outbuf 00000000               # out_end:        .quad outbuf                # next free byte in outbuf
+:syms_end &syms 00000000                # syms_end:       .quad syms                  # next free slot in syms
+:labels_end &labels 00000000            # labels_end:     .quad labels                # next free LABEL (pass 1)
+:label_next &labels 00000000            # label_next:     .quad labels                # next LABEL to check (pass 2)
+:pass 0000000000000000                  # pass:           .quad 0                     # 1 or 2
+:cur_pc 0000000000000000                # cur_pc:         .quad 0                     # address of the next byte
+:in_bss 0000000000000000                # in_bss:         .quad 0                     # 1 after the builtin bss
+:scope_depth 0000000000000000           # scope_depth:    .quad 0                     # placed functions in scopes
+
+# The exec seed: the instructions that exec context runs itself, rd = v1 op
+# v0, with v0 and v1 the other operands in parameter order (rs2 rs1, or imm
+# rs1, or shamt rs1).
+:exec_ops                               # exec_ops:
+6164640000000000                        #     .ascii "add\0\0\0\0\0"
+&op_add 00000000                        #     .quad op_add
+6164646900000000                        #     .ascii "addi\0\0\0\0"
+&op_add 00000000                        #     .quad op_add
+7375620000000000                        #     .ascii "sub\0\0\0\0\0"
+&op_sub 00000000                        #     .quad op_sub
+616E640000000000                        #     .ascii "and\0\0\0\0\0"
+&op_and 00000000                        #     .quad op_and
+616E646900000000                        #     .ascii "andi\0\0\0\0"
+&op_and 00000000                        #     .quad op_and
+6F72000000000000                        #     .ascii "or\0\0\0\0\0\0"
+&op_or 00000000                         #     .quad op_or
+6F72690000000000                        #     .ascii "ori\0\0\0\0\0"
+&op_or 00000000                         #     .quad op_or
+786F720000000000                        #     .ascii "xor\0\0\0\0\0"
+&op_xor 00000000                        #     .quad op_xor
+786F726900000000                        #     .ascii "xori\0\0\0\0"
+&op_xor 00000000                        #     .quad op_xor
+736C6C0000000000                        #     .ascii "sll\0\0\0\0\0"
+&op_sll 00000000                        #     .quad op_sll
+736C6C6900000000                        #     .ascii "slli\0\0\0\0"
+&op_sll 00000000                        #     .quad op_sll
+73726C0000000000                        #     .ascii "srl\0\0\0\0\0"
+&op_srl 00000000                        #     .quad op_srl
+73726C6900000000                        #     .ascii "srli\0\0\0\0"
+&op_srl 00000000                        #     .quad op_srl
+7372610000000000                        #     .ascii "sra\0\0\0\0\0"
+&op_sra 00000000                        #     .quad op_sra
+7372616900000000                        #     .ascii "srai\0\0\0\0"
+&op_sra 00000000                        #     .quad op_sra
+6D756C0000000000                        #     .ascii "mul\0\0\0\0\0"
+&op_mul 00000000                        #     .quad op_mul
+:exec_ops_end                           # exec_ops_end:
+
+#
+# The section .bss: no bytes in the file, only its labels
+#     .section .bss
+#     .balign 8
+^00402C98 :nodes                        # nodes:          .skip MAX_NODES * NODE_size
+^00602C98 :ptrs                         # ptrs:           .skip MAX_NODES * 8
+^00642C98 :syms                         # syms:           .skip MAX_NODES * 8         # the function NODEs, see collect_syms
+^00682C98 :labels                       # labels:         .skip MAX_NODES * LABEL_size
+^00742C98 :scopes                       # scopes:         .skip MAX_DEPTH * 8         # the placed functions around pc
+^00742E98 :vregs                        # vregs:          .skip 32 * 8                # the registers of exec context
+^00742F98 :linebuf                      # linebuf:        .skip 24                    # hex of an emitted word
+^00742FB0 :outbuf                       # outbuf:         .skip OUT_SIZE
+^00842FB0 :buf                          # buf:            .skip BUF_SIZE
+
+# Registers that live across the whole program:
+#   s0  %r12  parse cursor in buf
+#   s1  %r13  end of the loaded bytes
+#   s2  %r14  next free NODE in nodes
+#   s3  %r15  next free slot in ptrs
+
+#
+# The section .shstrtab: the names of the sections
+00                                      # ""
+2E736873747274616200                    # ".shstrtab"
+2E7465787400                            # ".text"
+2E726F6461746100                        # ".rodata"
+2E6461746100                            # ".data"
+2E62737300                              # ".bss"
+00000000                                # padding to the section headers
+#
+# Section header 0
+00000000                                # sh_name = 0x0: its name at this offset of .shstrtab
+00000000                                # sh_type = 0x0: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0000000000000000                        # sh_flags = 0x0: 1 W, 2 A, 4 X
+0000000000000000                        # sh_addr = 0x0: its address
+0000000000000000                        # sh_offset = 0x0: its file offset
+0000000000000000                        # sh_size = 0x0: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0000000000000000                        # sh_addralign = 0x0
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 1: .text
+0B000000                                # sh_name = 0xb: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0600000000000000                        # sh_flags = 0x6: 1 W, 2 A, 4 X
+B000400000000000                        # sh_addr = 0x4000b0: its address
+B000000000000000                        # sh_offset = 0xb0: its file offset
+3118000000000000                        # sh_size = 0x1831: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0100000000000000                        # sh_addralign = 0x1
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 2: .rodata
+11000000                                # sh_name = 0x11: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0200000000000000                        # sh_flags = 0x2: 1 W, 2 A, 4 X
+E118400000000000                        # sh_addr = 0x4018e1: its address
+E118000000000000                        # sh_offset = 0x18e1: its file offset
+5D02000000000000                        # sh_size = 0x25d: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0100000000000000                        # sh_addralign = 0x1
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 3: .data
+19000000                                # sh_name = 0x19: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0300000000000000                        # sh_flags = 0x3: 1 W, 2 A, 4 X
+402B400000000000                        # sh_addr = 0x402b40: its address
+401B000000000000                        # sh_offset = 0x1b40: its file offset
+5801000000000000                        # sh_size = 0x158: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0800000000000000                        # sh_addralign = 0x8
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 4: .bss
+1F000000                                # sh_name = 0x1f: its name at this offset of .shstrtab
+08000000                                # sh_type = 0x8: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0300000000000000                        # sh_flags = 0x3: 1 W, 2 A, 4 X
+982C400000000000                        # sh_addr = 0x402c98: its address
+981C000000000000                        # sh_offset = 0x1c98: its file offset
+1803540000000000                        # sh_size = 0x540318: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0800000000000000                        # sh_addralign = 0x8
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 5: .shstrtab
+01000000                                # sh_name = 0x1: its name at this offset of .shstrtab
+03000000                                # sh_type = 0x3: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0000000000000000                        # sh_flags = 0x0: 1 W, 2 A, 4 X
+0000000000000000                        # sh_addr = 0x0: its address
+981C000000000000                        # sh_offset = 0x1c98: its file offset
+2400000000000000                        # sh_size = 0x24: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0100000000000000                        # sh_addralign = 0x1
+0000000000000000                        # sh_entsize = 0x0

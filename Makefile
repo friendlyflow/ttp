@@ -52,15 +52,17 @@ compiler-test: compiler
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler test
 
 # Assemble the programs, check them against GNU as and run them; build and
-# run the C programs (and with -O, check-O); the seeds of the other hosts agree with ttpc.s; ttp's
-# own tools in ff (src/compiler/tools) agree with their Perl versions.
+# run the C programs (and with -O, check-O); the seeds of the other hosts
+# agree with ttpc.s; the hex seed is its texts and binutils' seed (hex);
+# ttp's own tools in ff (src/compiler/tools) agree with their Perl versions.
 compiler-check: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest check-O ctime cws targets seeds abi debug tools-check copies-check
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest check-O ctime cws targets seeds hex abi debug tools-check copies-check
 
 # ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
 # stage2: they must be the same. So too from the seed of each other host
 # (natively on this one, under qemu-<host> on the others), whose stage1 must
-# be what the riscv64 chain makes for it; then its C programs run.
+# be what the riscv64 chain makes for it; then its C programs run. The
+# x86_64 seed is built from hex0 (SEED=gnu: by binutils from ttpc.s).
 bootstrap:
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstraps
 
