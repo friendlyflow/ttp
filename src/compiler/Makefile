@@ -439,7 +439,8 @@ abi: $(BOOT)/stage2 $(SHARED)
 
 # -g (gen/patches/debug.pl, ehframe.pl): the section headers, symbols and
 # frames of progs/cdebug.ff (and ctls, csection, cdatasep), as readelf,
-# objdump, gdb and libgcc's unwinder read them (progs/debug/run.sh), on
+# objdump, gdb and libgcc's unwinder read them (progs/debug/run.sh), and its
+# line table (dwarfline.pl) as gdb's break, list and addr2line read it, on
 # every target: gdb natively on x86_64, under qemu -g on the others.
 DEBUG_TARGETS := riscv64 x86_64 aarch64 arm
 debug: $(BOOT)/stage2 $(SHARED)

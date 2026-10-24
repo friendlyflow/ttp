@@ -12,7 +12,12 @@
 #   nohook deep deep vdeep deep deep _start;
 # - libgcc's unwinder: progs/debug/unwind.c, by gcc against glibc's libc.a
 #   (GLIBC_REF, src/glibc's reference build), walks gcc deep deep vdeep
-#   deep deep gcc.
+#   deep deep gcc;
+# - the line table (.debug_line, gen/patches/dwarfline.pl): gdb's break
+#   deep and break progs/cdebug.ff.txt:53 stop at the lines of the tree's
+#   text (fftext.pl txt) that start deep's first statement and the return
+#   at 53, list shows those lines, and addr2line gives the same file and
+#   line for each address gdb stops at.
 # Needs the dev shell (GLIBC_CC_<target>) and stage2 as TTPC.
 set -e
 t=$1 o=$2
@@ -68,7 +73,7 @@ if test -n "$q"; then
 fi
 timeout 60 gdb -q -batch -nx -x "$o/bt.gdb" "$o/cdebug.g" > "$o/bt.out" 2>&1 || :
 wait
-grep "^#" "$o/bt.out" | sed 's/.* in \([^ ]*\) .*/\1/' | paste -sd' ' > "$o/bt.names"
+grep "^#" "$o/bt.out" | sed -E 's/^#[0-9]+ +(0x[0-9a-f]+ in )?([^ ]+) .*/\2/' | paste -sd' ' > "$o/bt.names"
 test "$(cat "$o/bt.names")" = "nohook deep deep vdeep deep deep _start" || { cat "$o/bt.out"; fail "gdb's bt: $(cat "$o/bt.names")"; }
 # libgcc's unwinder
 test -f "$obj/libc.a" || fail "no glibc reference build in $obj (make -C src/glibc glibc-ref)"
@@ -77,4 +82,33 @@ test -f "$obj/libc.a" || fail "no glibc reference build in $obj (make -C src/gli
     -Wl,--start-group "$obj/libc.a" -lgcc -lgcc_eh -Wl,--end-group "$("$cc" -print-file-name=crtend.o)" "$obj/csu/crtn.o"
 timeout 20 $q "$o/unwind" "$o/cdebug.g" | paste -sd' ' > "$o/unwind.out"
 test "$(cat "$o/unwind.out")" = "gcc deep deep vdeep deep deep gcc deep 3: 10" || fail "libgcc's walk: $(cat "$o/unwind.out")"
-echo "debug-$t: sections, symbols as the listing, objdump, frames; gdb: $(cat "$o/bt.names"); libgcc: $(cat "$o/unwind.out")"
+# the line table: gdb's breakpoints by function and by line, list, addr2line
+for s in .debug_abbrev .debug_info .debug_line; do grep -q " $s " "$o/cdebug.sections" || fail "cdebug: no $s"; done
+mkdir -p "$o/progs"
+perl "$c/gen/fftext.pl" txt "$c/progs/cdebug.ff" > "$o/progs/cdebug.ff.txt"
+printf 'set pagination off\nset confirm off\nset architecture %s\ndirectory %s\n%s\nbreak deep\nbreak progs/cdebug.ff.txt:53\n%s\ninfo line *$pc\ndelete 1\ncontinue\ninfo line *$pc\nbt 1\nlist 42,42\nlist 53,53\nkill\n' $ga "$o" \
+    "$(test -n "$q" && echo "target remote :PORT")" "$(test -n "$q" && echo continue || echo run)" > "$o/line.gdb"
+if test -n "$q"; then
+    port=$((20000 + ($$ + 7) % 20000))
+    sed -i "s/PORT/$port/" "$o/line.gdb"
+    timeout 60 $q -g $port "$o/cdebug.g" > /dev/null 2>&1 &
+    sleep 1
+fi
+timeout 60 gdb -q -batch -nx -x "$o/line.gdb" "$o/cdebug.g" > "$o/line.out" 2>&1 || :
+wait
+norm() { sed 's,^\(\./\)*,,'; }
+grep -Eq '^Line 42 of "(\./)*progs/cdebug.ff.txt" (starts at|is at) address' "$o/line.out" || { cat "$o/line.out"; fail "gdb: break deep is not at line 42"; }
+grep -Eq '^Line 53 of "(\./)*progs/cdebug.ff.txt" (starts at|is at) address' "$o/line.out" || { cat "$o/line.out"; fail "gdb: no stop at line 53"; }
+grep -q "^#0 .*deep .* at .*progs/cdebug.ff.txt:53" "$o/line.out" || { cat "$o/line.out"; fail "gdb: bt at line 53"; }
+for l in 42 53; do
+    grep -q "^$l	$(sed -n ${l}p "$o/progs/cdebug.ff.txt")\$" "$o/line.out" || { cat "$o/line.out"; fail "gdb: list $l is not the tree's line $l"; }
+done
+n=0
+for a in $(sed -n 's/^Breakpoint [0-9]* at \(0x[0-9a-f]*\): file \([^,]*\), line \([0-9]*\)\./\1/p' "$o/line.out"); do
+    g=$(sed -n "s/^Breakpoint [0-9]* at $a: file \([^,]*\), line \([0-9]*\)\./\1:\2/p" "$o/line.out" | norm)
+    b=$(${x}addr2line -e "$o/cdebug.g" $a | norm)
+    test "$g" = "$b" || fail "addr2line $a: $b, gdb: $g"
+    n=$((n + 1))
+done
+test $n = 2 || { cat "$o/line.out"; fail "gdb set $n breakpoints, not 2"; }
+echo "debug-$t: sections, symbols as the listing, objdump, frames; gdb: $(cat "$o/bt.names"); libgcc: $(cat "$o/unwind.out"); lines: break deep and :53, list, addr2line"
