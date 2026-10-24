@@ -2549,6 +2549,7 @@ c:
 opt:
   comment
     -O (gen/patches/opt.pl): cc_ldfp_* off: V = the local at FP + off, as cc_li off V, cc_addfp, cc_load_* do; cc_stfp_* off: [FP + off] = V, as cc_li off L, cc_addfp_l, cc_store_* (L is not set); off in -255..255, one instruction.
+    cc_toarg i: argument register i = V, the reverse of cc_param (a call's argument without its push, cc_arg's load and a slot of cc_drop).
   cc_ldfp_i8:
     off
     ldursb
@@ -2621,6 +2622,12 @@ opt:
       off
       x29
       x0
+  cc_toarg:
+    i
+    orr
+      x0
+      xzr
+      i
 linux:
   comment
     The Linux system calls by name, for syscall: aarch64 has the generic numbers, as riscv64.

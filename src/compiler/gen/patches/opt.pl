@@ -17,7 +17,11 @@
 #   off, then the rest; off in -255..255 and not 0 (every target encodes it
 #   in one instruction; the macros are in each target's c: group). Where a
 #   pattern breaks, its first primitive is emitted as it was and the rest
-#   go through stage B again.
+#   go through stage B again;
+#   call arguments (stage A): cc_push, then cc_arg i off for each register
+#   argument, one of them off 0 (the slot pushed), then cc_drop n is cc_toarg
+#   i (argument register i = V, the reverse of cc_param) first, then the
+#   others one slot less, then cc_drop n less a slot (none where that is 0).
 #
 # The decisions depend only on the primitives' names and arguments, so
 # pass 1 and pass 2 make the same. What is held is emitted (flushed) before
@@ -45,6 +49,8 @@ my $reset = "
     sd 0 zero t0
     la opt_a t0
     sd 0 zero t0
+    la opt_c t0
+    sd 0 zero t0
     la opt_n t0
     sd 0 zero t0
     la optb_n t0
@@ -54,7 +60,7 @@ my $reset = "
 # ---- the variables (bss): after data_at
 once(\$t, "  data_at:\n    reserve\n      2048\n",
     "  data_at:\n    reserve\n      2048\n" . join('', map { "  $_->[0]:\n    reserve\n      $_->[1]\n" }
-        [opt_on => 8], [opt_held => 8], [opt_in => 8], [opt_a => 8], [opt_n => 8], [opt_fn => 8], [opt_buf => 8 * 48],
+        [opt_on => 8], [opt_held => 8], [opt_in => 8], [opt_a => 8], [opt_c => 8], [opt_n => 8], [opt_fn => 8], [opt_buf => 8 * 48],
         [optb_n => 8], [optb_buf => 10 * 48]), 'data_at');
 
 # ---- the names it knows, after cc_names
@@ -63,7 +69,7 @@ my @safe = qw(cc_global cc_addfp cc_load_i8 cc_load_i16 cc_load_i32 cc_load_i64 
 my $names = join '', map { "  $_->[0]:\n    ascii\n      $_->[1]\n" }
     [opt_push => 'cc_push\x00'], [opt_pop => 'cc_pop\x00'], [opt_setreg => 'cc_setreg\x00'], [opt_l => 'cc_l\x00'],
     [opt_safe => 'cc_li_pos\x00cc_li_neg\x00cc_li_big\x00'], [opt_safe1 => join('', map { "$_\\x00" } @safe) . '\x00'],
-    [opt_v => 'cc_v\x00'], [opt_addfp => 'cc_addfp\x00'], [opt_addfpl => 'cc_addfp_l\x00'],
+    [opt_v => 'cc_v\x00'], [opt_arg => 'cc_arg\x00'], [opt_drop => 'cc_drop\x00'], [opt_toarg => 'cc_toarg\x00'], [opt_addfp => 'cc_addfp\x00'], [opt_addfpl => 'cc_addfp_l\x00'],
     [opt_lipos => 'cc_li_pos\x00'], [opt_lineg => 'cc_li_neg\x00'], [opt_libig => 'cc_li_big\x00'],
     [opt_lds => 'cc_load_i8\x00\x00cc_load_i16\x00cc_load_i32\x00cc_load_i64\x00cc_load_u8\x00\x00cc_load_u16\x00cc_load_u32\x00cc_load_u64\x00\x00'],
     [opt_ldfps => 'cc_ldfp_i8\x00\x00cc_ldfp_i16\x00cc_ldfp_i32\x00cc_ldfp_i64\x00cc_ldfp_u8\x00\x00cc_ldfp_u16\x00cc_ldfp_u32\x00cc_ldfp_u64\x00'],
@@ -133,15 +139,20 @@ $code .= cfn('optflush', "with -O, what opt holds emitted (opt_fn, its flush); e
     bnez O1 t0
     ret
     O1:
+    addi -16 sp sp
+    sd 0 ra sp
     la opt_fn t0
     ld 0 t0 t0
-    jalr 0 t0 zero
+    jalr 0 t0 ra
+    ld 0 sp ra
+    addi 16 sp sp
+    ret
 ", 2);
 once(\$t, "\n1:\n", "\n${code}1:\n", 'the end of layer 0');
 
 # ---- the group opt: of cc, at the end of its layer 1
 # Stage A (push ... pop) feeds stage B (the locals), stage B prim0.
-my $opt = cfn('opt', "the peephole of -O (gen/patches/opt.pl), prim's a0..a5 a primitive. Stage A: cc_push held (opt_a), then what touches only V or X (opt_buf, opt_n); cc_pop after them is cc_setreg cc_l, then them; else the push and them, then it. Stage B (optb_buf, optb_n): cc_li off V, cc_addfp, cc_load_* is cc_ldfp_* off; cc_li off L, cc_addfp_l, cc_store_*, what neither reads nor sets L, then what sets L is cc_stfp_* off, then them; else the first as it was, the rest again. F0 emits what both hold (optflush), unless opt runs (opt_in).", "
+my $opt = cfn('opt', "the peephole of -O (gen/patches/opt.pl), prim's a0..a5 a primitive. Stage A: cc_push held (opt_a), then what touches only V or X (opt_buf, opt_n); cc_pop after them is cc_setreg cc_l, then them; or at once after it cc_arg i off (opt_c), one of them off 0, then cc_drop n: cc_toarg of that one, the others a slot less, cc_drop n less a slot; else the push and them, then it. Stage B (optb_buf, optb_n): cc_li off V, cc_addfp, cc_load_* is cc_ldfp_* off; cc_li off L, cc_addfp_l, cc_store_*, what neither reads nor sets L, then what sets L is cc_stfp_* off, then them; else the first as it was, the rest again. F0 emits what both hold (optflush), unless opt runs (opt_in).", "
     addi -16 sp sp
     sd 0 ra sp
     la opt_in t0
@@ -172,7 +183,7 @@ my $opt = cfn('opt', "the peephole of -O (gen/patches/opt.pl), prim's a0..a5 a p
     M1:
     la opt_a t0
     ld 0 t0 t0
-    bnez H1 t0
+    bnez H0 t0
     N0:
     mv s4 a0
     bnez X1 s5
@@ -187,7 +198,111 @@ my $opt = cfn('opt', "the peephole of -O (gen/patches/opt.pl), prim's a0..a5 a p
     la opt_n t0
     sd 0 zero t0
     leave8
+    H0:
+    la opt_c t0
+    ld 0 t0 t0
+    bnez C1 t0
+    la opt_n t0
+    ld 0 t0 t0
+    bnez H1 t0
+    call ISA
+    beqz H1 a0
+    la opt_c t0
+    li 1 t1
+    sd 0 t1 t0
+    j AP
+    C1:
+    la opt_n t0
+    ld 0 t0 t0
+    li 8 t1
+    bge rel:X0 t1 t0
+    call ISA
+    bnez AP a0
+    li 1 t0
+    bne rel:X0 t0 s5
+    mv s4 a0
+    la opt_drop a2
+    call cstreq
+    beqz X0 a0
+    li -1 s10
+    li 0 t1
+    la opt_n t0
+    ld 0 t0 t2
+    CD1:
+    bge rel:CD2 t2 t1
+    li 48 t3
+    mul t3 t1 t3
+    la opt_buf t0
+    add t3 t0 t3
+    ld 24 t3 t4
+    bnez CD3 t4
+    bltz CD8 s10
+    j X0
+    CD8:
+    mv t1 s10
+    CD3:
+    addi 1 t1 t1
+    j CD1
+    CD2:
+    bltz X0 s10
+    call slot
+    mv a0 s11
+    li 48 t3
+    mul t3 s10 t3
+    la opt_buf t0
+    add t3 t0 t3
+    ld 16 t3 a2
+    la opt_toarg a0
+    li 1 a1
+    li 0 a5
+    call SB
+    li 0 s7
+    CD4:
+    la opt_n t0
+    ld 0 t0 t1
+    bge rel:CD6 t1 s7
+    beq rel:CD5 s7 s10
+    li 48 t3
+    mul t3 s7 t3
+    la opt_buf t0
+    add t3 t0 t3
+    ld 0 t3 a0
+    ld 8 t3 a1
+    ld 16 t3 a2
+    ld 24 t3 a3
+    sub s11 a3 a3
+    li 0 a5
+    call SB
+    CD5:
+    addi 1 s7 s7
+    j CD4
+    CD6:
+    la opt_a t0
+    sd 0 zero t0
+    la opt_n t0
+    sd 0 zero t0
+    la opt_c t0
+    sd 0 zero t0
+    sub s11 s6 a2
+    beqz CD7 a2
+    mv s4 a0
+    li 1 a1
+    li 0 a5
+    call SB
+    CD7:
+    leave8
+    ISA:
+    li 2 t0
+    bne rel:IS0 t0 s5
+    bnez IS0 s9
+    mv s4 a0
+    la opt_arg a2
+    j cstreq
+    IS0:
+    li 0 a0
+    ret
     H1:
+    mv s4 a0
     bnez H2 s5
     la opt_pop a2
     call cstreq
@@ -209,6 +324,7 @@ my $opt = cfn('opt', "the peephole of -O (gen/patches/opt.pl), prim's a0..a5 a p
     mv s9 a1
     call SAFE
     beqz X0 a0
+    AP:
     la opt_n t0
     ld 0 t0 t1
     addi 1 t1 t2
@@ -238,6 +354,8 @@ my $opt = cfn('opt', "the peephole of -O (gen/patches/opt.pl), prim's a0..a5 a p
     leave8
     FA:
     enter1
+    la opt_c t0
+    sd 0 zero t0
     la opt_a t0
     ld 0 t0 t1
     beqz FA9 t1
