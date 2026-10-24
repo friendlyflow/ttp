@@ -475,12 +475,15 @@ SLDFLAGS_x86_64 := -s -z noseparate-code
 # The hex seed (lane H): on the hosts of HEXHOSTS the chain builds the seed
 # without binutils, from hosts/<host>/hex0, a binary of a few hundred bytes
 # that is its commented text hex0.hex0 (make hex checks both): hex0 makes
-# hex2 of hex2.hex0, hex2 makes the seed of ttpc.hex2. SEED=gnu builds it
-# with binutils' as and ld from ttpc.s instead, as on the other hosts. Both
-# give the same bytes (make hex): on x86_64 as and ld without the GNU
-# property note, the symbols (which name the object file) and the page of
-# its own for the code, so that the cross and the native binutils agree.
-SEED ?= hex
+# hex2 of hex2.hex0, hex2 makes M1 of M1.hex2, M1 and hex2 make asm of
+# asm.M1, and asm assembles the readable seed ttpc.s into the seed.
+# SEED=hex: hex2 makes the seed of ttpc.hex2 instead (the stepping stone);
+# SEED=gnu: binutils' as and ld make it of ttpc.s, as on the other hosts.
+# All three give the same bytes (make hex): on x86_64 as and ld without
+# the GNU property note, the symbols (which name the object file) and the
+# page of its own for the code, so that the cross and the native binutils
+# agree.
+SEED ?= asm
 HEXHOSTS := x86_64
 SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
 
@@ -605,13 +608,15 @@ endef
 $(foreach h,$(HOSTS),$(eval $(call host,$(h))))
 
 # The hex seed of a host of HEXHOSTS: hex0 makes hex2, hex2 the seed of
-# ttpc.hex2 and M1 of M1.hex2 (a macro assembler, as stage0-posix's).
-# hex-<host> checks hex0 and hex2 against their texts without comments
-# (what a person can check by hand: the hex digits before each '#' or ';',
-# as od prints the binary), that hex0 makes itself of hex0.hex0, that M1
-# is what binutils makes of its source gen/hex/<host>/M1.s (a dev aid,
-# which gen/mkhex.pl made M1.hex2 of), and that the seed from ttpc.hex2 is
-# the one binutils makes of ttpc.s.
+# ttpc.hex2 and M1 of M1.hex2 (a macro assembler, as stage0-posix's), M1
+# the hex2 text of asm.M1 and hex2 of it asm, the seed's assembler, and
+# asm the seed of ttpc.s. hex-<host> checks hex0 and hex2 against their
+# texts without comments (what a person can check by hand: the hex digits
+# before each '#' or ';', as od prints the binary), that hex0 makes itself
+# of hex0.hex0, that M1 and asm are what binutils makes of their sources
+# gen/hex/<host>/M1.s and asm.s (dev aids, which gen/mkhex.pl made M1.hex2
+# and asm.M1 of), and that the seeds of ttpc.hex2 and of asm are the one
+# binutils makes of ttpc.s.
 define hexhost
 
 $(BUILD)/$(1)/hex2: hosts/$(1)/hex0 hosts/$(1)/hex2.hex0 | $(BUILD)/$(1)
@@ -624,12 +629,23 @@ $(BUILD)/$(1)/M1: $(BUILD)/$(1)/hex2 hosts/$(1)/M1.hex2
 	chmod +x $$@.tmp
 	mv $$@.tmp $$@
 
+$(BUILD)/$(1)/asm: $(BUILD)/$(1)/M1 $(BUILD)/$(1)/hex2 hosts/$(1)/asm.M1
+	$(RUN_$(1)) $(BUILD)/$(1)/M1 < hosts/$(1)/asm.M1 > $$@.hex2
+	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < $$@.hex2 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/seed.asm: $(BUILD)/$(1)/asm hosts/$(1)/ttpc.s
+	$(RUN_$(1)) $(BUILD)/$(1)/asm < hosts/$(1)/ttpc.s > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
 $(BUILD)/$(1)/seed.hex: $(BUILD)/$(1)/hex2 hosts/$(1)/ttpc.hex2
 	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/ttpc.hex2 > $$@.tmp
 	chmod +x $$@.tmp
 	mv $$@.tmp $$@
 
-hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/M1 $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
+hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/M1 $(BUILD)/$(1)/asm $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
 	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
 	for f in hex0 hex2; do sed 's/[#;].*//' hosts/$(1)/$$$$f.hex0 | tr -cd 0-9A-Fa-f | tr A-F a-f > $$$$d/$$$$f.text; done; \
 	od -An -v -tx1 hosts/$(1)/hex0 | tr -cd 0-9a-f | cmp - $$$$d/hex0.text; \
@@ -638,11 +654,14 @@ hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/M1 $(BUILD)/$(1)/seed.hex $(BUILD)/$(
 	echo "hex-$(1): hex0 makes itself of hex0.hex0"; \
 	od -An -v -tx1 $(BUILD)/$(1)/hex2 | tr -cd 0-9a-f | cmp - $$$$d/hex2.text; \
 	echo "hex-$(1): hex2 ($$$$(wc -c < $(BUILD)/$(1)/hex2) bytes), made by hex0, is hex2.hex0 without its comments"; \
-	for f in M1; do $(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
+	for f in M1 asm; do $(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
 	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.o $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
 	echo "hex-$(1): M1 ($$$$(wc -c < $(BUILD)/$(1)/M1) bytes), made by hex2 of M1.hex2 ($$$$(wc -l < hosts/$(1)/M1.hex2) lines), is what binutils makes of gen/hex/$(1)/M1.s"; \
+	echo "hex-$(1): asm ($$$$(wc -c < $(BUILD)/$(1)/asm) bytes), made by M1 and hex2 of asm.M1 ($$$$(wc -l < hosts/$(1)/asm.M1) lines), is what binutils makes of gen/hex/$(1)/asm.s"; \
 	cmp $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu; \
-	echo "hex-$(1): hex2 makes of ttpc.hex2 ($$$$(wc -l < hosts/$(1)/ttpc.hex2) lines) the seed binutils makes of ttpc.s ($$$$(wc -c < $(BUILD)/$(1)/seed.gnu) bytes)"
+	echo "hex-$(1): hex2 makes of ttpc.hex2 ($$$$(wc -l < hosts/$(1)/ttpc.hex2) lines) the seed binutils makes of ttpc.s ($$$$(wc -c < $(BUILD)/$(1)/seed.gnu) bytes)"; \
+	cmp $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu; \
+	echo "hex-$(1): asm makes of ttpc.s ($$$$(wc -l < hosts/$(1)/ttpc.s) lines) that seed too"
 
 .PHONY: hex-$(1)
 endef

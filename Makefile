@@ -62,7 +62,8 @@ compiler-check: compiler
 # stage2: they must be the same. So too from the seed of each other host
 # (natively on this one, under qemu-<host> on the others), whose stage1 must
 # be what the riscv64 chain makes for it; then its C programs run. The
-# x86_64 seed is built from hex0 (SEED=gnu: by binutils from ttpc.s).
+# x86_64 seed is built from hex0: hex0, hex2, M1 and asm assemble ttpc.s
+# (SEED=hex: hex2 from ttpc.hex2; SEED=gnu: binutils from ttpc.s).
 bootstrap:
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstraps
 
