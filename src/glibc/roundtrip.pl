@@ -33,6 +33,9 @@
 # A host tool, not part of ttpc.
 use strict;
 use warnings;
+use FindBin;
+use lib "$FindBin::Bin/../compiler/gen";
+use FFold;
 my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 
 our $target = '';
@@ -62,6 +65,7 @@ our $typeof_depth = 0;     # (tstr through typeof_expr, at most 8 deep)
 our %typeof;               # what its typeof (expression) types are, where clang says
 our %declty;               # the types of its functions and globals, for typeof (name)
 our %errordecl;            # functions of gcc's error attribute declared in a function (by id): a call of one is none, as c2ff has it
+our %constint;             # glibc's side: the unit's const integer globals of a number, an array's count as c2ff takes them (tst-random's long rnd[nseq][nrnd])
 my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'short' => 'i16', 'unsigned short' => 'u16',
     'int' => 'i32', 'unsigned int' => 'u32', 'long' => 'i64', 'long long' => 'i64', 'unsigned long' => 'u64',
     'unsigned long long' => 'u64', '_Bool' => 'u8', 'float' => 'float', 'double' => 'double',
@@ -75,6 +79,7 @@ sub tstr {
     $s =~ s/^ | $//g;
     $s =~ s/ (\*|\[)/$1/g;
     $s =~ s/\bsigned (char)\b/signed $1/;
+    $s =~ s/\[([A-Za-z_]\w*)\]/'[' . ($constint{$1} \/\/ $1) . ']'/ge if %constint;
     $s =~ s/\b(?:long int)\b/long/g;
     $s =~ s/\b(?:short int)\b/short/g;
     $s =~ s/\bunsigned\b(?! (?:char|short|int|long))/unsigned int/g;
@@ -149,11 +154,40 @@ my %castdrop = map { $_ => 1 } qw(LValueToRValue NoOp ArrayToPointerDecay Functi
 my %atomicop = map { $_ => 1 } qw(exchange load store compare_exchange fetch_add fetch_sub fetch_and fetch_or fetch_xor fetch_nand
     add_fetch sub_fetch and_fetch or_fetch xor_fetch nand_fetch);
 
+# inf or nan where n is a call of gcc's __builtin_huge_val, inf or nan ("")
+# (of any floating type), under floating conversions; else undef
+sub special_float {
+    my ($n) = @_;
+    $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr)$/
+        || ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($n->{castKind} // '') =~ /^(FloatingCast|NoOp)$/;
+    return unless $n && ($n->{kind} // '') eq 'CallExpr';
+    my $d = (strip((kids($n))[0]) // {})->{referencedDecl} or return;
+    my $name = $d->{name} // '';
+    return 'inf' if $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/;
+    return 'nan' if $name =~ /^__builtin_nan[fl]?$/;
+    return;
+}
+# a value of FFold's as E has the literal of its type
+sub fconst {
+    my ($v, $t) = @_;
+    my $x = $v->{k} ne 'num' ? "(fspecial $v->{k} " . tstr($t) . ')'
+        : $t eq 'long double' ? '(fltl ' . FFold::qlit($v->{q}, $v->{e}, 16383) . ')'
+        : '(flt ' . sprintf('%.17g', $v->{q}->numify * 2**$v->{e}) . ')';
+    $v->{neg} ? "(u- $x)" : $x;
+}
 sub E {
     my ($n) = @_;
     return '-' unless $n && $n->{kind};
     my $k = $n->{kind};
     return E((kids($n))[0]) if $k =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
+    # (in a global's value gcc's infinity or NaN, converted or not, is the
+    # literal of its type there, as c2ff writes it; ff2c writes it back as
+    # the builtin of that type)
+    if ($in_global && (my $sp = special_float($n))) { return "(fspecial $sp " . tcls($n) . ')' }
+    # (a global's floating constant of long double, as c2ff works it out:
+    # FFold's, the same on both sides)
+    if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
+        && FFold::fty(FFold::ftype($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) { return fconst($v, FFold::ftype($n)) }
     if ($k eq 'ImplicitCastExpr' || $k eq 'CStyleCastExpr') {
         my ($c) = kids($n);
         my $ck = $n->{castKind} // '';
@@ -213,7 +247,11 @@ sub E {
     return '(u- (int ' . (2**32 - $n->{value}) . ' i32))' if $k eq 'CharacterLiteral' && $n->{value} >= 2**31 && (($n->{type} // {})->{qualType} // '') eq 'int';
     return '(int ' . $n->{value} . ' i32)' if $k eq 'CharacterLiteral';
     # (a long double literal, binary128: clang's decimal of it, every digit)
+    # (a long double literal, binary128: its exact hex, of clang's decimal
+    # of it; a float's its value as a float)
+    return '(fltl ' . FFold::ldround($n->{value}, 113, -16494, 16383) . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble' && $target ne 'arm';
     return '(fltl ' . $n->{value} . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble';
+    if ($k eq 'FloatingLiteral' && FFold::ftype($n) eq 'float' && (my $v = FFold::fold($n))) { return fconst($v, 'float') }
     return '(flt ' . flt($n->{value}) . ')' if $k eq 'FloatingLiteral';
     return '(str ' . str($n->{value}) . ')' if $k eq 'StringLiteral';
     return E((kids($n))[0]) if $k eq 'PredefinedExpr';
@@ -818,6 +856,11 @@ for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
     local %typeof = typeofs($ast);
     local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
     local %errordecl = errordecls($ast);
+    local %constint = map {
+        my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($_);
+        $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr)$/;
+        $e && $e->{kind} eq 'IntegerLiteral' ? ($_->{name} => $e->{value}) : ()
+    } grep { $_->{kind} eq 'VarDecl' && ($_->{type}{qualType} // '') =~ /^const (?:(?:unsigned |signed )?(?:char|short|int|long|long long)(?: int)?|unsigned)$/ && ($_->{init} // '') eq 'c' } kids($ast);
     my %def;
     for my $d (kids($ast)) {
         if ($d->{kind} eq 'VarDecl' && ($d->{storageClass} // '') eq 'register' && (my ($l) = grep { $_->{kind} eq 'AsmLabelAttr' } kids($d))) {

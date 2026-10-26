@@ -195,16 +195,23 @@ sub newwords {
 sub regroup {
     my ($t, $n, $ctx) = @_;
     my @k = kids($n);
-    my ($head, $items) = (0, $ctx eq 'items');
+    my ($head, $items, $fnhead) = (0, $ctx eq 'items');
     if ($n->{content} =~ /.:$/ && $n->{content} ne ':') {
         my $i = marks(\@k);
         if ($i < @k && is_typeword($t, $k[$i]) && !(leaf($k[0]) && $k[0]{content} =~ /^(?:struct|union|enum)$/)) {
             my (undef, $j) = oldrun_new($t, \@k, $i);
-            ($head, $items) = ($j, 1);
+            # (not a function: its type run, then a parameter, its ..., a
+            # comment or a statement; its statements go in layers, as c2ff
+            # writes them: nss_files_functions' 64 *fptr++ = f past 255)
+            if ($j < @k && $k[$j]{content} =~ /.:$|^(?:\.\.\.|comment|return|if|while|for|do while|switch|goto)$/) {
+                $j++ while $j < @k && $k[$j]{content} =~ /.:$|^(?:\.\.\.|comment)$/ && $k[$j]{content} !~ /^[0-9]+:$/;
+                $fnhead = $j;
+            } else { ($head, $items) = ($j, 1) }
         }
     }
     $n->{children} = [map { regroup($t, $_, $items && ($_->{content} eq ':' || $_->{content} eq 'items') ? 'items' : '') } @k];
     return $n if @k <= 255;
+    if (defined $fnhead) { $n->{children} = [@k[0 .. $fnhead - 1], layers(@k[$fnhead .. $#k])]; return $n }
     unless ($items) { $n->{children} = [layers(@k)]; return $n }
     my @v = map { $_->{content} eq 'items' && !leaf($_) ? kids($_) : $_ } @k[$head .. $#k];
     # (an item whole in one group: a cast or a suffix with its operand, a

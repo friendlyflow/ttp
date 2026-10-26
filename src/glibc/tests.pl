@@ -19,7 +19,9 @@
 #       result: "equal: ..." where every run exits with the same status
 #       and prints the same (stdout and stderr), else "differ: ..."
 #       (an address printed, 0x and 6 hex digits or more, compares as any
-#       other: where a build puts its stack or heap is its own)
+#       other: where a build puts its stack or heap is its own; the
+#       program's name, test.ref or test-prog, as the test's; a temporary
+#       file's random XXXXXX in a line that differs only there)
 #   perl tests.pl table <area> <target> <dir> <test>...
 #       the table of dir/<test>.result: a line of counts, then a line per test
 #
@@ -104,6 +106,21 @@ if ($cmd eq 'why') {
 
 sub slurp { my ($f) = @_; open my $h, '<:raw', $f or return ''; local $/; my $c = <$h>; defined $c ? $c : '' }
 sub unaddr { my ($s) = @_; $s =~ s/\b0x[0-9a-f]{6,}\b/0x.../gr }
+# (and the program's own name, its argv[0], test.ref or test-prog, as test)
+sub norm { my ($s, $t) = @_; unaddr($s) =~ s/\Q$t\E(?:\.ref|-prog)\b/$t/gr }
+# (and a temporary file's name, mkstemp's or tmpnam's: a path's part whose
+# last 6 letters or digits are the random ones of its XXXXXX, as any other)
+sub tmpname { my ($s) = @_; $s =~ s{(/[^/\s"']*?)[A-Za-z0-9]{6}(?=[/\s"')]|\z)}{$1XXXXXX}gr }
+sub same {
+    my ($a, $b, $t) = @_;
+    ($a, $b) = (norm($a, $t), norm($b, $t));
+    return 1 if $a eq $b;
+    my @a = split /\n/, $a, -1;
+    my @b = split /\n/, $b, -1;
+    return 0 unless @a == @b;
+    for my $i (0 .. $#a) { return 0 unless $a[$i] eq $b[$i] || tmpname($a[$i]) eq tmpname($b[$i]) }
+    1;
+}
 sub status_word { my ($s) = @_; $s == 0 ? 'PASS' : $s == 77 ? 'UNSUPPORTED' : $s >= 128 ? 'FAIL, signal ' . ($s - 128) : 'FAIL' }
 
 if ($cmd eq 'run') {
@@ -150,8 +167,8 @@ if ($cmd eq 'run') {
             my $g = $got{$b}{$cpu};
             my $who = ($b eq 'ref' ? "gcc's" : "ttpc's") . " on $cpu";
             if ($g->[0] != $want->[0]) { push @diff, "$who: exit $g->[0], gcc's on $cpus[0] $want->[0]" }
-            elsif (unaddr($g->[1]) ne unaddr($want->[1])) { push @diff, "$who: other output" }
-            elsif (unaddr($g->[2]) ne unaddr($want->[2])) { push @diff, "$who: other stderr" }
+            elsif (!same($g->[1], $want->[1], $t)) { push @diff, "$who: other output" }
+            elsif (!same($g->[2], $want->[2], $t)) { push @diff, "$who: other stderr" }
         }
     }
     my $s = $want->[0];

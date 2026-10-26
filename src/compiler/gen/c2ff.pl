@@ -64,6 +64,7 @@ use lib $FindBin::Bin;
 my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 use FF qw(node layers write_txt read_ff);
 use Words;
+use FFold qw(ldround ratq qlit);
 use Header qw(license_nodes header_of);
 use Digest::SHA;
 use POSIX ();
@@ -99,6 +100,7 @@ my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
 my %owntd;                 # a unit's own typedefs, where another unit's came first
+my %constint;              # a unit's const integer globals of a number (tst-random's const int nseq = 3): the counts of arrays
 my %tagname;                # struct, union, enum tags and their ff names
 my %typedef;                # typedef names and the types they stand for
 my %errorfn;                # functions of the error attribute (by unit and id): no call of them
@@ -129,6 +131,12 @@ sub is_fieldname {
 # A C type string to a list of ff words. A pointer to a function names a
 # function type of its own (fn1:, fn2:, ...), made once per spelling.
 our $ctype_depth = 0;
+# an array's count that is a const integer global of the unit: its number
+sub constcounts {
+    my ($t) = @_;
+    return $t unless $cur_unit && $constint{$cur_unit} && $t =~ /\[[A-Za-z_]/;
+    $t =~ s/\[([A-Za-z_]\w*)\]/'[' . ($constint{$cur_unit}{$1} \/\/ $1) . ']'/ger;
+}
 sub ctype {
     my ($t) = @_;
     local $ctype_depth = $ctype_depth + 1;
@@ -148,6 +156,7 @@ sub ctype {
     $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
     $t = trim($t);
     $t =~ s/\s+/ /g;
+    $t = constcounts($t);
     # (T *__seg_fs: the pointer in fs; __seg_fs T: T in fs, after the
     # pointers below, which bind first: __seg_fs struct p * is (__seg_fs
     # struct p) *)
@@ -212,7 +221,12 @@ sub ctype {
         # libio's own an _IO_lock_t *)
         # (an alias's name too: glibc's weak alias sigaction of __sigaction,
         # struct sigaction's tag took its name and a program's call of it)
-        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $alias{$2} || $localname{$2} || is_fieldname(ffname($2)) || $treedefs{ ffname($2) } ? "$2 $1" : ffname($2);
+        # (a program's, with --index, "name kind prog": glibc's units name
+        # theirs so too, unit-local, and a unit found the program's:
+        # tst-grouping_iterator's lc_ctype_data struct, whose fcts field was
+        # the program's empty gconv_fcts struct)
+        return $tagname{"$1 $2"} //= $var{$2} || $fn{$2} || $alias{$2} || $localname{$2} || is_fieldname(ffname($2)) || $treedefs{ ffname($2) }
+            ? (%treedefs ? "$2 $1 prog" : "$2 $1") : ffname($2);
     }
     # glibc's array check (array_length): sizeof (struct { _Static_assert
     # (...); }), a struct clang writes no declaration of; it has no fields
@@ -359,7 +373,7 @@ my %reserved = map { $_ => 1 } qw(
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
-    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor line zero ra sp gp tp fp pc
+    alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor fs vector line zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -466,14 +480,23 @@ sub enum_value {
     $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
     $e && $e->{kind} eq 'ConstantExpr' ? $e->{value} : undef;
 }
+# (an enum's definition, its constants: not a declaration of it that came
+# first, nss_status's in a header that only names it)
+sub enum_consts { grep { $_->{kind} eq 'EnumConstantDecl' } @{ $_[0]{inner} || [] } }
+sub set_enumd {
+    my ($tag, $d) = @_;
+    $enumd{$tag} = $d if !$enumd{$tag} || !enum_consts($enumd{$tag}) && enum_consts($d);
+}
 sub index_enum {
     my ($d) = @_;
     $enumid{$d->{id}} = $d;
     my @c = grep { $_->{kind} eq 'EnumConstantDecl' } @{ $d->{inner} || [] };
     my $tag = defined $d->{name} ? "enum $d->{name}" : @c ? "enum $c[0]{name} enum" : undef;
     return unless defined $tag;
-    $enumd{$tag} //= $d;
-    $tagname{$tag} //= defined $d->{name} ? ffname($d->{name}) : "$c[0]{name} enum";
+    set_enumd($tag, $d);
+    # (a named one's name ctype gives, once every local's name is known: a
+    # tag that is also a local's takes its kind, wordexp's enum action action)
+    $tagname{$tag} //= "$c[0]{name} enum" unless defined $d->{name};
     $enumof{ $_->{name} } //= $tag for @c;
     # the constants' values: clang's ConstantExpr where C gives one, else the
     # one before and 1
@@ -647,6 +670,14 @@ for my $u (@units) {
             }
         } elsif ($d->{kind} eq 'VarDecl') {
             if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
+            # (a const integer global of a number: in C not a constant, so an
+            # array of it as count is of variable length, the same as of the
+            # number; tst-random's long rnd[nseq][nrnd])
+            if (qt($d) =~ /^const (?:(?:unsigned |signed )?(?:char|short|int|long|long long)(?: int)?|unsigned)$/ && ($d->{init} // '') eq 'c'
+                && (my ($i) = grep { $_->{kind} !~ /Attr$/ } @in)) {
+                my $v = int_const($i);
+                $constint{$u}{$name} = $v if defined $v;
+            }
             if (($d->{storageClass} // '') ne 'extern' || $zero{$name}) {
                 my $k = own_name(\%var, $name, $d, $u);
                 # (a global of a named section: reached with the section's bounds)
@@ -656,7 +687,7 @@ for my $u (@units) {
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
             reg_rec("$d->{tagUsed} $name", $d, $u) and anon_fields($d, $name);
         } elsif ($d->{kind} eq 'EnumDecl') {
-            $enumd{"enum $name"} //= $d;
+            set_enumd("enum $name", $d);
         }
     }
 }
@@ -672,7 +703,7 @@ sub anon_fields {
             $last = $k;
             # a named record or enum inside a record is seen as one outside it, as in C
             if (($k->{name} // '') ne '') {
-                if ($k->{kind} eq 'EnumDecl') { $enumd{"enum $k->{name}"} //= $k }
+                if ($k->{kind} eq 'EnumDecl') { set_enumd("enum $k->{name}", $k) }
                 elsif ($k->{completeDefinition}) { $rec{"$k->{tagUsed} $k->{name}"} //= $k; anon_fields($k, $k->{name}) }
             }
             next;
@@ -968,6 +999,51 @@ my %prec = ('=' => 1, '+=' => 1, '-=' => 1, '*=' => 1, '/=' => 1, '%=' => 1, '&=
 my %isop = map { $_ => 1 } (keys %prec, qw(! ~ ++ --));
 
 sub kids { @{ $_[0]{inner} || [] } }
+# gcc's __builtin_tgmath (tgmath.h's): its functions, then the arguments; the
+# call is the one of the function of the type of the arguments that differ
+# in type between the functions (float, double, else long double; an
+# integer is a double), so ldexp (v, exp) of a float v is ldexpf. clang-
+# prelude.h declares it without parameters, so clang made a float argument
+# a double: the call made again, of the chosen function, with the
+# arguments' own values converted to its parameters.
+sub tgmath {
+    my ($n, @args) = @_;
+    my @f;
+    push @f, shift @args while @args && strip($args[0])->{kind} eq 'DeclRefExpr' && qt(strip($args[0])) =~ /\(/;
+    @f >= 3 && @args or stop('__builtin_tgmath without functions and arguments', $n);
+    my @ft = map { qt(strip($_)) } @f;
+    my $params = sub { $_[0] =~ /\((.*)\)$/ ? split(/, /, $1) : () };
+    my @p0 = $params->($ft[0]);
+    my @p1 = $params->($ft[1]);
+    $ft[0] =~ /^float \(/ && $ft[1] =~ /^double \(/ && $ft[2] =~ /^long double \(/ && @p0 == @args && @p1 == @args
+        or stop('__builtin_tgmath of other functions than of float, double, long double', $n);
+    my $bare = sub { (my $t = qt($_[0])) =~ s/\b(const|volatile)\s+//g; $t };
+    # an argument's value before the promotion of an unprototyped call
+    my @v = map {
+        my $a = $_;
+        $a = (kids($a))[0] while $a->{kind} eq 'ImplicitCastExpr' && ($a->{castKind} // '') eq 'FloatingCast' && $bare->((kids($a))[0]) eq 'float';
+        $a
+    } @args;
+    my $rank = 0;
+    for my $i (0 .. $#v) {
+        next if $p0[$i] eq $p1[$i];
+        my $t = $bare->($v[$i]);
+        stop('__builtin_tgmath of a complex argument', $n) if $t =~ /_Complex/;
+        my $r = $t eq 'float' ? 0 : $t eq 'long double' ? 2 : 1;
+        $rank = $r if $r > $rank;
+    }
+    my @p = $params->($ft[$rank]);
+    my ($ret) = $ft[$rank] =~ /^(.*?) \(/;
+    my $isf = sub { $_[0] =~ /^(float|double|long double)$/ };
+    my @a = map {
+        my ($a, $t) = ($v[$_], $p[$_]);
+        my $from = $bare->($a);
+        $from eq $t ? $a
+            : { kind => 'ImplicitCastExpr', type => { qualType => $t }, inner => [$a],
+                castKind => $isf->($t) ? ($isf->($from) ? 'FloatingCast' : 'IntegralToFloating') : 'IntegralCast' }
+    } 0 .. $#v;
+    return { kind => 'CallExpr', type => { qualType => $ret }, inner => [$f[$rank], @a] };
+}
 sub strip {     # through what means nothing in ff
     my ($n) = @_;
     $n = (kids($n))[0] while $n->{kind} =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
@@ -1445,6 +1521,11 @@ sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
     softfp($n);
+    if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
+        && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
+        my @f = femit($v, tword($n));
+        return @f if @f;
+    }
     # GNU's &&L, the address of a label of the function
     return node('address', node(label_name($label{ $n->{labelDeclId} } // stop('the address of no label', $n)))) if $k eq 'AddrLabelExpr';
     # in a global's items, an array field that decays to its first element's
@@ -1470,9 +1551,11 @@ sub expr {
         # the long double literal of its value, which binary128 holds
         # exactly: ttpc has no conversion to run there, libm's zero = 0.0)
         my $e = strip((kids($n))[0]);
+        if ($in_global && defined(my $lit = special_float((kids($n))[0], $n))) { return node($lit) }
         if ($in_global && isld($n) && $e->{kind} eq 'FloatingLiteral' && (my $t = tword($e)) =~ /^(float|double)$/) {
             return node($target eq 'arm' || $t eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : ldround($e->{value}, 24, -149, 127));
         }
+        if ($in_global && defined(my $lit = narrowlit($n, $e))) { return node($lit) }
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
     # C's conversion to _Bool (in ff a u8) gives 0 or 1: the value compared
@@ -1592,6 +1675,7 @@ sub expr {
         stop("the operator $op", $n);
     }
     if ($k eq 'CStyleCastExpr') {
+        if ($in_global && defined(my $lit = narrowlit($n, strip((kids($n))[0])))) { return node($lit) }
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
     }
     # C11's _Generic: generic / x / an association per type (its type words
@@ -1660,8 +1744,15 @@ sub expr {
     if ($k eq 'CallExpr') {
         my ($callee, @args) = kids($n);
         my $c = strip($callee);
-        # (*f) (...) calls what f points at, as f (...) does
-        $c = strip((kids($c))[0]) while $c->{kind} eq 'ParenExpr' || ($c->{kind} eq 'UnaryOperator' && $c->{opcode} eq '*');
+        # (*f) (...) calls what f points at, as f (...) does; a _Generic's
+        # call is of the association clang selected (tst-scanf-format-real.h's
+        # _Generic (v, float: strtof, ...) (s, &e))
+        while (1) {
+            $c = strip((kids($c))[0]) while $c->{kind} eq 'ParenExpr' || ($c->{kind} eq 'UnaryOperator' && $c->{opcode} eq '*');
+            last unless $c->{kind} eq 'GenericSelectionExpr';
+            my ($as) = grep { $_->{selected} } kids($c) or stop('a _Generic with no association selected', $n);
+            $c = strip((kids($as))[-1]);
+        }
         if ($c->{kind} =~ /^(MemberExpr|ArraySubscriptExpr)$/) {
             # through a function pointer at the end of a path: p / fn / x is
             # p->fn (x), its arguments after the path's fields and indexes
@@ -1686,6 +1777,10 @@ sub expr {
         my $name = $c->{referencedDecl}{name};
         # (its value a long, as its first argument is made one)
         return cast_node([ctype(qt($n))], item(expr($args[0]))) if $name eq '__builtin_expect';
+        return expr(tgmath($n, @args)) if $name eq '__builtin_tgmath';
+        # (in a global's value, gcc's infinity or NaN is its literal, as gcc
+        # folds it: ttpc's global items call nothing)
+        if ($in_global && defined(my $lit = special_float($n, $n))) { return node($lit) }
         if ($name eq '__builtin_constant_p') {
             # gcc's answer where it cannot tell is 0, and code that asks must
             # mean the same either way: 1 for a literal, else 0
@@ -1738,17 +1833,21 @@ sub expr {
         return node('va_arg_pack') if $name eq '__builtin_va_arg_pack';
         return node('va_arg_pack_len') if $name eq '__builtin_va_arg_pack_len';
         # the builtins glibc in ff has by hand (src/glibc/builtins.ff.txt)
-        # (arm's C23 bit functions of a 4-byte value, builtins-arm.ff.txt's:
-        # builtins.ff.txt's are of u64, whose leading zeros, width, ceiling
-        # and rotations are not those of 32 bits)
-        if ($target eq 'arm' && $name =~ /^__builtin_stdc_(leading_zeros|trailing_zeros|count_ones|bit_width|has_single_bit|bit_ceil|rotate_left|rotate_right)$/) {
-            my $w = tword_int($args[0]);
-            return node("$name u32", map { item(expr($_)) } @args) if $w =~ /^(u32|i32|int|long)$/;
-            stop("$name on $w", $n) unless $w =~ /^(u64|i64)$/;
+        # C23's bit functions, gcc's type-generic __builtin_stdc_*: one of
+        # stdbit.ff.txt for each width, named for the first argument's type
+        # (clang's overload of it, clang-prelude.h's; a unit whose pass was
+        # made with one of a word has the argument's conversion to it: the
+        # type under that)
+        if ($name =~ /^__builtin_stdc_(leading|trailing|first_leading|first_trailing|count)_(zeros?|ones?)$|^__builtin_stdc_(has_single_bit|bit_width|bit_floor|bit_ceil|rotate_left|rotate_right)$/) {
+            my $a = $args[0];
+            $a = (kids($a))[0] while ($a->{kind} // '') eq 'ImplicitCastExpr' && ($a->{castKind} // '') eq 'IntegralCast';
+            my $w = tword_int($a);
+            $w =~ /^u(8|16|32|64)$/ or stop("$name on $w", $n);
+            return node("$name $w", map { item(expr($_)) } @args);
         }
         # (arm's __builtin_add_overflow_p on its words, unsigned ints)
         return node("$name u32", map { item(expr($_)) } @args) if $name eq '__builtin_add_overflow_p' && $target eq 'arm';
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(stdc_rotate_right|stdc_rotate_left|unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|stdc_count_ones|stdc_bit_width|stdc_leading_zeros|stdc_trailing_zeros|stdc_has_single_bit|stdc_bit_ceil|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
+        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
@@ -1965,58 +2064,32 @@ sub ldhexfloat {
     }
     ldround($s, 113, -16494, 16383) // die "c2ff: a long double literal past the largest: $s\n";
 }
-# The decimal $s to the nearest number of $p bits (ties to even), its
-# exponent no lower than $emin (the subnormals) and its top bit's no higher
-# than $emax, as binary128's exact hex float with L; undef past $emax.
-sub ldround {
-    my ($s, $p, $emin, $emax) = @_;
-    $s =~ /^([0-9]*)(?:\.([0-9]*))?(?:[eE]([-+]?[0-9]+))?$/ or die "c2ff: a long double literal that is no decimal: $s\n";
-    my ($i, $f, $e) = ($1, $2 // '', $3 // 0);
-    my $m = Math::BigInt->new(($i . $f) =~ s/^0+(?=.)//r);
-    my $e10 = $e - length $f;
-    return '0x0p+0L' if $m->is_zero;
-    my ($n, $d) = $e10 >= 0 ? ($m * Math::BigInt->new(10)->bpow($e10), Math::BigInt->new(1)) : ($m, Math::BigInt->new(10)->bpow(-$e10));
-    my $bits = sub { length($_[0]->as_bin) - 2 };
-    # e2: value / 2^e2 in [2^(p-1), 2^p)
-    my $e2 = $bits->($n) - $bits->($d) - $p;
-    my $q;
-    my $div = sub {
-        my ($e2) = @_;
-        my ($nn, $dd) = ($n->copy, $d->copy);
-        if ($e2 >= 0) { $dd->blsft($e2) } else { $nn->blsft(-$e2) }
-        my ($qq, $r) = $nn->copy->bdiv($dd);
-        # round to nearest, ties to even
-        my $c = ($r * 2)->bcmp($dd);
-        $qq->binc if $c > 0 || ($c == 0 && $qq->is_odd);
-        $qq;
-    };
-    my $top = Math::BigInt->new(2)->bpow($p - 1);
-    my $over = Math::BigInt->new(2)->bpow($p);
-    $e2++ while ($div->($e2))->bcmp($over) >= 0;
-    $e2-- while ($div->($e2))->bcmp($top) < 0 && $e2 > $emin;
-    $e2 = $emin if $e2 < $emin;
-    $q = $div->($e2);
-    if ($q->bcmp($over) >= 0) { $e2++; $q = $div->($e2) }
-    return '0x0p+0L' if $q->is_zero;
-    # q * 2^e2, as binary128 writes it: its top bit the leading 1, or, below
-    # binary128's normal range, a subnormal 0x0.<digits>p-16382
-    my $lead = length($q->as_bin) - 3;
-    my $exp = $e2 + $lead;
-    return undef if $exp > $emax;
-    my $g = $q->copy;
-    if ($exp >= -16382) {
-        $g->bsub(Math::BigInt->new(2)->bpow($lead));
-        $g->blsft(112 - $lead);
-        my $hex = substr($g->as_hex, 2);
-        $hex = ('0' x (28 - length $hex)) . $hex;
-        $hex =~ s/0+$//;
-        return sprintf "0x1%sp%+dL", ($hex eq '0' || $hex eq '' ? '' : ".$hex"), $exp;
-    }
-    $g->blsft($e2 + 16494);
-    my $hex = substr($g->as_hex, 2);
-    $hex = ('0' x (28 - length $hex)) . $hex;
-    $hex =~ s/0+$//;
-    sprintf "0x0.%sp-16382L", $hex;
+# (ldround, ratq, qlit: FFold.pm's)
+# (in a global's value, a long double literal made double or float is the
+# literal of its value rounded to that type, as gcc folds it: glibc's
+# DBL_MIN is ((double) 2.2250738585072014e-308L), tst-strtod-underflow's
+# volatile double d = DBL_MIN; ttpc would convert it by soft-fp's
+# __trunctfdf2, which compile time has no code of)
+sub narrowlit {
+    my ($n, $e) = @_;
+    return undef unless $e->{kind} eq 'FloatingLiteral' && isld($e) && $target ne 'arm';
+    my $to = tword($n);
+    my $l = $to eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : $to eq 'float' ? ldround($e->{value}, 24, -149, 127) : undef;
+    return undef unless defined $l;
+    $l =~ s/L$/$to eq 'float' ? 'f' : ''/e;
+    $l;
+}
+# A global's value of floating constants that involves long double (riscv64,
+# x86_64, aarch64: soft-fp, whose functions compile time has no code of)
+# worked out here, as gcc folds it (FFold.pm's fold: strtod's and strfrom's
+# tests' INFINITY + 0.0L, -NAN + 0.0L), written as the literal of its type
+# (- before it where it is negative)
+sub femit {
+    my ($v, $t) = @_;
+    my (undef, undef, $emax, $suf, $sp) = @{ FFold::fty($t) };
+    my $l = $v->{k} eq 'nan' ? "0x1.8p+$sp" : $v->{k} eq 'inf' ? "0x1p+$sp"
+        : $v->{q}->is_zero ? "0x0p+0$suf" : (qlit($v->{q}, $v->{e}, $emax) // return) =~ s/L$/$suf/r;
+    $v->{neg} ? node(':', node('-'), node($l)) : node($l);
 }
 sub fail_float { die "c2ff: a constant with no hex form: $_[0]\n" }
 
@@ -2064,7 +2137,8 @@ sub texts {
 }
 # A string literal as a value: address / char / its text. But a text that ff
 # reads as something else (an operator: __dcigettext's "/", a word ff
-# reserves), holds a NUL (which a node's text cannot) or is longer than a
+# reserves), holds a NUL (which a node's text cannot), bytes that are not UTF-8
+# (tst-sprintf's, tst-grouping_iterator's) or is longer than a
 # node's 255 bytes (a __PRETTY_FUNCTION__: a value is one text) is a global
 # char array of its own, text 1, 2, ..., and the value the address of its
 # first char.
@@ -2083,13 +2157,15 @@ sub pure {
 }
 sub cast_node {
     my ($t, @v) = @_;
-    @v = node(':', @v) if "@$t" =~ /^address (char|u8)$/ && @v == 1 && !@{ $v[0]{children} };
+    # (a value of one node that is a leaf in the words of now: content x
+    # and address x become x * pointer, x & address, whose x would be text)
+    @v = node(':', @v) if "@$t" =~ /^address (char|u8)$/ && @v == 1 && (!@{ $v[0]{children} } || $v[0]{content} =~ /^(?:content|address)$/);
     node('cast:', map({ node($_) } @$t), @v);
 }
 sub string_value {
     my ($n) = @_;
     my $s = bytes($n);
-    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255;
+    return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255 || ($s ne '' && !pieces($s));
     my $name = 'text ' . ++$ntext;
     my @c = (unpack('C*', $s), 0);
     push @out, [$cur_unit, node("$name:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
@@ -2130,6 +2206,30 @@ sub array_text {
     @p ? map({ node($_) } @p) : map({ node($_) } unpack 'C*', $s);
 }
 # A string literal that sets a char array: under no decay to an address.
+# gcc's infinity or NaN builtin of a constant (__builtin_huge_val, inf, nan
+# (""): HUGE_VAL, INFINITY, NAN), as type t: the hex float one exponent
+# past its range (the user's choice A, 2026-10-23): 0x1p+1024 infinity,
+# 0x1.8p+1024 the quiet NaN (float 128f, long double 16384L), of the type
+# of node t; else undef
+sub special_float {
+    my ($n, $t) = @_;
+    my $s = $n;
+    $s = (kids($s))[0] while ($s->{kind} // '') =~ /^(ImplicitCastExpr|ConstantExpr|ParenExpr)$/;
+    return unless ($s->{kind} // '') eq 'CallExpr';
+    my ($c, @args) = kids($s);
+    $c = strip($c);
+    my $name = ($c->{kind} // '') eq 'DeclRefExpr' ? $c->{referencedDecl}{name} // '' : '';
+    my $nan = $name =~ /^__builtin_nan[fl]?$/ ? 1 : $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/ ? 0 : return;
+    if ($nan) {
+        return if @args != 1;
+        my $str = $args[0];
+        $str = (kids($str))[0] while ($str->{kind} // '') =~ /^(ImplicitCastExpr|ParenExpr)$/;
+        return if ($str->{kind} // '') ne 'StringLiteral' || ($str->{value} // '') ne '""';
+    } else { return if @args }
+    my $w = tword($t);
+    my $e = $w eq 'float' ? '128f' : $w eq 'double' ? '1024' : $w eq 'long double' ? '16384L' : return;
+    $nan ? "0x1.8p+$e" : "0x1p+$e";
+}
 sub bare_string {
     my ($n) = @_;
     $n = (kids($n))[0] while $n->{kind} eq 'ParenExpr' || ($n->{kind} eq 'ImplicitCastExpr' && ($n->{castKind} // '') ne 'ArrayToPointerDecay');
@@ -2567,7 +2667,7 @@ sub decl {
     $v->{kind} eq 'VarDecl' or stop('a declaration of ' . $v->{kind}, $v);
     # a variable-length array (iofwide's wchar_t to_buf[max]): array, the
     # element's type and the count, which clang has only as text in the type
-    if (!$global && qt($v) =~ /^(.*?) ?\[([^\[\]]*[A-Za-z_][^\[\]]*)\]$/) {
+    if (!$global && constcounts(qt($v)) =~ /^(.*?) ?\[([^\[\]]*[A-Za-z_][^\[\]]*)\]$/) {
         my ($elem, $count) = ($1, $2);
         my @c = vla_count($count, $v);
         # (a count of one name in a : too: a global's name alone there, as
@@ -2586,7 +2686,10 @@ sub decl {
     @i = node(':', @i) if $global && @i > 1 && strip($init)->{kind} ne 'InitListExpr' && !bare_string($init);
     # under address / char a leaf is text: a value that starts with a leaf goes
     # in a : (vfprintf's char *workend = work_buffer + WORK_BUFFER_SIZE)
-    @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i && !@{ $i[0]{children} } && !bare_string($init);
+    # (content x and address x too: in the words of now x * pointer and
+    # x & address, whose x is a leaf: gconv's const unsigned char *inptr =
+    # *inptrp was the text "inptrp", which its loops then wrote over)
+    @i = node(':', @i) if "@t" =~ /^address (char|u8)$/ && @i && (!@{ $i[0]{children} } || $i[0]{content} =~ /^(?:content|address)$/) && !bare_string($init);
     # a thread-local one, __thread, is ff's thread local (ttpc lays it out in
     # the TLS image, where the target has one)
     my @tls = $global && $v->{tls} ? node('thread local') : ();
@@ -2740,6 +2843,10 @@ sub leave_out {
     (my $why = $@) =~ s/\n+$//;
     warn "c2ff: left out: $name: $why\n";
 }
+# (a program's own texts, text N and wide text N, from 100001: glibc's units
+# have theirs from 1, and a unit's text 5 found the program's, which was
+# another: C-numeric's decimal point "." was "" in tst-strtod2)
+($ntext, $nwide) = (100000, 100000) if defined $program;
 # (an object's constructors and destructors are roots: the start code runs
 # them, whatever names the object: tst-putenv's module of a constructor alone)
 want($_) for map { @{ $ctors_of{$_} // [] } } grep { $_->{object} } @units;
@@ -2827,6 +2934,8 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
             or do { warn "c2ff: no definition of $tag\n"; next };
         my ($kind) = $tag =~ /^(\S+)/;
         if ($kind eq 'enum') {
+            # (its name, where no ctype of it gave it yet: index_enum leaves it)
+            ctype($tag) unless defined $tagname{$tag};
             # a constant keeps its value where C gives it one (clang has worked it out)
             unshift @types, node($tagname{$tag} . ':', node('enum'), grouped(254, map {
                 my $v = enum_value($_);

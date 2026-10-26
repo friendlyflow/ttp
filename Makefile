@@ -118,7 +118,7 @@ patch:
 # same for its milestones, LINKED_aarch64, and its asm check) and x86_64's
 # (units-ready, its milestones of LINKED_x86_64 as aarch64's, then the
 # generic program's; its asm check) and arm's (units-ready, LINKED_arm's
-# milestones, its asm check). Each step
+# milestones, its asm check), and on each the stdbit program's check. Each step
 # prints PASS or FAIL and its time as it ends, its output in
 # CHECKLOG/<step>.log, and at the end all of them in order; make fails if
 # one did. Each heavy command takes a slot of its own
@@ -147,7 +147,8 @@ PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-che
 	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 \
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm \
-	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm
+	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
+	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
 # with its time and how much of it its commands waited for a slot
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
@@ -240,6 +241,12 @@ pc-check-O-x86_64: $(PC_X64:%=pc-%-x86_64)
 	$(call pc_step,check-O-x86_64,$(call PC_GLIBC,x86_64) check-O)
 pc-check-O-arm: $(PC_ARM:%=pc-%-arm)
 	$(call pc_step,check-O-arm,$(call PC_GLIBC,arm) check-O)
+# C23's bit functions (progs/stdbit.c) on each target
+define pc_stdbit
+pc-stdbit-$(1): pc-units-$(1)
+	$$(call pc_step,stdbit-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) stdbit-check)
+endef
+$(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_stdbit,$(t))))
 .PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
 
 clean:
