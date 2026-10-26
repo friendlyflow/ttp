@@ -35,7 +35,13 @@
 #                   macros/riscv64.ff.txt as they are; vector ones vm first
 #                   (1, or 0 under v0.t), then their sources in GNU's order,
 #                   the destination last; a vtype is its number, a constant
-#                   expression its value
+#                   expression its value; the F and D instructions gcc's code
+#                   has (the rounding mode GNU as encoded, from the dump), a
+#                   load from a symbol (op rd, sym[, rt]: auipc and the load)
+#   read-only data  gcc's constants (.rodata, .srodata*: .word .dword .half .byte
+#                   .zero after a label, .set X, Y + K) are asm functions of
+#                   their words, each named by its label (.LC0 is "LC0 file");
+#                   a .set's of a part of another is a copy of that part
 #
 # A host tool (core Perl only), not part of ttpc.
 use strict;
@@ -69,6 +75,9 @@ die "usage: s2ff.pl [--page name | --items | --size] file.s file.dump\n" unless 
 my ($src, $dump) = @files;
 my $where = $src;
 sub fail { die "s2ff: $where: @_\n" }
+# the name of gcc's local data label as an asm function's (.LC0 of x.s: LC0 x)
+my %dlabel;
+sub dname { my ($l) = @_; $dlabel{$l} ? ($l =~ s/^\.//r) . ' ' . ($src =~ s{.*/}{}r =~ s/\.\w+$//r) : $l }
 
 # x86_64 (the dump says so) has its own arm, s2ffx86.pm: one AT&T
 # instruction is many encodings there, and it takes the form whose bytes
@@ -87,7 +96,7 @@ my @made;
 open my $d, '<', $dump or die "s2ff: cannot open $dump: $!\n";
 while (<$d>) {
     next unless /^\s*([0-9a-f]+):\t([0-9a-f ]+?)\s*\t(\S+)\s*(.*)$/;
-    push @made, { bytes => length($2 =~ s/ //gr) / 2, op => $3, args => $4 };
+    push @made, { bytes => length($2 =~ s/ //gr) / 2, op => $3, args => $4, enc => hex($2 =~ s/ //gr) };
 }
 close $d;
 
@@ -155,7 +164,8 @@ my %macro = map { $_ => 1 } qw(mv li neg seqz j jr ret beqz bnez bltz bgez blez 
 my %vmask = map { $_ => 1 } qw(vmseq vmsne vmsltu vmsleu vmsgtu vadd vsub vand vor vxor vrgather
     vredmaxu vredminu vredsum vredor);
 
-# a source instruction GNU as left at 4 bytes
+# a source instruction GNU as left at 4 bytes (its encoding $cur_enc)
+my $cur_enc = 0;
 sub full {
     my ($op, @o) = @_;
     return ins($op, $csr{$o[1]} // num($o[1]), $o[0]) if $op eq 'csrr';
@@ -168,6 +178,12 @@ sub full {
     return ins($op, reverse @o) if $rtype{$op} || $itype{$op} || $macro{$op};
     # jal [rd,] target (rd ra where it is left out: setcontext's jal __setcontext)
     return ins('jal', rel($o[-1]), @o == 2 ? $o[0] : 'ra') if $op eq 'jal' && @o <= 2 && !isnum($o[-1]);
+    # jalr rs (ra the link), jalr rd, off(rs), jalr rd, rs, off
+    if ($op eq 'jalr') {
+        return ins($op, 0, $o[0], 'ra') if @o == 1;
+        return ins($op, mem($o[1]), $o[0]) if @o == 2;
+        return ins($op, num($o[2]), $o[1], $o[0]);
+    }
     return ins($op, mem($o[1]), $o[0]) if $load{$op};
     if ($store{$op}) { my ($off, $base) = mem($o[1]); return ins($op, $off, $o[0], $base) }
     return ins($op, rel($o[2]), $o[1], $o[0]) if $btype{$op};
@@ -182,6 +198,18 @@ sub full {
     # csrrw rd (or zero), fcsr, rs (getcontext, setcontext)
     return ins('csrrs', 3, 'zero', $o[0]) if $op eq 'frsr' || $op eq 'frcsr';
     return ins('csrrw', 3, $o[-1], @o == 2 ? $o[0] : 'zero') if $op eq 'fssr' || $op eq 'fscsr';
+    # F and D (gcc's code): ff's operands in field order, the rounding mode
+    # GNU as encoded (the dump's bits 14:12)
+    my $rm = ($cur_enc >> 12) & 7;
+    return ins($op, $o[2], $o[1], $rm, $o[0]) if $op =~ /^f(add|sub|mul|div)\.[sd]$/;
+    return ins($op, $o[3], $o[2], $o[1], $rm, $o[0]) if $op =~ /^f(n?madd|n?msub)\.[sd]$/;
+    return ins($op, $o[1], $rm, $o[0]) if $op =~ /^f(sqrt\.[sd]|cvt\.\w+\.\w+)$/;
+    return ins($op, $o[2], $o[1], $o[0]) if $op =~ /^f(sgnjn?|sgnjx|min|max|eq|lt|le)\.[sd]$/;
+    return ins($op, $o[1], $o[0]) if $op =~ /^f(class\.[sd]|mv\.x\.[wd]|mv\.[wd]\.x)$/;
+    return ins("fsgnj$1.$2", $o[1], $o[1], $o[0]) if $op =~ /^f(?|mv()|neg(n)|abs(x))\.([sd])$/;
+    return ins("f$1.$2", $o[1], $o[2], $o[0]) if $op =~ /^f(?|gt(lt)|ge(le))\.([sd])$/;
+    return ins('csrrs', 1, 'zero', $o[0]) if $op eq 'frflags';
+    return ins('csrrw', 1, $o[-1], @o == 2 ? $o[0] : 'zero') if $op eq 'fsflags';
     # vector
     return ins($op, vtype(@o[2 .. $#o]), $o[1], $o[0]) if $op eq 'vsetvli';
     return ins($op, vtype(@o[2 .. $#o]), num($o[1]), $o[0]) if $op eq 'vsetivli';
@@ -228,6 +256,7 @@ sub canon {
 
 # ---- the source --------------------------------------------------------------
 my (@fns, $fn, $block, $file, $line);
+($file, $line) = ($src =~ s{.*/}{}r, 0);     # (a .s of gcc's has no line marks)
 my $n = 0;
 my $pos = 0;        # the bytes GNU as made so far
 my $ends = 1;       # the last instruction does not run on (a return, a jump)
@@ -237,6 +266,7 @@ my %numeric;        # how many times each numeric label (1:) has come so far
 my $other;          # another section than .text, while in one
 my @pending;        # its labels so far, before the bytes they name
 my %datadef;        # the labels of data that is there (zero objects)
+my (@dobjs, $dobj, @dset);  # gcc's read-only data: its objects, the one being filled, its .set names
 # GNU as's next instruction, its bytes counted; whether it ends a function
 sub take {
     my $m = $made[$n++] or fail "GNU as made fewer instructions than $src has";
@@ -252,10 +282,21 @@ sub finish {
         map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got;
     %tls = %got = ();
 }
+# gcc's read-only data labels, known before the code that names them
+{
+    open my $p, '<', $src or die "s2ff: cannot open $src: $!\n";
+    my $sec = '.text';
+    while (<$p>) {
+        $sec = $2 // ".$1" if /^\s*\.(data|bss|text|section\s+([^,\s]+))/;
+        $sec = '.text' if /^\s*\.text\b/;
+        next unless $sec =~ /^\.s?rodata/;
+        $dlabel{$1} = 1 if /^([.\w]+):/ || /^\s*\.set\s+([.\w]+)\s*,/;
+    }
+}
 open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
 while (my $l = <$s>) {
     chomp $l;
-    if ($l =~ /^# (\d+) "([^"]+)"/) { ($line, $file) = ($1 - 1, $2 =~ s{^(\.\./)+}{}r); next }
+    if ($l =~ /^# (\d+) "([^"]*)"/) { ($line, $file) = ($1 - 1, $2 =~ s{^(\.\./)+}{}r); next }
     $line++;
     # a # starts a comment (.S's own, kept by cpp: dl-trampoline's), outside a text
     $l =~ s/\s*#.*$// unless $l =~ /"/;
@@ -276,17 +317,36 @@ while (my $l = <$s>) {
             if ($sec eq '.text') { $other = undef; next }
             $other = $sec;
             @pending = ();
+            undef $dobj;
             warn "s2ff: $where: $sec left out\n" if $sec =~ /^\.(pre)?init_array$|^\.fini_array$/;
             next;
         }
         if ($st eq '.text') { $other = undef; next }
         if (defined $other) {
-            next if $st =~ /^\.(globl|global|weak|type|size|hidden|align|p2align|balign)\b/;
-            if ($st =~ /^([.\w]+):$/) { push @pending, $1; next }
+            next if $st =~ /^\.(globl|global|weak|type|size|hidden|align|p2align|balign|ident|file)\b/;
+            if ($st =~ /^([.\w]+):$/) { push @pending, $1; undef $dobj; next }
             # (an alias of a label with no bytes, start.S's data_start, has
             # nothing to name)
             if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)) if $datadef{$2}; next }
             next if $other =~ /^\.(pre)?init_array$|^\.fini_array$/ && $st =~ /^\.dc\.a\s+[.\w]+$/;
+            # gcc's read-only data: an object per label, of its bytes
+            if ($other =~ /^\.s?rodata/) {
+                if ($st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)(?:\s*\+\s*(\d+))?$/) { push @dset, [$1, $2, $3 // 0]; next }
+                if ($st =~ /^\.(byte|half|2byte|word|4byte|dword|8byte|zero)\s+(-?\w+)$/) {
+                    my ($k, $v) = ($1, $2);
+                    if (@pending) {
+                        $dobj = { name => shift @pending, bytes => [], sec => $other };
+                        push @dobjs, $dobj;
+                        push @dset, map { [$_, $dobj->{name}, 0] } @pending;
+                        @pending = ();
+                    }
+                    fail "data without a label: $st" unless $dobj;
+                    my $n = { byte => 1, half => 2, '2byte' => 2, word => 4, '4byte' => 4, dword => 8, '8byte' => 8 }->{$k};
+                    if ($k eq 'zero') { push @{ $dobj->{bytes} }, (0) x num($v) }
+                    else { my $x = num($v); push @{ $dobj->{bytes} }, map { ($x >> (8 * $_)) & 255 } 0 .. $n - 1 }
+                    next;
+                }
+            }
             if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
                 my ($first, @more) = @pending;
                 $datadef{$_} = 1 for @pending;
@@ -337,12 +397,12 @@ while (my $l = <$s>) {
                 }
                 next;
             }
-            next if $op =~ /^\.(globl|global|weak|hidden|type|size|align|p2align|text|attribute|cfi_\w+)$/;
+            next if $op =~ /^\.(globl|global|weak|hidden|type|size|align|p2align|text|attribute|cfi_\w+|file|ident)$/;
             next if $op eq '.option' && $rest =~ /^(push|pop|arch\b.*|norelax|relax|pic|nopic|rvc|norvc)$/;
             fail "a directive with no ff form: $st";
         }
         fail "an instruction outside a function: $st" unless $fn;
-        $op = { scall => 'ecall', sbreak => 'ebreak' }->{$op} // $op;    # GNU's old names
+        $op = { scall => 'ecall', sbreak => 'ebreak', 'fmv.s.x' => 'fmv.w.x', 'fmv.x.s' => 'fmv.x.w' }->{$op} // $op;    # GNU's old names
         # (a call through the PLT, name@plt, is a call of name: a static
         # program has no PLT)
         my @o = map { /^(\d+)([fb])$/ ? ".L$1 " . (($numeric{$1} // 0) + ($2 eq 'f' ? 1 : 0)) : s/\@plt$//r } split_ops($rest);
@@ -380,7 +440,15 @@ while (my $l = <$s>) {
             next;
         }
         # la (and lla, which is la without pic), auipc and addi: the macro's
-        if ($op eq 'la' || $op eq 'lla') { take(); take(); push @$into, ins('la', $o[1], $o[0]); next }
+        if ($op eq 'la' || $op eq 'lla') { take(); take(); push @$into, ins('la', dname($o[1]), $o[0]); next }
+        # a load from a symbol (gcc's -mno-explicit-relocs: fld fa5, .LC0, a5;
+        # ld a1, .LC1): auipc, then the load from its low part
+        if ($load{$op} && @o >= 2 && $o[1] !~ /\(/ && !isnum($o[1])) {
+            take(); take();
+            my ($w, $rt) = (dname($o[1]), $o[2] // $o[0]);
+            push @$into, ins('auipc', node('pcrel_hi', node($w)), $rt), ins($op, node('pcrel_lo', node($w)), $rt, $o[0]);
+            next;
+        }
         my $m = take();
         # a call or a tail is two instructions, the macro's
         if ($op =~ /^(call|tail)$/) { take(); push @$into, node($op, node($o[-1])); next }
@@ -391,6 +459,7 @@ while (my $l = <$s>) {
             $target //= $o[-1] if $m->{op} =~ /^c\.(j|beqz|bnez)$/;
             $i = short($m, $target);
         } else {
+            $cur_enc = $m->{enc};
             $i = full($op, @o);
         }
         push @$into, $i;
@@ -398,6 +467,25 @@ while (my $l = <$s>) {
 }
 close $s;
 finish();
+# gcc's read-only data: an asm function of its words (bytes for a rest),
+# a .set name a copy of the part it names
+{
+    my %by = map { $_->{name} => $_ } @dobjs;
+    for (@dset) {
+        my ($x, $y, $k) = @$_;
+        my $o = $by{$y} or fail "a .set of $y, which is no data";
+        my @b = @{ $o->{bytes} };
+        fail ".set $x: past $y" if $k > @b;
+        push @dobjs, $by{$x} = { name => $x, bytes => [@b[$k .. $#b]], sec => $o->{sec} };
+    }
+    for my $o (@dobjs) {
+        my @b = @{ $o->{bytes} };
+        my @w;
+        while (@b >= 4) { my @q = splice @b, 0, 4; push @w, node('word', node($q[0] | $q[1] << 8 | $q[2] << 16 | $q[3] << 24)) }
+        push @w, map { node('byte', node($_)) } @b;
+        push @fns, node(dname($o->{name}) . ':', node('asm'), node('comment', node("gcc's $o->{sec}")), @w);
+    }
+}
 # what is left is the padding GNU as puts at the end of the section
 pop @made while @made > $n && $made[-1]{op} =~ /^c\.(addi|nop)$|^addi$/ && $made[-1]{args} =~ /^zero,(zero,)?0$/;
 fail "GNU as made " . scalar(@made) . " instructions, $src has $n" unless $n == @made;

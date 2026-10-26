@@ -46,13 +46,18 @@ int g_write (const char *s, int n)
 { register long x0 __asm__ ("x0") = 1; register const char *x1 __asm__ ("x1") = s;
   register long x2 __asm__ ("x2") = n; register long x8 __asm__ ("x8") = 64;
   __asm__ volatile ("svc 0" : "+r" (x0) : "r" (x1), "r" (x2), "r" (x8) : "memory"); return x0; }
+#elif defined __riscv
+int g_write (const char *s, int n)
+{ register long a0 __asm__ ("a0") = 1; register const char *a1 __asm__ ("a1") = s;
+  register long a2 __asm__ ("a2") = n; register long a7 __asm__ ("a7") = 64;
+  __asm__ volatile ("ecall" : "+r" (a0) : "r" (a1), "r" (a2), "r" (a7) : "memory"); return a0; }
 #else
 int g_write (const char *s, int n)
 { register int r0 __asm__ ("r0") = 1; register const char *r1 __asm__ ("r1") = s;
   register int r2 __asm__ ("r2") = n; register int r7 __asm__ ("r7") = 4;
   __asm__ volatile ("svc 0" : "+r" (r0) : "r" (r1), "r" (r2), "r" (r7) : "memory"); return r0; }
 #endif
-#if defined __aarch64__ || defined __x86_64__
+#if defined __aarch64__ || defined __x86_64__ || defined __riscv
 long f_i10 (int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
 { return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j; }
 double f_mixn (int a, double b, int c, double d, int e, double f, int g, double h, int i, double j, int k, double l,
@@ -96,7 +101,7 @@ long double g_ld (void) { return cb_ld (1, 3.0L, 2.5, 7.0L); }
 long double g_varld (void) { return cb_varld (3, 1.0, 1.0L, 2.0, 2.0L, 3.0, 3.0L); }
 long long g_vard (void) { return cb_vard (10, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5); }
 #endif
-#ifdef __x86_64__
+#if defined __x86_64__ || defined __riscv
 long f_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g)
 { return a.l + 2 * b.l + 3 * c.l + 4 * d.l + 5 * e.l + 6 * f.l + 7 * g.l + (long) (2 * (a.d + b.d + c.d + d.d + e.d + f.d + g.d)); }
 double f_ifl (ifl a, fid b) { return a.i + 2 * a.f + 3 * b.f + 4 * b.i + 8 * b.d; }
@@ -115,4 +120,30 @@ double g_r_fid (void) { fid r = cb_r_fid (1.5f, 3, 4.25); return r.f + r.i + r.d
 long g_vs (void)
 { s16 x1 = { 1, 2 }, x2 = { 6, 7 }, x3 = { 11, 12 }; s24 y1 = { 3, 4, 5 }, y2 = { 8, 9, 10 }, y3 = { 13, 14, 15 };
   return cb_vs (3, x1, y1, x2, y2, x3, y3); }
+#endif
+#ifdef __riscv
+long f_ff2 (ff2 a, fi b, d1 c, cd d) { return a.a + 2 * a.b + 3 * b.f + 4 * b.i + 5 * c.d + 6 * d.c + 7 * d.d; }
+double f_fpout (double a, double b, double c, double d, double e, double f, double g, hd2 x, ff2 y)
+{ return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * x.x + 9 * x.y + 10 * y.a + 11 * y.b; }
+double f_gpout (int a, int b, int c, int d, int e, int f, int g, int h, mix x, double y)
+{ return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * x.a + 10 * x.b + 11 * y; }
+long double f_ldsplit (int a, int b, int c, int d, int e, int f, int g, long double x, int h)
+{ return a + b + c + d + e + f + g == 28 && h == 8 ? x : 0.0L; }
+/* the register as the caller left it */
+long f_raw4 (unsigned a) { long r; __asm__ ("mv %0, %1" : "=r" (r) : "r" (a)); return r; }
+long f_raw2 (unsigned short a) { long r; __asm__ ("mv %0, %1" : "=r" (r) : "r" (a)); return r; }
+long f_raw1 (signed char a) { long r; __asm__ ("mv %0, %1" : "=r" (r) : "r" (a)); return r; }
+ff2 r_ff2 (float a) { ff2 r = { a, a + 1 }; return r; }
+fi r_fi (float f, int i) { fi r = { f, i }; return r; }
+cd r_cd (char c, double d) { cd r = { c, d }; return r; }
+long g_ff2 (void) { ff2 a = { 1, 2 }; fi b = { 3, 4 }; d1 c = { 5 }; cd d = { 6, 7 }; return cb_ff2 (a, b, c, d); }
+double g_fpout (void) { hd2 x = { 8, 9 }; ff2 y = { 10, 11 }; return cb_fpout (1, 2, 3, 4, 5, 6, 7, x, y); }
+double g_gpout (void) { mix x = { 9, 10 }; return cb_gpout (1, 2, 3, 4, 5, 6, 7, 8, x, 11); }
+long double g_ldsplit (void) { return cb_ldsplit (1, 2, 3, 4, 5, 6, 7, 9.0L, 8); }
+int g_narrow (void) { return cb_narrow (0xffffffffu, 0xffff, -1, -1); }
+/* the result's register as the callee left it */
+int g_u32 (void) { long r; unsigned v = cb_u32 (-1); __asm__ ("mv %0, %1" : "=r" (r) : "r" (v)); return r == -1; }
+int g_u16 (void) { long r; unsigned short v = cb_u16 (-1); __asm__ ("mv %0, %1" : "=r" (r) : "r" (v)); return r == 0xffff; }
+double g_r_fi (void) { fi r = cb_r_fi (1.5f, 3); return r.f + r.i; }
+double g_r_cd (void) { cd r = cb_r_cd (5, 2.25); return r.c + r.d; }
 #endif
