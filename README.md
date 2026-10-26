@@ -41,9 +41,10 @@ instruction at the line of its node in the tree's text (`X.ff.txt`, as
 rewrites the C layer's primitives by a peephole, the same for every target
 (push ... pop as a move, call arguments into their registers, locals by
 one fp-relative load or store, no dead code after a jump, no jump to the
-label right after it); without `-O` every byte stays as it was. The ff tools
-are built with it. It runs on riscv64 itself, under `qemu-riscv64`
-elsewhere; see [src/compiler/PLAN.md](src/compiler/PLAN.md).
+label right after it, a 32-bit constant as immediates, not 8 bytes in the
+code); without `-O` every byte stays as it was. The ff tools are built with
+it. It runs on riscv64 itself, under `qemu-riscv64` elsewhere;
+see [src/compiler/PLAN.md](src/compiler/PLAN.md).
 
 The root [Makefile](Makefile) calls the per-component Makefiles in
 [src/os](src/os/Makefile) and [src/compiler](src/compiler/Makefile),
