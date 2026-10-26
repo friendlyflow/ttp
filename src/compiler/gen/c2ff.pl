@@ -99,6 +99,7 @@ my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
+my %ownanon;               # a unit's own anonymous records, where another unit's at the same place differ (places)
 my %owntd;                 # a unit's own typedefs, where another unit's came first
 my %constint;              # a unit's const integer globals of a number (tst-random's const int nseq = 3): the counts of arrays
 my %tagname;                # struct, union, enum tags and their ff names
@@ -201,7 +202,7 @@ sub ctype {
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($desugar{$t}) if exists $desugar{$t};
     return ctype($typeof{$1}) if $t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1};
-    if (my $a = $anon{ anon_key($t) // '' }) {
+    if (my $a = own_anon($t) || $anon{ anon_key($t) // '' }) {
         my ($tag, $name) = @$a;
         $wanttag{$tag} = 1;
         return $tagname{$tag} //= $name;
@@ -556,7 +557,7 @@ for my $u (@units) {
     open my $h, '<', $u->{i} or die "c2ff: cannot open $u->{i}: $!\n";
     $u->{text} = do { local $/; <$h> };
     close $h;
-    places($ast->{ff_places});
+    places($ast->{ff_places}, $u);
     my $file = '';
     for my $d (@{ $ast->{inner} }) {
         $file = $d->{loc}{file} if $d->{loc} && $d->{loc}{file};
@@ -944,15 +945,31 @@ sub body_of {
     $d;
 }
 sub places {
-    for (@{ $_[0] }) {
+    my ($found, $u) = @_;
+    for (@$found) {
         if (@$_ == 2) { $desugar{ $_->[0] } //= $_->[1]; next }
         my ($key, $kind, $name, $n) = @$_;
-        next if $anon{$key};
+        if (my $a = $anon{$key}) {
+            # (the same place in another unit, defined otherwise there: a
+            # skeleton included with another type, strfrom-skeleton.c's union
+            # of FLOAT, a double in strfromd's and a long double in
+            # strfroml's): that unit's own, named with it
+            my ($r, $ru) = ($rec{ $a->[0] }, $recunit{ $a->[0] });
+            next if !$u || !$r || !$ru || $ru == $u || def_text($n, $u) eq def_text($r, $ru);
+            my $own = "$name " . unit_name($u);
+            $ownanon{$u}{$key} = ["$kind $own", $own];
+            $rec{"$kind $own"} //= $n;
+            $recunit{"$kind $own"} //= $u;
+            next;
+        }
         $anon{$key} = ["$kind $name", $name];
         $rec{"$kind $name"} //= $n;
+        $recunit{"$kind $name"} //= $u;
     }
 }
 
+# a unit's own anonymous record of type spelling t (places), or none
+sub own_anon { my ($t) = @_; $cur_unit && $ownanon{$cur_unit} && $ownanon{$cur_unit}{ anon_key($t) // '' } }
 # Clang spells one anonymous type in more than one way (enum (unnamed enum at
 # ../include/../locale/localeinfo.h:54:3), enum __locale_data::(unnamed at
 # ../locale/localeinfo.h:54:3)): what they share is where it is.
@@ -2760,7 +2777,7 @@ sub union_before {
     my $f = $l->{field} or return ();
     my $t = expand(qt($l));
     $t =~ /^union\b/ or return ();
-    my $r = $rec{$t} // do { my $a = $anon{ anon_key($t) // '' }; $a && $rec{ $a->[0] } } or return ();
+    my $r = $rec{$t} // do { my $a = own_anon($t) || $anon{ anon_key($t) // '' }; $a && $rec{ $a->[0] } } or return ();
     my @fs = grep { $_->{kind} eq 'FieldDecl' } @{ $r->{inner} || [] };
     my ($k) = grep { ($fs[$_]{name} // '') eq ($f->{name} // '') } 0 .. $#fs;      # (an unnamed one: errname's)
     defined $k or stop('a union set through a member it has not: ' . ($f->{name} // '?'), $l);

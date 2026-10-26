@@ -799,9 +799,10 @@ LAYERS := perl -I../compiler/gen -MFF=node,layers,read_txt,write_txt -0777 -ne \
 	'print write_txt(map { node($$_->{content}, layers(@{ $$_->{children} })) } read_txt($$_, $$ARGV))'
 ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # libgcc_eh's unwinder, which a static program has from gcc (glibc's
-# __pthread_unwind, backtrace): not in ff yet, its names weak (address 0),
+# __pthread_unwind, backtrace): on riscv64 builtins-riscv64.ff.txt's, which
+# walks ttpc's frames; elsewhere not in ff yet, its names weak (address 0),
 # as for a program that never unwinds
-UNWIND_glibc := _Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP
+UNWIND_glibc := $(if $(filter riscv64,$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
 $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
 	mkdir -p $(FF)

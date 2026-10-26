@@ -19,7 +19,8 @@
 #       result: "equal: ..." where every run exits with the same status
 #       and prints the same (stdout and stderr), else "differ: ..."
 #       (an address printed, 0x and 6 hex digits or more, compares as any
-#       other: where a build puts its stack or heap is its own; the
+#       other, and so does one of 5 in a line where the other side has one:
+#       where a build puts its stack or heap is its own; the
 #       program's name, test.ref or test-prog, as the test's; a temporary
 #       file's random XXXXXX in a line that differs only there)
 #   perl tests.pl table <area> <target> <dir> <test>...
@@ -106,6 +107,9 @@ if ($cmd eq 'why') {
 
 sub slurp { my ($f) = @_; open my $h, '<:raw', $f or return ''; local $/; my $c = <$h>; defined $c ? $c : '' }
 sub unaddr { my ($s) = @_; $s =~ s/\b0x[0-9a-f]{6,}\b/0x.../gr }
+# (in a line where one side printed an address, a 5-digit one of the other's
+# too: gcc's static program has its data low, tst-makecontext2's 0xe0018)
+sub unaddr5 { my ($s) = @_; $s =~ s/\b0x[0-9a-f]{5}\b/0x.../gr }
 # (and the program's own name, its argv[0], test.ref or test-prog, as test)
 sub norm { my ($s, $t) = @_; unaddr($s) =~ s/\Q$t\E(?:\.ref|-prog)\b/$t/gr }
 # (and a temporary file's name, mkstemp's or tmpnam's: a path's part whose
@@ -118,7 +122,10 @@ sub same {
     my @a = split /\n/, $a, -1;
     my @b = split /\n/, $b, -1;
     return 0 unless @a == @b;
-    for my $i (0 .. $#a) { return 0 unless $a[$i] eq $b[$i] || tmpname($a[$i]) eq tmpname($b[$i]) }
+    for my $i (0 .. $#a) {
+        next if $a[$i] eq $b[$i] || tmpname($a[$i]) eq tmpname($b[$i]);
+        return 0 unless "$a[$i]$b[$i]" =~ /0x\.\.\./ && unaddr5($a[$i]) eq unaddr5($b[$i]);
+    }
     1;
 }
 sub status_word { my ($s) = @_; $s == 0 ? 'PASS' : $s == 77 ? 'UNSUPPORTED' : $s >= 128 ? 'FAIL, signal ' . ($s - 128) : 'FAIL' }
