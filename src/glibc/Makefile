@@ -610,6 +610,28 @@ $(1)-check: $$(FF)/$(1).ref $$(FF)/$(1)-prog $$(call expect,$(1)) $(if $(filter 
 endef
 $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 
+# -O (ttpc's peephole, ../compiler/gen/patches/opt.pl): each milestone's
+# program built with -O (NAME-prog-O), against the same expect as its check;
+# check-O: every milestone of the target (riscv64's MILESTONES, else LINKED).
+$(FF)/%-prog-O: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
+	$(RUN) -t 900 $(TTPC_RUN) -O $(SHARED) $< $@ > $@.lst
+define checkO
+$(1)-check-O: $$(FF)/$(1)-prog-O $$(FF)/$(1)-prog $$(call expect,$(1))
+	@want=$$$$(head -n 1 $$(call expect,$(1)) | cut -d" " -f2); \
+	tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1).want; \
+	for cpu in $$(CPUS); do \
+	    s=0; $$(RUN) -t 60 $$(if $$(RUNENV_$(1)),env $$(RUNENV_$(1))) qemu-$$(GTARGET) -cpu $$$$cpu $$(FF)/$(1)-prog-O $$(RUN_$(1)) > $$(FF)/$(1)-prog-O.out || s=$$$$?; \
+	    test $$$$s -eq $$$$want || { echo "$(1)-check-O: on $$$$cpu: exit status $$$$s, not $$$$want"; exit 1; }; \
+	    cmp -s $$(FF)/$(1)-prog-O.out $$(FF)/$(1).want || { echo "$(1)-check-O: on $$$$cpu: wrong output"; diff $$(FF)/$(1)-prog-O.out $$(FF)/$(1).want | head; exit 1; }; \
+	done; \
+	echo "$(1)-check-O: ttpc -O + glibc in ff as gcc + libc.a on $(GTARGET) ($$(CPUS)): exit $$$$want, $$$$(wc -c < $$(FF)/$(1)-prog-O) bytes, without -O $$$$(wc -c < $$(FF)/$(1)-prog)"
+.PHONY: $(1)-check-O
+endef
+$(foreach m,$(MILESTONES),$(eval $(call checkO,$(m))))
+CHECKO_MS := $(if $(filter riscv64,$(GTARGET)),$(MILESTONES),$(LINKED))
+check-O: $(CHECKO_MS:%=%-check-O)
+.PHONY: check-O
+
 # The round trip, the other proof of "exact": the C functions of a milestone,
 # written back as C from its ff (ff2c.pl, which reads ff as ttpc does), have
 # the AST of glibc's own, each against its .i's (roundtrip.pl). The

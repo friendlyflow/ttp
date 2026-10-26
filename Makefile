@@ -52,11 +52,11 @@ compiler-test: compiler
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler test
 
 # Assemble the programs, check them against GNU as and run them; build and
-# run the C programs; the seeds of the other hosts agree with ttpc.s; the
-# hex seed is its texts and binutils' seed (hex); ttp's own tools in ff
-# (src/compiler/tools) agree with their Perl versions.
+# run the C programs (and with -O, check-O); the seeds of the other hosts
+# agree with ttpc.s; the hex seed is its texts and binutils' seed (hex);
+# ttp's own tools in ff (src/compiler/tools) agree with their Perl versions.
 compiler-check: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest ctime cws targets seeds hex abi debug tools-check copies-check
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest check-O ctime cws targets seeds hex abi debug tools-check copies-check
 
 # ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
 # stage2: they must be the same. So too from the seed of each other host
@@ -147,6 +147,7 @@ PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-che
 	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 \
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm \
+	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
 	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
 # with its time and how much of it its commands waited for a slot
@@ -230,6 +231,16 @@ endef
 $(foreach m,$(PC_ARM),$(eval $(call pc_arm,$(m))))
 pc-asm-arm: pc-bootstrap pc-gbuild
 	$(call pc_step,asm-arm,$(call PC_GLIBC,arm) asm-check)
+# -O (ttpc's peephole): each target's milestones built with -O, after
+# their checks (src/glibc's check-O)
+pc-check-O-riscv64: $(PC_MS:%=pc-%-check)
+	$(call pc_step,check-O-riscv64,$(call PC_GLIBC) check-O)
+pc-check-O-aarch64: $(PC_A64:%=pc-%-aarch64)
+	$(call pc_step,check-O-aarch64,$(call PC_GLIBC,aarch64) check-O)
+pc-check-O-x86_64: $(PC_X64:%=pc-%-x86_64)
+	$(call pc_step,check-O-x86_64,$(call PC_GLIBC,x86_64) check-O)
+pc-check-O-arm: $(PC_ARM:%=pc-%-arm)
+	$(call pc_step,check-O-arm,$(call PC_GLIBC,arm) check-O)
 # C23's bit functions (progs/stdbit.c) on each target
 define pc_stdbit
 pc-stdbit-$(1): pc-units-$(1)

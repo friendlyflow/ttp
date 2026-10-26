@@ -232,7 +232,7 @@ bootstrap: $(BOOT)/ttpc1.self $(BOOT)/ttpc2.self $(BOOT)/ttpc3.self $(BOOT)/stag
 # rest of it. A C program is only its program: the shared pages come from
 # shared.ff.
 $(P)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)
-	$(QEMU) $(BOOT)/stage2 $(SHARED) $< $@ > $(P)/$*.lst
+	$(QEMU) $(BOOT)/stage2 $(TTPCFLAGS) $(SHARED) $< $@ > $(P)/$*.lst
 
 # The vector instructions (RVV 1.0), which ttpc.s predates: stage2
 # assembles progs/riscv64/rvv.ff, a program-only tree that mkrvv.pl writes
@@ -311,7 +311,8 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # chello for riscv64 and for x86_64 and cexit with the name it gets without
 # set output (next to cws.ff), each the bytes the command line makes.
 # cwsdebug.ff makes chello twice, with set debug (as -g) and without; run
-# with -g, both as -g (gsame). cinclude is chello including its shared page,
+# with -g, both as -g (gsame); cwsopt.ff so with set optimise (as -O) and
+# cfib, run with -O both as -O. cinclude is chello including its shared page,
 # --print prints a tree as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
@@ -319,7 +320,7 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # header: its program, symbols and their names; the line table names the
 # trees by their paths, which differ in a build file)
 gsame = n=$$(readelf -SW $(2) | sed -n 's/.* \.debug_abbrev  *PROGBITS  *[0-9a-f]* \([0-9a-f]*\) .*/\1/p'); test -n "$$n" && cmp -i 64 -n $$((0x$$n - 64)) $(1) $(2) && readelf -SW $(1) | grep -q ' \.debug_line '
-cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
+cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 	rm -f progs/cexit
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cws.ff > cws.lst
 	mv progs/cexit $(P)/cws-cexit
@@ -334,6 +335,15 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -g $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
 	$(call gsame,$(P)/cwsdebug,$(P)/chello.g)
 	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
+	$(QEMU) $(BOOT)/stage2 -O $(SHARED) progs/cfib.ff $(P)/cfib.O > $(P)/cfib.O.lst
+	! cmp -s $(P)/cfib.O $(P)/cfib.celf
+	cmp $(P)/cwsopt $(P)/cfib.celf
+	cmp $(P)/cwsopt-O $(P)/cfib.O
+	rm $(P)/cwsopt $(P)/cwsopt-O
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -O $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
+	cmp $(P)/cwsopt $(P)/cfib.O
+	cmp $(P)/cwsopt-O $(P)/cfib.O
 	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
@@ -394,7 +404,7 @@ $(P)/$(1)/%.twin.bin: progs/$(1)/%.s $(TLDS_$(1)) | $(P)/$(1)
 	$(CROSS_$(1))objcopy -O binary $(P)/$(1)/$$*.twin $$@
 
 $(P)/$(1)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)/$(1)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(TTPCFLAGS) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
 
 check-$(1): $(PROGS:%=$(P)/$(1)/%.elf) $(PROGS:%=$(P)/$(1)/%.twin.bin)
 	@for p in $(PROGS); do \
@@ -450,6 +460,14 @@ abi: $(BOOT)/stage2 $(SHARED)
 DEBUG_TARGETS := riscv64 x86_64 aarch64 arm
 debug: $(BOOT)/stage2 $(SHARED)
 	@for t in $(DEBUG_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/debug/run.sh $$t $(P)/debug-$$t > $(P)/debug-$$t.log 2>&1 || { cat $(P)/debug-$$t.log; exit 1; }; tail -n 1 $(P)/debug-$$t.log; done
+
+# -O (gen/patches/opt.pl, the peephole): every C program of ctest and
+# ctest-<target>, built with -O into progs-O, against the same .expect
+# files; TTPCFLAGS are the flags of stage2 for the C programs.
+TTPCFLAGS ?=
+check-O:
+	$(MAKE) --no-print-directory P=$(BUILD)/progs-O TTPCFLAGS=-O ctest $(TARGETS:%=ctest-%)
+.PHONY: check-O
 
 targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%) x86gnu
 	! $(QEMU) $(BOOT)/stage2 --target mips $(SHARED) progs/cexit.ff $(P)/mips.celf 2> $(P)/mips.err
@@ -734,6 +752,10 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # gen/ISA.pm and isa/<target>.pl, the second implementation) and compares.
 # mkff runs after stage2 exists (it builds it): the chain reads the
 # committed shared.ff and never makes it.
+# TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
+# ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
+# do stage1 and stage2.
+TOOLFLAGS := -O
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff tools/files.ff
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge
@@ -747,12 +769,12 @@ SHAVFILES := abc empty m448 m896 million $(foreach n,0 1 55 56 63 64 65 119 120 
 define tooltarget
 $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/mkff: tools/mkff.ff $(TOOLLIB) $(MKFFLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
 tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want

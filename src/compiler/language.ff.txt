@@ -610,6 +610,6 @@ ff, the language ttpc compiles
               rbx
   build files
     ttpc build.ff, one tree and no output: runs its top level compile time lambdas, writes nothing of its own
-    workspace makes one; set target w section, set output w path, set debug w (as -g), add file w path (the last is the program), compile w queues it
+    workspace makes one; set target w section, set output w path, set debug w (as -g), set optimise w (as -O), add file w path (the last is the program), compile w queues it
     a workspace is a long: w:, long, workspace
     paths are from the folder of the file whose code runs the word

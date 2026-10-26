@@ -3558,6 +3558,88 @@ c:
     vmov.rs
       s9
       r0
+opt:
+  comment
+    -O (gen/patches/opt.pl): cc_ldfp_* off: V = the local at FP + off, as cc_li off V, cc_addfp, cc_load_* do; cc_stfp_* off: [FP + off] = V, as cc_li off L, cc_addfp_l, cc_store_* (L is not set); off in -255..255, one instruction.
+    cc_toarg i: argument register i = V, the reverse of cc_param (a call's argument without its push, cc_arg's load and a slot of cc_drop).
+  cc_ldfp_i8:
+    off
+    ldrsb
+      off
+      r11
+      r0
+  cc_ldfp_i16:
+    off
+    ldrsh
+      off
+      r11
+      r0
+  cc_ldfp_i32:
+    off
+    ldr
+      off
+      r11
+      r0
+  cc_ldfp_i64:
+    off
+    ldr
+      off
+      r11
+      r0
+  cc_ldfp_u8:
+    off
+    ldrb
+      off
+      r11
+      r0
+  cc_ldfp_u16:
+    off
+    ldrh
+      off
+      r11
+      r0
+  cc_ldfp_u32:
+    off
+    ldr
+      off
+      r11
+      r0
+  cc_ldfp_u64:
+    off
+    ldr
+      off
+      r11
+      r0
+  cc_stfp_8:
+    off
+    strb
+      off
+      r11
+      r0
+  cc_stfp_16:
+    off
+    strh
+      off
+      r11
+      r0
+  cc_stfp_32:
+    off
+    str
+      off
+      r11
+      r0
+  cc_stfp_64:
+    off
+    str
+      off
+      r11
+      r0
+  cc_toarg:
+    i
+    mov
+      r0
+      cc_argreg
+        i
 linux:
   comment
     The Linux system calls by name, for syscall: the arm EABI numbers (mmap is mmap2, its offset in pages).
