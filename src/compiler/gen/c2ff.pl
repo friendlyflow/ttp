@@ -1226,6 +1226,9 @@ sub asm_stmt {
     my @ic = @$icr;
     my @ops = @$opsr;
     my (@arg, @text, $ret, $fret, @fmv);
+    # (by the lp64d ABI an argument in a register: a float or double in fa0
+    # ..., any other in a0 ..., each counted apart)
+    my ($ni, $nf) = (0, 0);
     # a float operand's width, s or d
     my $fw = sub { my ($o) = @_; my $t = tword($o); $t eq 'float' ? 's' : $t eq 'double' ? 'd' : stop("an asm operand \"f\" of type " . qt($o), $n) };
     for my $i (0 .. $#ops) {
@@ -1239,12 +1242,10 @@ sub asm_stmt {
             $fret = $fw->($ops[$i]);
             push @text, 'ft0';
         } elsif ($k eq 'f' && $i >= @oc) {
-            # a float register input: its bits come as an argument, and go
-            # into a float register of their own (ft1 ...) first
-            push @arg, [$i, 'value'];
-            my $r = 'ft' . (@fmv + 1);
-            push @fmv, node('fmv.' . ($fw->($ops[$i]) eq 's' ? 'w' : 'd') . '.x', node('a' . $#arg), node($r));
-            push @text, $r;
+            # a float register input: an argument, in its fa register
+            $fw->($ops[$i]);
+            push @arg, [$i, 'value', 0, 'fa' . $nf++];
+            push @text, $arg[-1][3];
         } elsif ($k eq 'i' && $i >= @oc) {
             # an immediate: its value, worked out (an integer constant
             # expression: feholdexcept's flags or'ed together)
@@ -1256,18 +1257,18 @@ sub asm_stmt {
             stop('an asm statement with two register outputs', $n) if defined $ret;
             $ret = $i;
             push @text, 't0';
-            push @arg, [$i, 'value', $c =~ /\+/] if $c =~ /\+/;
+            push @arg, [$i, 'value', 1, 'a' . $ni++] if $c =~ /\+/;
         } elsif ($k =~ /^[rJK]+$/) {
-            push @arg, [$i, 'value'];
-            push @text, 'a' . $#arg;
+            push @arg, [$i, 'value', 0, 'a' . $ni++];
+            push @text, $arg[-1][3];
         } elsif ($k =~ /^\d$/ && $i >= @oc && defined $ret && $k == $ret) {
             # an input in the register output's place (dl-lookup's "0"):
             # its value there first, as for +r
-            push @arg, [$i, 'value', 1];
+            push @arg, [$i, 'value', 1, 'a' . $ni++];
             push @text, 't0';
         } elsif ($k =~ /^[Am]$/) {
-            push @arg, [$i, 'address'];
-            push @text, ($k eq 'A' ? '(a' . $#arg . ')' : '0(a' . $#arg . ')');
+            push @arg, [$i, 'address', 0, 'a' . $ni++];
+            push @text, ($k eq 'A' ? "($arg[-1][3])" : "0($arg[-1][3])");
         } else {
             stop("the asm constraint $c", $n);
         }
@@ -1275,7 +1276,7 @@ sub asm_stmt {
     (my $t = $template) =~ s/%z?(\d+)/$text[$1] \/\/ stop("the asm operand %$1", $n)/ge;
     my @code;
     # a +r output: its value from its argument
-    for my $j (0 .. $#arg) { push @code, node('mv', node("a$j"), node('t0')) if $arg[$j][2] }
+    for my $j (0 .. $#arg) { push @code, node('mv', node($arg[$j][3]), node('t0')) if $arg[$j][2] }
     push @code, @fmv;
     push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
     push @code, node('fmv.x.' . ($fret eq 's' ? 'w' : 'd'), node('ft0'), node('t0')) if $fret;
@@ -1776,7 +1777,7 @@ sub expr {
             my @p = expr($c);
             @p == 1 && @{ $p[0]{children} } or stop('a call through a path that is not one node', $n);
             # (without arguments, a . after the path: the field alone is its value)
-            push @{ $p[0]{children} }, @args ? map { item(expr($_)) } @args : node('.');
+            push @{ $p[0]{children} }, @args ? map { arg($_) } @args : node('.');
             return @p;
         }
         if ($c->{kind} =~ /^(CStyleCastExpr|ConditionalOperator|CallExpr|BinaryOperator)$/) {
@@ -1786,7 +1787,7 @@ sub expr {
             my @p = expr($c);
             @p = node(':', @p) if @p > 1;    # (a conditional, an operator's)
             @p == 1 or stop('a call through ' . $c->{kind} . ' of several nodes', $n);
-            push @{ $p[0]{children} }, node('.'), map { item(expr($_)) } @args;
+            push @{ $p[0]{children} }, node('.'), map { arg($_) } @args;
             return @p;
         }
         $c->{kind} eq 'DeclRefExpr' or stop('a call through ' . $c->{kind}, $n);
@@ -1813,7 +1814,7 @@ sub expr {
             my $mc = own('memcpy');
             want($mc);
             return cast_node(['address', 'void'], node(':', cast_node(['address', 'u8'],
-                node(ffname($mc), map { item(expr($_)) } @args)), node('+'), atom($args[2])));
+                node(ffname($mc), map { arg($_) } @args)), node('+'), atom($args[2])));
         }
         # a builtin of a libc function is a call of it, as gcc makes one
         # where it does not expand the builtin
@@ -1823,7 +1824,7 @@ sub expr {
         $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
         # gcc's alloca: ttpc's, C on the shared page, which the function gives
         # back when it returns
-        return node('alloca', map { item(expr($_)) } @args) if $name eq '__builtin_alloca';
+        return node('alloca', map { arg($_) } @args) if $name eq '__builtin_alloca';
         # gcc's type-generic overflow builtins: one function in builtins.ff.txt
         # for each set of operand types glibc uses, named for them
         # (__builtin_add_overflow u32 u32 u32)
@@ -1831,7 +1832,7 @@ sub expr {
             my @t = map { tword_int($_) } @args;
             my $sig = "@t" =~ /^(\S+) (\S+) address (\S+)$/ ? "$1 $2 $3" : '';
             $ovf{"$name $sig"} || ($target eq 'arm' && $ovf_arm{"$name $sig"}) or stop("$name on @t", $n);
-            return node("$name $sig", map { item(expr($_)) } @args);
+            return node("$name $sig", map { arg($_) } @args);
         }
         # gcc's type-generic float classification, in builtins.ff.txt, one
         # function for each floating type (printf_fp has double and long double)
@@ -1840,7 +1841,7 @@ sub expr {
         if ($name =~ /^__builtin_(isnan|isinf_sign|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
             $t =~ /^(float|double|long double)$/ or stop("$name on $t", $n);
-            return node("$name $t", map { item(expr($_)) } @args);
+            return node("$name $t", map { arg($_) } @args);
         }
         # C's va_ words, as clang has them
         return node('va_start', item(expr($args[0]))) if $name eq '__builtin_va_start' || $name eq '__builtin_c23_va_start';
@@ -1860,22 +1861,22 @@ sub expr {
             $a = (kids($a))[0] while ($a->{kind} // '') eq 'ImplicitCastExpr' && ($a->{castKind} // '') eq 'IntegralCast';
             my $w = tword_int($a);
             $w =~ /^u(8|16|32|64)$/ or stop("$name on $w", $n);
-            return node("$name $w", map { item(expr($_)) } @args);
+            return node("$name $w", map { arg($_) } @args);
         }
         # (arm's __builtin_add_overflow_p on its words, unsigned ints)
-        return node("$name u32", map { item(expr($_)) } @args) if $name eq '__builtin_add_overflow_p' && $target eq 'arm';
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
+        return node("$name u32", map { arg($_) } @args) if $name eq '__builtin_add_overflow_p' && $target eq 'arm';
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
-        return node($name, map { item(expr($_)) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
         # gcc's _mm_cmpistri, _mm_cmpistrc, _mm_cmpistrz (<smmintrin.h>, whose
         # bodies clangvec.pl leaves out): the builtin of its immediate, a
         # function of builtins-x86_64.ff.txt for each (pcmpistri $imm)
         if ($name =~ /^_mm_cmpistr([icz])$/ && $target eq 'x86_64' && @args == 3) {
             my $imm = int_const($args[2]);
             defined $imm or stop("$name of an immediate that is no constant", $n);
-            return node(sprintf('__builtin_ia32_pcmpistr%s128 0x%x', { i => 'i', c => 'ic', z => 'iz' }->{$1}, $imm), map { item(expr($_)) } @args[0, 1]);
+            return node(sprintf('__builtin_ia32_pcmpistr%s128 0x%x', { i => 'i', c => 'ic', z => 'iz' }->{$1}, $imm), map { arg($_) } @args[0, 1]);
         }
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
         $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
@@ -1887,7 +1888,7 @@ sub expr {
         # (through a function's static, its name as a global: tst-strerror-fail's
         # original_malloc)
         my $sn = $c->{referencedDecl}{kind} eq 'VarDecl' && $staticname{"$cur_unit $c->{referencedDecl}{id}"};
-        return node($sn || ffname($name), map { item(expr($_)) } @args);
+        return node($sn || ffname($name), map { arg($_) } @args);
     }
     if ($k eq 'AtomicExpr') {
         # gcc's atomic builtins: a call of libatomic's function for the size,
@@ -2581,6 +2582,20 @@ sub stmt {
     return () if $k eq 'NullStmt';
     return effect($n) if $k =~ /Expr$|Operator$|Literal$/;
     stop($k, $n);
+}
+# A call's argument: its value; one that C converts from unsigned int to a
+# wider integer (a parameter of 8 bytes) as that cast, written: ttpc passes
+# an argument by its own type, and riscv64's lp64d sign-extends an unsigned
+# int (stdbit's __builtin_clzll (x) of a u32 x)
+sub arg {
+    my ($a) = @_;
+    if ($a->{kind} eq 'ImplicitCastExpr' && ($a->{castKind} // '') eq 'IntegralCast') {
+        my ($v) = kids($a);
+        my @to = ctype(qt($a));
+        my @from = ctype(qt($v));
+        return cast_node([@to], item(expr($v))) if "@from" =~ /^(?:u32|unsigned int)$/ && "@to" =~ /^(?:u64|long|i64|unsigned long|long long|unsigned long long)$/;
+    }
+    item(expr($a));
 }
 # An expression for what it does, its value unused: x++ is ++x then.
 # (x = setjmp (...), a function that returns twice: its value first into a

@@ -8,7 +8,8 @@
 # argument's type (clang-prelude.h declares them for clang, overloaded on
 # the five unsigned types). Each counts on the u64 builtins of
 # builtins.ff.txt (clzll, ctzll, popcountll, which give 64 for 0), on its
-# argument zero-extended; bit_ceil gives 0 where the result does not fit,
+# argument zero-extended (a cast to u64: riscv64's lp64d sign-extends an
+# unsigned int passed as itself); bit_ceil gives 0 where the result does not fit,
 # as gcc's does.
 #
 #   perl mkstdbit.pl > stdbit.ff.txt
@@ -39,7 +40,7 @@ for my $n (8, 16, 32, 64) {
     my $zero = grp(leaf('x', '==', 0));
     push @fns,
         node("__builtin_stdc_leading_zeros $t:", leaf('u32'), @x,
-            ret(cast('u32', $n == 64 ? node('__builtin_clzll', leaf('x')) : grp(node('__builtin_clzll', leaf('x')), leaf('-', 64 - $n))))),
+            ret(cast('u32', $n == 64 ? node('__builtin_clzll', leaf('x')) : grp(node('__builtin_clzll', cast('u64', leaf('x'))), leaf('-', 64 - $n))))),
         node("__builtin_stdc_leading_ones $t:", leaf('u32'), @x, ret(call('leading_zeros', $n, $not))),
         node("__builtin_stdc_trailing_zeros $t:", leaf('u32'), @x,
             ret(cast('u32', node('__builtin_ctzll', $n == 64 ? leaf('x') : grp(leaf('x', '|', 'ULL', 2 ** $n)))))),
@@ -50,7 +51,7 @@ for my $n (8, 16, 32, 64) {
         node("__builtin_stdc_first_trailing_one $t:", leaf('u32'), @x, iff($zero, ret(leaf(0))),
             ret(call('trailing_zeros', $n, leaf('x')), leaf('+', 1))),
         node("__builtin_stdc_first_trailing_zero $t:", leaf('u32'), @x, ret(call('first_trailing_one', $n, $not))),
-        node("__builtin_stdc_count_ones $t:", leaf('u32'), @x, ret(cast('u32', node('__builtin_popcountll', leaf('x'))))),
+        node("__builtin_stdc_count_ones $t:", leaf('u32'), @x, ret(cast('u32', node('__builtin_popcountll', $n == 64 ? leaf('x') : cast('u64', leaf('x')))))),
         node("__builtin_stdc_count_zeros $t:", leaf('u32'), @x, ret(leaf($n, '-'), call('count_ones', $n, leaf('x')))),
         node("__builtin_stdc_has_single_bit $t:", leaf('int'), @x, ret(call('count_ones', $n, leaf('x')), leaf('==', 1))),
         node("__builtin_stdc_bit_width $t:", leaf('u32'), @x, ret(leaf($n, '-'), call('leading_zeros', $n, leaf('x')))),
