@@ -234,12 +234,22 @@ sub regroup {
             } else { ($head, $items) = ($j, 1) }
         }
     }
-    $n->{children} = [map { regroup($t, $_, $items && ($_->{content} eq ':' || $_->{content} eq 'items') ? 'items' : '') } @k];
+    $n->{children} = [map { regroup($t, $_, $items && ($_->{content} eq ':' || $_->{content} eq 'items') ? 'items' : defined $fnhead && $_->{content} =~ /^\d+:$/ ? 'body' : '') } @k];
+    # (c2ff's layers of a function's statements, one past 255 in the words
+    # of now (nss_files_functions' 0:): all of them cut again, at the
+    # function's level, as a layer in a layer hides a declaration from the
+    # layer after it)
+    @k = kids($n);
+    if (defined $fnhead && grep { $_->{content} =~ /^\d+:$/ && @{ $_->{children} } > 255 } @k[$fnhead .. $#k]) {
+        my $flat; $flat = sub { my ($x) = @_; $x->{content} =~ /^\d+:$/ ? map { $flat->($_) } kids($x) : $x };
+        $n->{children} = [@k[0 .. $fnhead - 1], stmt_layers(map { $flat->($_) } @k[$fnhead .. $#k])];
+        return $n;
+    }
     return $n if @k <= 255;
     if (defined $fnhead) { $n->{children} = [@k[0 .. $fnhead - 1], stmt_layers(@k[$fnhead .. $#k])]; return $n }
     # (a layer that c2ff made of a function's statements, past 255 now:
-    # nss_files_functions' 0:)
-    if (!$items && $n->{content} =~ /^\d+:$/) { $n->{children} = [stmt_layers(@k)]; return $n }
+    # its function cuts them again, above)
+    return $n if !$items && $n->{content} =~ /^\d+:$/ && $ctx eq 'body';
     unless ($items) { $n->{children} = [layers(@k)]; return $n }
     my @v = map { $_->{content} eq 'items' && !leaf($_) ? kids($_) : $_ } @k[$head .. $#k];
     # (an item whole in one group: a cast or a suffix with its operand, a
