@@ -985,6 +985,18 @@ refresh: $(CT)/mkff
 	$(RUNT) $(CT)/mkff > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 	perl gen/mkgnuff.pl > $(X86GNU).tmp && mv $(X86GNU).tmp $(X86GNU)
 
+# The committed shared.ff and x86_64gnu.ff are what refresh makes of their
+# sources (made again in a folder of their own): a source changed without
+# refresh, or shared.ff patched alone (which the next refresh would drop),
+# fails here.
+refresh-check: $(CT)/mkff
+	@set -e; d=$(TL)/refresh; rm -rf $$d; mkdir -p $$d; \
+	$(RUNT) $(CT)/mkff > $$d/$(SHARED); \
+	cmp $$d/$(SHARED) $(SHARED) || { echo "refresh-check: $(SHARED) is not what make refresh makes of shared.ff.txt, macros/ and isa/"; exit 1; }; \
+	perl gen/mkgnuff.pl > $$d/$(X86GNU); \
+	cmp $$d/$(X86GNU) $(X86GNU) || { echo "refresh-check: $(X86GNU) is not what make refresh makes of isa/x86_64gnu.pl"; exit 1; }; \
+	echo "refresh-check: $(SHARED) and $(X86GNU) are what make refresh makes"
+
 # A change of ttpc is a patch script (gen/patches/*.pl, see gen/patchlib.pl),
 # committed with the tree it changes, so that it can be replayed when a
 # merge of the tree conflicts: T (ttpc.ff) is dumped to text, the script
@@ -1006,4 +1018,4 @@ endif
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds hex bootstraps refresh patch clean licenses abi debug tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))
+.PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds hex bootstraps refresh refresh-check patch clean licenses abi debug tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))

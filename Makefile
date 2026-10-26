@@ -54,9 +54,10 @@ compiler-test: compiler
 # Assemble the programs, check them against GNU as and run them; build and
 # run the C programs (and with -O, check-O); the seeds of the other hosts
 # agree with ttpc.s; the hex seed is its texts and binutils' seed (hex);
-# ttp's own tools in ff (src/compiler/tools) agree with their Perl versions.
+# ttp's own tools in ff (src/compiler/tools) agree with their Perl versions;
+# shared.ff and x86_64gnu.ff are what make refresh makes of their sources.
 compiler-check: compiler
-	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest check-O ctime cws targets seeds hex abi debug tools-check copies-check
+	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler check licenses rvv simd run ctest check-O ctime cws targets seeds hex abi debug tools-check refresh-check copies-check
 
 # ttpc.s (stage0) assembles ttpc in ff into stage1, stage1 assembles it into
 # stage2: they must be the same. So too from the seed of each other host
