@@ -988,14 +988,19 @@ refresh: $(CT)/mkff
 # A change of ttpc is a patch script (gen/patches/*.pl, see gen/patchlib.pl),
 # committed with the tree it changes, so that it can be replayed when a
 # merge of the tree conflicts: T (ttpc.ff) is dumped to text, the script
-# P edits the text, and the text becomes T again.
+# P edits the text, and the text becomes T again. A text tree (T=*.txt:
+# macros/<target>.ff.txt, then make refresh) the script edits as it is.
 T ?= $(TTPC_FF)
 patch: | $(BUILD)
 	@test -n "$(P)" || { echo "usage: make patch P=gen/patches/x.pl [T=ttpc.ff]"; exit 1; }
+ifneq ($(filter %.txt,$(T)),)
+	PATCHLIB=$(CURDIR)/gen/patchlib.pl perl $(P) $(T)
+else
 	perl gen/fftext.pl txt $(T) > $(BUILD)/patch.ff.txt
 	PATCHLIB=$(CURDIR)/gen/patchlib.pl perl $(P) $(BUILD)/patch.ff.txt
 	perl gen/fftext.pl ff $(BUILD)/patch.ff.txt > $(BUILD)/patch.ff
 	mv $(BUILD)/patch.ff $(T)
+endif
 	@echo "patch: $(P) on $(T)"
 
 clean:

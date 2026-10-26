@@ -1859,6 +1859,25 @@ c:
     mov
       r8
       r0
+  cc_fneg_q:
+    vldr.64
+      0
+      r0
+      d6
+    vneg.f64
+      d6
+      d6
+    add
+      r8
+      r11
+      r8
+    vstr.64
+      0
+      r8
+      d6
+    mov
+      r8
+      r0
   cc_cvt_dm_l:
     vmov.sr
       r0

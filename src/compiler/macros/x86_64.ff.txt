@@ -1500,6 +1500,32 @@ c:
     btcq.i
       63
       rax
+  cc_fneg_q:
+    addq
+      rbp
+      r11
+    movq.m
+      0
+      rax
+      r10
+    movq.mr
+      r10
+      0
+      r11
+    movq.m
+      8
+      rax
+      r10
+    btcq.i
+      63
+      r10
+    movq.mr
+      r10
+      8
+      r11
+    movq
+      r11
+      rax
   cc_cvt_d_l:
     cvtsi2sdq
       rax
