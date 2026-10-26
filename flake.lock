@@ -15,11 +15,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1792116957,
-        "narHash": "sha256-EjZqHKObBfIOeHZnMRVV87HB3pPq/WBkmRJWyFxmZu8=",
+        "lastModified": 1792812153,
+        "narHash": "sha256-T2+XBfNbf9pecLUWS4+RtuVNZ3W8K5taG5QdV71mWlk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "f20cd90e28fe0403873f473b29e42662cd86e8c4",
+        "rev": "674a2028661e550a97400c1cc992b9cca9a668a1",
         "type": "github"
       },
       "original": {
@@ -32,11 +32,11 @@
     "raddebugger": {
       "flake": false,
       "locked": {
-        "lastModified": 1792202668,
-        "narHash": "sha256-+xX9R7PIbXYFOJSAPs9QoIYszi5w7YssrtmncvJk5xE=",
+        "lastModified": 1792507179,
+        "narHash": "sha256-y76eVv2SkDeaesHuBFmiHQ6bd2rnkbt9j2qE3fm8B/E=",
         "owner": "EpicGamesExt",
         "repo": "raddebugger",
-        "rev": "62b715a30e5da6b8d7e02372a8e7458feab1df97",
+        "rev": "771f63dd35d3d17f0c7914c5031959282802be5f",
         "type": "github"
       },
       "original": {
