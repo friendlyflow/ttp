@@ -1694,6 +1694,39 @@ c:
     fmov.x.d
       d16
       x0
+  cc_fneg_q:
+    add
+      x29
+      x10
+      x10
+    ldr
+      0
+      x0
+      x9
+    str
+      0
+      x10
+      x9
+    ldr
+      8
+      x0
+      x9
+    fmov.d.x
+      x9
+      d16
+    fneg.d
+      d16
+      d16
+    fmov.x.d
+      d16
+      x9
+    str
+      8
+      x10
+      x9
+    mov
+      x10
+      x0
   cc_cvt_d_l:
     scvtf.d.x
       x0

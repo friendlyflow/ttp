@@ -1265,6 +1265,40 @@ c:
     fmv.x.d
       ft0
       a0
+  cc_fneg_q:
+    add
+      t1
+      s0
+      t1
+    ld
+      0
+      a0
+      t0
+    sd
+      0
+      t0
+      t1
+    ld
+      8
+      a0
+      t0
+    fmv.d.x
+      t0
+      ft0
+    fsgnjn.d
+      ft0
+      ft0
+      ft0
+    fmv.x.d
+      ft0
+      t0
+    sd
+      8
+      t0
+      t1
+    mv
+      t1
+      a0
   cc_cvt_d_l:
     fcvt.d.l
       a0
