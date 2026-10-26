@@ -3562,6 +3562,7 @@ opt:
   comment
     -O (gen/patches/opt.pl): cc_ldfp_* off: V = the local at FP + off, as cc_li off V, cc_addfp, cc_load_* do; cc_stfp_* off: [FP + off] = V, as cc_li off L, cc_addfp_l, cc_store_* (L is not set); off in -255..255, one instruction.
     cc_toarg i: argument register i = V, the reverse of cc_param (a call's argument without its push, cc_arg's load and a slot of cc_drop).
+    cc_li_pos32 value rd, cc_li_neg32 value rd (optli.pl): rd = value, li's constant in 2048..2^31-2049 or -2^31..-2049 (and the TLS offset): movw + movt, as cc_li_big (arm's values are 32-bit).
   cc_ldfp_i8:
     off
     ldrsb
@@ -3640,6 +3641,28 @@ opt:
       r0
       cc_argreg
         i
+  cc_li_pos32:
+    value
+    rd
+    movw
+      lo16
+        value
+      rd
+    movt
+      hi16
+        value
+      rd
+  cc_li_neg32:
+    value
+    rd
+    movw
+      lo16
+        value
+      rd
+    movt
+      hi16
+        value
+      rd
 linux:
   comment
     The Linux system calls by name, for syscall: the arm EABI numbers (mmap is mmap2, its offset in pages).
