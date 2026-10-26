@@ -2583,12 +2583,27 @@ sub stmt {
     stop($k, $n);
 }
 # An expression for what it does, its value unused: x++ is ++x then.
+# (x = setjmp (...), a function that returns twice: its value first into a
+# local of its own, then x; ttpc keeps x's address on the stack across the
+# call, which the second return finds overwritten: start_thread's
+# not_first_call, where pthread_cancel's longjmp comes back)
 sub effect {
     my ($n) = @_;
     my $s = strip($n);
     return (atom((kids($s))[0]), node($s->{opcode})) if $s->{kind} eq 'UnaryOperator' && $s->{opcode} =~ /^(\+\+|--)$/;
+    if ($s->{kind} eq 'BinaryOperator' && $s->{opcode} eq '=' && returns_twice((kids($s))[1])) {
+        my ($l, $r) = kids($s);
+        return node(':', node('returns twice:', map({ node($_) } ctype(qt($r))), item(expr($r))), expr($l), node('='), node('returns twice'));
+    }
     return node(':', map { effect($_) } kids($s)) if $s->{kind} eq 'BinaryOperator' && $s->{opcode} eq ',';
     item(expr($n));
+}
+# a call of a function that returns twice (setjmp's, getcontext, vfork)
+sub returns_twice {
+    my $c = strip($_[0] // return 0);
+    return 0 unless $c->{kind} eq 'CallExpr';
+    my $f = strip((kids($c))[0] // return 0);
+    $f->{kind} eq 'DeclRefExpr' && ($f->{referencedDecl}{name} // '') =~ /^(?:_?setjmp|__sigsetjmp|sigsetjmp|__builtin_setjmp|_?_?getcontext|vfork|__vfork)$/;
 }
 # One part of a for: one item (a declaration, or an expression), an empty
 # : when there is none.
