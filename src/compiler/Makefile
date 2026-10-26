@@ -751,6 +751,10 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # gen/ISA.pm and isa/<target>.pl, the second implementation) and compares.
 # mkff runs after stage2 exists (it builds it): the chain reads the
 # committed shared.ff and never makes it.
+# TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
+# ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
+# do stage1 and stage2.
+TOOLFLAGS := -O
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff tools/files.ff
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge
@@ -764,12 +768,12 @@ SHAVFILES := abc empty m448 m896 million $(foreach n,0 1 55 56 63 64 65 119 120 
 define tooltarget
 $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/mkff: tools/mkff.ff $(TOOLLIB) $(MKFFLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
 tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
