@@ -189,6 +189,31 @@ sub newwords {
     typenames($t, @n);
     map { regroup($t, $_, '') } map { newnode($t, $_, 'page') } @n;
 }
+# A function's statements in layers, each cut before a statement (a line,
+# a declaration, a comment, a keyword's), not inside one: c2ff cut them so,
+# and the words of now made some longer (*fptr++ = f is five nodes):
+# nss_files_functions' was cut before its =, which stopped ttpc. A
+# statement past 255 nodes, or past 255 layers, is cut as layers cuts.
+sub stmt_layers {
+    my @k = @_;
+    return @k if @k <= 255;
+    my $starts = sub { my ($x) = @_; leaf($x) ? $x->{content} =~ /^(?:comment|return|break|continue)$/ : $x->{content} =~ /.:$|^(?:line|comment|return|if|while|for|do while|switch|goto)$/ };
+    my (@l, @cur, $cut);
+    for my $x (@k) {
+        if (@cur >= 255) {
+            return layers(@k) unless $cut;
+            push @l, [@cur[0 .. $cut - 1]];
+            @cur = @cur[$cut .. $#cur];
+            undef $cut;
+            for my $i (reverse 1 .. $#cur) { if ($starts->($cur[$i])) { $cut = $i; last } }
+        }
+        $cut = scalar @cur if @cur && $starts->($x);
+        push @cur, $x;
+    }
+    push @l, [@cur] if @cur;
+    return layers(@k) if @l > 255;
+    map { node("$_:", @{ $l[$_] }) } 0 .. $#l;
+}
 # A node past 255 children now (a cast and its value were one node, a
 # literal's zeros are written out): a declaration's items, a : of items in
 # them, in items groups again; any other in layers (0: 1: ..., FF.pm)
@@ -211,7 +236,7 @@ sub regroup {
     }
     $n->{children} = [map { regroup($t, $_, $items && ($_->{content} eq ':' || $_->{content} eq 'items') ? 'items' : '') } @k];
     return $n if @k <= 255;
-    if (defined $fnhead) { $n->{children} = [@k[0 .. $fnhead - 1], layers(@k[$fnhead .. $#k])]; return $n }
+    if (defined $fnhead) { $n->{children} = [@k[0 .. $fnhead - 1], stmt_layers(@k[$fnhead .. $#k])]; return $n }
     unless ($items) { $n->{children} = [layers(@k)]; return $n }
     my @v = map { $_->{content} eq 'items' && !leaf($_) ? kids($_) : $_ } @k[$head .. $#k];
     # (an item whole in one group: a cast or a suffix with its operand, a
