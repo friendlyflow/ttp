@@ -237,6 +237,9 @@ sub regroup {
     $n->{children} = [map { regroup($t, $_, $items && ($_->{content} eq ':' || $_->{content} eq 'items') ? 'items' : '') } @k];
     return $n if @k <= 255;
     if (defined $fnhead) { $n->{children} = [@k[0 .. $fnhead - 1], stmt_layers(@k[$fnhead .. $#k])]; return $n }
+    # (a layer that c2ff made of a function's statements, past 255 now:
+    # nss_files_functions' 0:)
+    if (!$items && $n->{content} =~ /^\d+:$/) { $n->{children} = [stmt_layers(@k)]; return $n }
     unless ($items) { $n->{children} = [layers(@k)]; return $n }
     my @v = map { $_->{content} eq 'items' && !leaf($_) ? kids($_) : $_ } @k[$head .. $#k];
     # (an item whole in one group: a cast or a suffix with its operand, a
