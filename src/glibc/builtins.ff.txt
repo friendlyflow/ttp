@@ -2596,3 +2596,232 @@ builtins:
   __atomic_signal_fence:
     asm
     ret
+  comment
+    libatomic's generic __atomic_load (size, src, dst, order) and __atomic_store (size, dst, src, order), which c2ff calls for gcc's __atomic_load and __atomic_store of a value of any type (libgcc's unwinder, of a struct of bit fields): of 1, 2, 4 or 8
+    bytes the function of that size (atomics.ff.txt's), as gcc expands them; of another size its bytes one by one.
+  __atomic_load:
+    void
+    size:
+      u64
+    src:
+      void
+      * pointer
+    dst:
+      void
+      * pointer
+    order:
+      int
+    i:
+      u64
+    if
+      size
+      ==
+      8
+      :
+        cast
+          u64
+          * pointer
+        dst
+      * pointer
+      =
+      __atomic_load_8
+        cast
+          u64
+          * pointer
+        src
+        order
+    else if
+      size
+      ==
+      4
+      :
+        cast
+          u32
+          * pointer
+        dst
+      * pointer
+      =
+      __atomic_load_4
+        cast
+          u32
+          * pointer
+        src
+        order
+    else if
+      size
+      ==
+      2
+      :
+        cast
+          u16
+          * pointer
+        dst
+      * pointer
+      =
+      __atomic_load_2
+        cast
+          u16
+          * pointer
+        src
+        order
+    else if
+      size
+      ==
+      1
+      :
+        cast
+          u8
+          * pointer
+        :
+          dst
+      * pointer
+      =
+      __atomic_load_1
+        cast
+          u8
+          * pointer
+        :
+          src
+        order
+    else
+      for
+        i
+        =
+        0
+        i
+        <
+        size
+        i
+        ++
+        :
+          :
+            cast
+              u8
+              * pointer
+            :
+              dst
+          +
+          i
+        * pointer
+        =
+        :
+          :
+            cast
+              u8
+              * pointer
+            :
+              src
+          +
+          i
+        * pointer
+  __atomic_store:
+    void
+    size:
+      u64
+    dst:
+      void
+      * pointer
+    src:
+      void
+      * pointer
+    order:
+      int
+    i:
+      u64
+    if
+      size
+      ==
+      8
+      __atomic_store_8
+        cast
+          u64
+          * pointer
+        dst
+        :
+          cast
+            u64
+            * pointer
+          src
+        * pointer
+        order
+    else if
+      size
+      ==
+      4
+      __atomic_store_4
+        cast
+          u32
+          * pointer
+        dst
+        :
+          cast
+            u32
+            * pointer
+          src
+        * pointer
+        order
+    else if
+      size
+      ==
+      2
+      __atomic_store_2
+        cast
+          u16
+          * pointer
+        dst
+        :
+          cast
+            u16
+            * pointer
+          src
+        * pointer
+        order
+    else if
+      size
+      ==
+      1
+      __atomic_store_1
+        cast
+          u8
+          * pointer
+        :
+          dst
+        :
+          cast
+            u8
+            * pointer
+          :
+            src
+        * pointer
+        order
+    else
+      for
+        i
+        =
+        0
+        i
+        <
+        size
+        i
+        ++
+        :
+          :
+            cast
+              u8
+              * pointer
+            :
+              dst
+          +
+          i
+        * pointer
+        =
+        :
+          :
+            cast
+              u8
+              * pointer
+            :
+              src
+          +
+          i
+        * pointer

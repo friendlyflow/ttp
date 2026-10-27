@@ -1,0 +1,3 @@
+exit 7
+backtrace: walk f3 f2 f1 main (5 frames, 3)
+forced: g3 g2 g1 (longjmp 1, CFAs rising)

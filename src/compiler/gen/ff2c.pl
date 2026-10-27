@@ -652,6 +652,12 @@ sub operand {
         my $f = '_mm_cmpistr' . { i => 'i', ic => 'c', iz => 'z' }->{$1};
         return ("$f(" . join(', ', (map { expr_item($_) } items(@k)), $2) . ')', [scalar => 'int']);
     }
+    # (c2ff's call of libatomic's generic __atomic_load or __atomic_store, the
+    # size first: gcc's builtin again, without it)
+    if ($w =~ /^__atomic_(load|store)$/ && !local_type($w)) {
+        my @i = items(@k);
+        return ("$w(" . join(', ', map { expr_item($_) } @i[1 .. $#i]) . ')', [scalar => 'void']);
+    }
     if (!local_type($w) && !gtype($w) && (sig($w) || $w =~ /^__builtin_/)) {
         my $s = sig($w);
         return (callee($w) . '(' . join(', ', map { expr_item($_) } items(@k)) . ')', $s ? $s->{ret} : undef);
@@ -1008,7 +1014,7 @@ for my $f (grep { $glibcpage{$_} } @order) {
     push @names, join("\t", 'body', cid($f), orig($f), $unit // '-');
 }
 # clang's own builtins, which C does not declare
-sub clang_builtin { $_[0] =~ /^__builtin_|^__atomic_(?:always_lock_free|is_lock_free|thread_fence|signal_fence)$/ }
+sub clang_builtin { $_[0] =~ /^__builtin_|^__atomic_(?:always_lock_free|is_lock_free|thread_fence|signal_fence|load|store)$/ }
 # The labels of a body: name: nodes that are no declaration
 sub labels_in {
     map {
