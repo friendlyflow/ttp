@@ -1163,6 +1163,11 @@ c:
       x0
       x9
       x0
+  cc_andt:
+    and
+      x10
+      x9
+      x9
   cc_and:
     and
       x0
