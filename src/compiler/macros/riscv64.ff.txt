@@ -2192,6 +2192,7 @@ opt:
     cc_toarg i: argument register i = V, the reverse of cc_param (a call's argument without its push, cc_arg's load and a slot of cc_drop).
     cc_li_pos32 value rd, cc_li_neg32 value rd (optli.pl): rd = value, li's constant in 2048..2^31-2049 or -2^31..-2049 (and the TLS offset): lui + addiw.
     cc_ldfx_* off, cc_stfx_* off (optfold.pl): as cc_ldfp_* and cc_stfp_*, for li's big offset (-2^31..2^31-2049): lui of the high part, add fp, the load or store with the low 12 bits (in V for a load, L for a store).
+    with -O (optwide.pl) stage B's cc_ldfp_* and cc_stfp_* take off in -2048..2047.
   cc_ldfp_i8:
     off
     lb
