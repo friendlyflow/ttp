@@ -1160,6 +1160,11 @@ c:
       r0
       r12
       r0
+  cc_andt:
+    and
+      r8
+      r12
+      r12
   cc_and:
     and
       r0

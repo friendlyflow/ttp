@@ -917,6 +917,10 @@ c:
     xorq
       r10
       rax
+  cc_andt:
+    andq
+      r11
+      r10
   cc_and:
     andq
       r10

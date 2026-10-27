@@ -819,6 +819,11 @@ c:
       a0
       t0
       a0
+  cc_andt:
+    and
+      t1
+      t0
+      t0
   cc_and:
     and
       a0

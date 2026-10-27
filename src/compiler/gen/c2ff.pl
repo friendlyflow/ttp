@@ -99,6 +99,7 @@ my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
+my %ownfnrec;              # a function's own definitions of tags its unit defines otherwise
 my %ownanon;               # a unit's own anonymous records, where another unit's at the same place differ (places)
 my %owntd;                 # a unit's own typedefs, where another unit's came first
 my %constint;              # a unit's const integer globals of a number (tst-random's const int nseq = 3): the counts of arrays
@@ -208,6 +209,11 @@ sub ctype {
         return $tagname{$tag} //= $name;
     }
     if ($t =~ /^(struct|union|enum) (\S+)$/) {
+        # (a function's own definition of the tag)
+        if ($cur_unit && $main::cur_fn && $ownfnrec{$cur_unit} && (my $own = ($ownfnrec{$cur_unit}{$main::cur_fn} // {})->{"$1 $2"})) {
+            $wanttag{$own} = 1;
+            return $tagname{$own} //= ffname($2) . " " . ffname($main::cur_fn);
+        }
         # (a unit's own definition of the tag, reg_rec)
         if ($cur_unit && $ownrec{$cur_unit} && (my $own = $ownrec{$cur_unit}{"$1 $2"})) {
             $wanttag{$own} = 1;
@@ -647,8 +653,9 @@ for my $u (@units) {
             # and its body may only inline, error.h's error with
             # __builtin_va_arg_pack)
             my $inline_only = %treedefs && $d->{inline} && ($d->{storageClass} // '') eq 'extern' && $treedefs{ ffname($name) };
+            my $fk;
             if (!$inline_only && grep { $_->{kind} eq 'CompoundStmt' } @in) {
-                my $k = own_name(\%fn, $name, $d, $u);
+                my $k = $fk = own_name(\%fn, $name, $d, $u);
                 $fn{$k} //= [$d, $u];
                 # a constructor or destructor: run by the start code, so a
                 # root wherever its unit is linked (as an archive member is)
@@ -666,7 +673,20 @@ for my $u (@units) {
                 if ($t->{kind} eq 'EnumDecl') { index_enum($t) }
                 elsif ($t->{completeDefinition}) {
                     $recid{$t->{id}} = $t;
-                    if (defined $t->{name} && $t->{name} ne '') { reg_rec("$t->{tagUsed} $t->{name}", $t, $u) and anon_fields($t, $t->{name}) }
+                    next unless defined $t->{name} && $t->{name} ne '';
+                    my $key = "$t->{tagUsed} $t->{name}";
+                    # (a tag that another function of the unit defines
+                    # otherwise is this function's own, named with it:
+                    # tst-makecontext-align's struct aligned of check_align_16
+                    # and of check_align_32)
+                    if (defined $fk && $rec{$key} && ($recunit{$key} // 0) == $u && def_text($t, $u) ne def_text($rec{$key}, $u)) {
+                        my $own = "$key " . ffname($fk);
+                        $rec{$own} //= $t;
+                        $recunit{$own} //= $u;
+                        $ownfnrec{$u}{$fk}{$key} = $own;
+                        next;
+                    }
+                    reg_rec($key, $t, $u) and anon_fields($t, $t->{name});
                 }
             }
         } elsif ($d->{kind} eq 'VarDecl') {
