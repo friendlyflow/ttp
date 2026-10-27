@@ -1400,6 +1400,16 @@ sub asm_ins_other {
             return node($o, map { node(s/^%//r) } @a) if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)[lq]$/;
         }
         return node($op, node($1)) if $op =~ /^(?:div|mul)q$/ && @a == 1 && $a[0] =~ /^%(\w+)$/;
+        # a load of the TCB's word at an offset into the register output
+        # (x86_cpu_cet_active's mov %fs:72, %0 of an unsigned int): the fs
+        # prefix, then mov's absolute form, as GNU as makes it (64 8b 04 25)
+        if ($op =~ /^mov[lq]?$/ && @a == 2 && $a[0] =~ /^%fs:(\d+)$/) {
+            my ($s, $d) = (substr($op, 3) || $asm_size // '', $1);
+            if ($s && $a[1] =~ /^%(r(?:[abcd]x|[sd]i))$/) {
+                my $r = $1;
+                return (node('fs'), $s eq 'l' ? node('movl.n.a32', node($d), node($r =~ s/^r/e/r)) : node('movq.a32', node($d), node($r)));
+            }
+        }
         # FMA on xmm registers (libm's fma and fmaf): FMA3's 213 form and
         # FMA4's, both VEX3 (x86_64gnu.ff)
         if ((($op =~ /^vfmadd213s[sd]$/ && @a == 3) || ($op =~ /^vfmadds[sd]$/ && @a == 4)) && !grep { !/^%xmm\d+$/ } @a) {
