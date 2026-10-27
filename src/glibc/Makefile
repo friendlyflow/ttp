@@ -928,9 +928,14 @@ $(TI)/%.i: mki.pl | $(TOBJ)/$(AREA).log
 TCLANGFIX_riscv64 := sed -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\?\)[fF]64x\b/\1L   /g' \
 	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g' -e 's/\([0-9]\.\?\)[fF]128\b/\1L   /g'
 TCLANGFIX = $(or $(CLANGFIX),$(TCLANGFIX_$(GTARGET)))
-$(TI)/%.c2ff: $(TI)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh
-	@$(if $(TCLANGFIX),$(TCLANGFIX) $< > $(TI)/$*.clang.i;) \
-	sh unit.sh $(GTARGET) $< $(TI)/$*.json $(if $(TCLANGFIX),$(TI)/$*.clang.i,$<) $(CLANG_AST)
+# (and on x86_64 a test of gcc's intrinsics headers, <x86intrin.h>: the
+# tst-*-rtm tests' _xbegin and _xend, through clangvec.pl as glibc's
+# units of them, clang with -msse4.2 -mrtm)
+TVEC_x86_64 = grep -q 'intrin\.h"' $< && vec=1;
+$(TI)/%.c2ff: $(TI)/%.i clang-prelude.h ../compiler/gen/c2ff.pl unit.sh clangvec.pl
+	@vec=; $(TVEC_$(GTARGET)) src=$<; \
+	if test -n "$(if $(TCLANGFIX),1)$$vec"; then $(or $(TCLANGFIX),cat) $< | if test -n "$$vec"; then perl clangvec.pl; else cat; fi > $(TI)/$*.clang.i; src=$(TI)/$*.clang.i; fi; \
+	sh unit.sh $(GTARGET) $< $(TI)/$*.json $$src $(CLANG_AST) $${vec:+-msse4.2 -mrtm}
 	@touch $@
 
 # libsupport's passes, once for all tests (one that fails is the c2ff step's

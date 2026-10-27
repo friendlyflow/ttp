@@ -1418,6 +1418,9 @@ sub asm_stmt_other {
     # an empty template whose outputs are all read and written (+r: the
     # optimization barriers of dl-new-hash.h) changes nothing: no code
     return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc;
+    # and one with inputs alone (math_force_eval's "" : : "f" (x) of a long
+    # double on x86_64, "x" of a float), of values with no effects: none
+    return () if $target eq 'x86_64' && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops;
     # (rbx too: the C layer keeps nothing in it across a call)
     my %fixed = $target eq 'x86_64' ? (a => 'rax', b => 'rbx', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
     local $asm_size;
@@ -1842,6 +1845,10 @@ sub expr {
         # and the other way: a libm function gcc always expands, as its
         # builtin (s_scalbn's copysign, which libc.a has no function of)
         $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
+        # (x86_64's _Float128 builtins and copysignf128 / fabsf128: ttpc's
+        # long double is binary128, _Float128 is long double in ff)
+        $name =~ s/^(?:__builtin_)?(copysign|fabs)f128$/__builtin_$1l/;
+        $name =~ s/^(__builtin_(?:huge_val|inf|nan|nans|signbit))f128$/$1l/;
         # gcc's alloca: ttpc's, C on the shared page, which the function gives
         # back when it returns
         return node('alloca', map { arg($_) } @args) if $name eq '__builtin_alloca';
@@ -1888,7 +1895,7 @@ sub expr {
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
-        return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
+        return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause|xbegin|xend|xtest)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
         # gcc's _mm_cmpistri, _mm_cmpistrc, _mm_cmpistrz (<smmintrin.h>, whose
         # bodies clangvec.pl leaves out): the builtin of its immediate, a
@@ -2257,7 +2264,7 @@ sub special_float {
     my ($c, @args) = kids($s);
     $c = strip($c);
     my $name = ($c->{kind} // '') eq 'DeclRefExpr' ? $c->{referencedDecl}{name} // '' : '';
-    my $nan = $name =~ /^__builtin_nan[fl]?$/ ? 1 : $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/ ? 0 : return;
+    my $nan = $name =~ /^__builtin_nan(?:[fl]|f128)?$/ ? 1 : $name =~ /^__builtin_(?:huge_val|inf)(?:[fl]|f128)?$/ ? 0 : return;
     if ($nan) {
         return if @args != 1;
         my $str = $args[0];

@@ -44,6 +44,65 @@
     mfence
     ret
   comment
+    gcc's RTM builtins (<rtmintrin.h>: glibc's tst-*-rtm tests), as bytes. __builtin_ia32_xbegin: xbegin with its fallback the next instruction, eax -1 (_XBEGIN_STARTED) where the transaction starts, else the abort's status, which the processor puts there.
+    __builtin_ia32_xend: xend. __builtin_ia32_xtest: xtest, 1 inside a transaction (ZF 0), else 0.
+  __builtin_ia32_xbegin:
+    asm
+    byte
+      0xb8
+    byte
+      0xff
+    byte
+      0xff
+    byte
+      0xff
+    byte
+      0xff
+    byte
+      0xc7
+    byte
+      0xf8
+    byte
+      0x00
+    byte
+      0x00
+    byte
+      0x00
+    byte
+      0x00
+    byte
+      0xc3
+  __builtin_ia32_xend:
+    asm
+    byte
+      0x0f
+    byte
+      0x01
+    byte
+      0xd5
+    byte
+      0xc3
+  __builtin_ia32_xtest:
+    asm
+    byte
+      0x31
+    byte
+      0xc0
+    byte
+      0x0f
+    byte
+      0x01
+    byte
+      0xd6
+    byte
+      0x0f
+    byte
+      0x95
+    byte
+      0xc0
+    byte
+      0xc3
+  comment
     The SSE builtins of gcc that x86_64's string functions use (strcspn-sse4.c, strspn-sse4.c: <nmmintrin.h>), each a C function of vectors (vector / char / 16, gcc's __v16qi)
     that gives their addresses to an asm function of its own (rdi rsi, the result's rdx), which loads them into xmm0 and xmm1.
     __builtin_ia32_pmovmskb128 x: pmovmskb, a bit of each byte's top. __builtin_ia32_pshufb128 x y: pshufb, x's bytes by y's indexes.
