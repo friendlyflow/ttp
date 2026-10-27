@@ -309,7 +309,15 @@ ROOTS_gnuc := $(ROOTS_ldouble) $(ROOTS_gnuc_$(GTARGET))
 LIBGCC_EH := unwind-dw2 unwind-dw2-fde-dip unwind-c
 OBJS_unwind := elf/dl-iteratephdr setjmp/longjmp setjmp/jmp-unwind nptl/pthread_cleanup_upto nptl/pthread_cond_wait nptl/pthread_cond_broadcast nptl/pthread_mutex_cond_lock nptl/pthread_cond_signal $(LIBGCC_EH:%=libgcc/%)
 ASMS_unwind :=
-ROOTS_unwind := $(ROOTS_stdio) _Unwind_Backtrace _Unwind_ForcedUnwind _Unwind_GetIP _Unwind_GetCFA _Unwind_FindEnclosingFunction _setjmp longjmp
+ROOTS_unwind := $(ROOTS_stdio) _Unwind_Backtrace _Unwind_ForcedUnwind _Unwind_GetIP _Unwind_GetCFA _Unwind_FindEnclosingFunction _setjmp longjmp \
+	open read mmap __register_frame
+# (and gcc's frames among the program's: progs/unwind-gcc.c, by gcc alone at
+# an address of its own, which the program maps and registers)
+RUN_unwind = $(FF)/unwind-gcc.elf
+$(FF)/unwind-gcc.elf: progs/unwind-gcc.c
+	mkdir -p $(FF)
+	$(RUN) -t 60 $(GLIBC_CC) -O1 -funwind-tables -fno-pic -no-pie -static -nostdlib -Wl,-Ttext-segment=0x30000000 -Wl,-e,gcc_mid -Wl,--build-id=none $< -o $@
+unwind-check unwind-check-O: $(FF)/unwind-gcc.elf
 ZEROS_unwind := $(ZEROS_stdio)
 WEAKS_unwind := $(WEAKS_stdio)
 LICENSE_unwind := license-libgcc.ff.txt
