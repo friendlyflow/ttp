@@ -1905,8 +1905,10 @@ h_li_4:                                 # lui rd, upper; addiw rd, rd, lower (if
     slli    t0, s5, 7
     or      a0, a0, t0
     jal     ra, emit32
-h_li_lower:
-    beq     s8, zero, end_line
+h_li_lower:                             # (rd x0: gas's addiw anyway, its hi_reg 0)
+    bne     s8, zero, h_li_addi
+    bne     s5, zero, end_line
+h_li_addi:
     mv      s7, s8
     beq     s5, zero, h_li_addiw        # c.addiw rd, -32..31 (rd not x0)
     addi    t0, s7, 32
@@ -2221,14 +2223,10 @@ layout:                                 # every section's file offset and addres
     ld      a1, V_align+32(s0)
     jal     ra, alignup
     sd      a0, V_base+32(s0)           # .bss
-    ld      t0, V_base+24(s0)
-    sub     t1, a0, t0
-    ld      t0, V_off+24(s0)
-    add     t1, t1, t0
-    sd      t1, V_off+32(s0)
-    ld      a0, V_off+24(s0)            # .shstrtab after .data
-    ld      t0, V_loc+24(s0)
+    ld      a0, V_off+24(s0)            # its file offset, and .shstrtab's: the end
+    ld      t0, V_loc+24(s0)            # of .data (ld's, though .bss be aligned)
     add     a0, a0, t0
+    sd      a0, V_off+32(s0)
     sd      a0, V_shstr(s0)
     addi    a0, a0, SHSTRTAB_len        # then the section headers
     li      a1, 8
