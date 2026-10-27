@@ -512,14 +512,21 @@ SLDFLAGS_x86_64 := -s -z noseparate-code
 # the GNU property note, the symbols (which name the object file) and the
 # page of its own for the code, so that the cross and the native binutils
 # agree.
-# riscv64 (the bootstrap's own seed, $(BIN)) has hex0, hex2 and ttpc.hex2
-# so far: SEED=asm takes ttpc.hex2 there (ASMHOSTS have M1 and asm). Its
+# riscv64 (the bootstrap's own seed, $(BIN)) has them all too (its asm
+# matches gas's compressed instructions and branch relaxation); its
 # binutils' seed is as -mno-arch-attr (the attribute's string names the
-# version of binutils) and ld -s -z noseparate-code, so the cross and the
-# native binutils agree too.
+# version of binutils) and ld --no-relax -s -z noseparate-code, so the
+# cross and the native binutils agree too. SEED=asm takes ttpc.hex2 on a
+# host of HEXHOSTS without M1 and asm (not in ASMHOSTS).
 SEED ?= asm
 HEXHOSTS := x86_64 riscv64
-ASMHOSTS := x86_64
+ASMHOSTS := x86_64 riscv64
+# the flat tools (M1.s, asm.s) as binutils makes them, for make hex:
+# riscv64's RV64IM without relaxing, linked at 0 (gas keeps relocations
+# even for a branch in its own section)
+SEEDCROSS_riscv64 := $(CROSS)
+TOOLASFLAGS_x86_64 := $(SASFLAGS_x86_64)
+TOOLASFLAGS_riscv64 := -march=rv64im -mabi=lp64 -mno-arch-attr -mno-relax
 seedkind = $(if $(filter $(1),$(HEXHOSTS)),$(if $(filter asm,$(SEED)),$(if $(filter $(1),$(ASMHOSTS)),asm,hex),$(SEED)),gnu)
 RUN_riscv64 := $(QEMU)
 SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
@@ -705,8 +712,9 @@ $(BUILD)/$(1)/seed.asm: $(BUILD)/$(1)/asm hosts/$(1)/ttpc.s
 
 hexasm-$(1): hex-$(1) $(BUILD)/$(1)/M1 $(BUILD)/$(1)/asm $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu
 	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
-	for f in M1 asm; do $(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
-	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.o $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
+	for f in M1 asm; do $(SEEDCROSS_$(1))as $(TOOLASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
+	$(if $(filter riscv64,$(1)),$(SEEDCROSS_$(1))ld -Ttext=0 -e 0 $$$$d/$$$$f.o -o $$$$d/$$$$f.e 2> /dev/null,cp $$$$d/$$$$f.o $$$$d/$$$$f.e); \
+	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.e $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
 	echo "hex-$(1): M1 ($$$$(wc -c < $(BUILD)/$(1)/M1) bytes), made by hex2 of M1.hex2 ($$$$(wc -l < hosts/$(1)/M1.hex2) lines), is what binutils makes of gen/hex/$(1)/M1.s"; \
 	echo "hex-$(1): asm ($$$$(wc -c < $(BUILD)/$(1)/asm) bytes), made by M1 and hex2 of asm.M1 ($$$$(wc -l < hosts/$(1)/asm.M1) lines), is what binutils makes of gen/hex/$(1)/asm.s"; \
 	cmp $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu; \

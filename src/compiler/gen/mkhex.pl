@@ -449,6 +449,121 @@ sub m1num {
     return $sign . ($v < 0 ? ($v > -4096 ? $v : sprintf '-0x%x', -$v) : $v < 4096 ? $v : sprintf '0x%x', $v);
 }
 
+# m1 for riscv64: each instruction as stage0-posix's riscv64 M1 writes
+# it: its registers (rd_a0 rs1_sp rs2_t0, the fields as words) and
+# immediate (!n I, @n S, ~n U) or label (@label B, $label J, ~label and
+# !label an auipc pair), then its name, the DEFINE of its fixed bits
+my %rvop = (0x33 => 'R', 0x13 => 'I', 0x1b => 'I', 0x03 => 'I', 0x67 => 'I', 0x73 => 'I', 0x23 => 'S', 0x63 => 'B', 0x6f => 'J', 0x37 => 'U', 0x17 => 'U');
+my %rvname = (
+    '33.0.0' => 'add', '33.0.32' => 'sub', '33.1.0' => 'sll', '33.2.0' => 'slt', '33.3.0' => 'sltu', '33.4.0' => 'xor',
+    '33.5.0' => 'srl', '33.5.32' => 'sra', '33.6.0' => 'or', '33.7.0' => 'and', '33.0.1' => 'mul', '33.4.1' => 'div',
+    '33.5.1' => 'divu', '33.6.1' => 'rem', '33.7.1' => 'remu',
+    '13.0' => 'addi', '13.2' => 'slti', '13.3' => 'sltiu', '13.4' => 'xori', '13.6' => 'ori', '13.7' => 'andi',
+    '13.1' => 'slli', '13.5' => 'srli', '1b.0' => 'addiw', '3.0' => 'lb', '3.1' => 'lh', '3.2' => 'lw', '3.3' => 'ld',
+    '3.4' => 'lbu', '3.5' => 'lhu', '3.6' => 'lwu', '67.0' => 'jalr', '73.0' => 'ecall', '23.0' => 'sb', '23.1' => 'sh',
+    '23.2' => 'sw', '23.3' => 'sd', '63.0' => 'beq', '63.1' => 'bne', '63.4' => 'blt', '63.5' => 'bge', '63.6' => 'bltu',
+    '63.7' => 'bgeu', '6f' => 'jal', '37' => 'lui', '17' => 'auipc');
+my %opname = (0x33 => 'OP', 0x13 => 'OP-IMM', 0x1b => 'OP-IMM-32', 0x03 => 'LOAD', 0x67 => 'JALR', 0x73 => 'SYSTEM',
+    0x23 => 'STORE', 0x63 => 'BRANCH', 0x6f => 'JAL', 0x37 => 'LUI', 0x17 => 'AUIPC');
+sub rvword { my $v = shift; '.' . &le($v & 0xffffffff, 4) }
+sub rvnum { my $v = shift; $v < 0 ? ($v > -4096 ? $v : sprintf '-0x%x', -$v) : $v < 4096 ? $v : sprintf '0x%x', $v }
+if ($mode eq 'm1' && $rv) {
+    my (%def, @rows);
+    my $reg = sub {
+        my ($f, $n, $sh) = @_;
+        my $name = "${f}_$abi[$n]";
+        $def{$name} //= [rvword($n << $sh), sprintf '%s x%d %s: bits %d:%d, a word', $f, $n, $abi[$n], $sh + 4, $sh];
+        return $name;
+    };
+    for my $l (@{ $bysec{'.text'} }) {
+        my $t = $l->{text};
+        die "mkhex: line $l->{n}: a local label\n" if grep { defined $_->{num} } @{ $l->{labels} };
+        my $defs = join ' ', map { ":$_->{name}" } @{ $l->{labels} };
+        if (!defined $l->{off}) {
+            push @rows, $defs ne '' ? row($defs, $t) : $t eq '' ? '' : cm($t);
+            next;
+        }
+        my $b = substr $bin, $l->{off}, $l->{end} - $l->{off};
+        if ($l->{mn} =~ /^\./) {
+            my $str = $l->{mn} eq '.asciz' && $l->{ops} =~ /^"([^"\\]*)"$/ ? $1 : undef;
+            if (defined $str && "$str\0" eq $b && $str !~ /[\s'"]/) { push @rows, row(join(' ', grep { $_ ne '' } $defs, "\"$str\""), $t); next }
+            my @h = unpack '(H32)*', $b;
+            push @rows, row(join(' ', grep { $_ ne '' } $defs, uc shift @h), $t), map { uc } @h;
+            next;
+        }
+        my @tok;
+        my $pair;    # the label of an auipc, for the instruction after it
+        for (my $p = $l->{off}; $p < $l->{end}; $p += 4) {
+            my $w = rd($p, 4);
+            my ($op, $rd, $f3, $rs1, $rs2, $f7) = ($w & 0x7f, ($w >> 7) & 31, ($w >> 12) & 7, ($w >> 15) & 31, ($w >> 20) & 31, $w >> 25);
+            my $k = $rvop{$op} // die sprintf "mkhex: line %d: opcode %07b\n", $l->{n}, $op;
+            my $key = sprintf '%x', $op;
+            $key .= ".$f3" unless $k eq 'J' || $k eq 'U';
+            $key .= '.' . ($f7 & ~0) if $k eq 'R';
+            my $name = $rvname{$key} // die "mkhex: line $l->{n}: instruction $key\n";
+            my $fixed = $w & ($k eq 'R' ? 0xfe00707f : $k eq 'J' || $k eq 'U' ? 0x7f : 0x707f);
+            if ($name eq 'srli' && ($w >> 30) & 1) { $name = 'srai' }
+            $fixed |= $w & 0x40000000 if $name eq 'srai';
+            $fixed = $w if $name eq 'ecall';
+            my @f;
+            push @f, $reg->('rd', $rd, 7) if $rd && $k ne 'S' && $k ne 'B';
+            push @f, $reg->('rs1', $rs1, 15) if $rs1 && $k ne 'U' && $k ne 'J';
+            push @f, $reg->('rs2', $rs2, 20) if $rs2 && ($k eq 'R' || $k eq 'S' || $k eq 'B');
+            my $P = $p;
+            if ($k eq 'I' && $name ne 'ecall') {
+                my $imm = $name =~ /^s[lr][la]i$/ ? $rs2 | (($w >> 20) & 32) : iimm($w);
+                if (defined $pair) { push @f, "!$pair"; undef $pair }
+                elsif ($imm) { push @f, '!' . rvnum($imm) }
+            } elsif ($k eq 'S') {
+                my $imm = sxb(($w >> 25) << 5 | $rd, 12);
+                push @f, '@' . rvnum($imm) if $imm;
+            } elsif ($k eq 'B' || $k eq 'J') {
+                my $tgt = $P + ($k eq 'B' ? bimm($w) : jimm($w));
+                my $lab = name_at($tgt, $l->{ops});
+                if (!defined $lab && $k eq 'B' && $tgt == $P + 8 && $p + 8 <= $l->{end} && (rd($p + 4, 4) & 0x7f) == 0x6f) {
+                    push @f, rvword($w & 0xfe000f80);    # gas's far branch: the other one over a jal, +8 as a word
+                } else {
+                    die "mkhex: line $l->{n}: no label at the target of $t\n" unless defined $lab;
+                    push @f, ($k eq 'B' ? '@' : '$') . $lab;
+                }
+            } elsif ($name eq 'auipc') {
+                my $w2 = $p + 8 <= $l->{end} ? rd($p + 4, 4) : die "mkhex: line $l->{n}: an auipc alone\n";
+                my $lab = name_at($P + uimm($w) + iimm($w2), $l->{ops}) // die "mkhex: line $l->{n}: no label at the auipc's target\n";
+                push @f, "~$lab";
+                $pair = $lab;
+            } elsif ($name eq 'lui') {
+                push @f, '~' . sprintf('0x%x', $w & 0xfffff000);
+            }
+            my $why = sprintf '%s: opcode %07b %s', $k, $op, $opname{$op};
+            $why .= sprintf ', funct3 %03b', $f3 unless $k eq 'J' || $k eq 'U';
+            $why .= sprintf ', funct7 %07b', $f7 if $k eq 'R';
+            $why .= ', bit 30: arithmetic' if $name eq 'srai';
+            $why .= ', all of it' if $name eq 'ecall';
+            die "mkhex: $name is $def{$name}[0] and " . &le($fixed, 4) . "\n" if $def{$name} && $def{$name}[0] ne &le($fixed, 4);
+            $def{$name} //= [&le($fixed, 4), $why];
+            push @tok, @f, $name;
+        }
+        push @rows, row(join(' ', grep { $_ ne '' } $defs, @tok), $t);
+    }
+    push @out, "# $src as M1 text, made by gen/mkhex.pl, as stage0-posix's riscv64",
+        "# M1 writes RISC-V: first a DEFINE for each instruction it uses, its",
+        "# fixed bits (opcode, funct3, funct7; little endian), and for each",
+        "# register field it uses, rd_<reg> rs1_<reg> rs2_<reg>, a word (.hex,",
+        "# which hex2 XORs into the next 4 bytes written). Then each asm line:",
+        "# :label for its labels, then each instruction's fields, then its name:",
+        "# its registers (x0 left out), its immediate (!n I, \@n S, ~n U, as",
+        "# words; 0 left out) or its label (\@label B, \$label J, ~label and !label",
+        "# an auipc and the instruction after it, as hex2's references; a branch",
+        "# to a label out of its reach is gas's, the other branch over a jal, its",
+        "# +8 the word .00040000). Data is",
+        "# hex or a \"string\" (its bytes, then 00). M1 reads only what is before",
+        "# each '#'; M1's hex2 text is made by hex2.", '#';
+    push @out, map { row("DEFINE $_ $def{$_}[0]", $def{$_}[1]) } sort { ($a =~ /^r[ds]/) <=> ($b =~ /^r[ds]/) || $a cmp $b } keys %def;
+    push @out, '#', @rows;
+    print "$_\n" for @out;
+    exit 0;
+}
+
 if ($mode eq 'm1') {
     my (%def, @rows);
     my ($addr, $foff) = (0, 0);

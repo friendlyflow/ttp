@@ -27,6 +27,7 @@ hosts/riscv64/hex0.hex0 GPL-3.0-only
 hosts/riscv64/hex2.hex0 GPL-3.0-only
 hosts/riscv64/ttpc.hex2 GPL-3.0-only
 hosts/riscv64/M1.hex2   GPL-3.0-only
+hosts/riscv64/asm.M1    GPL-3.0-only
 ttpc1.ff              GPL-3.0-only
 ttpc2.ff              GPL-3.0-only
 ttpc2.defs.ff         GPL-3.0-only
