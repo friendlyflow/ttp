@@ -394,6 +394,19 @@ sub reserve_target {
     my ($regs) = grep { $_->{content} eq 'registers:' } @{ $sec->{children} } or die "c2ff: $t has no registers\n";
     delete $reserved{$_} for grep { /^(?:x|a|s|t|f|fa|fs|ft|v)\d+$|^(?:zero|ra|sp|gp|tp|fp|pc)$/ } keys %reserved;
     for (@{ $regs->{children} }) { (my $c = $_->{content}) =~ s/:$//; $reserved{$_} = 1 for split ' ', $c }
+    # (and on x86_64 its instructions' names, which C's names would hide
+    # nothing of: ttpc found the lock prefix for localealias.c's lock, so
+    # __libc_lock_lock (lock) took 0's address; pause, setns, fadd ... too;
+    # its groups of instructions, isa/x86_64.pl's, and x86_64gnu.ff's)
+    if ($t eq 'x86_64') {
+        my %insgroup = map { $_ => 1 } qw(alu1 alu2 move unary shift1 shift2 bit branch set cmov stack atomic system sse);
+        my @forms = map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s/:$//r } } @{ $sec->{children} };
+        if (open my $g, '<:raw', "$FindBin::Bin/../x86_64gnu.ff") {
+            my @todo = @{ read_ff(do { local $/; <$g> })->{children} };
+            while (my $x = shift @todo) { $x->{content} =~ /^[a-z]\w*:$/ && !grep { $_->{content} =~ /:$/ } @{ $x->{children} } ? push @forms, $x : push @todo, @{ $x->{children} } }
+        }
+        for (@forms) { $reserved{$1} = 1 if $_->{content} =~ /^([A-Za-z_]\w*):$/ }
+    }
 }
 my %renamed;
 sub ffname {
