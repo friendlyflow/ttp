@@ -234,6 +234,108 @@
         & address
       * pointer
   comment
+    gcc's builtins of libgcc's unwinder (unwind-dw2.c), for ttpc's frames on riscv64. A C function's s0 holds its caller's s0 at s0 and its return address at s0 + 8, its CFA is s0 + 16 (ttpc -g's .eh_frame: DW_CFA_def_cfa s0, 16), and of the
+    callee-saved registers it keeps only s0 (ttpc's C uses no other: s1 ... s11 are as its caller left them, what the unwinder takes of a register no frame saved).
+    __builtin_dwarf_cfa: the CFA of the function that calls it (one that is not variadic: a variadic one's is 64 bytes higher, ehframerv.pl), from its s0, which the word at this builtin's own s0 holds.
+  __builtin_dwarf_cfa:
+    void
+    * pointer
+    return
+      cast
+        void
+        * pointer
+      :
+        cast
+          char
+          * pointer
+        :
+          cast
+            u64
+            * pointer
+          s0
+        * pointer
+        +
+        16
+  comment
+    __builtin_unwind_init: gcc saves every callee-saved register in the frame of the function that calls it, for uw_init_context_1 to find; a ttpc frame changes none but s0, which it saves always: nothing to do.
+  __builtin_unwind_init:
+    void
+  comment
+    __builtin_dwarf_sp_column, __builtin_eh_return_data_regno: DWARF's numbers of sp (2) and of the registers a landing pad takes the exception in (a0 and a1, 10 and 11), as gcc has them on riscv64; __builtin_frob_return_addr: the address itself.
+  __builtin_dwarf_sp_column:
+    int
+    return
+      2
+  __builtin_eh_return_data_regno:
+    int
+    n:
+      int
+    return
+      n
+      ==
+      0
+      ?
+      10
+      :
+      n
+      ==
+      1
+      ?
+      11
+      :
+      -
+      1
+  __builtin_frob_return_addr:
+    void
+    * pointer
+    a:
+      void
+      * pointer
+    return
+      a
+  comment
+    __builtin_init_dwarf_reg_size_table: the bytes of each DWARF register as the unwinder saves it, as gcc fills the table on riscv64 under lp64d: x0 ... x31 and f0 ... f31 (0 ... 63) and 64 8 bytes, the vector registers (96 ... 127) 4, the rest 0.
+  __builtin_init_dwarf_reg_size_table:
+    void
+    t:
+      u8
+      * pointer
+    i:
+      int
+    for
+      i
+      =
+      0
+      i
+      <=
+      64
+      i
+      ++
+      t
+        i
+      =
+      8
+    for
+      i
+      =
+      96
+      i
+      <
+      128
+      i
+      ++
+      t
+        i
+      =
+      4
+  comment
+    __builtin_eh_return: gcc's epilogue of a function that installs a context (_Unwind_RaiseException, _Unwind_ForcedUnwind, _Unwind_Resume ...): it restores the target frame's registers and jumps to its landing pad. Only a frame with a personality
+    routine has one, and ttpc writes none (no LSDA): no unwind of ttpc's frames comes here, and glibc's cancellation longjmps out of its stop function. A gcc frame's landing pad (C++'s, lane A-cxx) takes the exception in a0 and a1 and its
+    callee-saved registers from the frames between, which ttpc's frame does not keep yet: until then it stops here, as __builtin_trap.
+  __builtin_eh_return:
+    asm
+    ebreak
+  comment
     libgcc_eh's unwinder as far as glibc asks it (a static program has it from gcc: __pthread_unwind's _Unwind_ForcedUnwind with unwind_stop, which reads _Unwind_GetCFA; backtrace's _Unwind_Backtrace and _Unwind_GetIP), for ttpc's frames on
     riscv64:
     each C function's s0 holds its caller's s0, s0 + 8 its return address, s0 + 16 its CFA (a variadic one's is 64 bytes higher: an unwind_stop that compares it is early by one frame there). An asm function keeps its caller's s0, so a walk goes

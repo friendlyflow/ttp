@@ -132,6 +132,11 @@
           GLIBC_HEADERS_arm = "${pkgs.pkgsCross.armv7l-hf-multiplatform.linuxHeaders}/include";
           GLIBC_CC_arm = "${(glibcGcc pkgs "armv7l-hf-multiplatform").cc}/bin/armv7l-unknown-linux-gnueabihf-gcc";
           C2FF_CLANG = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
+          # For src/libgcc (libgcc in ff): the C library's headers gcc's own
+          # libgcc was built with (nixpkgs' glibc for riscv64, its
+          # --with-native-system-header-dir), which the reference libgcc
+          # (src/glibc's libgcc-ref) is built with too
+          LIBGCC_HEADERS = "${pkgs.pkgsCross.riscv64.glibc.dev}/include";
 
           # `nix develop` always starts bash; drop into fish instead.
           # Guard against re-exec loops and non-interactive invocations

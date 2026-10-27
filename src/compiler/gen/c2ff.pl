@@ -65,7 +65,7 @@ my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON:
 use FF qw(node layers write_txt read_ff);
 use Words;
 use FFold qw(ldround ratq qlit);
-use Header qw(license_nodes header_of);
+use Header qw(license_nodes header_of unit_label);
 use Digest::SHA;
 use POSIX ();
 
@@ -85,6 +85,8 @@ my %scalar = (
     '__float128' => 'long double',      # x86_64's _Float128 for clang (clang-prelude.h)
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
     '_Bool' => 'u8', 'void' => 'void',
+    # (C23's bool, the type of libgcc's C under gcc 16's gnu23: _Bool)
+    'bool' => 'u8',
     '__builtin_va_list' => 'va_list',
     # (aarch64's __builtin_va_list is AAPCS64's struct; ttpc's va_list is its
     # own word, as on every target)
@@ -1616,6 +1618,8 @@ sub expr {
         my @t = ctype(qt($n));
         return @t == 1 && $t[0] ne 'int' ? node($t[0], node($n->{value})) : node($n->{value});
     }
+    # C23's true and false (libgcc's C, gnu23), clang's C++ bool literal: 1 and 0
+    return node($n->{value} ? 1 : 0) if $k eq 'CXXBoolLiteralExpr';
     # (a char literal is an int: '\xff' where char is signed, x86_64's, is -1,
     # which clang's JSON has as 4294967295)
     return node($n->{value} >= 2**31 && qt($n) eq 'int' ? $n->{value} - 2**32 : $n->{value}) if $k eq 'CharacterLiteral';
@@ -1858,7 +1862,7 @@ sub expr {
         # function for each floating type (printf_fp has double and long double)
         # (and C's classification and quiet comparisons, a function for each
         # of the three types; fpclassify's type is its last argument's)
-        if ($name =~ /^__builtin_(isnan|isinf_sign|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
+        if ($name =~ /^__builtin_(isnan|isinf_sign|isinf|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
             $t =~ /^(float|double|long double)$/ or stop("$name on $t", $n);
             return node("$name $t", map { arg($_) } @args);
@@ -1887,6 +1891,8 @@ sub expr {
         return node("$name u32", map { arg($_) } @args) if $name eq '__builtin_add_overflow_p' && $target eq 'arm';
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
+        # (riscv64's for libgcc's unwinder, unwind-dw2.c: its frame and registers)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target eq 'riscv64';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
@@ -2867,8 +2873,9 @@ sub function {
     my @head = (map({ node($_) } ctype($ret)),
         map({ $i++; node(ffname($_->{name} // "p$i") . ':', map { node($_) } ctype(qt($_))) } @p),
         ($d->{variadic} ? node('...') : ()),
-        # (the .i, not the copy of it clang read: CLANGFIX)
-        node('comment', node("glibc-2.44 " . ($d->{file} =~ s/\.clang\.i$/.i/r))));
+        # (the .i, not the copy of it clang read: CLANGFIX; after the name
+        # of its tree, glibc-2.44, gcc-16.2.0 for libgcc's)
+        node('comment', node(do { my $f = $d->{file} =~ s/\.clang\.i$/.i/r; unit_label($f) . " $f" })));
     # (constructor or destructor first, its priority under it: the user's
     # choice, 2026-10-21)
     my $c = $ctor{$name};

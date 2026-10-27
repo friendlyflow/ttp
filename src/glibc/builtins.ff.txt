@@ -1824,6 +1824,35 @@ builtins:
     return
       1
   comment
+    gcc's type-generic __builtin_isinf (libgcc's complex multiply and divide): whether x is an infinity, of either sign, one function for each type (c2ff names them so), __builtin_isinf_sign's not 0.
+  __builtin_isinf float:
+    int
+    x:
+      float
+    return
+      __builtin_isinf_sign float
+        x
+      !=
+      0
+  __builtin_isinf double:
+    int
+    x:
+      double
+    return
+      __builtin_isinf_sign double
+        x
+      !=
+      0
+  __builtin_isinf long double:
+    int
+    x:
+      long double
+    return
+      __builtin_isinf_sign long double
+        x
+      !=
+      0
+  comment
     __builtin_isunordered on floats: either is a NaN.
     __builtin_isless and the other comparisons of C's math.h: the compare, but never on a NaN (they raise no invalid exception for one, as C's < does).
   __builtin_isunordered float:

@@ -14,7 +14,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use Header qw(header_of header_text leading_header real_path GENERATED NOHEADER);
+use Header qw(header_of header_text leading_header real_path GENERATED NOHEADER NOHEADER_GCC);
 
 die "usage: headers.pl out.c names.txt\n" unless @ARGV == 2;
 my ($cfile, $names) = @ARGV;
@@ -35,7 +35,7 @@ for my $f (sort keys %got) {
     my $why;
     if ($text eq header_text(GENERATED)) {
         $why = "the line of a generated stub for a file" unless $f eq '<stdin>';
-    } elsif ($text eq header_text(NOHEADER)) {
+    } elsif ($text eq header_text(NOHEADER) || $text eq header_text(NOHEADER_GCC)) {
         $why = "it has a header, ff says none" if defined leading_header(slurp(real_path($f)));
     } else {
         my $want = leading_header(slurp(real_path($f)));

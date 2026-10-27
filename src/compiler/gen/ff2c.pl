@@ -108,12 +108,12 @@ my @headers;    # the license of each file a page is made of: [its name, its lin
 
 for my $page (@top) {
     next if c($page) eq 'comment' || c($page) eq 'license';
-    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:' && (!%only || $only{ c($page) =~ s/:$//r });
+    my $glibc = c($page) =~ /^(?:glibc|gcc) / && c($page) !~ /^(?:glibc|gcc) asm:$/ && (!%only || $only{ c($page) =~ s/:$//r });
     # (each license after a comment naming its file: that file's header)
     { my @k = FF::kids($page);
       for my $i (1 .. $#k) {
           next unless c($k[$i]) eq 'license' && c($k[$i - 1]) eq 'comment' && @{ $k[$i - 1]{children} };
-          my ($f) = c($k[$i - 1]{children}[0]) =~ /^glibc-\S+ (.+)$/ or next;
+          my ($f) = c($k[$i - 1]{children}[0]) =~ /^(?:glibc|gcc)-\S+ (.+)$/ or next;
           my (undef, @l) = map { c($_) } kids($k[$i]);
           push @headers, [$f, \@l];
       } }
@@ -997,7 +997,7 @@ for my $f (grep { $glibcpage{$_} } @order) {
     local $cur_fn = $f;
     my $s = sig($f);
     my @l = kids($fn{$f}{node});
-    my ($unit) = map { c((kids($_))[0]) =~ /^glibc-\S+ (\S+)$/ ? $1 : () } grep { c($_) eq 'comment' } @l[$s->{body} .. $#l];
+    my ($unit) = map { c((kids($_))[0]) =~ /^(?:glibc|gcc)-\S+ (\S+)$/ ? $1 : () } grep { c($_) eq 'comment' } @l[$s->{body} .. $#l];
     local @scope = ({ map { ($_->[0] => $_->[1]) } @{ $s->{params} } });
     local $cur_last = @{ $s->{params} } ? cid_local($s->{params}[-1][0]) : '';
     local our $labels = { map { $_ => 1 } labels_in(@l[$s->{body} .. $#l]) };

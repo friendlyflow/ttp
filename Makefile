@@ -15,7 +15,7 @@
 #                   stage1 == stage2; and so on x86_64, aarch64 and arm from
 #                   their own seeds (hosts/<host>/ttpc.s), without riscv64
 #   make gcroots    keep glibc's source and toolchains (GLIBC_SRC, GLIBC_CC*,
-#                   GLIBC_HEADERS*, C2FF_CLANG) alive in nix gc, as
+#                   GLIBC_HEADERS*, C2FF_CLANG, LIBGCC_HEADERS) alive in nix gc, as
 #                   ~/.cache/ttp/gcroots/<name>
 #   make git-setup  register the ff diff and merge drivers (.gitattributes)
 #                   in this repository's git config
@@ -76,7 +76,7 @@ bootstrap:
 # a gc root, ~/.cache/ttp/gcroots/<name>, which `make gcroots` points at
 # what the flake names now.
 GCROOTS := $(HOME)/.cache/ttp/gcroots
-GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG
+GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS
 gcroots:
 	@mkdir -p $(GCROOTS)
 	@for v in $(GCROOT_VARS); do \
