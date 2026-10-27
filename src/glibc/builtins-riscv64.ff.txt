@@ -233,3 +233,259 @@
         r
         & address
       * pointer
+  comment
+    libgcc_eh's unwinder as far as glibc asks it (a static program has it from gcc: __pthread_unwind's _Unwind_ForcedUnwind with unwind_stop, which reads _Unwind_GetCFA; backtrace's _Unwind_Backtrace and _Unwind_GetIP), for ttpc's frames on
+    riscv64:
+    each C function's s0 holds its caller's s0, s0 + 8 its return address, s0 + 16 its CFA (a variadic one's is 64 bytes higher: an unwind_stop that compares it is early by one frame there). An asm function keeps its caller's s0, so a walk goes
+    past it, a signal handler's to the frame the signal stopped.
+    The walk begins at the caller's frame, ends where the next s0 is 0 or not above the last (the end of the stack: _start's, whose s0 the kernel left 0); its stop function sees each frame (the last with _UA_END_OF_STACK), unwind_stop longjmps
+    out of it.
+    gcc's own unwinder, which reads .eh_frame (ttpc -g writes it, debug.pl and ehframe.pl), is C++'s: this one runs no personality routines (ttpc writes no LSDA), as glibc's C needs none, its cleanups are registered
+    (pthread_cleanup_combined_push, the jmp_bufs of pthread_cleanup_push).
+  ttpc unwind exception:
+    struct
+    exception_class:
+      u64
+    exception_cleanup:
+      void
+      * pointer
+    private_1:
+      u64
+    private_2:
+      u64
+  ttpc unwind context:
+    struct
+    cfa:
+      u64
+    ip:
+      u64
+  ttpc unwind stop:
+    function
+    int
+    p1:
+      int
+    p2:
+      int
+    p3:
+      u64
+    p4:
+      ttpc unwind exception
+      * pointer
+    p5:
+      ttpc unwind context
+      * pointer
+    p6:
+      void
+      * pointer
+  ttpc unwind trace:
+    function
+    int
+    p1:
+      ttpc unwind context
+      * pointer
+    p2:
+      void
+      * pointer
+  _Unwind_GetCFA:
+    u64
+    context:
+      ttpc unwind context
+      * pointer
+    return
+      context
+        cfa
+  _Unwind_GetIP:
+    u64
+    context:
+      ttpc unwind context
+      * pointer
+    return
+      context
+        ip
+  _Unwind_ForcedUnwind:
+    int
+    exc:
+      ttpc unwind exception
+      * pointer
+    stop:
+      ttpc unwind stop
+      * pointer
+    param:
+      void
+      * pointer
+    fp':
+      u64
+      * pointer
+      cast
+        u64
+        * pointer
+      :
+        cast
+          u64
+          * pointer
+        __builtin_frame_address
+          0
+      * pointer
+    ip:
+      u64
+      :
+        :
+          cast
+            u64
+            * pointer
+          __builtin_frame_address
+            0
+        +
+        1
+      * pointer
+    context:
+      ttpc unwind context
+    while
+      1
+      next:
+        u64
+        * pointer
+        cast
+          u64
+          * pointer
+        fp'
+          0
+      end:
+        int
+        next
+        ==
+        0
+        ||
+        next
+        <=
+        fp'
+      context
+        cfa
+      =
+      cast
+        u64
+      fp'
+      +
+      16
+      context
+        ip
+      =
+      ip
+      if
+        stop
+          1
+          end
+          ?
+          2
+          |
+          8
+          |
+          16
+          :
+          2
+          |
+          8
+          exc
+            exception_class
+          exc
+          context
+          & address
+          param
+        !=
+        0
+        return
+          2
+      if
+        end
+        return
+          5
+      ip
+      =
+      fp'
+        1
+      fp'
+      =
+      next
+  _Unwind_Backtrace:
+    int
+    trace:
+      ttpc unwind trace
+      * pointer
+    arg:
+      void
+      * pointer
+    fp':
+      u64
+      * pointer
+      cast
+        u64
+        * pointer
+      :
+        cast
+          u64
+          * pointer
+        __builtin_frame_address
+          0
+      * pointer
+    ip:
+      u64
+      :
+        :
+          cast
+            u64
+            * pointer
+          __builtin_frame_address
+            0
+        +
+        1
+      * pointer
+    context:
+      ttpc unwind context
+    while
+      1
+      next:
+        u64
+        * pointer
+        cast
+          u64
+          * pointer
+        fp'
+          0
+      context
+        cfa
+      =
+      cast
+        u64
+      fp'
+      +
+      16
+      context
+        ip
+      =
+      ip
+      if
+        trace
+          context
+          & address
+          arg
+        !=
+        0
+        return
+          3
+      if
+        next
+        ==
+        0
+        ||
+        next
+        <=
+        fp'
+        return
+          5
+      ip
+      =
+      fp'
+        1
+      fp'
+      =
+      next

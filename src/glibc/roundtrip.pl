@@ -211,6 +211,10 @@ sub E {
         # functions are asm, and __builtin_thread_pointer)
         return E($c) if $ck =~ /^(BitCast|IntegralToPointer|PointerToIntegral|IntegralCast|NoOp)$/ && asm_valued($c);
         return E($c) if $ck eq 'IntegralCast' && is_syscallv($c);
+        # (an unsigned int widened to 64 bits, which c2ff writes as a cast
+        # where it is a call's argument: lp64d passes an unsigned int
+        # sign-extended; the same value either way)
+        return E($c) if $ck eq 'IntegralCast' && tcls($c) eq 'u32' && tcls($n) =~ /^[iu]64$/;
         # (an int literal of a 32-bit type, that int or its unsigned, is its
         # value: aarch64's wchar_t is unsigned, L'\n' 10 either way)
         return E($c) if $ck eq 'IntegralCast' && tcls($n) =~ /^[iu]32$/ && small_literal($c);
@@ -685,9 +689,23 @@ sub S {
         next unless $n && $n->{kind};
         my $k = $n->{kind};
         if ($k eq 'CompoundStmt') {
+            # (c2ff's x = setjmp (...) through a local of its own, returns
+            # twice, is that assignment)
+            my @c = kids($n);
+            my ($v) = @c == 2 && $c[0]{kind} eq 'DeclStmt' ? kids($c[0]) : ();
+            my $as = @c == 2 ? unparen($c[1]) : undef;
+            if ($side eq 'ff' && $v && ($v->{name} // '') =~ /^returns_?twice$/ && $as->{kind} eq 'BinaryOperator' && $as->{opcode} eq '=') {
+                my ($l, $r) = kids($as);
+                my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v);
+                my $rr = strip($r);
+                if ($init && $rr->{kind} eq 'DeclRefExpr' && ($rr->{referencedDecl}{name} // '') eq $v->{name}) {
+                    push @out, '(= ' . E($l) . ' ' . E($init) . ')';
+                    next;
+                }
+            }
             # (one statement in braces is that statement: c2ff writes C's
             # parentheses as :, which is a block as a statement)
-            push @out, brace(S(kids($n)));
+            push @out, brace(S(@c));
             next;
         }
         if ($k eq 'DeclStmt') {

@@ -46,13 +46,13 @@ double g_r_hd2 (void);
 long long g_var (void);
 long long g_ptr (long long (*f) (int, long long, int, long long, long long));
 int g_write (const char *s, int n);
-#if defined __aarch64__ || defined __x86_64__
-/* the shapes of the 64-bit ABIs (AAPCS64, SysV x86_64): the stack's 8-byte
-   slots past the registers, structs of 16 bytes in two registers or (past
-   them) on the stack, larger ones (by the address of a copy on aarch64, by
-   their bytes on the stack on x86_64), hfas of four, long doubles in q or
-   xmm registers (binary128), va_list passed on between gcc's code and
-   ttpc's */
+#if defined __aarch64__ || defined __x86_64__ || defined __riscv
+/* the shapes of the 64-bit ABIs (AAPCS64, SysV x86_64, lp64d): the stack's
+   8-byte slots past the registers, structs of 16 bytes in two registers or
+   (past them) on the stack, larger ones (by the address of a copy on aarch64
+   and riscv64, by their bytes on the stack on x86_64), hfas of four, long
+   doubles in q or xmm registers or a pair of general ones (binary128),
+   va_list passed on between gcc's code and ttpc's */
 #include <stdarg.h>
 typedef struct { long a, b; } s16;
 typedef struct { long a, b, c; } s24;
@@ -103,8 +103,9 @@ long double g_ld (void);
 long double g_varld (void);
 long long g_vard (void);
 #endif
-#ifdef __x86_64__
-/* the SysV ABI's own shapes: a struct's eightbytes in a general and an xmm
+#if defined __x86_64__ || defined __riscv
+/* the SysV ABI's own shapes (on riscv64: a double and a long, an int and a
+   float in an fa and a general register, three fields as two words): a struct's eightbytes in a general and an xmm
    register, an int and a float in one eightbyte (a general one), structs
    past rdi..r9 on the stack, va_arg of structs in registers and in memory */
 typedef struct { double d; long l; } dl;
@@ -123,4 +124,44 @@ long g_dl (void);
 double g_r_dl (void);
 double g_r_fid (void);
 long g_vs (void);
+#endif
+#ifdef __riscv
+/* the lp64d ABI's own shapes: structs of two floats, of a float and an int,
+   of one double, of a char and a double in fa (and a) registers; as words
+   where the fa or the general registers run out; a long double split
+   between a7 and the stack; integers narrower than a word as their
+   registers hold them (extended by their sign to 32 bits, then
+   sign-extended), both ways */
+typedef struct { float a, b; } ff2;
+typedef struct { float f; int i; } fi;
+typedef struct { double d; } d1;
+typedef struct { char c; double d; } cd;
+long f_ff2 (ff2 a, fi b, d1 c, cd d);
+double f_fpout (double a, double b, double c, double d, double e, double f, double g, hd2 x, ff2 y);
+double f_gpout (int a, int b, int c, int d, int e, int f, int g, int h, mix x, double y);
+long double f_ldsplit (int a, int b, int c, int d, int e, int f, int g, long double x, int h);
+long f_raw4 (unsigned a);
+long f_raw2 (unsigned short a);
+long f_raw1 (signed char a);
+ff2 r_ff2 (float a);
+fi r_fi (float f, int i);
+cd r_cd (char c, double d);
+long cb_ff2 (ff2 a, fi b, d1 c, cd d);
+double cb_fpout (double a, double b, double c, double d, double e, double f, double g, hd2 x, ff2 y);
+double cb_gpout (int a, int b, int c, int d, int e, int f, int g, int h, mix x, double y);
+long double cb_ldsplit (int a, int b, int c, int d, int e, int f, int g, long double x, int h);
+int cb_narrow (unsigned a, unsigned short b, signed char c, int d);
+unsigned cb_u32 (int a);
+unsigned short cb_u16 (int a);
+fi cb_r_fi (float f, int i);
+cd cb_r_cd (char c, double d);
+long g_ff2 (void);
+double g_fpout (void);
+double g_gpout (void);
+long double g_ldsplit (void);
+int g_narrow (void);
+int g_u32 (void);
+int g_u16 (void);
+double g_r_fi (void);
+double g_r_cd (void);
 #endif

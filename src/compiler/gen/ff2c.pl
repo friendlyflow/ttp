@@ -134,7 +134,9 @@ for my $page (@top) {
             $econst{ c($_) =~ s/:$//r } //= $name for grep { c($_) =~ /:$/ } map { c($_) eq 'items' ? kids($_) : $_ } @k[1 .. $#k];
             next;
         }
-        if ($w eq 'function' && $page && c($page) =~ /types/) { $fntype{$name} = $d; next }
+        # (a function type: on c2ff's types page, or a builtins page's own:
+        # builtins-riscv64's unwinder's stop and trace functions)
+        if ($w eq 'function' && $page) { $fntype{$name} = $d; next }
         if ($w eq 'alias') { $fn{$name} = { kind => 'alias', target => c($k[1]) }; next }
         if ($w eq 'ifunc') { $fn{$name} = { kind => 'ifunc', node => $d, from => 2 }; next }
         if ($w eq 'asm') {

@@ -20,7 +20,7 @@ long long cb_var (int n, ...)
 { va_list ap; long long s = 0; va_start (ap, n);
   for (int i = 0; i < n; i++) { s += va_arg (ap, int); s += 2 * va_arg (ap, long long); }
   va_end (ap); return s; }
-#if defined __aarch64__ || defined __x86_64__
+#if defined __aarch64__ || defined __x86_64__ || defined __riscv
 long cb_i10 (int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
 { return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * i + 10 * j; }
 double cb_mixn (int a, double b, int c, double d, int e, double f, int g, double h, int i, double j, int k, double l,
@@ -121,7 +121,7 @@ static void a64 (void)
   check (p_g_vard () == 55 + 180, "a64: gcc calls ttpc: variadic doubles past v7, ttpc's va_list to gcc");
 }
 #endif
-#ifdef __x86_64__
+#if defined __x86_64__ || defined __riscv
 long cb_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g)
 { return a.l + 2 * b.l + 3 * c.l + 4 * d.l + 5 * e.l + 6 * f.l + 7 * g.l + (long) (2 * (a.d + b.d + c.d + d.d + e.d + f.d + g.d)); }
 dl cb_r_dl (double d, long l) { dl r = { d, l }; return r; }
@@ -155,6 +155,63 @@ static void x64 (void)
   check (p_g_r_dl () == 9.5, "x64: gcc calls ttpc: a struct result in xmm0 and rax");
   check (p_g_r_fid () == 8.75, "x64: gcc calls ttpc: a struct result in rax and xmm0");
   check (p_g_vs () == 390, "x64: gcc calls ttpc: variadic structs");
+}
+#endif
+#ifdef __riscv
+long cb_ff2 (ff2 a, fi b, d1 c, cd d) { return a.a + 2 * a.b + 3 * b.f + 4 * b.i + 5 * c.d + 6 * d.c + 7 * d.d; }
+double cb_fpout (double a, double b, double c, double d, double e, double f, double g, hd2 x, ff2 y)
+{ return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * x.x + 9 * x.y + 10 * y.a + 11 * y.b; }
+double cb_gpout (int a, int b, int c, int d, int e, int f, int g, int h, mix x, double y)
+{ return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + 8 * h + 9 * x.a + 10 * x.b + 11 * y; }
+long double cb_ldsplit (int a, int b, int c, int d, int e, int f, int g, long double x, int h)
+{ return a + b + c + d + e + f + g == 28 && h == 8 ? x : 0.0L; }
+int cb_narrow (unsigned a, unsigned short b, signed char c, int d)
+{ return (a == 0xffffffffu) + 2 * (b == 0xffff) + 4 * (c == -1) + 8 * (d == -1) + 16 * ((unsigned long) a == 0xffffffffUL); }
+unsigned cb_u32 (int a) { return a; }
+unsigned short cb_u16 (int a) { return a; }
+fi cb_r_fi (float f, int i) { fi r = { f, i }; return r; }
+cd cb_r_cd (char c, double d) { cd r = { c, d }; return r; }
+static void rv (void)
+{
+  long (*p_f_ff2) (ff2, fi, d1, cd) = f_ff2;
+  double (*p_f_fpout) (double, double, double, double, double, double, double, hd2, ff2) = f_fpout;
+  double (*p_f_gpout) (int, int, int, int, int, int, int, int, mix, double) = f_gpout;
+  long double (*p_f_ldsplit) (int, int, int, int, int, int, int, long double, int) = f_ldsplit;
+  long (*p_f_raw4) (unsigned) = f_raw4;
+  long (*p_f_raw2) (unsigned short) = f_raw2;
+  long (*p_f_raw1) (signed char) = f_raw1;
+  ff2 (*p_r_ff2) (float) = r_ff2;
+  fi (*p_r_fi) (float, int) = r_fi;
+  cd (*p_r_cd) (char, double) = r_cd;
+  long (*p_g_ff2) (void) = g_ff2;
+  double (*p_g_fpout) (void) = g_fpout;
+  double (*p_g_gpout) (void) = g_gpout;
+  long double (*p_g_ldsplit) (void) = g_ldsplit;
+  double (*p_g_r_fi) (void) = g_r_fi;
+  double (*p_g_r_cd) (void) = g_r_cd;
+  ff2 a = { 1, 2 }; fi b = { 3, 4 }; d1 c = { 5 }; cd d = { 6, 7 };
+  check (p_f_ff2 (a, b, c, d) == 1 + 4 + 9 + 16 + 25 + 36 + 49, "rv: two floats, a float and an int, a double, a char and a double");
+  hd2 x = { 8, 9 }; ff2 y = { 10, 11 };
+  check (p_f_fpout (1, 2, 3, 4, 5, 6, 7, x, y) == 140 + 64 + 81 + 100 + 121, "rv: structs of floats as words past fa7");
+  mix m = { 9, 10 };
+  check (p_f_gpout (1, 2, 3, 4, 5, 6, 7, 8, m, 11) == 204 + 81 + 100 + 121, "rv: a struct of an int and a double on the stack past a7");
+  check (ldeq (p_f_ldsplit (1, 2, 3, 4, 5, 6, 7, 9.0L, 8), 9.0L), "rv: a long double in a7 and on the stack");
+  unsigned short us = (unsigned short) -1; signed char sc = (signed char) 255;
+  check (p_f_raw4 (0xffffffffu) == -1 && p_f_raw2 (us) == 0xffff && p_f_raw1 (sc) == -1, "rv: narrow integers sign-extended from 32 bits");
+  ff2 rf = p_r_ff2 (1.5f);
+  check (rf.a == 1.5f && rf.b == 2.5f, "rv: a struct of two floats as a result");
+  fi ri = p_r_fi (2.5f, 7);
+  check (ri.f == 2.5f && ri.i == 7, "rv: a struct of a float and an int as a result");
+  cd rc = p_r_cd (9, 1.25);
+  check (rc.c == 9 && rc.d == 1.25, "rv: a struct of a char and a double as a result");
+  check (p_g_ff2 () == 140, "rv: gcc calls ttpc: structs of floating fields");
+  check (p_g_fpout () == 506, "rv: gcc calls ttpc: structs of floats past fa7");
+  check (p_g_gpout () == 506, "rv: gcc calls ttpc: a struct of an int and a double past a7");
+  check (ldeq (p_g_ldsplit (), 9.0L), "rv: gcc calls ttpc: a long double in a7 and on the stack");
+  check (g_narrow () == 31, "rv: gcc calls ttpc: narrow integers");
+  check (g_u32 () == 1 && g_u16 () == 1, "rv: gcc calls ttpc: narrow integer results");
+  check (p_g_r_fi () == 4.5, "rv: gcc calls ttpc: a struct of a float and an int as a result");
+  check (p_g_r_cd () == 7.25, "rv: gcc calls ttpc: a struct of a char and a double as a result");
 }
 #endif
 int main (void)
@@ -229,11 +286,14 @@ int main (void)
   check (g_s () == 819, "gcc calls ttpc: structs");
   check (g_r_s20 () == 60, "gcc calls ttpc: a struct result");
   check (p_g_r_hd2 () == 9.5, "gcc calls ttpc: a double aggregate result");
-#if defined __aarch64__ || defined __x86_64__
+#if defined __aarch64__ || defined __x86_64__ || defined __riscv
   a64 ();
 #endif
-#ifdef __x86_64__
+#if defined __x86_64__ || defined __riscv
   x64 ();
+#endif
+#ifdef __riscv
+  rv ();
 #endif
   return fails;
 }
