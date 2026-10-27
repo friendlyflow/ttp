@@ -1569,6 +1569,8 @@ sub asm_stmt_other {
         elsif ($m ne '' && !($m eq 's' && $r =~ /^s\d/) && !($m eq 'd' && $r =~ /^d\d/) && !($m eq 'x' && $r =~ /^x\d/)) { stop("the asm operand %$m$i", $n) }
         $target eq 'x86_64' && $r !~ /\(/ ? "%$r" : $r;
     }ge;
+    # (gcc's %% for a register or segment's own %: x86's %%fs)
+    $t =~ s/%%/%/g;
     push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins_other($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
     push @code, @after;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
