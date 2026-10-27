@@ -1,0 +1,683 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/riscv64/hex2.s as hex0 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then its file offset and the line. hex0 reads only the
+# hex digits before each '#'.
+#
+# hex2 for riscv64 Linux: hex0 with labels. The second link of the
+# bootstrap, built by hex0 from hosts/riscv64/hex2.hex0 (made from this
+# file once by gen/mkhex.pl, a dev aid; the chain never reads this file).
+# It builds the seed, ttpc, from hosts/riscv64/ttpc.hex2.
+#
+#   hex2 < file.hex2 > file
+#
+# As hex0: each pair of hex digits is a byte, '#' and ';' start a comment
+# to the end of the line, every other byte is skipped. And the address of
+# the next byte, which starts at 0 and counts every byte written:
+#   :name    defines the label name, at that address
+#   &name    4 bytes, little endian: name's address (an abs32; a .dword's
+#            low half)
+#   ^hex     the address of the next byte is this hex number (where a
+#            file's addresses jump: its next segment, the labels of a bss)
+# and RISC-V's references, as stage0-posix's hex2 has them: each takes d,
+# name's address minus the address of the next byte (the instruction's
+# own), scatters its bits into an instruction's immediate field and XORs
+# them into the next bytes written (the instruction, written with that
+# field zero):
+#   ~name    U (auipc): d + 0x800, its bits 31:12 (the 0x800 makes up for
+#            the low part's sign); d + 0x800 must fit in 32 bits, signed
+#   !name    I (the addi, ld or jalr after an auipc): d + 4 (from the
+#            auipc, 4 bytes before), its bits 11:0 into 31:20; unchecked:
+#            the low part of the auipc's
+#   @name    B (beq ...): d in 13 bits, even
+#   $name    J (jal): d in 21 bits, even
+# and two for the compressed instructions, which stage0-posix uses none of:
+#   |name    CB (c.beqz, c.bnez): d in 9 bits, even
+#   *name    CJ (c.j): d in 12 bits, even
+# Their bit layouts are the table kinds before the code, each a list of (from
+# bit, bits, to bit) as the RISC-V manual draws the formats. A name is
+# every byte after the sign up to a space, tab or newline. The input is
+# read whole, then twice: the first pass gives every label its address,
+# the second writes. On an unknown label, a label defined twice, a
+# reference out of range, a full table or input and a failed read or
+# write it says so on stderr and ends with status 1; else with 0.
+#
+# One flat file, loaded at BASE by its first program header, read and
+# run; the second maps the memory it writes, LABELS to the end of INPUT.
+# RV64I only, no compressed instructions. The registers:
+#   s2  the next byte of the input          s3  the end of the input
+#   s4  the address of the next byte        s5  the pass, 1 or 2
+#   s6  the high half of a byte, or -1      s7  the next free label
+#   s8  the bits to XOR into the next bytes written, the lowest first
+# A label is 24 bytes: the address of its name in the input, the name's
+# length, its address.
+
+#     .equ BASE, 0x600000
+#     .equ LABELS, 0x700000               # 65536 labels of 24 bytes
+#     .equ LABELS_END, LABELS + 0x10000 * 24
+#     .equ INPUT, 0x900000                # 16 MiB of input
+#     .equ INPUT_END, INPUT + 0x1000000
+#     .equ SYS_read, 63
+#     .equ SYS_write, 64
+#     .equ SYS_exit, 93
+
+# 0000  ehdr:                                   # the ELF header, 64 bytes
+7F454C46                # 0000      .byte 0x7f, 0x45, 0x4c, 0x46        # e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                      # 0004      .byte 2                             # EI_CLASS: ELFCLASS64
+01                      # 0005      .byte 1                             # EI_DATA: ELFDATA2LSB, little endian
+01                      # 0006      .byte 1                             # EI_VERSION: EV_CURRENT
+00                      # 0007      .byte 0                             # EI_OSABI: System V
+0000000000000000        # 0008      .byte 0, 0, 0, 0, 0, 0, 0, 0        # EI_ABIVERSION 0, then padding to 16
+0200                    # 0010      .half 2                             # e_type: ET_EXEC, an executable
+F300                    # 0012      .half 0xf3                          # e_machine: EM_RISCV
+01000000                # 0014      .word 1                             # e_version: EV_CURRENT
+B401600000000000        # 0018      .dword BASE + _start - ehdr         # e_entry: the address of _start
+4000000000000000        # 0020      .dword phdr - ehdr                  # e_phoff: the program headers follow
+0000000000000000        # 0028      .dword 0                            # e_shoff: no section headers
+00000000                # 0030      .word 0                             # e_flags: no RVC, soft float (none used)
+4000                    # 0034      .half 64                            # e_ehsize: this header's size
+3800                    # 0036      .half 56                            # e_phentsize: a program header's size
+0200                    # 0038      .half 2                             # e_phnum: two program headers
+0000                    # 003a      .half 0                             # e_shentsize: no section headers
+0000                    # 003c      .half 0                             # e_shnum: none
+0000                    # 003e      .half 0                             # e_shstrndx: none
+# 0040  phdr:                                   # the program: 56 bytes
+01000000                # 0040      .word 1                             # p_type: PT_LOAD
+05000000                # 0044      .word 5                             # p_flags: PF_R | PF_X, read and run
+0000000000000000        # 0048      .dword 0                            # p_offset: from the file's first byte
+0000600000000000        # 0050      .dword BASE                         # p_vaddr: loaded at BASE
+0000600000000000        # 0058      .dword BASE                         # p_paddr: the same
+7405000000000000        # 0060      .dword end - ehdr                   # p_filesz: the whole file
+7405000000000000        # 0068      .dword end - ehdr                   # p_memsz: the same
+0010000000000000        # 0070      .dword 0x1000                       # p_align: a page
+                                        # its memory: 56 bytes
+01000000                # 0078      .word 1                             # p_type: PT_LOAD
+06000000                # 007c      .word 6                             # p_flags: PF_R | PF_W, read and write
+0000000000000000        # 0080      .dword 0                            # p_offset: none of the file
+0000700000000000        # 0088      .dword LABELS                       # p_vaddr: the labels, then the input
+0000700000000000        # 0090      .dword LABELS                       # p_paddr: the same
+0000000000000000        # 0098      .dword 0                            # p_filesz: none, all zero
+0000200100000000        # 00a0      .dword INPUT_END - LABELS           # p_memsz: to the end of the input
+0010000000000000        # 00a8      .dword 0x1000                       # p_align: a page
+
+
+# The kinds of reference: its sign, the bits d must fit in (signed), 1 if
+# d must be even, its pieces, the addend (2 bytes), then each piece: the
+# bit of d it starts at, its bits, the bit of the field it goes to.
+# 00b0  kinds:
+7E200001                # 00b0      .byte 0x7e, 32, 0, 1                # '~' U: d + 0x800
+0008                    # 00b4      .half 0x800
+0C140C                  # 00b6      .byte 12, 20, 12                    #   imm[31:12] to 31:12
+21400001                # 00b9      .byte 0x21, 64, 0, 1                # '!' I: d + 4, unchecked
+0400                    # 00bd      .half 4
+000C14                  # 00bf      .byte 0, 12, 20                     #   imm[11:0] to 31:20
+400D0104                # 00c2      .byte 0x40, 13, 1, 4                # '@' B
+0000                    # 00c6      .half 0
+010408                  # 00c8      .byte 1, 4, 8                       #   imm[4:1] to 11:8
+050619                  # 00cb      .byte 5, 6, 25                      #   imm[10:5] to 30:25
+0B0107                  # 00ce      .byte 11, 1, 7                      #   imm[11] to 7
+0C011F                  # 00d1      .byte 12, 1, 31                     #   imm[12] to 31
+24150104                # 00d4      .byte 0x24, 21, 1, 4                # '$' J
+0000                    # 00d8      .half 0
+010A15                  # 00da      .byte 1, 10, 21                     #   imm[10:1] to 30:21
+0B0114                  # 00dd      .byte 11, 1, 20                     #   imm[11] to 20
+0C080C                  # 00e0      .byte 12, 8, 12                     #   imm[19:12] to 19:12
+14011F                  # 00e3      .byte 20, 1, 31                     #   imm[20] to 31
+7C090105                # 00e6      .byte 0x7c, 9, 1, 5                 # '|' CB
+0000                    # 00ea      .half 0
+010203                  # 00ec      .byte 1, 2, 3                       #   offset[2:1] to 4:3
+03020A                  # 00ef      .byte 3, 2, 10                      #   offset[4:3] to 11:10
+050102                  # 00f2      .byte 5, 1, 2                       #   offset[5] to 2
+060205                  # 00f5      .byte 6, 2, 5                       #   offset[7:6] to 6:5
+08010C                  # 00f8      .byte 8, 1, 12                      #   offset[8] to 12
+2A0C0108                # 00fb      .byte 0x2a, 12, 1, 8                # '*' CJ
+0000                    # 00ff      .half 0
+010303                  # 0101      .byte 1, 3, 3                       #   offset[3:1] to 5:3
+04010B                  # 0104      .byte 4, 1, 11                      #   offset[4] to 11
+050102                  # 0107      .byte 5, 1, 2                       #   offset[5] to 2
+060107                  # 010a      .byte 6, 1, 7                       #   offset[6] to 7
+070106                  # 010d      .byte 7, 1, 6                       #   offset[7] to 6
+080209                  # 0110      .byte 8, 2, 9                       #   offset[9:8] to 10:9
+0A0108                  # 0113      .byte 10, 1, 8                      #   offset[10] to 8
+0B010C                  # 0116      .byte 11, 1, 12                     #   offset[11] to 12
+00                      # 0119      .byte 0                             # the end of the kinds
+
+686578323A20756E6B6E6F776E206C61 # 011a  msg_unknown:    .asciz "hex2: unknown label: "
+62656C3A2000
+686578323A206C6162656C2064656669 # 0130  msg_twice:      .asciz "hex2: label defined twice: "
+6E65642074776963653A2000
+686578323A206F7574206F662072616E # 014c  msg_range:      .asciz "hex2: out of range: "
+67653A2000
+686578323A20746F6F206D616E79206C # 0161  msg_many:       .asciz "hex2: too many labels"
+6162656C7300
+686578323A20696E70757420746F6F20 # 0177  msg_large:      .asciz "hex2: input too large"
+6C6172676500
+686578323A2072656164206661696C65 # 018d  msg_read:       .asciz "hex2: read failed"
+6400
+686578323A207772697465206661696C # 019f  msg_write:      .asciz "hex2: write failed"
+656400
+0A                      # 01b2  newline:        .ascii "\n"
+00                      # 01b3      .balign 4                           # the code, 4-byte aligned (zeros)
+
+# 01b4  _start:                                 # read all of stdin into INPUT
+B7099000                # 01b4      li      s3, INPUT                   # the end of what is read
+#       U 00000000100100000000 10011 0110111: imm 0x900, rd x19 s3
+# 01b8  read:
+37069001                # 01b8      li      a2, INPUT_END
+#       U 00000001100100000000 01100 0110111: imm 0x1900, rd x12 a2
+33063641                # 01bc      sub     a2, a2, s3                  # the room left
+#       R 0100000 10011 01100 000 01100 0110011: rs2 x19 s3, rs1 x12 a2, rd x12 a2
+63060632                # 01c0      beq     a2, zero, too_large
+#       B 0011001 00000 01100 000 01100 1100011: imm 812, rs2 x0 zero, rs1 x12 a2
+9308F003                # 01c4      li      a7, SYS_read
+#       I 000000111111 00000 000 10001 0010011: imm 63, rs1 x0 zero, rd x17 a7
+13050000                # 01c8      li      a0, 0                       # fd 0, stdin
+#       I 000000000000 00000 000 01010 0010011: imm 0, rs1 x0 zero, rd x10 a0
+93850900                # 01cc      mv      a1, s3                      # after what is read
+#       I 000000000000 10011 000 01011 0010011: imm 0, rs1 x19 s3, rd x11 a1
+73000000                # 01d0      ecall
+#       I 000000000000 00000 000 00000 1110011: imm 0, rs1 x0 zero, rd x0 zero
+63420532                # 01d4      blt     a0, zero, read_failed
+#       B 0011001 00000 01010 100 00100 1100011: imm 804, rs2 x0 zero, rs1 x10 a0
+63060500                # 01d8      beq     a0, zero, read_all          # the end of stdin
+#       B 0000000 00000 01010 000 01100 1100011: imm 12, rs2 x0 zero, rs1 x10 a0
+B389A900                # 01dc      add     s3, s3, a0
+#       R 0000000 01010 10011 000 10011 0110011: rs2 x10 a0, rs1 x19 s3, rd x19 s3
+6FF09FFD                # 01e0      j       read
+#       J 11111101100111111111 00000 1101111: imm -40, rd x0 zero
+# 01e4  read_all:
+B70B7000                # 01e4      li      s7, LABELS                  # no labels yet
+#       U 00000000011100000000 10111 0110111: imm 0x700, rd x23 s7
+930A1000                # 01e8      li      s5, 1                       # pass 1
+#       I 000000000001 00000 000 10101 0010011: imm 1, rs1 x0 zero, rd x21 s5
+# 01ec  pass:
+37099000                # 01ec      li      s2, INPUT                   # from the first byte
+#       U 00000000100100000000 10010 0110111: imm 0x900, rd x18 s2
+130A0000                # 01f0      li      s4, 0                       # at address 0
+#       I 000000000000 00000 000 10100 0010011: imm 0, rs1 x0 zero, rd x20 s4
+130BF0FF                # 01f4      li      s6, -1                      # no high half
+#       I 111111111111 00000 000 10110 0010011: imm -1, rs1 x0 zero, rd x22 s6
+130C0000                # 01f8      li      s8, 0                       # nothing to XOR
+#       I 000000000000 00000 000 11000 0010011: imm 0, rs1 x0 zero, rd x24 s8
+# 01fc  loop:                                   # the next byte of the input
+6370390B                # 01fc      bgeu    s2, s3, pass_end
+#       B 0000101 10011 10010 111 00000 1100011: imm 160, rs2 x19 s3, rs1 x18 s2
+03450900                # 0200      lbu     a0, 0(s2)
+#       I 000000000000 10010 100 01010 0000011: imm 0, rs1 x18 s2, rd x10 a0
+13091900                # 0204      addi    s2, s2, 1
+#       I 000000000001 10010 000 10010 0010011: imm 1, rs1 x18 s2, rd x18 s2
+93023002                # 0208      li      t0, 0x23                    # '#': a comment
+#       I 000000100011 00000 000 00101 0010011: imm 35, rs1 x0 zero, rd x5 t0
+630C5506                # 020c      beq     a0, t0, comment
+#       B 0000011 00101 01010 000 11000 1100011: imm 120, rs2 x5 t0, rs1 x10 a0
+9302B003                # 0210      li      t0, 0x3b                    # ';': a comment
+#       I 000000111011 00000 000 00101 0010011: imm 59, rs1 x0 zero, rd x5 t0
+63085506                # 0214      beq     a0, t0, comment
+#       B 0000011 00101 01010 000 10000 1100011: imm 112, rs2 x5 t0, rs1 x10 a0
+9302A003                # 0218      li      t0, 0x3a                    # ':': a label
+#       I 000000111010 00000 000 00101 0010011: imm 58, rs1 x0 zero, rd x5 t0
+630A5508                # 021c      beq     a0, t0, define
+#       B 0000100 00101 01010 000 10100 1100011: imm 148, rs2 x5 t0, rs1 x10 a0
+93026002                # 0220      li      t0, 0x26                    # '&': abs32
+#       I 000000100110 00000 000 00101 0010011: imm 38, rs1 x0 zero, rd x5 t0
+630E550A                # 0224      beq     a0, t0, abs32
+#       B 0000101 00101 01010 000 11100 1100011: imm 188, rs2 x5 t0, rs1 x10 a0
+9302E005                # 0228      li      t0, 0x5e                    # '^': an address
+#       I 000001011110 00000 000 00101 0010011: imm 94, rs1 x0 zero, rd x5 t0
+630C5518                # 022c      beq     a0, t0, origin
+#       B 0001100 00101 01010 000 11000 1100011: imm 408, rs2 x5 t0, rs1 x10 a0
+17030000130303E8        # 0230      la      t1, kinds                   # a reference of one of the kinds?
+#       U 00000000000000000000 00110 0010111: imm 0x0, rd x6 t1; I 111010000000 00110 000 00110 0010011: imm -384, rs1 x6 t1, rd x6 t1
+# 0238  kind:
+83420300                # 0238      lbu     t0, 0(t1)                   # its sign, 0 after the last
+#       I 000000000000 00110 100 00101 0000011: imm 0, rs1 x6 t1, rd x5 t0
+63800202                # 023c      beq     t0, zero, digit
+#       B 0000001 00000 00101 000 00000 1100011: imm 32, rs2 x0 zero, rs1 x5 t0
+6302550E                # 0240      beq     a0, t0, reference
+#       B 0000111 00101 01010 000 00100 1100011: imm 228, rs2 x5 t0, rs1 x10 a0
+83433300                # 0244      lbu     t2, 3(t1)                   # its pieces, 3 bytes each
+#       I 000000000011 00110 100 00111 0000011: imm 3, rs1 x6 t1, rd x7 t2
+13036300                # 0248      addi    t1, t1, 6                   # after its 6 bytes
+#       I 000000000110 00110 000 00110 0010011: imm 6, rs1 x6 t1, rd x6 t1
+33037300                # 024c      add     t1, t1, t2
+#       R 0000000 00111 00110 000 00110 0110011: rs2 x7 t2, rs1 x6 t1, rd x6 t1
+33037300                # 0250      add     t1, t1, t2
+#       R 0000000 00111 00110 000 00110 0110011: rs2 x7 t2, rs1 x6 t1, rd x6 t1
+33037300                # 0254      add     t1, t1, t2
+#       R 0000000 00111 00110 000 00110 0110011: rs2 x7 t2, rs1 x6 t1, rd x6 t1
+6FF01FFE                # 0258      j       kind
+#       J 11111110000111111111 00000 1101111: imm -32, rd x0 zero
+# 025c  digit:
+EF00C018                # 025c      jal     ra, hexval                  # a0 = its value, or -1
+#       J 00011000110000000000 00001 1101111: imm 396, rd x1 ra
+E34E05F8                # 0260      blt     a0, zero, loop              # not a hex digit: skipped
+#       B 1111100 00000 01010 100 11101 1100011: imm -100, rs2 x0 zero, rs1 x10 a0
+634C0B00                # 0264      blt     s6, zero, high              # the first digit of a pair?
+#       B 0000000 00000 10110 100 11000 1100011: imm 24, rs2 x0 zero, rs1 x22 s6
+131B4B00                # 0268      slli    s6, s6, 4                   # the second: high half, then this one
+#       I 000000000100 10110 001 10110 0010011: imm 4, rs1 x22 s6, rd x22 s6
+33656501                # 026c      or      a0, a0, s6
+#       R 0000000 10110 01010 110 01010 0110011: rs2 x22 s6, rs1 x10 a0, rd x10 a0
+EF000021                # 0270      jal     ra, emit
+#       J 00100001000000000000 00001 1101111: imm 528, rd x1 ra
+130BF0FF                # 0274      li      s6, -1                      # the next pair
+#       I 111111111111 00000 000 10110 0010011: imm -1, rs1 x0 zero, rd x22 s6
+6FF05FF8                # 0278      j       loop
+#       J 11111000010111111111 00000 1101111: imm -124, rd x0 zero
+# 027c  high:
+130B0500                # 027c      mv      s6, a0                      # keep it for the second digit
+#       I 000000000000 01010 000 10110 0010011: imm 0, rs1 x10 a0, rd x22 s6
+6FF0DFF7                # 0280      j       loop
+#       J 11110111110111111111 00000 1101111: imm -132, rd x0 zero
+# 0284  comment:                                # skip to the end of the line
+E37C39F7                # 0284      bgeu    s2, s3, loop
+#       B 1111011 10011 10010 111 11001 1100011: imm -136, rs2 x19 s3, rs1 x18 s2
+03450900                # 0288      lbu     a0, 0(s2)
+#       I 000000000000 10010 100 01010 0000011: imm 0, rs1 x18 s2, rd x10 a0
+13091900                # 028c      addi    s2, s2, 1
+#       I 000000000001 10010 000 10010 0010011: imm 1, rs1 x18 s2, rd x18 s2
+9302A000                # 0290      li      t0, 0x0a                    # '\n'
+#       I 000000001010 00000 000 00101 0010011: imm 10, rs1 x0 zero, rd x5 t0
+E31855FE                # 0294      bne     a0, t0, comment
+#       B 1111111 00101 01010 001 10001 1100011: imm -16, rs2 x5 t0, rs1 x10 a0
+6FF05FF6                # 0298      j       loop
+#       J 11110110010111111111 00000 1101111: imm -156, rd x0 zero
+# 029c  pass_end:
+938A1A00                # 029c      addi    s5, s5, 1
+#       I 000000000001 10101 000 10101 0010011: imm 1, rs1 x21 s5, rd x21 s5
+93022000                # 02a0      li      t0, 2                       # after pass 1, pass 2
+#       I 000000000010 00000 000 00101 0010011: imm 2, rs1 x0 zero, rd x5 t0
+E3845AF4                # 02a4      beq     s5, t0, pass
+#       B 1111010 00101 10101 000 01001 1100011: imm -184, rs2 x5 t0, rs1 x21 s5
+13050000                # 02a8      li      a0, 0                       # after pass 2, status 0
+#       I 000000000000 00000 000 01010 0010011: imm 0, rs1 x0 zero, rd x10 a0
+6F00002B                # 02ac      j       exit
+#       J 00101011000000000000 00000 1101111: imm 688, rd x0 zero
+
+# 02b0  define:                                 # :name
+EF004016                # 02b0      jal     ra, name
+#       J 00010110010000000000 00001 1101111: imm 356, rd x1 ra
+93021000                # 02b4      li      t0, 1                       # only in pass 1
+#       I 000000000001 00000 000 00101 0010011: imm 1, rs1 x0 zero, rd x5 t0
+E3925AF4                # 02b8      bne     s5, t0, loop
+#       B 1111010 00101 10101 001 00101 1100011: imm -188, rs2 x5 t0, rs1 x21 s5
+EF00C017                # 02bc      jal     ra, find
+#       J 00010111110000000000 00001 1101111: imm 380, rd x1 ra
+63140520                # 02c0      bne     a0, zero, twice
+#       B 0010000 00000 01010 001 01000 1100011: imm 520, rs2 x0 zero, rs1 x10 a0
+B7028800                # 02c4      li      t0, LABELS_END
+#       U 00000000100010000000 00101 0110111: imm 0x880, rd x5 t0
+63FC5B20                # 02c8      bgeu    s7, t0, too_many
+#       B 0010000 00101 10111 111 11000 1100011: imm 536, rs2 x5 t0, rs1 x23 s7
+23B0BB00                # 02cc      sd      a1, 0(s7)                   # its name
+#       S 0000000 01011 10111 011 00000 0100011: imm 0, rs2 x11 a1, rs1 x23 s7
+23B4CB00                # 02d0      sd      a2, 8(s7)                   # its length
+#       S 0000000 01100 10111 011 01000 0100011: imm 8, rs2 x12 a2, rs1 x23 s7
+23B84B01                # 02d4      sd      s4, 16(s7)                  # its address
+#       S 0000000 10100 10111 011 10000 0100011: imm 16, rs2 x20 s4, rs1 x23 s7
+938B8B01                # 02d8      addi    s7, s7, 24
+#       I 000000011000 10111 000 10111 0010011: imm 24, rs1 x23 s7, rd x23 s7
+6FF01FF2                # 02dc      j       loop
+#       J 11110010000111111111 00000 1101111: imm -224, rd x0 zero
+
+# 02e0  abs32:                                  # &name
+EF004013                # 02e0      jal     ra, name
+#       J 00010011010000000000 00001 1101111: imm 308, rd x1 ra
+93021000                # 02e4      li      t0, 1                       # pass 1 only counts its 4 bytes
+#       I 000000000001 00000 000 00101 0010011: imm 1, rs1 x0 zero, rd x5 t0
+638A5A02                # 02e8      beq     s5, t0, skip4
+#       B 0000001 00101 10101 000 10100 1100011: imm 52, rs2 x5 t0, rs1 x21 s5
+EF00C014                # 02ec      jal     ra, find
+#       J 00010100110000000000 00001 1101111: imm 332, rd x1 ra
+6306051C                # 02f0      beq     a0, zero, unknown
+#       B 0001110 00000 01010 000 01100 1100011: imm 460, rs2 x0 zero, rs1 x10 a0
+833C0501                # 02f4      ld      s9, 16(a0)                  # its address
+#       I 000000010000 01010 011 11001 0000011: imm 16, rs1 x10 a0, rd x25 s9
+93D20C02                # 02f8      srli    t0, s9, 32                  # fits in 32 bits, unsigned
+#       I 000000100000 11001 101 00101 0010011: imm 32, rs1 x25 s9, rd x5 t0
+639C021C                # 02fc      bne     t0, zero, range
+#       B 0001110 00000 00101 001 11000 1100011: imm 472, rs2 x0 zero, rs1 x5 t0
+130D4000                # 0300      li      s10, 4                      # 4 bytes, the lowest first
+#       I 000000000100 00000 000 11010 0010011: imm 4, rs1 x0 zero, rd x26 s10
+# 0304  emit4:
+13F5FC0F                # 0304      andi    a0, s9, 0xff
+#       I 000011111111 11001 111 01010 0010011: imm 255, rs1 x25 s9, rd x10 a0
+EF008017                # 0308      jal     ra, emit
+#       J 00010111100000000000 00001 1101111: imm 376, rd x1 ra
+93DC8C00                # 030c      srli    s9, s9, 8
+#       I 000000001000 11001 101 11001 0010011: imm 8, rs1 x25 s9, rd x25 s9
+130DFDFF                # 0310      addi    s10, s10, -1
+#       I 111111111111 11010 000 11010 0010011: imm -1, rs1 x26 s10, rd x26 s10
+E3180DFE                # 0314      bne     s10, zero, emit4
+#       B 1111111 00000 11010 001 10001 1100011: imm -16, rs2 x0 zero, rs1 x26 s10
+6FF05FEE                # 0318      j       loop
+#       J 11101110010111111111 00000 1101111: imm -284, rd x0 zero
+# 031c  skip4:
+130A4A00                # 031c      addi    s4, s4, 4
+#       I 000000000100 10100 000 10100 0010011: imm 4, rs1 x20 s4, rd x20 s4
+6FF0DFED                # 0320      j       loop
+#       J 11101101110111111111 00000 1101111: imm -292, rd x0 zero
+
+# 0324  reference:                              # a kind's sign, t1 = the kind
+EF00000F                # 0324      jal     ra, name                    # (name and find keep t1)
+#       J 00001111000000000000 00001 1101111: imm 240, rd x1 ra
+93021000                # 0328      li      t0, 1                       # pass 1: no bytes of its own
+#       I 000000000001 00000 000 00101 0010011: imm 1, rs1 x0 zero, rd x5 t0
+E3885AEC                # 032c      beq     s5, t0, loop
+#       B 1110110 00101 10101 000 10001 1100011: imm -304, rs2 x5 t0, rs1 x21 s5
+EF008010                # 0330      jal     ra, find
+#       J 00010000100000000000 00001 1101111: imm 264, rd x1 ra
+63040518                # 0334      beq     a0, zero, unknown
+#       B 0001100 00000 01010 000 01000 1100011: imm 392, rs2 x0 zero, rs1 x10 a0
+03350501                # 0338      ld      a0, 16(a0)                  # its address
+#       I 000000010000 01010 011 01010 0000011: imm 16, rs1 x10 a0, rd x10 a0
+33054541                # 033c      sub     a0, a0, s4                  # d: minus the next byte's
+#       R 0100000 10100 01010 000 01010 0110011: rs2 x20 s4, rs1 x10 a0, rd x10 a0
+83424300                # 0340      lbu     t0, 4(t1)                   # plus the kind's addend, 2 bytes
+#       I 000000000100 00110 100 00101 0000011: imm 4, rs1 x6 t1, rd x5 t0
+83435300                # 0344      lbu     t2, 5(t1)                   # (bytes: the table is not aligned)
+#       I 000000000101 00110 100 00111 0000011: imm 5, rs1 x6 t1, rd x7 t2
+93938300                # 0348      slli    t2, t2, 8
+#       I 000000001000 00111 001 00111 0010011: imm 8, rs1 x7 t2, rd x7 t2
+B3E27200                # 034c      or      t0, t0, t2
+#       R 0000000 00111 00101 110 00101 0110011: rs2 x7 t2, rs1 x5 t0, rd x5 t0
+33055500                # 0350      add     a0, a0, t0
+#       R 0000000 00101 01010 000 01010 0110011: rs2 x5 t0, rs1 x10 a0, rd x10 a0
+83421300                # 0354      lbu     t0, 1(t1)                   # fits in that many bits, signed:
+#       I 000000000001 00110 100 00101 0000011: imm 1, rs1 x6 t1, rd x5 t0
+93030004                # 0358      li      t2, 64
+#       I 000001000000 00000 000 00111 0010011: imm 64, rs1 x0 zero, rd x7 t2
+B3835340                # 035c      sub     t2, t2, t0
+#       R 0100000 00101 00111 000 00111 0110011: rs2 x5 t0, rs1 x7 t2, rd x7 t2
+331E7500                # 0360      sll     t3, a0, t2                  # the same, cut to them
+#       R 0000000 00111 01010 001 11100 0110011: rs2 x7 t2, rs1 x10 a0, rd x28 t3
+335E7E40                # 0364      sra     t3, t3, t2
+#       R 0100000 00111 11100 101 11100 0110011: rs2 x7 t2, rs1 x28 t3, rd x28 t3
+6316AE16                # 0368      bne     t3, a0, range
+#       B 0001011 01010 11100 001 01100 1100011: imm 364, rs2 x10 a0, rs1 x28 t3
+83422300                # 036c      lbu     t0, 2(t1)                   # 1: must be even
+#       I 000000000010 00110 100 00101 0000011: imm 2, rs1 x6 t1, rd x5 t0
+B3F2A200                # 0370      and     t0, t0, a0
+#       R 0000000 01010 00101 111 00101 0110011: rs2 x10 a0, rs1 x5 t0, rd x5 t0
+63900216                # 0374      bne     t0, zero, range
+#       B 0001011 00000 00101 001 00000 1100011: imm 352, rs2 x0 zero, rs1 x5 t0
+83433300                # 0378      lbu     t2, 3(t1)                   # its pieces
+#       I 000000000011 00110 100 00111 0000011: imm 3, rs1 x6 t1, rd x7 t2
+13036300                # 037c      addi    t1, t1, 6
+#       I 000000000110 00110 000 00110 0010011: imm 6, rs1 x6 t1, rd x6 t1
+130E0000                # 0380      li      t3, 0                       # the field
+#       I 000000000000 00000 000 11100 0010011: imm 0, rs1 x0 zero, rd x28 t3
+# 0384  piece:
+638C0302                # 0384      beq     t2, zero, pieces_done
+#       B 0000001 00000 00111 000 11000 1100011: imm 56, rs2 x0 zero, rs1 x7 t2
+834E0300                # 0388      lbu     t4, 0(t1)                   # from bit
+#       I 000000000000 00110 100 11101 0000011: imm 0, rs1 x6 t1, rd x29 t4
+034F1300                # 038c      lbu     t5, 1(t1)                   # bits
+#       I 000000000001 00110 100 11110 0000011: imm 1, rs1 x6 t1, rd x30 t5
+834F2300                # 0390      lbu     t6, 2(t1)                   # to bit
+#       I 000000000010 00110 100 11111 0000011: imm 2, rs1 x6 t1, rd x31 t6
+B356D501                # 0394      srl     a3, a0, t4
+#       R 0000000 11101 01010 101 01101 0110011: rs2 x29 t4, rs1 x10 a0, rd x13 a3
+13071000                # 0398      li      a4, 1                       # (1 << bits) - 1
+#       I 000000000001 00000 000 01110 0010011: imm 1, rs1 x0 zero, rd x14 a4
+3317E701                # 039c      sll     a4, a4, t5
+#       R 0000000 11110 01110 001 01110 0110011: rs2 x30 t5, rs1 x14 a4, rd x14 a4
+1307F7FF                # 03a0      addi    a4, a4, -1
+#       I 111111111111 01110 000 01110 0010011: imm -1, rs1 x14 a4, rd x14 a4
+B3F6E600                # 03a4      and     a3, a3, a4
+#       R 0000000 01110 01101 111 01101 0110011: rs2 x14 a4, rs1 x13 a3, rd x13 a3
+B396F601                # 03a8      sll     a3, a3, t6
+#       R 0000000 11111 01101 001 01101 0110011: rs2 x31 t6, rs1 x13 a3, rd x13 a3
+336EDE00                # 03ac      or      t3, t3, a3
+#       R 0000000 01101 11100 110 11100 0110011: rs2 x13 a3, rs1 x28 t3, rd x28 t3
+13033300                # 03b0      addi    t1, t1, 3
+#       I 000000000011 00110 000 00110 0010011: imm 3, rs1 x6 t1, rd x6 t1
+9383F3FF                # 03b4      addi    t2, t2, -1
+#       I 111111111111 00111 000 00111 0010011: imm -1, rs1 x7 t2, rd x7 t2
+6FF0DFFC                # 03b8      j       piece
+#       J 11111100110111111111 00000 1101111: imm -52, rd x0 zero
+# 03bc  pieces_done:
+334CCC01                # 03bc      xor     s8, s8, t3                  # into the next bytes written
+#       R 0000000 11100 11000 100 11000 0110011: rs2 x28 t3, rs1 x24 s8, rd x24 s8
+6FF0DFE3                # 03c0      j       loop
+#       J 11100011110111111111 00000 1101111: imm -452, rd x0 zero
+
+# 03c4  origin:                                 # ^hex: the address of the next byte
+130A0000                # 03c4      li      s4, 0
+#       I 000000000000 00000 000 10100 0010011: imm 0, rs1 x0 zero, rd x20 s4
+# 03c8  origin_digit:
+E37A39E3                # 03c8      bgeu    s2, s3, loop
+#       B 1110001 10011 10010 111 10101 1100011: imm -460, rs2 x19 s3, rs1 x18 s2
+03450900                # 03cc      lbu     a0, 0(s2)
+#       I 000000000000 10010 100 01010 0000011: imm 0, rs1 x18 s2, rd x10 a0
+EF008001                # 03d0      jal     ra, hexval
+#       J 00000001100000000000 00001 1101111: imm 24, rd x1 ra
+E34405E2                # 03d4      blt     a0, zero, loop              # its end
+#       B 1110001 00000 01010 100 01001 1100011: imm -472, rs2 x0 zero, rs1 x10 a0
+13091900                # 03d8      addi    s2, s2, 1
+#       I 000000000001 10010 000 10010 0010011: imm 1, rs1 x18 s2, rd x18 s2
+131A4A00                # 03dc      slli    s4, s4, 4
+#       I 000000000100 10100 001 10100 0010011: imm 4, rs1 x20 s4, rd x20 s4
+336AAA00                # 03e0      or      s4, s4, a0
+#       R 0000000 01010 10100 110 10100 0110011: rs2 x10 a0, rs1 x20 s4, rd x20 s4
+6FF05FFE                # 03e4      j       origin_digit
+#       J 11111110010111111111 00000 1101111: imm -28, rd x0 zero
+
+# 03e8  hexval:                                 # a0 = the value of hex digit a0, or -1
+930205FD                # 03e8      addi    t0, a0, -0x30               # '0'-'9' to 0-9
+#       I 111111010000 01010 000 00101 0010011: imm -48, rs1 x10 a0, rd x5 t0
+9303A000                # 03ec      li      t2, 10
+#       I 000000001010 00000 000 00111 0010011: imm 10, rs1 x0 zero, rd x7 t2
+63EE7200                # 03f0      bltu    t0, t2, hexval_done
+#       B 0000000 00111 00101 110 11100 1100011: imm 28, rs2 x7 t2, rs1 x5 t0
+93620502                # 03f4      ori     t0, a0, 0x20                # 'A'-'F' to 'a'-'f'
+#       I 000000100000 01010 110 00101 0010011: imm 32, rs1 x10 a0, rd x5 t0
+938292FA                # 03f8      addi    t0, t0, -0x57               # 'a'-'f' to 10-15
+#       I 111110101001 00101 000 00101 0010011: imm -87, rs1 x5 t0, rd x5 t0
+938362FF                # 03fc      addi    t2, t0, -10                 # 0-5 for 'a'-'f'
+#       I 111111110110 00101 000 00111 0010011: imm -10, rs1 x5 t0, rd x7 t2
+130E6000                # 0400      li      t3, 6
+#       I 000000000110 00000 000 11100 0010011: imm 6, rs1 x0 zero, rd x28 t3
+63E4C301                # 0404      bltu    t2, t3, hexval_done
+#       B 0000000 11100 00111 110 01000 1100011: imm 8, rs2 x28 t3, rs1 x7 t2
+9302F0FF                # 0408      li      t0, -1                      # none
+#       I 111111111111 00000 000 00101 0010011: imm -1, rs1 x0 zero, rd x5 t0
+# 040c  hexval_done:
+13850200                # 040c      mv      a0, t0
+#       I 000000000000 00101 000 01010 0010011: imm 0, rs1 x5 t0, rd x10 a0
+67800000                # 0410      ret
+#       I 000000000000 00001 000 00000 1100111: imm 0, rs1 x1 ra, rd x0 zero
+
+# 0414  name:                                   # a1, a2 = the name at s2, s2 after it
+93050900                # 0414      mv      a1, s2
+#       I 000000000000 10010 000 01011 0010011: imm 0, rs1 x18 s2, rd x11 a1
+# 0418  name_byte:
+637C3901                # 0418      bgeu    s2, s3, name_end
+#       B 0000000 10011 10010 111 11000 1100011: imm 24, rs2 x19 s3, rs1 x18 s2
+83420900                # 041c      lbu     t0, 0(s2)
+#       I 000000000000 10010 100 00101 0000011: imm 0, rs1 x18 s2, rd x5 t0
+93030002                # 0420      li      t2, 0x20                    # ends at a space, tab, newline
+#       I 000000100000 00000 000 00111 0010011: imm 32, rs1 x0 zero, rd x7 t2
+63F65300                # 0424      bgeu    t2, t0, name_end
+#       B 0000000 00101 00111 111 01100 1100011: imm 12, rs2 x5 t0, rs1 x7 t2
+13091900                # 0428      addi    s2, s2, 1
+#       I 000000000001 10010 000 10010 0010011: imm 1, rs1 x18 s2, rd x18 s2
+6FF0DFFE                # 042c      j       name_byte
+#       J 11111110110111111111 00000 1101111: imm -20, rd x0 zero
+# 0430  name_end:
+3306B940                # 0430      sub     a2, s2, a1
+#       R 0100000 01011 10010 000 01100 0110011: rs2 x11 a1, rs1 x18 s2, rd x12 a2
+67800000                # 0434      ret
+#       I 000000000000 00001 000 00000 1100111: imm 0, rs1 x1 ra, rd x0 zero
+
+# 0438  find:                                   # a0 = the label of name a1, a2, or 0
+37057000                # 0438      li      a0, LABELS
+#       U 00000000011100000000 01010 0110111: imm 0x700, rd x10 a0
+# 043c  find_next:
+637E7503                # 043c      bgeu    a0, s7, not_found
+#       B 0000001 10111 01010 111 11100 1100011: imm 60, rs2 x23 s7, rs1 x10 a0
+83328500                # 0440      ld      t0, 8(a0)                   # the same length
+#       I 000000001000 01010 011 00101 0000011: imm 8, rs1 x10 a0, rd x5 t0
+6396C202                # 0444      bne     t0, a2, find_on
+#       B 0000001 01100 00101 001 01100 1100011: imm 44, rs2 x12 a2, rs1 x5 t0
+83330500                # 0448      ld      t2, 0(a0)                   # and the same bytes
+#       I 000000000000 01010 011 00111 0000011: imm 0, rs1 x10 a0, rd x7 t2
+138E0500                # 044c      mv      t3, a1
+#       I 000000000000 01011 000 11100 0010011: imm 0, rs1 x11 a1, rd x28 t3
+B38EC500                # 0450      add     t4, a1, a2
+#       R 0000000 01100 01011 000 11101 0110011: rs2 x12 a2, rs1 x11 a1, rd x29 t4
+# 0454  find_byte:
+6304DE03                # 0454      beq     t3, t4, found
+#       B 0000001 11101 11100 000 01000 1100011: imm 40, rs2 x29 t4, rs1 x28 t3
+03CF0300                # 0458      lbu     t5, 0(t2)
+#       I 000000000000 00111 100 11110 0000011: imm 0, rs1 x7 t2, rd x30 t5
+834F0E00                # 045c      lbu     t6, 0(t3)
+#       I 000000000000 11100 100 11111 0000011: imm 0, rs1 x28 t3, rd x31 t6
+6318FF01                # 0460      bne     t5, t6, find_on
+#       B 0000000 11111 11110 001 10000 1100011: imm 16, rs2 x31 t6, rs1 x30 t5
+93831300                # 0464      addi    t2, t2, 1
+#       I 000000000001 00111 000 00111 0010011: imm 1, rs1 x7 t2, rd x7 t2
+130E1E00                # 0468      addi    t3, t3, 1
+#       I 000000000001 11100 000 11100 0010011: imm 1, rs1 x28 t3, rd x28 t3
+6FF09FFE                # 046c      j       find_byte
+#       J 11111110100111111111 00000 1101111: imm -24, rd x0 zero
+# 0470  find_on:
+13058501                # 0470      addi    a0, a0, 24
+#       I 000000011000 01010 000 01010 0010011: imm 24, rs1 x10 a0, rd x10 a0
+6FF09FFC                # 0474      j       find_next
+#       J 11111100100111111111 00000 1101111: imm -56, rd x0 zero
+# 0478  not_found:
+13050000                # 0478      li      a0, 0
+#       I 000000000000 00000 000 01010 0010011: imm 0, rs1 x0 zero, rd x10 a0
+# 047c  found:
+67800000                # 047c      ret
+#       I 000000000000 00001 000 00000 1100111: imm 0, rs1 x1 ra, rd x0 zero
+
+# 0480  emit:                                   # writes a0 XOR s8's low byte in pass 2, counts it
+130A1A00                # 0480      addi    s4, s4, 1
+#       I 000000000001 10100 000 10100 0010011: imm 1, rs1 x20 s4, rd x20 s4
+9372FC0F                # 0484      andi    t0, s8, 0xff
+#       I 000011111111 11000 111 00101 0010011: imm 255, rs1 x24 s8, rd x5 t0
+33455500                # 0488      xor     a0, a0, t0
+#       R 0000000 00101 01010 100 01010 0110011: rs2 x5 t0, rs1 x10 a0, rd x10 a0
+135C8C00                # 048c      srli    s8, s8, 8
+#       I 000000001000 11000 101 11000 0010011: imm 8, rs1 x24 s8, rd x24 s8
+93021000                # 0490      li      t0, 1
+#       I 000000000001 00000 000 00101 0010011: imm 1, rs1 x0 zero, rd x5 t0
+63825A02                # 0494      beq     s5, t0, emitted
+#       B 0000001 00101 10101 000 00100 1100011: imm 36, rs2 x5 t0, rs1 x21 s5
+2300A100                # 0498      sb      a0, 0(sp)                   # from the stack
+#       S 0000000 01010 00010 000 00000 0100011: imm 0, rs2 x10 a0, rs1 x2 sp
+93080004                # 049c      li      a7, SYS_write
+#       I 000001000000 00000 000 10001 0010011: imm 64, rs1 x0 zero, rd x17 a7
+13051000                # 04a0      li      a0, 1                       # fd 1, stdout
+#       I 000000000001 00000 000 01010 0010011: imm 1, rs1 x0 zero, rd x10 a0
+93050100                # 04a4      mv      a1, sp
+#       I 000000000000 00010 000 01011 0010011: imm 0, rs1 x2 sp, rd x11 a1
+13061000                # 04a8      li      a2, 1                       # 1 byte
+#       I 000000000001 00000 000 01100 0010011: imm 1, rs1 x0 zero, rd x12 a2
+73000000                # 04ac      ecall
+#       I 000000000000 00000 000 00000 1110011: imm 0, rs1 x0 zero, rd x0 zero
+93021000                # 04b0      li      t0, 1                       # written?
+#       I 000000000001 00000 000 00101 0010011: imm 1, rs1 x0 zero, rd x5 t0
+63185504                # 04b4      bne     a0, t0, write_failed
+#       B 0000010 00101 01010 001 10000 1100011: imm 80, rs2 x5 t0, rs1 x10 a0
+# 04b8  emitted:
+67800000                # 04b8      ret
+#       I 000000000000 00001 000 00000 1100111: imm 0, rs1 x1 ra, rd x0 zero
+
+# 04bc  unknown:
+970600009386E6C5        # 04bc      la      a3, msg_unknown
+#       U 00000000000000000000 01101 0010111: imm 0x0, rd x13 a3; I 110001011110 01101 000 01101 0010011: imm -930, rs1 x13 a3, rd x13 a3
+6F00C004                # 04c4      j       die
+#       J 00000100110000000000 00000 1101111: imm 76, rd x0 zero
+# 04c8  twice:
+97060000938686C6        # 04c8      la      a3, msg_twice
+#       U 00000000000000000000 01101 0010111: imm 0x0, rd x13 a3; I 110001101000 01101 000 01101 0010011: imm -920, rs1 x13 a3, rd x13 a3
+6F000004                # 04d0      j       die
+#       J 00000100000000000000 00000 1101111: imm 64, rd x0 zero
+# 04d4  range:
+97060000938686C7        # 04d4      la      a3, msg_range
+#       U 00000000000000000000 01101 0010111: imm 0x0, rd x13 a3; I 110001111000 01101 000 01101 0010011: imm -904, rs1 x13 a3, rd x13 a3
+6F004003                # 04dc      j       die
+#       J 00000011010000000000 00000 1101111: imm 52, rd x0 zero
+# 04e0  too_many:
+97060000938616C8        # 04e0      la      a3, msg_many
+#       U 00000000000000000000 01101 0010111: imm 0x0, rd x13 a3; I 110010000001 01101 000 01101 0010011: imm -895, rs1 x13 a3, rd x13 a3
+6F004002                # 04e8      j       die_plain
+#       J 00000010010000000000 00000 1101111: imm 36, rd x0 zero
+# 04ec  too_large:
+970600009386B6C8        # 04ec      la      a3, msg_large
+#       U 00000000000000000000 01101 0010111: imm 0x0, rd x13 a3; I 110010001011 01101 000 01101 0010011: imm -885, rs1 x13 a3, rd x13 a3
+6F008001                # 04f4      j       die_plain
+#       J 00000001100000000000 00000 1101111: imm 24, rd x0 zero
+# 04f8  read_failed:
+97060000938656C9        # 04f8      la      a3, msg_read
+#       U 00000000000000000000 01101 0010111: imm 0x0, rd x13 a3; I 110010010101 01101 000 01101 0010011: imm -875, rs1 x13 a3, rd x13 a3
+6F00C000                # 0500      j       die_plain
+#       J 00000000110000000000 00000 1101111: imm 12, rd x0 zero
+# 0504  write_failed:
+970600009386B6C9        # 0504      la      a3, msg_write
+#       U 00000000000000000000 01101 0010111: imm 0x0, rd x13 a3; I 110010011011 01101 000 01101 0010011: imm -869, rs1 x13 a3, rd x13 a3
+# 050c  die_plain:
+13060000                # 050c      li      a2, 0                       # no name
+#       I 000000000000 00000 000 01100 0010011: imm 0, rs1 x0 zero, rd x12 a2
+# 0510  die:                                    # message a3 (to its 0), then name a1, a2
+13870600                # 0510      mv      a4, a3
+#       I 000000000000 01101 000 01110 0010011: imm 0, rs1 x13 a3, rd x14 a4
+# 0514  die_length:
+83420700                # 0514      lbu     t0, 0(a4)
+#       I 000000000000 01110 100 00101 0000011: imm 0, rs1 x14 a4, rd x5 t0
+63860200                # 0518      beq     t0, zero, die_write
+#       B 0000000 00000 00101 000 01100 1100011: imm 12, rs2 x0 zero, rs1 x5 t0
+13071700                # 051c      addi    a4, a4, 1
+#       I 000000000001 01110 000 01110 0010011: imm 1, rs1 x14 a4, rd x14 a4
+6FF05FFF                # 0520      j       die_length
+#       J 11111111010111111111 00000 1101111: imm -12, rd x0 zero
+# 0524  die_write:
+3307D740                # 0524      sub     a4, a4, a3
+#       R 0100000 01101 01110 000 01110 0110011: rs2 x13 a3, rs1 x14 a4, rd x14 a4
+938C0500                # 0528      mv      s9, a1
+#       I 000000000000 01011 000 11001 0010011: imm 0, rs1 x11 a1, rd x25 s9
+130D0600                # 052c      mv      s10, a2
+#       I 000000000000 01100 000 11010 0010011: imm 0, rs1 x12 a2, rd x26 s10
+93850600                # 0530      mv      a1, a3
+#       I 000000000000 01101 000 01011 0010011: imm 0, rs1 x13 a3, rd x11 a1
+13060700                # 0534      mv      a2, a4
+#       I 000000000000 01110 000 01100 0010011: imm 0, rs1 x14 a4, rd x12 a2
+EF00C002                # 0538      jal     ra, ewrite
+#       J 00000010110000000000 00001 1101111: imm 44, rd x1 ra
+93850C00                # 053c      mv      a1, s9
+#       I 000000000000 11001 000 01011 0010011: imm 0, rs1 x25 s9, rd x11 a1
+13060D00                # 0540      mv      a2, s10
+#       I 000000000000 11010 000 01100 0010011: imm 0, rs1 x26 s10, rd x12 a2
+EF000002                # 0544      jal     ra, ewrite
+#       J 00000010000000000000 00001 1101111: imm 32, rd x1 ra
+970500009385A5C6        # 0548      la      a1, newline
+#       U 00000000000000000000 01011 0010111: imm 0x0, rd x11 a1; I 110001101010 01011 000 01011 0010011: imm -918, rs1 x11 a1, rd x11 a1
+13061000                # 0550      li      a2, 1
+#       I 000000000001 00000 000 01100 0010011: imm 1, rs1 x0 zero, rd x12 a2
+EF000001                # 0554      jal     ra, ewrite
+#       J 00000001000000000000 00001 1101111: imm 16, rd x1 ra
+13051000                # 0558      li      a0, 1                       # status 1
+#       I 000000000001 00000 000 01010 0010011: imm 1, rs1 x0 zero, rd x10 a0
+# 055c  exit:
+9308D005                # 055c      li      a7, SYS_exit
+#       I 000001011101 00000 000 10001 0010011: imm 93, rs1 x0 zero, rd x17 a7
+73000000                # 0560      ecall
+#       I 000000000000 00000 000 00000 1110011: imm 0, rs1 x0 zero, rd x0 zero
+# 0564  ewrite:                                 # writes a1, a2 to stderr
+93080004                # 0564      li      a7, SYS_write
+#       I 000001000000 00000 000 10001 0010011: imm 64, rs1 x0 zero, rd x17 a7
+13052000                # 0568      li      a0, 2                       # fd 2, stderr
+#       I 000000000010 00000 000 01010 0010011: imm 2, rs1 x0 zero, rd x10 a0
+73000000                # 056c      ecall
+#       I 000000000000 00000 000 00000 1110011: imm 0, rs1 x0 zero, rd x0 zero
+67800000                # 0570      ret
+#       I 000000000000 00001 000 00000 1100111: imm 0, rs1 x1 ra, rd x0 zero
+# 0574  end:

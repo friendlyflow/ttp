@@ -29,6 +29,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
+$ENV{NIX_HARDENING_ENABLE} = '';    # the Nix ld-wrapper's -z relro / -z now
 
 die "usage: mkhex.pl hex0|hex2|flat|m1 <prog.s>\n" unless @ARGV == 2 && $ARGV[0] =~ /^(hex[02]|flat|m1)$/;
 my ($mode, $src) = @ARGV;
@@ -37,13 +38,31 @@ sub run { system(@_) == 0 or die "mkhex: @_ failed\n" }
 sub out { my $c = shift; my $o = `$c`; die "mkhex: $c failed\n" if $?; $o }
 sub slurp { open my $f, '<:raw', $_[0] or die "mkhex: $_[0]: $!\n"; local $/; <$f> }
 
-run('as', '-mx86-used-note=no', "-aln=$t/l", '--listing-cont-lines=1000000', $src, '-o', "$t/o");
+# the host: the folder of <prog.s>, gen/hex/<host>/ or hosts/<host>/
+my $arch = $src =~ m{(?:^|/)(x86_64|riscv64)/[^/]*$} ? $1 : die "mkhex: $src is not in a folder x86_64/ or riscv64/\n";
+my $rv = $arch eq 'riscv64';
+# x86_64: as the Makefile's SEED=gnu and make hex; riscv64 the same: the
+# seed as -march=rv64imac (ttpc.s's ASFLAGS) without the arch attribute,
+# ld without relaxing, symbols or a page of its own for the code; the
+# programs (hex0 ...) RV64IM, linked at 0 (gas leaves relocations even for
+# a branch in its own section).
+my $X = $rv ? 'riscv64-none-elf-' : '';
+my @as = $rv ? ('-march=' . ($mode eq 'hex2' ? 'rv64imac' : 'rv64im'), '-mabi=lp64', '-mno-arch-attr', $mode eq 'hex2' ? () : '-mno-relax')
+    : ('-mx86-used-note=no');
+my @ld = ('-static', ($rv ? '--no-relax' : ()), '-z', 'noseparate-code');
+# riscv64's gas cannot list ttpc.s (a listing makes `li a2, msg_len` of an
+# .equ of `. - msg` an error): the lines' offsets come from a copy with a
+# label before and after each line, assembled apart
+if ($rv) { run("${X}as", @as, $src, '-o', "$t/o") }
+else { run("${X}as", @as, "-aln=$t/l", '--listing-cont-lines=1000000', $src, '-o', "$t/o") }
 my $bin;
 if ($mode ne 'hex2') {
-    run('objcopy', '-O', 'binary', '-j', '.text', "$t/o", "$t/bin");
+    my $o = "$t/o";
+    if ($rv) { run("${X}ld", @ld, '-Ttext=0', '-e', '0', "$t/o", '-o', "$t/e"); $o = "$t/e" }
+    run("${X}objcopy", '-O', 'binary', '-j', '.text', $o, "$t/bin");
 } else {
-    run('ld', '-static', '-z', 'noseparate-code', '-e', '_start', "$t/o", '-o', "$t/u");
-    run('ld', '-static', '-s', '-z', 'noseparate-code', '-e', '_start', "$t/o", '-o', "$t/bin");
+    run("${X}ld", @ld, '-e', '_start', "$t/o", '-o', "$t/u");
+    run("${X}ld", @ld, '-s', '-e', '_start', "$t/o", '-o', "$t/bin");
 }
 $bin = slurp("$t/bin");
 
@@ -53,7 +72,7 @@ if ($mode ne 'hex2') {
     %sec = ('.text' => [0, 0, length $bin, 0]);
     @order = ('.text');
 } else {
-    for (split /\n/, out("readelf -SW $t/bin")) {
+    for (split /\n/, out("${X}readelf -SW $t/bin")) {
         next unless /^\s*\[\s*\d+\]\s+(\.\S+)\s+(\S+)\s+([0-9a-f]+)\s+([0-9a-f]+)\s+([0-9a-f]+)/;
         $sec{$1} = [hex $3, hex $4, hex $5, $2 eq 'NOBITS'];
         push @order, $1;
@@ -62,8 +81,30 @@ if ($mode ne 'hex2') {
 
 # the listing: the first offset of every line that emits
 my %off;
-for (split /\n/, slurp("$t/l")) {
-    $off{$1} //= hex $2 if /^\s*(\d+) ([0-9a-f]{4,}) [0-9A-F]/;
+if (!$rv) {
+    for (split /\n/, slurp("$t/l")) {
+        $off{$1} //= hex $2 if /^\s*(\d+) ([0-9a-f]{4,}) [0-9A-F]/;
+    }
+} else {
+    my @s = split /\n/, slurp($src), -1;
+    pop @s if @s && $s[-1] eq '';
+    open my $m, '>', "$t/m.s" or die "mkhex: $t/m.s: $!\n";
+    print $m "__mkhex_a$_:\n$s[$_ - 1]\n__mkhex_z$_:\n" for 1 .. @s;
+    close $m;
+    run("${X}as", @as, "$t/m.s", '-o', "$t/m.o");
+    for my $j ('.text', '.rodata', '.data') {
+        run("${X}objcopy", '-O', 'binary', '-j', $j, "$t/$_", "$t/$_$j") for 'o', 'm.o';
+        die "mkhex: the labels of each line change $j\n" if slurp("$t/o$j") ne slurp("$t/m.o$j");
+    }
+    my (%ndx, %v);
+    for (split /\n/, out("${X}readelf -sW $t/m.o")) {
+        my @f = split;
+        $v{ $f[7] } = [hex $f[1], $f[6]] if @f >= 8 && $f[7] =~ /^__mkhex_[az]\d+$/;
+    }
+    for my $n (1 .. @s) {
+        my ($a, $z) = ($v{"__mkhex_a$n"}, $v{"__mkhex_z$n"});
+        $off{$n} = $a->[0] if $a->[1] eq $z->[1] && $z->[0] > $a->[0];
+    }
 }
 
 # the source lines: section, labels, mnemonic and operands
@@ -130,15 +171,18 @@ sub name_at {
 my %reloc;    # section -> offset -> [type, target]
 if ($mode eq 'hex2') {
     my %sym;
-    for (split /\n/, out("readelf -sW $t/u")) {
+    for (split /\n/, out("${X}readelf -sW $t/u")) {
         my @f = split;
         next unless @f >= 8 && $f[0] =~ /^\d+:$/ && $f[6] ne 'ABS' && $f[6] ne 'UND';
         $sym{ $f[7] } = hex $f[1];
     }
     my $rs;
-    for (split /\n/, out("readelf -rW $t/o")) {
+    for (split /\n/, out("${X}readelf -rW $t/o")) {
         $rs = $1 if /'\.rela(\.\w+)'/;
-        next unless /^([0-9a-f]+)\s+[0-9a-f]+\s+(R_X86_64_\w+)\s+[0-9a-f]+\s+(\S+)\s*([+-])\s*([0-9a-f]+)/;
+        next unless /^([0-9a-f]+)\s+[0-9a-f]+\s+(R_\w+)\s+[0-9a-f]+\s+(\S+)\s*([+-])\s*([0-9a-f]+)/;
+        # riscv64: only the .dwords; the code's references are read from
+        # its instructions (fields_rv)
+        next if $rv && $2 ne 'R_RISCV_64';
         my ($o, $type, $s, $sign, $a) = (hex $1, $2, $3, $4, hex $5);
         my $S = $sec{$s} ? $sec{$s}[0] : $sym{$s} // die "mkhex: no symbol $s\n";
         $reloc{$rs}{$o} = [$type, $S + ($sign eq '-' ? -$a : $a)];
@@ -149,9 +193,96 @@ sub le { my ($v, $n) = @_; join '', map { sprintf '%02X', ($v >> 8 * $_) & 255 }
 sub sx { my ($v, $n) = @_; my $m = 1 << 8 * $n; $v &= $m - 1; $v >= $m / 2 ? $v - $m : $v }
 sub rd { my ($o, $n) = @_; my $v = 0; $v |= ord(substr $bin, $o + $_, 1) << 8 * $_ for 0 .. $n - 1; $v }
 
+# riscv64: the immediates of the formats, sign-extended, and their bits
+sub sxb { my ($v, $n) = @_; $v &= (1 << $n) - 1; $v >= 1 << ($n - 1) ? $v - (1 << $n) : $v }
+sub bimm { my $w = shift; sxb((($w >> 31) & 1) << 12 | (($w >> 7) & 1) << 11 | (($w >> 25) & 0x3f) << 5 | (($w >> 8) & 0xf) << 1, 13) }
+sub jimm { my $w = shift; sxb((($w >> 31) & 1) << 20 | (($w >> 12) & 0xff) << 12 | (($w >> 20) & 1) << 11 | (($w >> 21) & 0x3ff) << 1, 21) }
+sub uimm { sxb($_[0] & 0xfffff000, 32) }
+sub iimm { sxb($_[0] >> 20, 12) }
+sub cbimm { my $h = shift; sxb((($h >> 12) & 1) << 8 | (($h >> 10) & 3) << 3 | (($h >> 5) & 3) << 6 | (($h >> 3) & 3) << 1 | (($h >> 2) & 1) << 5, 9) }
+sub cjimm { my $h = shift; sxb((($h >> 12) & 1) << 11 | (($h >> 11) & 1) << 4 | (($h >> 9) & 3) << 8 | (($h >> 8) & 1) << 10 | (($h >> 7) & 1) << 6 | (($h >> 6) & 1) << 7 | (($h >> 3) & 7) << 1 | (($h >> 2) & 1) << 5, 12) }
+
+# riscv64: a line's pc-relative instructions as tokens, [start, length,
+# token, the bytes with the field zero]: jal $, branches @, c.j *, c.beqz
+# and c.bnez |, an auipc ~ and the addi, load or jalr after it !
+sub fields_rv {
+    my ($l) = @_;
+    my ($addr, $foff) = @{ $sec{ $l->{sec} } };
+    my ($o, $e) = ($l->{off}, $l->{end});
+    my (@f, @raw);
+    my $tok = sub {
+        my ($p, $n, $sign, $tgt, $w, $mask) = @_;
+        my $name = name_at($tgt, $l->{ops});
+        if (!$name) { push @raw, sprintf '%s to 0x%x', $sign, $tgt; return 0 }
+        push @f, [$p, $n, "$sign$name", &le($w & ~$mask, $n)];
+        return 1;
+    };
+    for (my $p = $o; $p < $e;) {
+        my $P = $addr + $p;
+        if ((ord(substr $bin, $foff + $p, 1) & 3) != 3) {
+            my $h = rd($foff + $p, 2);
+            my ($q, $f3) = ($h & 3, $h >> 13);
+            $tok->($p, 2, '*', $P + cjimm($h), $h, 0x1ffc) if $q == 1 && $f3 == 5;
+            $tok->($p, 2, '|', $P + cbimm($h), $h, 0x1c7c) if $q == 1 && $f3 >= 6;
+            $p += 2;
+            next;
+        }
+        my $w = rd($foff + $p, 4);
+        my $op = $w & 0x7f;
+        if ($op == 0x6f) { $tok->($p, 4, '$', $P + jimm($w), $w, 0xfffff000) }
+        elsif ($op == 0x63) { $tok->($p, 4, '@', $P + bimm($w), $w, 0xfe000f80) }
+        elsif ($op == 0x17) {
+            my $w2 = $p + 8 <= $e ? rd($foff + $p + 4, 4) : 0;
+            my $op2 = $w2 & 0x7f;
+            die "mkhex: line $l->{n}: an auipc without its addi, load or jalr after it\n"
+                unless ($op2 == 0x13 || $op2 == 0x03 || $op2 == 0x67) && (($w2 >> 15) & 31) == (($w >> 7) & 31);
+            my $tgt = $P + uimm($w) + iimm($w2);
+            my $name = name_at($tgt, $l->{ops});
+            if ($name) { push @f, [$p, 4, "~$name", &le($w & 0xfff, 4)], [$p + 4, 4, "!$name", &le($w2 & 0xfffff, 4)] }
+            else { push @raw, sprintf 'auipc pair to 0x%x', $tgt }
+            $p += 8;
+            next;
+        }
+        $p += 4;
+    }
+    return (\@f, @raw ? ' (written out: ' . join(', ', @raw) . ')' : '');
+}
+
+# riscv64: an instruction's fields as the RISC-V manual draws them, for
+# the hand check of hex0's text: its 32 bits cut at the fields, MSB first,
+# then what they say
+my @abi = qw(zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6);
+sub rvwhy {
+    my ($b) = @_;
+    my @r;
+    for (my $p = 0; $p < length $b;) {
+        my $w = 0;
+        $w |= ord(substr $b, $p + $_, 1) << 8 * $_ for 0 .. 3;
+        if (($w & 3) != 3) { push @r, sprintf 'compressed %016b', $w & 0xffff; $p += 2; next }
+        $w &= 0xffffffff;
+        my ($op, $rd, $f3, $rs1, $rs2) = ($w & 0x7f, ($w >> 7) & 31, ($w >> 12) & 7, ($w >> 15) & 31, ($w >> 20) & 31);
+        my $x = sub { "x$_[0] $abi[$_[0]]" };
+        my ($k, $cut, $what);
+        if ($op == 0x33) { ($k, $cut, $what) = ('R', [7, 5, 5, 3, 5, 7], sprintf 'rs2 %s, rs1 %s, rd %s', $x->($rs2), $x->($rs1), $x->($rd)) }
+        elsif ($op == 0x13 || $op == 0x03 || $op == 0x67 || $op == 0x73 || $op == 0x1b) { ($k, $cut, $what) = ('I', [12, 5, 3, 5, 7], sprintf 'imm %d, rs1 %s, rd %s', iimm($w), $x->($rs1), $x->($rd)) }
+        elsif ($op == 0x23) { ($k, $cut, $what) = ('S', [7, 5, 5, 3, 5, 7], sprintf 'imm %d, rs2 %s, rs1 %s', sxb(($w >> 25) << 5 | $rd, 12), $x->($rs2), $x->($rs1)) }
+        elsif ($op == 0x63) { ($k, $cut, $what) = ('B', [7, 5, 5, 3, 5, 7], sprintf 'imm %d, rs2 %s, rs1 %s', bimm($w), $x->($rs2), $x->($rs1)) }
+        elsif ($op == 0x37 || $op == 0x17) { ($k, $cut, $what) = ('U', [20, 5, 7], sprintf 'imm 0x%x, rd %s', $w >> 12, $x->($rd)) }
+        elsif ($op == 0x6f) { ($k, $cut, $what) = ('J', [20, 5, 7], sprintf 'imm %d, rd %s', jimm($w), $x->($rd)) }
+        else { die sprintf "mkhex: opcode %07b\n", $op }
+        my $bits = sprintf '%032b', $w;
+        my @g;
+        for (@$cut) { push @g, substr $bits, 0, $_, '' }
+        push @r, "$k " . join(' ', @g) . ": $what";
+        $p += 4;
+    }
+    return join '; ', @r;
+}
+
 # a line's bytes as tokens: [start, length, token] for each reference
 sub fields {
     my ($l) = @_;
+    return fields_rv($l) if $rv && $l->{sec} eq '.text' && $l->{mn} !~ /^\./;
     my ($addr, $foff) = @{ $sec{ $l->{sec} } };
     my ($o, $e) = ($l->{off}, $l->{end});
     my (@f, @raw, $rel);
@@ -168,7 +299,7 @@ sub fields {
             my $name = $k == 0 ? name_at($tgt, $l->{ops}) : undef;
             if ($name) { push @f, [$p, 4, "%$name"] }
             else { my $to = $tgt + $k; push @raw, sprintf('rel32 to %s', name_at($to, $l->{ops}) // sprintf '0x%x', $to) . ($k ? ", from the end of the instruction, $k bytes after the field" : '') }
-        } elsif ($type eq 'R_X86_64_64') {
+        } elsif ($type eq 'R_X86_64_64' || $type eq 'R_RISCV_64') {
             my $v = rd($foff + $p, 8);
             my $name = $v >> 32 ? undef : name_at($v, $l->{ops});
             if ($name) { push @f, [$p, 4, "&$name"] }
@@ -199,6 +330,7 @@ sub hexline {
     for (sort { $a->[0] <=> $b->[0] } @f) {
         push @tok, uc unpack('H*', substr $bin, $foff + $p, $_->[0] - $p) if $_->[0] > $p;
         push @tok, $_->[2];
+        push @tok, $_->[3] if defined $_->[3];    # riscv64: the bytes, the field zero
         $p = $_->[0] + $_->[1];
     }
     push @tok, uc unpack('H*', substr $bin, $foff + $p, $e - $p) if $e > $p;
@@ -243,8 +375,10 @@ sub section_rows {
         if ($mode eq 'hex0') {
             my $a = sprintf '%04x', $l->{at};
             if (!defined $l->{off}) { push @r, $t eq '' ? '' : @{ $l->{labels} } ? "# $a  $t" : cm($t); next }
-            my @b = unpack '(H32)*', substr $bin, $foff + $l->{off}, $l->{end} - $l->{off};
+            my $b = substr $bin, $foff + $l->{off}, $l->{end} - $l->{off};
+            my @b = unpack '(H32)*', $b;
             push @r, row(uc shift @b, "$a  $t"), map { uc } @b;
+            push @r, row('', sprintf '%-6s%s', '', rvwhy($b)) if $rv && $l->{mn} !~ /^\./;
             next;
         }
         if (!defined $l->{off}) {
@@ -416,9 +550,9 @@ if ($mode eq 'flat') {
 # hex2: the ELF header and program headers, field by field
 my @ehdr = (
     [16, 'e_ident', 'the magic 7f "ELF", ELFCLASS64, little endian, EV_CURRENT, System V, padding'],
-    [2, 'e_type', 'ET_EXEC, an executable'], [2, 'e_machine', 'EM_X86_64'], [4, 'e_version', 'EV_CURRENT'],
+    [2, 'e_type', 'ET_EXEC, an executable'], [2, 'e_machine', $rv ? 'EM_RISCV' : 'EM_X86_64'], [4, 'e_version', 'EV_CURRENT'],
     [8, 'e_entry', 'the address of _start'], [8, 'e_phoff', 'the program headers follow'],
-    [8, 'e_shoff', 'the section headers, at the end'], [4, 'e_flags', 'none on x86_64'],
+    [8, 'e_shoff', 'the section headers, at the end'], [4, 'e_flags', $rv ? 'EF_RISCV_RVC, compressed instructions; the soft-float ABI' : 'none on x86_64'],
     [2, 'e_ehsize', 'this header'], [2, 'e_phentsize', 'a program header'],
     [2, 'e_phnum', 'program headers'], [2, 'e_shentsize', 'a section header'],
     [2, 'e_shnum', 'section headers'], [2, 'e_shstrndx', 'the section of the section names']);
@@ -452,9 +586,18 @@ my $shstr = $sec{'.shstrtab'} or die "mkhex: no .shstrtab\n";
 my ($delta) = rd($phoff + 16, 8) - rd($phoff + 8, 8);
 push @out, "# $src as hex2 text, made by gen/mkhex.pl from GNU as's and ld's output:",
     "# the whole executable in the order of its bytes. :label defines a label",
+    $rv ? (
+    "# at the address of the next byte; &label is label's address in 4 bytes",
+    "# (abs32, the low half of a .dword). The code's references XOR their",
+    "# field into the instruction after them, which is written with that",
+    "# field zero; d is label minus the instruction's address: ~label",
+    "# auipc's U (d + 0x800, its bits 31:12), !label the I of the addi, ld",
+    "# or jalr after the auipc (d + 4, from the auipc, its bits 11:0), \@label",
+    "# a branch's B, \$label jal's J, |label c.beqz's and c.bnez's CB, *label",
+    "# c.j's CJ;") : (
     "# at the address of the next byte; %label is the 4 bytes of label minus",
     "# the address after them (rel32), !label the same in 1 byte (rel8),",
-    "# &label label's address in 4 bytes (abs32, the low half of a .quad);",
+    "# &label label's address in 4 bytes (abs32, the low half of a .quad);"),
     "# ^address sets the address of the next byte (where the file and the",
     "# addresses part: the data segment, the labels of the bss). Every other",
     "# pair of hex digits is a byte; '#' and ';' start a comment to the end of",
