@@ -1,5 +1,6 @@
 # optli.pl: -O, the inline 8-byte constants (lane S3), after opt.pl,
-# setopt.pl and optdead.pl; run on ttpc.ff, then with T=ttpc.defs.ff.
+# setopt.pl and optdead.pl; run on ttpc.ff, then with T=ttpc.defs.ff and
+# T=macros/<target>.ff.txt (each target, then make refresh).
 #
 #   li gives a value past -2048..2047 to cc_li_big, on riscv64 auipc, ld,
 #   j +12 and the 8 bytes (20 bytes, 3 instructions): in stdlib-prog 21,000
@@ -25,8 +26,9 @@
 # same. Not inside compile time (CC_jit). Without -O every byte is as before.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
-# (T=shared.ff: the two in each target's group opt:, as in macros/<target>.ff.txt)
-if ($t =~ /^shared:\n/m) {
+# (T=macros/<target>.ff.txt, then make refresh: the two in the target's
+# group opt:)
+if ($t =~ /^opt:\n/m) {
     my %m = (
         riscv64 => [("lui\n  hi\n    value\n  rd\naddiw\n  lo\n    value\n  rd\n  rd\n") x 2],
         x86_64 => [("movq.i\n  value\n  rd\n") x 2],
@@ -36,16 +38,14 @@ if ($t =~ /^shared:\n/m) {
     );
     my %c = (riscv64 => 'lui + addiw', x86_64 => 'movq.i, a sign-extended imm32',
         aarch64 => 'movz + movk (pos32), movn + movk (neg32)', arm => "movw + movt, as cc_li_big (arm's values are 32-bit)");
-    my $n = 0;
-    $t =~ s{^  (\w+):\n((?:(?!  \w+:\n).*\n)*?)    opt:\n      comment\n((?:        .*\n)+)((?:      .*\n|        .*\n|          .*\n)*?)(?=    \w+:\n)}{
-        my ($k, $pre, $com, $body) = ($1, $2, $3, $4);
-        die "optli: shared.ff: $k\n" unless $m{$k};
-        $n++;
-        my $in = sub { join '', map { "        $_\n" } split /\n/, $_[0] };
-        "  $k:\n$pre    opt:\n      comment\n$com        cc_li_pos32 value rd, cc_li_neg32 value rd (optli.pl): rd = value, li's constant in 2048..2^31-2049 or -2^31..-2049 (and the TLS offset): $c{$k}.\n$body"
-            . "      cc_li_pos32:\n        value\n        rd\n" . $in->($m{$k}[0]) . "      cc_li_neg32:\n        value\n        rd\n" . $in->($m{$k}[1]);
-    }mge;
-    $n == 4 or die "optli: shared.ff: $n opt groups\n";
+    my ($k) = $tf =~ m{(\w+)\.ff\.txt$};
+    die "optli: $tf: not macros/<target>.ff.txt\n" unless $k && $m{$k};
+    my $in = sub { join '', map { "    $_\n" } split /\n/, $_[0] };
+    my $n = $t =~ s{^opt:\n  comment\n((?:    .*\n)+)((?: .*\n)*?)(?=^\S|\z)}{
+        "opt:\n  comment\n$1    cc_li_pos32 value rd, cc_li_neg32 value rd (optli.pl): rd = value, li's constant in 2048..2^31-2049 or -2^31..-2049 (and the TLS offset): $c{$k}.\n$2"
+            . "  cc_li_pos32:\n    value\n    rd\n" . $in->($m{$k}[0]) . "  cc_li_neg32:\n    value\n    rd\n" . $in->($m{$k}[1]);
+    }me;
+    $n == 1 or die "optli: $tf: $n opt groups\n";
     save();
     exit;
 }
