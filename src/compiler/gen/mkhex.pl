@@ -539,9 +539,14 @@ if ($mode eq 'm1') {
 if ($mode eq 'flat') {
     push @out, "# $src as hex2 text, made by gen/mkhex.pl: each line the bytes of",
         "# one asm line, then the line. :label defines a label at the address",
-        "# of the next byte (from 0, the file's first byte); %label is the 4",
-        "# bytes of label minus the address after them (rel32), !label the same",
-        "# in 1 byte (rel8). hex2 reads only what is before each '#'.", '#';
+        $rv ? ("# of the next byte (from 0, the file's first byte); a reference",
+            "# (\@label B, \$label J, ~label and !label an auipc and the instruction",
+            "# after it) XORs label minus the instruction's address into the",
+            "# immediate field of the instruction after it, written with that field",
+            "# zero. hex2 reads only what is before each '#'.", '#')
+        : ("# of the next byte (from 0, the file's first byte); %label is the 4",
+            "# bytes of label minus the address after them (rel32), !label the same",
+            "# in 1 byte (rel8). hex2 reads only what is before each '#'.", '#');
     push @out, section_rows('.text');
     print "$_\n" for @out;
     exit 0;

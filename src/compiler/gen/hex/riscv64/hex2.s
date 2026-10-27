@@ -13,6 +13,10 @@
 #            low half)
 #   ^hex     the address of the next byte is this hex number (where a
 #            file's addresses jump: its next segment, the labels of a bss)
+#   .hex     a word, 8 hex digits: its 4 bytes (the first pair lowest)
+#            are XORed into the next bytes written, as a reference's bits
+#            are (below); stage0-posix's word, which M1 writes for an
+#            instruction's registers and immediates
 # and RISC-V's references, as stage0-posix's hex2 has them: each takes d,
 # name's address minus the address of the next byte (the instruction's
 # own), scatters its bits into an instruction's immediate field and XORs
@@ -33,8 +37,8 @@
 # every byte after the sign up to a space, tab or newline. The input is
 # read whole, then twice: the first pass gives every label its address,
 # the second writes. On an unknown label, a label defined twice, a
-# reference out of range, a full table or input and a failed read or
-# write it says so on stderr and ends with status 1; else with 0.
+# reference out of range, a word that is not 8 hex digits, a full table
+# or input and a failed read or write it says so on stderr and ends with status 1; else with 0.
 #
 # One flat file, loaded at BASE by its first program header, read and
 # run; the second maps the memory it writes, LABELS to the end of INPUT.
@@ -140,6 +144,7 @@ msg_unknown:    .asciz "hex2: unknown label: "
 msg_twice:      .asciz "hex2: label defined twice: "
 msg_range:      .asciz "hex2: out of range: "
 msg_many:       .asciz "hex2: too many labels"
+msg_word:       .asciz "hex2: a word is 8 hex digits"
 msg_large:      .asciz "hex2: input too large"
 msg_read:       .asciz "hex2: read failed"
 msg_write:      .asciz "hex2: write failed"
@@ -182,6 +187,8 @@ loop:                                   # the next byte of the input
     beq     a0, t0, abs32
     li      t0, 0x5e                    # '^': an address
     beq     a0, t0, origin
+    li      t0, 0x2e                    # '.': a word
+    beq     a0, t0, word
     la      t1, kinds                   # a reference of one of the kinds?
 kind:
     lbu     t0, 0(t1)                   # its sign, 0 after the last
@@ -310,6 +317,26 @@ origin_digit:
     or      s4, s4, a0
     j       origin_digit
 
+word:                                   # .hex: 8 hex digits, XORed into s8
+    li      a3, 0                       # the word
+    li      a4, 4                       # the bit the next digit goes to:
+word_digit:                             # 4 0 12 8 20 16 28 24, pair by pair
+    bgeu    s2, s3, bad_word
+    lbu     a0, 0(s2)
+    addi    s2, s2, 1
+    jal     ra, hexval                  # (keeps a3, a4)
+    blt     a0, zero, bad_word
+    sll     a0, a0, a4
+    or      a3, a3, a0
+    andi    t0, a4, 4                   # a pair's high half: then its low
+    addi    a4, a4, -4
+    bne     t0, zero, word_digit
+    addi    a4, a4, 16                  # its low half: the next pair's high
+    li      t0, 32                      # after the fourth pair, 36: done
+    bltu    a4, t0, word_digit
+    xor     s8, s8, a3                  # into the next bytes written
+    j       loop
+
 hexval:                                 # a0 = the value of hex digit a0, or -1
     addi    t0, a0, -0x30               # '0'-'9' to 0-9
     li      t2, 10
@@ -391,6 +418,9 @@ range:
     j       die
 too_many:
     la      a3, msg_many
+    j       die_plain
+bad_word:
+    la      a3, msg_word
     j       die_plain
 too_large:
     la      a3, msg_large
