@@ -1,7 +1,9 @@
-# ttpc is plain RISC-V assembly, no libc: assembled and linked with the
-# bare-metal cross binutils into a static Linux riscv64 executable that only
-# makes raw syscalls. On riscv64 it runs natively, elsewhere under qemu-riscv64.
-# Without the cross binutils (no Nix) a host's own as and ld do for it.
+# ttpc is plain RISC-V assembly, no libc: a static Linux riscv64 executable
+# that only makes raw syscalls, built from hex0 (the hex seed, lane H, see
+# HEXHOSTS) or with SEED=gnu assembled and linked by the bare-metal cross
+# binutils, which also check the hex seed. On riscv64 it runs natively,
+# elsewhere under qemu-riscv64. Without the cross binutils (no Nix) a
+# host's own as and ld do for it.
 ARCH := $(shell uname -m)
 have = $(shell command -v $(1) 2>/dev/null)
 native_or = $(if $(call have,$(2)as),$(2),$(if $(filter $(1),$(ARCH)),,$(2)))
@@ -9,7 +11,7 @@ CROSS   ?= $(call native_or,riscv64,riscv64-none-elf-)
 AS      := $(CROSS)as
 LD      := $(CROSS)ld
 OBJCOPY := $(CROSS)objcopy
-ASFLAGS ?= -march=rv64imac -mabi=lp64
+ASFLAGS ?= -march=rv64imac -mabi=lp64 -mno-arch-attr
 QEMU    ?= $(if $(filter riscv64,$(ARCH)),,qemu-riscv64)
 
 # The GNU twins of the ff programs (progs/riscv64/*.s): every extension ff
@@ -25,7 +27,6 @@ export NIX_HARDENING_ENABLE :=
 BUILD ?= ../../build/compiler
 
 BIN := $(BUILD)/ttpc
-OBJ := $(BUILD)/ttpc.o
 
 # The ff sources, edited in sicompass. ttpc is a program of only its own,
 # ttpc.ff, with its constants in ttpc.defs.ff, on the shared page
@@ -94,12 +95,6 @@ all: $(BIN)
 $(BUILD) $(P):
 	mkdir -p $@
 
-$(OBJ): hosts/riscv64/ttpc.s | $(BUILD)
-	$(AS) $(ASFLAGS) $< -o $@
-
-$(BIN): $(OBJ)
-	$(LD) -static --no-relax -e _start $< -o $@
-
 # Print the tree of ttpc.ff, or of FF=<file>.
 FF ?= $(TTPC_FF)
 test: $(BIN)
@@ -148,8 +143,8 @@ run: $(P)/exit42.elf $(P)/hello.elf
 	printf 'hello, ff\nhello, ff\nhello, ff\n' | cmp - $(P)/hello.out
 	@echo "hello: prints its three lines"
 
-# The bootstrap, a chain of versions. ttpc.s (hosts/riscv64/), assembled
-# by GNU as, is stage0. ttpc1.ff, frozen like ttpc.s, is ttpc in the
+# The bootstrap, a chain of versions. ttpc.s (hosts/riscv64/), as the hex
+# seed makes it (or GNU as, SEED=gnu), is stage0. ttpc1.ff, frozen like ttpc.s, is ttpc in the
 # language of stage0, a whole tree below its 1 MiB: stage0 assembles it
 # into ttpc1, which must assemble itself into itself, assemble every asm
 # program and print ttpc1.ff exactly as stage0 does. ttpc1 assembles ttpc2
@@ -517,8 +512,16 @@ SLDFLAGS_x86_64 := -s -z noseparate-code
 # the GNU property note, the symbols (which name the object file) and the
 # page of its own for the code, so that the cross and the native binutils
 # agree.
+# riscv64 (the bootstrap's own seed, $(BIN)) has hex0, hex2 and ttpc.hex2
+# so far: SEED=asm takes ttpc.hex2 there (ASMHOSTS have M1 and asm). Its
+# binutils' seed is as -mno-arch-attr (the attribute's string names the
+# version of binutils) and ld -s -z noseparate-code, so the cross and the
+# native binutils agree too.
 SEED ?= asm
-HEXHOSTS := x86_64
+HEXHOSTS := x86_64 riscv64
+ASMHOSTS := x86_64
+seedkind = $(if $(filter $(1),$(HEXHOSTS)),$(if $(filter asm,$(SEED)),$(if $(filter $(1),$(ASMHOSTS)),asm,hex),$(SEED)),gnu)
+RUN_riscv64 := $(QEMU)
 SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
 
 # the NL trees a host's chain makes with its own unlicense
@@ -533,7 +536,7 @@ $(BUILD)/$(1)/seed.gnu: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
 	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
 	$(SEEDCROSS_$(1))ld -static $(SLDFLAGS_$(1)) -e _start $$@.o -o $$@
 
-$(BUILD)/$(1)/seed: $(BUILD)/$(1)/seed.$(if $(filter $(1),$(HEXHOSTS)),$(SEED),gnu)
+$(BUILD)/$(1)/seed: $(BUILD)/$(1)/seed.$(call seedkind,$(1))
 	cp $$< $$@
 
 # The links before the host's ttpc3 read committed copies (boot/<host>/,
@@ -642,21 +645,47 @@ endef
 $(foreach h,$(HOSTS),$(eval $(call host,$(h))))
 
 # The hex seed of a host of HEXHOSTS: hex0 makes hex2, hex2 the seed of
-# ttpc.hex2 and M1 of M1.hex2 (a macro assembler, as stage0-posix's), M1
-# the hex2 text of asm.M1 and hex2 of it asm, the seed's assembler, and
-# asm the seed of ttpc.s. hex-<host> checks hex0 and hex2 against their
-# texts without comments (what a person can check by hand: the hex digits
-# before each '#' or ';', as od prints the binary), that hex0 makes itself
-# of hex0.hex0, that M1 and asm are what binutils makes of their sources
+# ttpc.hex2; on a host of ASMHOSTS (below) hex2 makes M1 of M1.hex2 (a
+# macro assembler, as stage0-posix's), M1 the hex2 text of asm.M1 and hex2
+# of it asm, the seed's assembler, and asm the seed of ttpc.s. hex-<host>
+# checks hex0 and hex2 against their texts without comments (what a
+# person can check by hand: the hex digits before each '#' or ';', as od
+# prints the binary), that hex0 makes itself of hex0.hex0 and that the
+# seed of ttpc.hex2 is the one binutils makes of ttpc.s; hexasm-<host>
+# that M1 and asm are what binutils makes of their sources
 # gen/hex/<host>/M1.s and asm.s (dev aids, which gen/mkhex.pl made M1.hex2
-# and asm.M1 of), and that the seeds of ttpc.hex2 and of asm are the one
-# binutils makes of ttpc.s.
+# and asm.M1 of) and that asm's seed is binutils' too.
 define hexhost
 
 $(BUILD)/$(1)/hex2: hosts/$(1)/hex0 hosts/$(1)/hex2.hex0 | $(BUILD)/$(1)
 	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex2.hex0 > $$@.tmp
 	chmod +x $$@.tmp
 	mv $$@.tmp $$@
+
+$(BUILD)/$(1)/seed.hex: $(BUILD)/$(1)/hex2 hosts/$(1)/ttpc.hex2
+	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/ttpc.hex2 > $$@.tmp
+	chmod +x $$@.tmp
+	mv $$@.tmp $$@
+
+hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
+	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
+	for f in hex0 hex2; do sed 's/[#;].*//' hosts/$(1)/$$$$f.hex0 | tr -cd 0-9A-Fa-f | tr A-F a-f > $$$$d/$$$$f.text; done; \
+	od -An -v -tx1 hosts/$(1)/hex0 | tr -cd 0-9a-f | cmp - $$$$d/hex0.text; \
+	echo "hex-$(1): hex0 ($$$$(wc -c < hosts/$(1)/hex0) bytes) is hex0.hex0 without its comments"; \
+	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex0.hex0 > $$$$d/hex0.self; cmp $$$$d/hex0.self hosts/$(1)/hex0; \
+	echo "hex-$(1): hex0 makes itself of hex0.hex0"; \
+	od -An -v -tx1 $(BUILD)/$(1)/hex2 | tr -cd 0-9a-f | cmp - $$$$d/hex2.text; \
+	echo "hex-$(1): hex2 ($$$$(wc -c < $(BUILD)/$(1)/hex2) bytes), made by hex0, is hex2.hex0 without its comments"; \
+	cmp $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu; \
+	echo "hex-$(1): hex2 makes of ttpc.hex2 ($$$$(wc -l < hosts/$(1)/ttpc.hex2) lines) the seed binutils makes of ttpc.s ($$$$(wc -c < $(BUILD)/$(1)/seed.gnu) bytes)"
+
+.PHONY: hex-$(1)
+endef
+$(foreach h,$(HEXHOSTS),$(eval $(call hexhost,$(h))))
+
+# M1 and asm on a host of ASMHOSTS (H5): hexasm-<host> checks them and
+# their seed.
+define asmhost
 
 $(BUILD)/$(1)/M1: $(BUILD)/$(1)/hex2 hosts/$(1)/M1.hex2
 	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/M1.hex2 > $$@.tmp
@@ -674,33 +703,31 @@ $(BUILD)/$(1)/seed.asm: $(BUILD)/$(1)/asm hosts/$(1)/ttpc.s
 	chmod +x $$@.tmp
 	mv $$@.tmp $$@
 
-$(BUILD)/$(1)/seed.hex: $(BUILD)/$(1)/hex2 hosts/$(1)/ttpc.hex2
-	$(RUN_$(1)) $(BUILD)/$(1)/hex2 < hosts/$(1)/ttpc.hex2 > $$@.tmp
-	chmod +x $$@.tmp
-	mv $$@.tmp $$@
-
-hex-$(1): $(BUILD)/$(1)/hex2 $(BUILD)/$(1)/M1 $(BUILD)/$(1)/asm $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu
+hexasm-$(1): hex-$(1) $(BUILD)/$(1)/M1 $(BUILD)/$(1)/asm $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu
 	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
-	for f in hex0 hex2; do sed 's/[#;].*//' hosts/$(1)/$$$$f.hex0 | tr -cd 0-9A-Fa-f | tr A-F a-f > $$$$d/$$$$f.text; done; \
-	od -An -v -tx1 hosts/$(1)/hex0 | tr -cd 0-9a-f | cmp - $$$$d/hex0.text; \
-	echo "hex-$(1): hex0 ($$$$(wc -c < hosts/$(1)/hex0) bytes) is hex0.hex0 without its comments"; \
-	$(RUN_$(1)) hosts/$(1)/hex0 < hosts/$(1)/hex0.hex0 > $$$$d/hex0.self; cmp $$$$d/hex0.self hosts/$(1)/hex0; \
-	echo "hex-$(1): hex0 makes itself of hex0.hex0"; \
-	od -An -v -tx1 $(BUILD)/$(1)/hex2 | tr -cd 0-9a-f | cmp - $$$$d/hex2.text; \
-	echo "hex-$(1): hex2 ($$$$(wc -c < $(BUILD)/$(1)/hex2) bytes), made by hex0, is hex2.hex0 without its comments"; \
 	for f in M1 asm; do $(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
 	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.o $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
 	echo "hex-$(1): M1 ($$$$(wc -c < $(BUILD)/$(1)/M1) bytes), made by hex2 of M1.hex2 ($$$$(wc -l < hosts/$(1)/M1.hex2) lines), is what binutils makes of gen/hex/$(1)/M1.s"; \
 	echo "hex-$(1): asm ($$$$(wc -c < $(BUILD)/$(1)/asm) bytes), made by M1 and hex2 of asm.M1 ($$$$(wc -l < hosts/$(1)/asm.M1) lines), is what binutils makes of gen/hex/$(1)/asm.s"; \
-	cmp $(BUILD)/$(1)/seed.hex $(BUILD)/$(1)/seed.gnu; \
-	echo "hex-$(1): hex2 makes of ttpc.hex2 ($$$$(wc -l < hosts/$(1)/ttpc.hex2) lines) the seed binutils makes of ttpc.s ($$$$(wc -c < $(BUILD)/$(1)/seed.gnu) bytes)"; \
 	cmp $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu; \
 	echo "hex-$(1): asm makes of ttpc.s ($$$$(wc -l < hosts/$(1)/ttpc.s) lines) that seed too"
 
-.PHONY: hex-$(1)
+.PHONY: hexasm-$(1)
 endef
-$(foreach h,$(HEXHOSTS),$(eval $(call hexhost,$(h))))
-hex: $(foreach h,$(HEXHOSTS),$(if $(call can,$(h)),hex-$(h)))
+$(foreach h,$(ASMHOSTS),$(eval $(call asmhost,$(h))))
+
+# riscv64's seed: as the other hosts', in $(BUILD)/riscv64; $(BIN) is it.
+$(BUILD)/riscv64:
+	mkdir -p $@
+
+$(BUILD)/riscv64/seed.gnu: hosts/riscv64/ttpc.s | $(BUILD)/riscv64
+	$(AS) $(ASFLAGS) $< -o $@.o
+	$(LD) -static --no-relax -s -z noseparate-code -e _start $@.o -o $@
+
+$(BIN): $(BUILD)/riscv64/seed.$(call seedkind,riscv64)
+	cp $< $@
+
+hex: $(foreach h,$(HEXHOSTS),$(if $(call can,$(h)),hex-$(h) $(if $(filter $(h),$(ASMHOSTS)),hexasm-$(h))))
 	@echo "hex: $(foreach h,$(HEXHOSTS),$(if $(call can,$(h)),$(h)))"
 
 # seeds needs ttpc.s to compare with; bootstraps is riscv64 (make bootstrap)
