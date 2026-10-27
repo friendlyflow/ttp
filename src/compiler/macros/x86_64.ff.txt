@@ -252,6 +252,7 @@ opt:
     -O (gen/patches/opt.pl): cc_ldfp_* off: V = the local at FP + off, as cc_li off V, cc_addfp, cc_load_* do; cc_stfp_* off: [FP + off] = V, as cc_li off L, cc_addfp_l, cc_store_* (L is not set); off in -255..255, one instruction.
     cc_toarg i: argument register i = V, the reverse of cc_param (a call's argument without its push, cc_arg's load and a slot of cc_drop).
     cc_li_pos32 value rd, cc_li_neg32 value rd (optli.pl): rd = value, li's constant in 2048..2^31-2049 or -2^31..-2049 (and the TLS offset): movq.i, a sign-extended imm32.
+    cc_ldfx_* off, cc_stfx_* off (optfold.pl): as cc_ldfp_* and cc_stfp_*, for li's big offset (-2^31..2^31-2049): the load or store at rbp + disp32, as cc_ldfp_* and cc_stfp_*.
   cc_ldfp_i8:
     off
     movsbq.m
@@ -342,6 +343,78 @@ opt:
     movq.i
       value
       rd
+  cc_ldfx_i8:
+    off
+    movsbq.m
+      off
+      rbp
+      rax
+  cc_ldfx_i16:
+    off
+    movswq.m
+      off
+      rbp
+      rax
+  cc_ldfx_i32:
+    off
+    movslq.m
+      off
+      rbp
+      rax
+  cc_ldfx_i64:
+    off
+    movq.m
+      off
+      rbp
+      rax
+  cc_ldfx_u8:
+    off
+    movzbq.m
+      off
+      rbp
+      rax
+  cc_ldfx_u16:
+    off
+    movzwq.m
+      off
+      rbp
+      rax
+  cc_ldfx_u32:
+    off
+    movl.m
+      off
+      rbp
+      eax
+  cc_ldfx_u64:
+    off
+    movq.m
+      off
+      rbp
+      rax
+  cc_stfx_8:
+    off
+    movb.mr
+      al
+      off
+      rbp
+  cc_stfx_16:
+    off
+    movw.mr
+      ax
+      off
+      rbp
+  cc_stfx_32:
+    off
+    movl.mr
+      eax
+      off
+      rbp
+  cc_stfx_64:
+    off
+    movq.mr
+      rax
+      off
+      rbp
 linux:
   comment
     The Linux system calls by name, for syscall: the x86_64 numbers. The number goes in rax, the arguments in rdi rsi rdx r10 r8 r9; syscall leaves the result in rax and changes rcx and r11.
