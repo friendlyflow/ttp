@@ -3086,7 +3086,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
         my $d = $rec{$tag} // $enumd{$tag} // ($tag =~ /^(struct|union) / ? { kind => 'RecordDecl', tagUsed => $1, inner => [] } : undef)
             or do { warn "c2ff: no definition of $tag\n"; next };
         my ($kind) = $tag =~ /^(\S+)/;
-        next if defined $program && $kind ne 'enum' && !grep({ $_->{kind} eq 'FieldDecl' } @{ $d->{inner} || [] }) && $treerec{ join ' ', ctype($tag) };
+        next if defined $program && $tag =~ /^(?:struct|union) [A-Za-z_]\w*$/ && !$rec{$tag} && $treerec{ join ' ', ctype($tag) };
         if ($kind eq 'enum') {
             # (its name, where no ctype of it gave it yet: index_enum leaves it)
             ctype($tag) unless defined $tagname{$tag};

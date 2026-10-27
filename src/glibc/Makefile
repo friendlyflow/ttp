@@ -725,7 +725,7 @@ glibc-roundtrip: floats-roundtrip
 LICENSES_PL := perl ../compiler/gen/licenses.pl
 licenses:
 	$(LICENSES_PL) --fragment builtins.ff.txt stdbit.ff.txt atomics.ff.txt $(wildcard atomics-*.ff.txt)
-	$(LICENSES_PL) license.ff.txt progs/strlen.ff
+	$(LICENSES_PL) license.ff.txt license-libgcc.ff.txt ../libgcc/license.ff.txt progs/strlen.ff
 define licenses
 $(1)-licenses: $$(FF)/$(1).ff $$(FF)/$(1)/index.ff $$(FF)/$(1)-prog.ff
 	$$(LICENSES_PL) --pages $$(FF)/$(1).ff $$(FF)/$(1)/*.ff
@@ -882,20 +882,25 @@ LAYERS := perl -I../compiler/gen -MFF=node,layers,read_txt,write_txt -0777 -ne \
 	'print write_txt(map { node($$_->{content}, layers(@{ $$_->{children} })) } read_txt($$_, $$ARGV))'
 ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # libgcc_eh's unwinder, which a static program has from gcc (glibc's
-# __pthread_unwind, backtrace): on riscv64 builtins-riscv64.ff.txt's, which
-# walks ttpc's frames; elsewhere not in ff yet, its names weak (address 0),
-# as for a program that never unwinds
+# __pthread_unwind, backtrace): on riscv64 libgcc's own in ff (src/libgcc,
+# as the milestone unwind has it), its units after glibc's, as gcc links
+# libgcc_eh.a after libc.a, the tree's root license with libgcc's
+# (license-libgcc.ff.txt); a program that unwinds is built with ttpc -g
+# (its .eh_frame: the tests, TTPCFLAGS_tests); elsewhere not in ff yet,
+# its names weak (address 0), as for a program that never unwinds
 UNWIND_glibc := $(if $(filter riscv64,$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
+LIBGCC_glibc := $(if $(filter riscv64,$(GTARGET)),$(LIBGCC_EH))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
-$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
+$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump) $(LIBGCC_glibc:%=$(I)/libgcc/%.json)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
 	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
+	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
-	cp license.ff.txt $(FF)/glibc.ff.txt
+$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
 	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
@@ -1100,8 +1105,9 @@ $(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).c2ff) $(TI)/support.rea
 	    $(foreach o,$(TOBJS_$*),--object $(TI)/$(o).json=$(TI)/$(o).i) $(foreach o,$(SUPPORT),$(TI)/$(o).json=$(TI)/$(o).i) -- main > $(TFF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(TFF)/$*-prog.ff.txt > $@
 
+TTPCFLAGS_tests := $(if $(LIBGCC_glibc),-g)
 $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC)
-	$(RUN) -t 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
+	$(RUN) -t 900 $(TTPC_RUN) $(TTPCFLAGS_tests) $(SHARED) $< $@ > $@.lst
 
 # a test's result: its steps, each to its log, the first that fails the
 # result's reason; then the runs (tests.pl run), stdin the test's .input

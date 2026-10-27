@@ -27,7 +27,9 @@ drv="--inputs-from $top nixpkgs#pkgsCross.$cross.buildPackages.gcc16.cc"
 mkdir -p "$b"
 cd "$b"
 v=$("$GLIBC_CC" -dumpversion)
-rm -rf "gcc-$v" build
+# (configure copies --with-headers into prefix/, read-only as the store has them)
+chmod -R u+w prefix 2> /dev/null || :
+rm -rf "gcc-$v" build prefix
 nix develop $drv --unpack > unpack.log 2>&1
 (cd "gcc-$v" && nix develop $drv --phase patch > ../patch.log 2>&1)
 flags=$(nix eval --raw $drv.configureFlags --apply 'l: builtins.concatStringsSep " " l')
@@ -61,4 +63,5 @@ for a in libgcc.a libgcc_eh.a; do
     done
 done
 rm -rf cmp
+chmod -R u+w "$b/prefix" 2> /dev/null || :
 echo "libgcc-ref: $b/build/$triple/libgcc: libgcc.a and libgcc_eh.a, $n objects, each .text as gcc's own"

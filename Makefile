@@ -144,7 +144,7 @@ PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
 PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
-PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 \
+PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 \
 	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 \
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm \
@@ -193,6 +193,10 @@ endef
 $(foreach m,$(PC_MS),$(eval $(call pc_milestone,$(m))))
 pc-generic-riscv64: pc-units-riscv64
 	$(call pc_step,generic-riscv64,$(call PC_GLIBC) generic-check generic-roundtrip)
+# libgcc in ff (src/libgcc): its tree's licenses (its functions are the
+# milestones gccrt's and unwind's, their round trip gccrt's)
+pc-libgcc-riscv64: pc-units-riscv64
+	$(call pc_step,libgcc-riscv64,$(call PC_GLIBC) libgcc-licenses)
 pc-units-aarch64: pc-bootstrap pc-gbuild
 	$(call pc_step,units-aarch64,$(call PC_GLIBC,aarch64) units-ready)
 define pc_a64
