@@ -15,7 +15,8 @@
 #       the line of a step's log that says why it failed
 #   perl tests.pl run <dir> <test> <input> <slot command> -- <qemu> <cpu>...
 #       runs dir/test.ref (gcc's) and dir/test-prog (ttpc's) on each cpu
-#       (qemu -cpu), in dir/test.run, stdin from <input>, and prints the
+#       (qemu -cpu; natively where <qemu> is native, its cpu native), in
+#       dir/test.run, stdin from <input>, and prints the
 #       result: "equal: ..." where every run exits with the same status
 #       and prints the same (stdout and stderr), else "differ: ..."
 #       (an address printed, 0x and 6 hex digits or more, compares as any
@@ -157,7 +158,8 @@ if ($cmd eq 'run') {
                 open STDERR, '>', "$out.err" or die;
                 $ENV{TMPDIR} = Cwd::abs_path('.');
                 $ENV{TIMEOUTFACTOR} = 10;
-                exec @slot, $qemu, '-cpu', $cpu, $bin or die "tests: cannot run $qemu: $!\n";
+                # (natively where the machine is the target: no qemu, one run each)
+                exec @slot, $qemu eq "native" ? ($bin) : ($qemu, "-cpu", $cpu, $bin) or die "tests: cannot run $qemu: $!\n";
             }
             waitpid $pid, 0;
             my $s = $? & 127 ? 128 + ($? & 127) : $? >> 8;

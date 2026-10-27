@@ -426,7 +426,7 @@ CLANGFIX := $(CLANGFIX_$(GTARGET))
 # (x86_64's units of gcc's SSE4.2 intrinsics, <nmmintrin.h>: clang reads
 # them with -msse4.2, gcc's inline functions they do not reach left out of
 # its copy, clangvec.pl)
-CLANGVEC_x86_64 := string/strcspn-sse4 string/strspn-sse4
+CLANGVEC_x86_64 := string/strcspn-sse4 string/strpbrk-sse4 string/strspn-sse4
 CLANGVEC := $(CLANGVEC_$(GTARGET))
 vecfix = $(if $(filter $(1),$(CLANGVEC)),| perl clangvec.pl)
 vecflag = $(if $(filter $(1),$(CLANGVEC)),-msse4.2)
@@ -826,22 +826,29 @@ ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # as for a program that never unwinds
 UNWIND_glibc := $(if $(filter riscv64,$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
-$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(ALL_ASM:%=$(I)/%.dump)
+# (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
+# forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
+# crti's _init and _fini, s2ff --then, as in a milestone)
+GLIBC_ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM))
+GLIBC_THEN = $(if $(filter-out riscv64,$(GTARGET)),$(filter csu/crtn,$(ALL_ASM)))
+GLIBC_ASM = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)) $(GLIBC_THEN),$(ALL_ASM))
+$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THEN:%=$(I)/%.dump)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
-	  for a in $(ALL_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
+	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
 	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+$(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
 	cp license.ff.txt $(FF)/glibc.ff.txt
 	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
 	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
-	perl ../compiler/gen/s2ff.pl --header $(ALL_ASM:%=$(I)/%.s) | sed 's/^/  /' >> $(FF)/glibc.asm.page.txt
-	for a in $(ALL_ASM); do \
-	    $(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $(I)/$$a.s $(I)/$$a.dump > $(FF)/glibc.asm.txt || exit 1; \
+	perl ../compiler/gen/s2ff.pl --header $(GLIBC_ASM:%=$(I)/%.s) | sed 's/^/  /' >> $(FF)/glibc.asm.page.txt
+	for a in $(GLIBC_ASM); do \
+	    then=; test $$a = csu/crti && test -n "$(GLIBC_THEN)" && then="--then $(I)/csu/crtn$(SSRC) $(I)/csu/crtn.dump"; \
+	    $(RUN) -t 60 perl $(S2FF) --items $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
@@ -959,7 +966,9 @@ $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC)
 
 # a test's result: its steps, each to its log, the first that fails the
 # result's reason; then the runs (tests.pl run), stdin the test's .input
-# where glibc's source has one
+# where glibc's source has one; under qemu on each of CPUS, or natively
+# where the machine is GTARGET (an x86_64 machine's x86_64: one run each)
+TRUN = $(if $(filter $(shell uname -m),$(GTARGET)),native native,qemu-$(GTARGET) $(CPUS))
 TSTEP = $(MAKE) --no-print-directory $(TFF)/$*$(1) > $(TFF)/$*.$(2).log 2>&1 || \
 	{ echo "not yet: $(3): $$(perl tests.pl why $(TFF)/$*.$(2).log)" > $@; exit 0; }
 $(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) tests.pl
@@ -969,7 +978,7 @@ $(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $
 	$(call TSTEP,-prog.ff,c2ff,c2ff); \
 	$(call TSTEP,-prog,ttpc,ttpc); \
 	in=$(GLIBC_SRC)/$(AREA)/$*.input; test -e $$in || in=/dev/null; \
-	perl tests.pl run $(TFF) $* $$in $(RUN) -t 600 -- qemu-$(GTARGET) $(CPUS) > $@
+	perl tests.pl run $(TFF) $* $$in $(RUN) -t 600 -- $(TRUN) > $@
 
 # (the .mk first: where glibc's tests build failed, it stops here, before
 # a make of each test would try that build again)
