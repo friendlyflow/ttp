@@ -124,10 +124,10 @@ my @v = ([1, 'cur_pc', 0, 8], [1, 'in_bss', 0, 8], [1, 'out_end', 0, 8], [1, 'sc
     [1, 'ccs', 0, 'CC_swx'], [1, 'ccs', 'CC_rty', 24], [1, 'data_state', 0, 24], [1, 'dbg_area', 0, 32], [1, 'dbg_cst', 0, 16],
     [1, 'dbg_fns', 0, 8], [1, 'dbg_regs', 0, 8], [1, 'dbg_lines', 0, 8], [1, 'ct_placed', 0, 8],
     [1, 'sec_vars', 0, 8200], [1, 'sec_placing', 0, 8], [2, 'data_vars', 0, 8], [3, 'tls_vars', 0, 8],
-    [1, 'tls_vars', 32768, 16], [2, 'irw_vars', 0, 16],
+    [1, 'tls_vars', 32776, 8], [2, 'irw_vars', 0, 16],
     map { [1, $_->[0], 0, $_->[1]] } [opt_held => 8], [opt_in => 8], [opt_a => 8], [opt_c => 8], [opt_n => 8],
         [opt_fn => 8], [opt_buf => 384], [optb_n => 8], [optb_buf => 480], [opt_dead => 8], [opt_jheld => 8],
-        [opt_jid => 8], [opt_jlab => 8], [opt_jbuf => 48], [opt_spk => 8], [opt_spv => 8], [opt_spnew => 8],
+        [opt_jbuf => 48], [opt_spk => 8], [opt_spv => 8], [opt_spnew => 8],
         [opt_spset => 8], [opt_spdrop => 8], [opt_insync => 8], [opt_inprim => 8]);
 $vars .= "dword $_->[0]\ndword $_->[1]\ndword $_->[2]\ndword $_->[3]\n" for @v;
 once(\$t, "  cc_loads:\n", cfn('par_vars', "the state a sample of -j keeps: kind (1 its bytes, 2 a count and as many entries after it, 3 the same after 16 bytes), name, offset, bytes (of an entry); cur_pc, in_bss and out_end first (a sample's 32, 40, 48)", $vars . "dword 0\n", 2) . "  cc_loads:\n", 'cc_loads');
@@ -255,7 +255,7 @@ $c .= cfn('parlst2', "place's line, as parlst1 (s4 the node)", "
     Q9:
     ret
 ", 2);
-$c .= cfn('parwalk', "the state par_vars names and the sample a0: a1 0 into the sample, 1 back from it, 2 compared (a0 0, else 1 + the place in the sample that differs)", "
+$c .= cfn('parwalk', "the state par_vars names and the sample a0: a1 0 into the sample, 1 back from it, 2 compared (a0 0, else what differs: its entry of par_vars << 32, plus 1 + the byte in it)", "
     la par_vars a2
     addi 32 a0 a3
     li 0 a4
@@ -265,6 +265,7 @@ $c .= cfn('parwalk', "the state par_vars names and the sample a0: a1 0 into the 
     ld 8 a2 t1
     ld 16 a2 t2
     add t2 t1 t1
+    mv a3 a5
     ld 24 a2 t2
     li 1 t3
     beq rel:V4 t3 t0
@@ -295,8 +296,12 @@ $c .= cfn('parwalk', "the state par_vars names and the sample a0: a1 0 into the 
     ld 0 t1 t5
     beq rel:V7 t5 t4
     bnez V7 a4
-    sub a0 a3 a4
+    sub a5 a3 a4
     addi 1 a4 a4
+    la par_vars t5
+    sub t5 a2 t5
+    slli 27 t5 t5
+    add t5 a4 a4
     V7:
     addi 8 t1 t1
     addi 8 a3 a3
@@ -531,7 +536,7 @@ $c .= cfn('parhook', "cc_library: the entry a0 (-1 the list's end) of the loop a
     addi 48 sp sp
     ret
 ", 2);
-$c .= cfn('parrec', "the first pass at the entry s4 (1 << 40 the end) of the loop s5: a sample, at the first, the end and past each par_w bytes of the listing (128 at most: then every other one goes and par_w doubles)", "
+$c .= cfn('parrec', "the first pass at the entry s4 (1 << 40 the end) of the loop s5: a sample, at the first, the end and past each par_w bytes of the listing (128 at most: then those closer than a 64th of the bytes so far go, which par_w becomes)", "
     addi -16 sp sp
     sd 0 ra sp
     li 1 t0
@@ -555,42 +560,45 @@ $c .= cfn('parrec', "the first pass at the entry s4 (1 << 40 the end) of the loo
     li 128 t2
     bltu rel:R3 t2 t1
     la par_samp t2
-    li 1 t3
-    R2:
-    slli 4 t3 t4
-    add t4 t2 t4
-    ld 0 t4 t5
-    ld -8 t4 t6
-    la par_nfree a2
-    ld 0 a2 a3
-    slli 3 a3 a4
-    la par_free a5
-    add a5 a4 a4
-    sd 0 t6 a4
-    addi 1 a3 a3
-    sd 0 a3 a2
-    slli 3 t3 t4
-    add t4 t2 t4
-    sd 0 t5 t4
-    addi 1 t3 t3
-    li 64 t4
-    bltu rel:R2 t4 t3
-    ld 1016 t2 t6
-    la par_nfree a2
-    ld 0 a2 a3
-    slli 3 a3 a4
-    la par_free a5
-    add a5 a4 a4
-    sd 0 t6 a4
-    addi 1 a3 a3
-    sd 0 a3 a2
-    li 64 t1
-    la par_ns t0
-    sd 0 t1 t0
+    ld 0 t2 t0
+    ld 24 t0 t4
+    la par_lst t5
+    ld 0 t5 t5
+    sub t4 t5 t5
+    srli 6 t5 t5
+    addi 1 t5 t5
     la par_w t0
-    ld 0 t0 t2
-    slli 1 t2 t2
-    sd 0 t2 t0
+    sd 0 t5 t0
+    li 1 t3
+    li 1 t6
+    R2:
+    slli 3 t3 t0
+    add t0 t2 t0
+    ld 0 t0 t0
+    ld 24 t0 t1
+    sub t4 t1 a3
+    bltu rel:R4 t5 a3
+    slli 3 t6 a4
+    add a4 t2 a4
+    sd 0 t0 a4
+    addi 1 t6 t6
+    mv t1 t4
+    j R6
+    R4:
+    la par_nfree a2
+    ld 0 a2 a3
+    slli 3 a3 a4
+    la par_free a5
+    add a5 a4 a4
+    sd 0 t0 a4
+    addi 1 a3 a3
+    sd 0 a3 a2
+    R6:
+    addi 1 t3 t3
+    li 128 t0
+    bltu rel:R2 t0 t3
+    la par_ns t0
+    sd 0 t6 t0
     R3:
     la par_nfree a2
     ld 0 a2 a3
