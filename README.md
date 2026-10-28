@@ -46,6 +46,16 @@ code); without `-O` every byte stays as it was. The ff tools are built with
 it. It runs on riscv64 itself, under `qemu-riscv64` elsewhere;
 see [src/compiler/PLAN.md](src/compiler/PLAN.md).
 
+`ttpc -j N ...` (with `-g`, `-O` and `--target` in any order; `set jobs` / w / N
+in a build file) compiles the second pass on N processes: after the first
+pass, each of N shares of the library is compiled from the state the first
+pass recorded where it starts, and the output and listing are byte for byte
+those of one process (stdlib-prog for riscv64: natively 7.1 s, with `-j2`
+5.2 s, `-j4` 4.1 s, `-j6` 4.0 s; riscv64's ttpc under qemu 83, 60, 49 and
+46 s; the first pass, half of it, stays on one). `-j0` is a debugging aid:
+one process whose second pass checks that it meets the state the first
+recorded at each place a share could start.
+
 The root [Makefile](Makefile) calls the per-component Makefiles in
 [src/os](src/os/Makefile) and [src/compiler](src/compiler/Makefile),
 collecting their artifacts under `build/`.
