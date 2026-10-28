@@ -65,7 +65,7 @@ my $json_parser = eval { require JSON::XS; JSON::XS->new } || do { require JSON:
 use FF qw(node layers write_txt read_ff);
 use Words;
 use FFold qw(ldround ratq qlit);
-use Header qw(license_nodes header_of);
+use Header qw(license_nodes header_of unit_label);
 use Digest::SHA;
 use POSIX ();
 
@@ -85,6 +85,8 @@ my %scalar = (
     '__float128' => 'long double',      # x86_64's _Float128 for clang (clang-prelude.h)
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
     '_Bool' => 'u8', 'void' => 'void',
+    # (C23's bool, the type of libgcc's C under gcc 16's gnu23: _Bool)
+    'bool' => 'u8',
     '__builtin_va_list' => 'va_list',
     # (aarch64's __builtin_va_list is AAPCS64's struct; ttpc's va_list is its
     # own word, as on every target)
@@ -98,8 +100,11 @@ my %scalar = (
 my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
+our $saw_i128;             # (a 128-bit integer's type met: a function of one stops, sub function)
+my %treerec;               # --index file: the records its tree's types page defines
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
 my %ownfnrec;              # a function's own definitions of tags its unit defines otherwise
+my %recfn;                 # a tag a function's own definition registered first: that function
 my %ownanon;               # a unit's own anonymous records, where another unit's at the same place differ (places)
 my %owntd;                 # a unit's own typedefs, where another unit's came first
 my %constint;              # a unit's const integer globals of a number (tst-random's const int nseq = 3): the counts of arrays
@@ -198,7 +203,7 @@ sub ctype {
     # u64, for the layout of the audit interface's La_x86_64_regs and
     # La_x86_64_retval, which no code of a static program reads; arithmetic
     # on one stops ttpc)
-    return ('array', 'u64', 2) if $t =~ /^(?:__int128_t|__uint128_t|(?:unsigned )?__int128)$/;
+    if ($t =~ /^(?:__int128_t|__uint128_t|(?:unsigned )?__int128)$/) { $saw_i128 = 1; return ('array', 'u64', 2) }
     return ctype($owntd{$cur_unit}{$t}) if $cur_unit && $owntd{$cur_unit} && exists $owntd{$cur_unit}{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($desugar{$t}) if exists $desugar{$t};
@@ -447,6 +452,17 @@ while (@ARGV) {
         open my $h, '<:raw', $f or die "c2ff: cannot open $f: $!\n";
         my ($index) = grep { $_->{content} eq 'index:' } @{ read_ff(do { local $/; <$h> })->{children} } or die "c2ff: $f has no index\n";
         $treedefs{ $_->{content} =~ s/:$//r } = 1 for FF::kids($index);
+        # (and the records its types page defines, types.ff next to it: one
+        # the program only declares is the tree's, not an empty one of the
+        # program's, which ttpc would take for the tree's too: libgcc's
+        # struct _Unwind_Context, which unwind.h only names)
+        (my $tf = $f) =~ s{[^/]*$}{types.ff};
+        if (open my $t, '<:raw', $tf) {
+            my $tree = read_ff(do { local $/; <$t> });
+            my @d = map { FF::kids($_) } @{ $tree->{children} };
+            @d = map { $_->{content} =~ /^\d+:$/ ? FF::kids($_) : $_ } @d while grep { $_->{content} =~ /^\d+:$/ } @d;
+            for (@d) { my @k = FF::kids($_); $treerec{ $_->{content} =~ s/:$//r } = 1 if @k > 1 && $k[0]{content} =~ /^(struct|union)$/ }
+        }
         next;
     }
     if ($a eq '--target') { $target = shift @ARGV; next }
@@ -492,7 +508,19 @@ sub enum_value {
 sub enum_consts { grep { $_->{kind} eq 'EnumConstantDecl' } @{ $_[0]{inner} || [] } }
 sub set_enumd {
     my ($tag, $d) = @_;
-    $enumd{$tag} = $d if !$enumd{$tag} || !enum_consts($enumd{$tag}) && enum_consts($d);
+    $enumd{$tag} = $d if !$enumd{$tag} || !enum_consts($enumd{$tag}) && enum_consts($d) || enum_more($enumd{$tag}, $d);
+}
+# (another unit's definition with every constant of the first, of the same
+# value, and more: glibc's dwarf2.h's enum dwarf_location_atom ends at
+# DW_OP_nop, gcc's, libgcc's unwinder's, has the GNU ones too)
+sub enum_vals { my ($d) = @_; my $v = -1; map { my $e = enum_value($_); $v = defined $e ? $e : $v + 1; ($_->{name} => $v) } enum_consts($d) }
+sub enum_more {
+    my ($old, $new) = @_;
+    my %o = enum_vals($old);
+    my %n = enum_vals($new);
+    return 0 unless keys %n > keys %o;
+    for (keys %o) { return 0 unless exists $n{$_} && $n{$_} == $o{$_} }
+    1;
 }
 sub index_enum {
     my ($d) = @_;
@@ -686,7 +714,7 @@ for my $u (@units) {
                         $ownfnrec{$u}{$fk}{$key} = $own;
                         next;
                     }
-                    reg_rec($key, $t, $u) and anon_fields($t, $t->{name});
+                    if (reg_rec($key, $t, $u)) { anon_fields($t, $t->{name}); $recfn{$key} = $fk if defined $fk }
                 }
             }
         } elsif ($d->{kind} eq 'VarDecl') {
@@ -706,7 +734,23 @@ for my $u (@units) {
                 $var{$k} //= [$d, $u];
             }
         } elsif ($d->{kind} eq 'RecordDecl' && $d->{completeDefinition}) {
-            reg_rec("$d->{tagUsed} $name", $d, $u) and anon_fields($d, $name);
+            my $key = "$d->{tagUsed} $name";
+            # (a tag a function of the unit defined first, otherwise, is that
+            # function's own, the unit's the global one: libgcc's union
+            # unaligned of read_encoded_value_with_base and of read_pointer ...)
+            if (defined(my $f = $recfn{$key})) {
+                delete $recfn{$key};
+                if (($recunit{$key} // 0) == $u && def_text($d, $u) ne def_text($rec{$key}, $u)) {
+                    my $own = "$key " . ffname($f);
+                    $rec{$own} //= $rec{$key};
+                    $recunit{$own} //= $u;
+                    $ownfnrec{$u}{$f}{$key} = $own;
+                    $rec{$key} = $d;
+                    anon_fields($d, $name);
+                    next;
+                }
+            }
+            reg_rec($key, $d, $u) and anon_fields($d, $name);
         } elsif ($d->{kind} eq 'EnumDecl') {
             set_enumd("enum $name", $d);
         }
@@ -1165,6 +1209,8 @@ $ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'lon
 # (and builtins-arm.ff.txt's, of arm's 32-bit size_t)
 my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
+our $asm_rd_out;
+my @xreg = qw(zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6);
 sub asm_ins {
     my ($n, $op, @a) = @_;
     my $csr = sub { my ($c) = @_; $csrno{$c} // ($c =~ /^\d+$/ ? $c : stop("the CSR $c", $n)) };
@@ -1208,6 +1254,17 @@ sub asm_ins {
         my $v = $1;
         my $imm = oct($v =~ /^0x/i ? $v : "0$v") & 0xfff;
         return node('fence', node($imm >> 8), node(($imm >> 4) & 15), node($imm & 15));
+    }
+    # .insn 0x<word> of a CSR read, csrrs rd, csr, zero (libgcc's riscv_vlenb,
+    # csrr of vlenb, into its register variable): that instruction; where
+    # the statement's register output is that variable (its template names
+    # no operand), rd is the output, which the asm function returns from t0
+    if ($op eq '.insn' && @a == 1 && $a[0] =~ /^0x([0-9a-f]{8})$/i) {
+        my $w = hex $1;
+        if (($w & 0x707f) == 0x2073 && (($w >> 15) & 31) == 0) {
+            my $rd = $xreg[($w >> 7) & 31];
+            return (node('csrrs', node($w >> 20), node('zero'), node($rd)), ($asm_rd_out ? node('mv', node($rd), node('t0')) : ()));
+        }
     }
     stop("the asm instruction $op", $n);
 }
@@ -1298,6 +1355,9 @@ sub asm_stmt {
     # a +r output: its value from its argument
     for my $j (0 .. $#arg) { push @code, node('mv', node($arg[$j][3]), node('t0')) if $arg[$j][2] }
     push @code, @fmv;
+    # (a register output its template does not name: an instruction's own
+    # register, .insn's)
+    local $asm_rd_out = defined $ret && $template !~ /%/;
     push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
     push @code, node('fmv.x.' . ($fret eq 's' ? 'w' : 'd'), node('ft0'), node('t0')) if $fret;
     push @code, node('mv', node('t0'), node('a0')) if defined $ret;
@@ -1616,6 +1676,8 @@ sub expr {
         my @t = ctype(qt($n));
         return @t == 1 && $t[0] ne 'int' ? node($t[0], node($n->{value})) : node($n->{value});
     }
+    # C23's true and false (libgcc's C, gnu23), clang's C++ bool literal: 1 and 0
+    return node($n->{value} ? 1 : 0) if $k eq 'CXXBoolLiteralExpr';
     # (a char literal is an int: '\xff' where char is signed, x86_64's, is -1,
     # which clang's JSON has as 4294967295)
     return node($n->{value} >= 2**31 && qt($n) eq 'int' ? $n->{value} - 2**32 : $n->{value}) if $k eq 'CharacterLiteral';
@@ -1858,7 +1920,7 @@ sub expr {
         # function for each floating type (printf_fp has double and long double)
         # (and C's classification and quiet comparisons, a function for each
         # of the three types; fpclassify's type is its last argument's)
-        if ($name =~ /^__builtin_(isnan|isinf_sign|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
+        if ($name =~ /^__builtin_(isnan|isinf_sign|isinf|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
             $t =~ /^(float|double|long double)$/ or stop("$name on $t", $n);
             return node("$name $t", map { arg($_) } @args);
@@ -1887,6 +1949,8 @@ sub expr {
         return node("$name u32", map { arg($_) } @args) if $name eq '__builtin_add_overflow_p' && $target eq 'arm';
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
+        # (riscv64's for libgcc's unwinder, unwind-dw2.c: its frame and registers)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target eq 'riscv64';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
@@ -2052,6 +2116,14 @@ sub atomic_call {
         return node("__atomic_exchange_" . csize(qt($n)), item(expr($p)), item(expr($v[0])), item(expr($o))) if $a eq '__atomic_exchange_n';
         return node("__atomic_load_" . csize(qt($n)), item(expr($p)), item(expr($o))) if $a eq '__atomic_load_n';
         return node("__atomic_store_" . csize(qt($v[0])), item(expr($p)), item(expr($v[0])), item(expr($o))) if $a eq '__atomic_store_n';
+        # gcc's generic __atomic_load (p, ret, o) and __atomic_store (p, val,
+        # o), of a value of any type (libgcc's btree, a struct of bit
+        # fields): libatomic's generic function, with the size of *p first
+        # (builtins.ff.txt's)
+        if ($a eq '__atomic_load' || $a eq '__atomic_store') {
+            (my $t = qt($p)) =~ s/\s*\*\s*$// or stop("$a of no pointer", $n);
+            return node($a, node('sizeof', map { node($_) } ctype($t)), item(expr($p)), item(expr($v[0])), item(expr($o)));
+        }
         # clang's order: ptr, success, expected, failure, desired, weak
         return node("__atomic_compare_exchange_" . csize(qt($v[2])), item(expr($p)), item(expr($v[0])), item(expr($v[2])), item(expr($o)), item(expr($v[1])))
             if $a eq '__atomic_compare_exchange_n';
@@ -2590,7 +2662,14 @@ sub stmt {
     }
     return labelled($n) if $k eq 'CaseStmt' || $k eq 'DefaultStmt';
     # (a label's attribute, ret0: __attribute__ ((unused)), says nothing of its code)
-    return node(label_name($n->{name}) . ':', stmt((grep { $_->{kind} !~ /Attr$/ } kids($n))[0])) if $k eq 'LabelStmt';
+    if ($k eq 'LabelStmt') {
+        my ($s) = grep { $_->{kind} !~ /Attr$/ } kids($n);
+        # (a declaration after a label, C23's, libgcc's btree_lookup restart:
+        # struct btree_node *iter: the label alone, then the declaration, whose
+        # scope is the block's, not the label's)
+        return (node(label_name($n->{name}) . ':'), stmt($s)) if $s && $s->{kind} eq 'DeclStmt';
+        return node(label_name($n->{name}) . ':', stmt($s));
+    }
     return node('goto', node(label_name($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     # GNU's goto *p: to the address p holds (a label's, &&L)
     return node('goto', node('content', expr((kids($n))[0]))) if $k eq 'IndirectGotoStmt';
@@ -2861,14 +2940,19 @@ sub function {
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);
     my ($ret) = split_fn(expand(qt($d)));
     defined $ret or die "c2ff: not a function type: " . qt($d) . "\n";
+    # (a function of 128-bit integers, its value, a parameter or a local:
+    # ttpc has no such integer, and c2ff's two u64 of one are its layout
+    # only: libgcc's TImode helpers, __multi3 ..., stop, once translated)
+    local $saw_i128 = 0;
     my @p = grep { $_->{kind} eq 'ParmVarDecl' } kids($d);
     my ($cs) = grep { $_->{kind} eq 'CompoundStmt' } kids($d);
     my $i = 0;
     my @head = (map({ node($_) } ctype($ret)),
         map({ $i++; node(ffname($_->{name} // "p$i") . ':', map { node($_) } ctype(qt($_))) } @p),
         ($d->{variadic} ? node('...') : ()),
-        # (the .i, not the copy of it clang read: CLANGFIX)
-        node('comment', node("glibc-2.44 " . ($d->{file} =~ s/\.clang\.i$/.i/r))));
+        # (the .i, not the copy of it clang read: CLANGFIX; after the name
+        # of its tree, glibc-2.44, gcc-16.2.0 for libgcc's)
+        node('comment', node(do { my $f = $d->{file} =~ s/\.clang\.i$/.i/r; unit_label($f) . " $f" })));
     # (constructor or destructor first, its priority under it: the user's
     # choice, 2026-10-21)
     my $c = $ctor{$name};
@@ -2876,7 +2960,9 @@ sub function {
     # (the function's place first, with its file: where its name is)
     local ($lfile, $lline) = ('', 0);
     my @at = line_at(offset_of($d->{loc}));
-    node(ffname($name) . ':', @head, stmt_layers(scalar @head, (@at ? [@at] : ()), map { [lstmt($_)] } kids($cs)));
+    my $f = node(ffname($name) . ':', @head, stmt_layers(scalar @head, (@at ? [@at] : ()), map { [lstmt($_)] } kids($cs)));
+    stop("a function of __int128 values, which ttpc has no integer of", $d) if $saw_i128;
+    $f;
 }
 # A function's statements, each a run of nodes: past what a node holds
 # (255, with the head before them), in layers 0: 1: ... of whole
@@ -3000,6 +3086,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
         my $d = $rec{$tag} // $enumd{$tag} // ($tag =~ /^(struct|union) / ? { kind => 'RecordDecl', tagUsed => $1, inner => [] } : undef)
             or do { warn "c2ff: no definition of $tag\n"; next };
         my ($kind) = $tag =~ /^(\S+)/;
+        next if defined $program && $tag =~ /^(?:struct|union) [A-Za-z_]\w*$/ && !$rec{$tag} && $treerec{ join ' ', ctype($tag) };
         if ($kind eq 'enum') {
             # (its name, where no ctype of it gave it yet: index_enum leaves it)
             ctype($tag) unless defined $tagname{$tag};

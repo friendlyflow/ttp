@@ -108,12 +108,12 @@ my @headers;    # the license of each file a page is made of: [its name, its lin
 
 for my $page (@top) {
     next if c($page) eq 'comment' || c($page) eq 'license';
-    my $glibc = c($page) =~ /^glibc / && c($page) ne 'glibc asm:' && (!%only || $only{ c($page) =~ s/:$//r });
+    my $glibc = c($page) =~ /^(?:glibc|gcc) / && c($page) !~ /^(?:glibc|gcc) asm:$/ && (!%only || $only{ c($page) =~ s/:$//r });
     # (each license after a comment naming its file: that file's header)
     { my @k = FF::kids($page);
       for my $i (1 .. $#k) {
           next unless c($k[$i]) eq 'license' && c($k[$i - 1]) eq 'comment' && @{ $k[$i - 1]{children} };
-          my ($f) = c($k[$i - 1]{children}[0]) =~ /^glibc-\S+ (.+)$/ or next;
+          my ($f) = c($k[$i - 1]{children}[0]) =~ /^(?:glibc|gcc)-\S+ (.+)$/ or next;
           my (undef, @l) = map { c($_) } kids($k[$i]);
           push @headers, [$f, \@l];
       } }
@@ -652,6 +652,12 @@ sub operand {
         my $f = '_mm_cmpistr' . { i => 'i', ic => 'c', iz => 'z' }->{$1};
         return ("$f(" . join(', ', (map { expr_item($_) } items(@k)), $2) . ')', [scalar => 'int']);
     }
+    # (c2ff's call of libatomic's generic __atomic_load or __atomic_store, the
+    # size first: gcc's builtin again, without it)
+    if ($w =~ /^__atomic_(load|store)$/ && !local_type($w)) {
+        my @i = items(@k);
+        return ("$w(" . join(', ', map { expr_item($_) } @i[1 .. $#i]) . ')', [scalar => 'void']);
+    }
     if (!local_type($w) && !gtype($w) && (sig($w) || $w =~ /^__builtin_/)) {
         my $s = sig($w);
         return (callee($w) . '(' . join(', ', map { expr_item($_) } items(@k)) . ')', $s ? $s->{ret} : undef);
@@ -997,7 +1003,7 @@ for my $f (grep { $glibcpage{$_} } @order) {
     local $cur_fn = $f;
     my $s = sig($f);
     my @l = kids($fn{$f}{node});
-    my ($unit) = map { c((kids($_))[0]) =~ /^glibc-\S+ (\S+)$/ ? $1 : () } grep { c($_) eq 'comment' } @l[$s->{body} .. $#l];
+    my ($unit) = map { c((kids($_))[0]) =~ /^(?:glibc|gcc)-\S+ (\S+)$/ ? $1 : () } grep { c($_) eq 'comment' } @l[$s->{body} .. $#l];
     local @scope = ({ map { ($_->[0] => $_->[1]) } @{ $s->{params} } });
     local $cur_last = @{ $s->{params} } ? cid_local($s->{params}[-1][0]) : '';
     local our $labels = { map { $_ => 1 } labels_in(@l[$s->{body} .. $#l]) };
@@ -1008,7 +1014,7 @@ for my $f (grep { $glibcpage{$_} } @order) {
     push @names, join("\t", 'body', cid($f), orig($f), $unit // '-');
 }
 # clang's own builtins, which C does not declare
-sub clang_builtin { $_[0] =~ /^__builtin_|^__atomic_(?:always_lock_free|is_lock_free|thread_fence|signal_fence)$/ }
+sub clang_builtin { $_[0] =~ /^__builtin_|^__atomic_(?:always_lock_free|is_lock_free|thread_fence|signal_fence|load|store)$/ }
 # The labels of a body: name: nodes that are no declaration
 sub labels_in {
     map {

@@ -68,7 +68,7 @@ our %errordecl;            # functions of gcc's error attribute declared in a fu
 our %constint;             # glibc's side: the unit's const integer globals of a number, an array's count as c2ff takes them (tst-random's long rnd[nseq][nrnd])
 my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'short' => 'i16', 'unsigned short' => 'u16',
     'int' => 'i32', 'unsigned int' => 'u32', 'long' => 'i64', 'long long' => 'i64', 'unsigned long' => 'u64',
-    'unsigned long long' => 'u64', '_Bool' => 'u8', 'float' => 'float', 'double' => 'double',
+    'unsigned long long' => 'u64', '_Bool' => 'u8', 'bool' => 'u8', 'float' => 'float', 'double' => 'double',
     'long double' => 'ldouble', '__float128' => 'ldouble', 'void' => 'void', '__builtin_va_list' => 'va', 'va_list' => 'va', '__va_list_tag' => 'va');
 $cls{'unsigned long'} = 'u32' if $target eq 'arm';
 sub tstr {
@@ -194,6 +194,9 @@ sub E {
         # a conversion to _Bool: in ff (where it is a u8) a compare with 0
         # (what the operand is converted to first does not matter then)
         return '(tobool ' . E(unimplicit($c)) . ')' if $ck =~ /ToBoolean$/;
+        # (C23's true and false, a bool's own, are c2ff's 1 and 0, a u8 there:
+        # a 1 or 0 converted to a u8 is that literal, on both sides)
+        if ($ck eq 'IntegralCast' && tcls($n) eq 'u8' && !$in_global && (unparen($c)->{kind} // '') eq 'IntegerLiteral' && (unparen($c)->{value} // '') =~ /^[01]$/) { return E(unparen($c)) }
         if ($ck eq 'IntegralCast' && tcls($n) eq 'u8' && $side eq 'ff') {
             my $b = unparen($c);
             if ($b->{kind} eq 'BinaryOperator' && $b->{opcode} eq '!=' && is_zero((kids($b))[1])) { return '(tobool ' . E(unimplicit((kids($b))[0])) . ')' }
@@ -235,6 +238,10 @@ sub E {
         return "(cast IntegralCast i32 " . E($c) . ')' if $side eq 'glibc' && $ck eq 'IntegralCast' && tcls($n) eq 'enum' && tcls($c) !~ /^(enum|i32)$/
             && (($n->{type}{desugaredQualType} // $n->{type}{qualType} // '') =~ /^enum \((?:unnamed|anonymous)\b/);
         return E($c) if $ck eq 'IntegralCast' && (tcls($n) eq 'enum' || tcls($c) eq 'enum');
+        # (an enum constant converted: libgcc's enum register_rule of C23's
+        # underlying type unsigned char, its constants in a switch on a u8,
+        # where ff's enum is an int)
+        return E($c) if $ck eq 'IntegralCast' && (unparen($c)->{kind} // '') eq 'DeclRefExpr' && (unparen($c)->{referencedDecl}{kind} // '') eq 'EnumConstantDecl';
         # offsetof as ff has it: the field's address in a T at 0
         if ($ck eq 'PointerToIntegral' && is_offsetof($c)) { return '(offsetof)' }
         # a double literal cast to long double: the literal
@@ -242,6 +249,8 @@ sub E {
         return "(cast $ck " . tcls($n) . ' ' . E($c) . ')';
     }
     return '(int ' . ($n->{value} // 0) . ' ' . (small_literal($n) ? 'i32' : tcls($n)) . ')' if $k eq 'IntegerLiteral';
+    # (C23's true and false, libgcc's C: c2ff's 1 and 0)
+    return '(int ' . ($n->{value} ? 1 : 0) . ' i32)' if $k eq 'CXXBoolLiteralExpr';
     # (__builtin_types_compatible_p: the constant c2ff makes of it)
     if ($k eq 'TypeTraitExpr') {
         my @t = map { my $q = $_->{type}{desugaredQualType} // $_->{type}{qualType} // ''; $q =~ s/\b(const|volatile|restrict)\b//g; $q =~ s/\s+/ /g; $q =~ s/^ | $//g; $q } kids($n);
@@ -380,7 +389,8 @@ sub is_offsetof {
     my $s = unparen($n);
     return 0 unless $s->{kind} eq 'UnaryOperator' && $s->{opcode} eq '&';
     $s = unparen((kids($s))[0]);
-    $s = unparen((kids($s))[0]) while $s->{kind} =~ /^(MemberExpr|ArraySubscriptExpr)$/;
+    # (through an array member's element too: libgcc's offsetof (_Unwind_FrameState, regs.how[0]))
+    $s = unparen((kids($s))[0]) while $s->{kind} =~ /^(MemberExpr|ArraySubscriptExpr)$/ || $s->{kind} eq 'ImplicitCastExpr' && ($s->{castKind} // '') eq 'ArrayToPointerDecay';
     $s->{kind} =~ /CastExpr$/ && (strip($s)->{kind} // '') eq 'IntegerLiteral' && strip($s)->{value} == 0;
 }
 # The functions of gcc's error attribute declared in a function (__errordecl:
