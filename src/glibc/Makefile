@@ -951,7 +951,9 @@ print-%:
 # arithmetic of 128 bits. clang reads neither atomic.c (it redefines gcc's
 # __sync builtins) nor strub.c (__builtin_stack_address, which clang lacks).
 # Only riscv64 so far.
-LBUILD ?= $(HOME)/.cache/ttp/build/libgcc/$(GTARGET)
+# the shared reference (the user, 2026-10-28), as glibc-gcc16: built once with
+# make libgcc-ref, then only read by the checks of every lane
+LBUILD ?= $(HOME)/.cache/ttp/libgcc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 LOBJ := $(LBUILD)/build/$(TRIPLE)/libgcc
 export LIBGCC_SRC := $(LBUILD)/gcc-16.2.0
 LI := $(I)/libgcc
