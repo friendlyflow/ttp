@@ -121,26 +121,26 @@ edit(\$t, 'compile_page', "      mv\n        s7\n        a0\n      call\n       
 # ---- the state
 my $vars = '';
 my @v = ([1, 'cur_pc', 0, 8], [1, 'in_bss', 0, 8], [1, 'out_end', 0, 8], [1, 'scope_depth', 0, 8],
-    [1, 'ccs', 0, 'CC_swx'], [1, 'ccs', 'CC_rty', 24], [1, 'data_state', 0, 24], [1, 'dbg_area', 0, 32], [1, 'dbg_cst', 0, 16],
+    [1, 'ccs', 0, 'CC_ty'], [1, 'ccs', 'CC_cur', 16], [4, 'ccs', 'CC_types', 8], [1, 'ccs', 'CC_vbase', 40], [4, 'ccs', 'CC_rty', 24], [1, 'data_state', 0, 24], [1, 'dbg_area', 0, 32], [1, 'dbg_cst', 0, 16],
     [1, 'dbg_fns', 0, 8], [1, 'dbg_regs', 0, 8], [1, 'dbg_lines', 0, 8], [1, 'ct_placed', 0, 8],
     [1, 'sec_vars', 0, 8200], [1, 'sec_placing', 0, 8], [2, 'data_vars', 0, 8], [3, 'tls_vars', 0, 8],
     [1, 'tls_vars', 32776, 8], [2, 'irw_vars', 0, 16],
     map { [1, $_->[0], 0, $_->[1]] } [opt_held => 8], [opt_in => 8], [opt_a => 8], [opt_c => 8], [opt_n => 8],
-        [opt_fn => 8], [opt_buf => 384], [optb_n => 8], [optb_buf => 480], [opt_dead => 8], [opt_jheld => 8],
-        [opt_jbuf => 48], [opt_spk => 8], [opt_spv => 8], [opt_spnew => 8],
+        [opt_fn => 8], [optb_n => 8], [opt_dead => 8], [opt_jheld => 8],
+        [opt_spk => 8], [opt_spv => 8], [opt_spnew => 8],
         [opt_spset => 8], [opt_spdrop => 8], [opt_insync => 8], [opt_inprim => 8]);
 $vars .= "dword $_->[0]\ndword $_->[1]\ndword $_->[2]\ndword $_->[3]\n" for @v;
-once(\$t, "  cc_loads:\n", cfn('par_vars', "the state a sample of -j keeps: kind (1 its bytes, 2 a count and as many entries after it, 3 the same after 16 bytes), name, offset, bytes (of an entry); cur_pc, in_bss and out_end first (a sample's 32, 40, 48)", $vars . "dword 0\n", 2) . "  cc_loads:\n", 'cc_loads');
+once(\$t, "  cc_loads:\n", cfn('par_vars', "the state a sample of -j keeps: kind (1 its bytes, 4 the same but not compared: the C layer's types (where the next one goes, which compile time moves in the first pass, and the return type and others that point at them), 2 a count and as many entries after it, 3 the same after 16 bytes), name, offset, bytes (of an entry); cur_pc, in_bss and out_end first (a sample's 32, 40, 48)", $vars . "dword 0\n", 2) . "  cc_loads:\n", 'cc_loads');
 once(\$t, "  msg_moved:\n", "  msg_jstate:\n    ascii\n      ttpc -j: the second pass does not meet the state the first recorded (the list's place, what differs):\\x20\n  msg_jsys:\n    ascii\n      ttpc -j: a system call failed (mmap, clone or wait4)\\x0a\n  msg_moved:\n", 'msg_moved');
 
 my $res = '';
-$res .= "  $_->[0]:\n    reserve\n      $_->[1]\n" for [par_n => 8], [par_chk => 8], [par_go => 8], [par_lo => 8], [par_hi => 8],
+$res .= "  $_->[0]:\n    reserve\n      $_->[1]\n" for [par_n => 8], [par_cli => 8], [par_chk => 8], [par_go => 8], [par_lo => 8], [par_hi => 8],
     [par_kid => 8], [par_m => 8], [par_lst => 8], [par_lastw => 8], [par_w => 8], [par_ns => 8], [par_nfree => 8],
     [par_sbuf => 8], [par_endb => 8], [par_samp => 1040], [par_free => 1040], [par_bnd => 528], [par_pids => 520],
     [par_sout => 8], [par_slst => 8], [par_lcur => 8], [par_lend => 8], [par_tmp => 16], [par_txt => 40];
 once(\$t, "  opt_cli:\n    reserve\n      8\n", "  opt_cli:\n    reserve\n      8\n$res", 'opt_cli');
 
-# ---- the functions, before write_output
+# ---- the functions, at the end of layer 0: (the short branches of the code before them keep their reach)
 my $c = '';
 $c .= cfn('allflags', "a0 a1: _start's count of arguments and pointer; past the switches -j N, -O and -g, in any order", "
     addi -16 sp sp
@@ -157,7 +157,7 @@ $c .= cfn('allflags', "a0 a1: _start's count of arguments and pointer; past the 
     addi 16 sp sp
     ret
 ", 2);
-$c .= cfn('jflag', "a0 a1 as optflag; past a first -j N or -jN: par_n N (at most 64), none for 1, -j0 checks (par_chk)", "
+$c .= cfn('jflag', "a0 a1 as optflag; past a first -j N or -jN: par_n as parset, par_cli N + 1", "
     li 2 t1
     blt rel:J9 t1 a0
     ld 8 a1 t2
@@ -190,6 +190,17 @@ $c .= cfn('jflag', "a0 a1 as optflag; past a first -j N or -jN: par_n N (at most
     addi 1 t2 t2
     j J3
     J4:
+    addi 1 t6 t3
+    la par_cli t0
+    sd 0 t3 t0
+    slli 3 t5 t4
+    add t4 a1 a1
+    sub t5 a0 a0
+    j parset
+    J9:
+    ret
+", 2);
+$c .= cfn("parset", "t6 N, of -j N or a build file: par_n N (at most 64), none for 1, 0 checks (par_chk, par_n 2); every register kept but t0 t1 t3 t6", "
     la par_n t0
     la par_chk t1
     sd 0 zero t1
@@ -207,10 +218,6 @@ $c .= cfn('jflag', "a0 a1 as optflag; past a first -j N or -jN: par_n N (at most
     mv t3 t6
     J7:
     sd 0 t6 t0
-    slli 3 t5 t4
-    add t4 a1 a1
-    sub t5 a0 a0
-    J9:
     ret
 ", 2);
 $c .= cfn('parlst1', "emit's listing in the first pass with -j: the bytes its line will have (s5 bits, s6 the node), in par_lst", "
@@ -269,6 +276,8 @@ $c .= cfn('parwalk', "the state par_vars names and the sample a0: a1 0 into the 
     ld 24 a2 t2
     li 1 t3
     beq rel:V4 t3 t0
+    li 4 t3
+    beq rel:V4 t3 t0
     ld 0 t1 t4
     beqz V2 a1
     ld 0 a3 t4
@@ -292,6 +301,8 @@ $c .= cfn('parwalk', "the state par_vars names and the sample a0: a1 0 into the 
     sd 0 t4 t1
     j V7
     V6:
+    li 4 t3
+    beq rel:V7 t3 t0
     ld 0 a3 t4
     ld 0 t1 t5
     beq rel:V7 t5 t4
@@ -386,7 +397,9 @@ $c .= cfn('parhex', "a0 in 16 hex digits at a3, past them", "
     ret
 ", 2);
 $c .= cfn('parsys', "a0 a system call's result: back if it is no error", "
-    li -4095 t0
+    li -1 t0
+    slli 12 t0 t0
+    addi 1 t0 t0
     bgeu rel:Y1 t0 a0
     ret
     Y1:
@@ -981,7 +994,7 @@ $c .= cfn('parjoin', "the first process at its share's end: its state checked, t
     addi 16 sp sp
     ret
 ", 2);
-once(\$t, "  write_output:\n", "$c  write_output:\n", 'write_output');
+once(\$t, "\n1:\n", "\n${c}1:\n", "layer 1");
 # layer 2: is full: what follows opt_on (the reserves, mem_end) a layer 3: of its own
 once(\$t, "\n  opt_on:\n", "\n3:\n  opt_on:\n", "opt_on");
 save();
