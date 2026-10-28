@@ -299,7 +299,71 @@ ASMS_gnuc :=
 ROOTS_gnuc_x86_64 := fma fmaf
 ROOTS_gnuc := $(ROOTS_ldouble) $(ROOTS_gnuc_$(GTARGET))
 
-MILESTONES := string stdlib ldouble malloc stdio floats args gnuc
+# unwind: libgcc's own unwinder in ff (src/libgcc: libgcc_eh's unwind-dw2.c,
+# unwind-dw2-fde-dip.c and unwind-c.c, translated as glibc's units are,
+# $(I)/libgcc), linked as gcc links libgcc_eh.a into a static program, with
+# glibc's dl_iterate_phdr, which finds the program's .eh_frame_hdr
+# (PT_GNU_EH_FRAME): progs/unwind.c's _Unwind_Backtrace and
+# _Unwind_ForcedUnwind walk its frames, ttpc's with -g (.eh_frame), as gcc's
+# libgcc walks gcc's. Its tree has libgcc's license too (license-libgcc.ff.txt).
+LIBGCC_EH := unwind-dw2 unwind-dw2-fde-dip unwind-c
+OBJS_unwind := elf/dl-iteratephdr setjmp/longjmp setjmp/jmp-unwind nptl/pthread_cleanup_upto nptl/pthread_cond_wait nptl/pthread_cond_broadcast nptl/pthread_mutex_cond_lock nptl/pthread_cond_signal $(LIBGCC_EH:%=libgcc/%)
+ASMS_unwind :=
+ROOTS_unwind := $(ROOTS_stdio) _Unwind_Backtrace _Unwind_ForcedUnwind _Unwind_GetIP _Unwind_GetCFA _Unwind_FindEnclosingFunction _setjmp longjmp \
+	open read mmap __register_frame
+# (and gcc's frames among the program's: progs/unwind-gcc.c, by gcc alone at
+# an address of its own, which the program maps and registers)
+RUN_unwind = $(FF)/unwind-gcc.elf
+$(FF)/unwind-gcc.elf: progs/unwind-gcc.c
+	mkdir -p $(FF)
+	$(RUN) -t 60 $(GLIBC_CC) -O1 -funwind-tables -fno-pic -no-pie -static -nostdlib -Wl,-Ttext-segment=0x30000000 -Wl,-e,gcc_mid -Wl,--build-id=none $< -o $@
+unwind-check unwind-check-O: $(FF)/unwind-gcc.elf
+ZEROS_unwind := $(ZEROS_stdio)
+WEAKS_unwind := $(WEAKS_stdio)
+LICENSE_unwind := license-libgcc.ff.txt
+TTPCFLAGS_unwind := -g
+
+# gccrt: libgcc's own functions in ff (src/libgcc, as unwind's), called by
+# name (progs/gccrt.c): complex multiply and divide, the integer helpers,
+# the powers to an int and soft-fp's conversions, each result's bits
+# printed, as gcc's libgcc.a gives them. Its tree is all of libgcc's C
+# (LIBGCC_C, below) with what of glibc they call, from every name libgcc
+# defines (FF/libgcc.roots): gccrt-roundtrip is the round trip of each
+# function of libgcc that c2ff translates (--keep-going: the others are left
+# out, as in libgcc.ff), glibc's C giving what they call. (unwind's units
+# of glibc come first: their struct link_map is glibc's own, not the public
+# link.h's, which libgcc's unwinder has; libgcc's then come before stdio's,
+# so its soft-fp is the one of the names glibc's soft-fp defines too, the
+# same code.)
+LIBGCC_C := $(addprefix _,negdi2 lshrdi3 ashldi3 ashrdi3 cmpdi2 ucmpdi2 clear_cache trampoline _main absvsi2 absvdi2 addvsi3 \
+	addvdi3 subvsi3 subvdi3 mulvsi3 mulvdi3 negvsi2 negvdi2 ctors ffssi2 ffsdi2 clz clzsi2 clzdi2 ctzsi2 ctzdi2 popcount_tab \
+	popcountsi2 popcountdi2 paritysi2 paritydi2 powisf2 powidf2 powixf2 powitf2 mulhc3 mulsc3 muldc3 mulxc3 multc3 divhc3 \
+	divsc3 divdc3 divxc3 divtc3 bswapsi2 bswapdi2 clrsbsi2 clrsbdi2 mulbitint3 fixunssfsi fixunsdfsi fixunsxfsi fixsfdi \
+	fixdfdi fixxfdi fixunssfdi fixunsdfdi fixunsxfdi floatdisf floatdidf floatdixf floatundisf floatundidf floatundixf \
+	eprintf _gcc_bcmp divdi3 moddi3 divmoddi4 udivdi3 umoddi3 udivmoddi4 udiv_w_sdiv divmodbitint4) \
+	addtf3 divtf3 eqtf2 getf2 letf2 multf3 negtf2 subtf3 unordtf2 fixtfsi fixunstfsi floatsitf floatunsitf fixtfdi \
+	fixunstfdi floatditf floatunditf fixtfti fixunstfti floattitf floatuntitf extendsftf2 extenddftf2 extendhfsf2 extendhfdf2 \
+	extendhftf2 extendbfsf2 trunctfsf2 trunctfdf2 trunctfhf2 truncdfhf2 truncsfhf2 trunctfbf2 truncdfbf2 truncsfbf2 \
+	trunchfbf2 truncbfhf2 divsf3 divdf3 floatbitinttf fixtfbitint fixhfsi fixhfdi fixunshfsi fixunshfdi floatsihf floatdihf \
+	floatunsihf floatundihf floatsibf floatdibf floatunsibf floatundibf floatbitinthf fixhfti fixunshfti floattihf floatuntihf \
+	floattibf floatuntibf fixsfbitint floatbitintsf fixdfbitint floatbitintdf multi3 feature_bits enable-execute-stack hardcfr \
+	unwind-dw2 unwind-dw2-fde-dip unwind-sjlj unwind-c emutls
+OBJS_gccrt := $(OBJS_unwind) nptl/pthread_key_create nptl/pthread_setspecific nptl/pthread_getspecific stdio-common/fprintf libio/iofflush $(LIBGCC_C:%=libgcc/%)
+ASMS_gccrt :=
+ROOTS_gccrt = $(ROOTS_unwind) __mulsc3 __divsc3 __muldc3 __divdc3 __multc3 __divtc3 __popcountdi2 __clzdi2 __ctzdi2 __ffsdi2 \
+	__paritydi2 __clrsbdi2 __bswapsi2 __bswapdi2 __absvsi2 __absvdi2 __addvsi3 __addvdi3 __subvdi3 __mulvsi3 __powidf2 \
+	__powisf2 __powitf2 __fixunsdfdi __fixunssfdi __floatsitf __floatunsitf __fixtfsi __fixunstfsi __unordtf2 __divdf3 __divsf3 \
+	__gcc_bcmp $(ROOTS_ldouble) $(filter-out $(LIBGCC_NOGCCRT),$(shell cat $(FF)/libgcc.roots))
+# (but feature_bits.c's, riscv's function multi-versioning: its hwprobe
+# system call is an asm statement of register variables, which c2ff has no
+# form for yet; libgcc.ff leaves it out, with why)
+LIBGCC_NOGCCRT := __init_riscv_feature_bits __riscv_feature_bits __riscv_cpu_model
+ZEROS_gccrt := $(ZEROS_stdio)
+WEAKS_gccrt := $(WEAKS_stdio)
+LICENSE_gccrt := license-libgcc.ff.txt
+C2FFFLAGS_gccrt := --keep-going
+
+MILESTONES := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 
 # glibc's own startup, on riscv64, for the program of every milestone:
 # start.S's _start (crt1.o's, with csu/static-reloc and csu/init) calls
@@ -454,8 +518,8 @@ OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
 $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
-	cp license.ff.txt $$(FF)/$(1).ff.txt
-	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
+	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
+	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS_$(1)) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
 	    -- $$(ROOTS_$(1)) $$(if $$(call startms,$(1)),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
 	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
@@ -582,11 +646,16 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl ../compiler/g
 	$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $< -o $(FF)/$*-prog.i
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
-	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(call startms,$*),,--start)) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(call startms,$*),,--start)) \
+	    $(if $(filter $*,$(INDEXED)),--index $(FF)/$*/index.ff) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
+# (a program that names a record of its tree's it only declares, unwind's
+# struct _Unwind_Context: c2ff reads the tree's index and types, --index)
+INDEXED := unwind
+$(INDEXED:%=$(FF)/%-prog.ff): $(FF)/%-prog.ff: $(FF)/%/index.ff
 
 $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
-	$(RUN) -t 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
+	$(RUN) -t 900 $(TTPC_RUN) $(TTPCFLAGS_$*) $(SHARED) $< $@ > $@.lst
 
 # what a check expects: progs/NAME.expect, or progs/NAME.<target>.expect
 # where the target's glibc differs (soft-fp's NaNs: riscv64 makes them
@@ -614,7 +683,7 @@ $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 # program built with -O (NAME-prog-O), against the same expect as its check;
 # check-O: every milestone of the target (riscv64's MILESTONES, else LINKED).
 $(FF)/%-prog-O: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
-	$(RUN) -t 900 $(TTPC_RUN) -O $(SHARED) $< $@ > $@.lst
+	$(RUN) -t 900 $(TTPC_RUN) -O $(TTPCFLAGS_$*) $(SHARED) $< $@ > $@.lst
 define checkO
 $(1)-check-O: $$(FF)/$(1)-prog-O $$(FF)/$(1)-prog $$(call expect,$(1))
 	@want=$$$$(head -n 1 $$(call expect,$(1)) | cut -d" " -f2); \
@@ -664,7 +733,7 @@ glibc-roundtrip: floats-roundtrip
 LICENSES_PL := perl ../compiler/gen/licenses.pl
 licenses:
 	$(LICENSES_PL) --fragment builtins.ff.txt stdbit.ff.txt atomics.ff.txt $(wildcard atomics-*.ff.txt)
-	$(LICENSES_PL) license.ff.txt progs/strlen.ff
+	$(LICENSES_PL) license.ff.txt license-libgcc.ff.txt ../libgcc/license.ff.txt progs/strlen.ff
 define licenses
 $(1)-licenses: $$(FF)/$(1).ff $$(FF)/$(1)/index.ff $$(FF)/$(1)-prog.ff
 	$$(LICENSES_PL) --pages $$(FF)/$(1).ff $$(FF)/$(1)/*.ff
@@ -821,10 +890,14 @@ LAYERS := perl -I../compiler/gen -MFF=node,layers,read_txt,write_txt -0777 -ne \
 	'print write_txt(map { node($$_->{content}, layers(@{ $$_->{children} })) } read_txt($$_, $$ARGV))'
 ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # libgcc_eh's unwinder, which a static program has from gcc (glibc's
-# __pthread_unwind, backtrace): on riscv64 builtins-riscv64.ff.txt's, which
-# walks ttpc's frames; elsewhere not in ff yet, its names weak (address 0),
-# as for a program that never unwinds
+# __pthread_unwind, backtrace): on riscv64 libgcc's own in ff (src/libgcc,
+# as the milestone unwind has it), its units after glibc's, as gcc links
+# libgcc_eh.a after libc.a, the tree's root license with libgcc's
+# (license-libgcc.ff.txt); a program that unwinds is built with ttpc -g
+# (its .eh_frame: the tests, TTPCFLAGS_tests); elsewhere not in ff yet,
+# its names weak (address 0), as for a program that never unwinds
 UNWIND_glibc := $(if $(filter riscv64,$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
+LIBGCC_glibc := $(if $(filter riscv64,$(GTARGET)),$(LIBGCC_EH))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
 # (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
 # forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
@@ -832,15 +905,16 @@ WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
 GLIBC_ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM))
 GLIBC_THEN = $(if $(filter-out riscv64,$(GTARGET)),$(filter csu/crtn,$(ALL_ASM)))
 GLIBC_ASM = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)) $(GLIBC_THEN),$(ALL_ASM))
-$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THEN:%=$(I)/%.dump)
+$(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THEN:%=$(I)/%.dump) $(LIBGCC_glibc:%=$(I)/libgcc/%.json)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
 	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
+	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
-	cp license.ff.txt $(FF)/glibc.ff.txt
+$(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
+	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
 	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
@@ -858,6 +932,91 @@ $(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt s
 # the list of a kind of object, for a look at it: make print-ALL_ASM
 print-%:
 	@echo $($*)
+
+# ---- libgcc in ff -----------------------------------------------------------------
+# libgcc, gcc's runtime (src/libgcc), as glibc above: gcc 16's own source as
+# flake.nix pins it (nixpkgs' gcc16, the derivation of GLIBC_CC, its
+# patches applied), libgcc.a and libgcc_eh.a built for GTARGET as gcc's
+# are, with GLIBC_CC itself and the C library's headers gcc's libgcc was
+# built with (LIBGCC_HEADERS), in a folder of its own, LBUILD (not under
+# glibc's BUILD: one libgcc for all of them). Every object's .text is the
+# same as gcc's own libgcc.a's (../libgcc/mkref.sh checks it). build.log
+# keeps each command, which ../libgcc/mki.pl runs again with -E: the .i of
+# each object in $(I)/libgcc (a .S's .s), whose AST clang makes of a copy
+# (../libgcc/clangfix.pl: gcc's modes of libgcc's own, HF, HC and BF) as
+# gnu23, the C gcc 16 compiles libgcc's C as.
+#
+#   make libgcc-ref      gcc's source, configured; libgcc built -> LOBJ
+#
+# The tree, $(FF)/libgcc.ff (pages gcc libgcc: and gcc asm:, as glibc.ff's
+# glibc string: ...): c2ff of every C object of libgcc.a and libgcc_eh.a,
+# from every name they define, and s2ff of the asm objects, then the
+# builtins, as a milestone's; its license at its root
+# (../libgcc/license.ff.txt), each page with its files' headers. What c2ff
+# cannot translate yet is left out (--keep-going), with why, in
+# $(FF)/libgcc.c2ff.err: _Float16 and __bf16 (HF, BF), the trapping
+# arithmetic of 128 bits. clang reads neither atomic.c (it redefines gcc's
+# __sync builtins) nor strub.c (__builtin_stack_address, which clang lacks).
+# Only riscv64 so far.
+LBUILD ?= $(HOME)/.cache/ttp/build/libgcc/$(GTARGET)
+LOBJ := $(LBUILD)/build/$(TRIPLE)/libgcc
+export LIBGCC_SRC := $(LBUILD)/gcc-16.2.0
+LI := $(I)/libgcc
+# The objects of libgcc.a and libgcc_eh.a: its C (LIBGCC_C, above), its asm,
+# and what clang cannot read (libgcc.roots checks the list against them)
+LIBGCC_ASM := save-restore muldi3 div
+LIBGCC_NOCLANG := atomic strub
+
+libgcc-ref: $(LOBJ)/libgcc.a
+$(LOBJ)/libgcc.a:
+	$(RUN) -t 3600 sh ../libgcc/mkref.sh $(LBUILD) $(abspath ../..) $(TRIPLE) $(JOBS)
+	mkdir -p $(LBUILD)/gcroots
+	nix build --out-link $(LBUILD)/gcroots/HEADERS $$(echo $(LIBGCC_HEADERS) | cut -d/ -f1-4)
+	nix build --out-link $(LBUILD)/gcroots/CC $$(echo $(GLIBC_CC) | cut -d/ -f1-4)
+
+.PRECIOUS: $(LI)/%.i $(LI)/%.s $(LI)/%.json
+$(LI)/%.i: $(LOBJ)/libgcc.a ../libgcc/mki.pl
+	$(RUN) -t 120 perl ../libgcc/mki.pl $(LOBJ) $(LI) $*.o > /dev/null
+$(LI)/%.s: $(LOBJ)/libgcc.a ../libgcc/mki.pl
+	$(RUN) -t 120 perl ../libgcc/mki.pl $(LOBJ) $(LI) $*.o > /dev/null
+$(LI)/%.json: $(LI)/%.i ../libgcc/clangfix.pl clang-prelude.h
+	perl ../libgcc/clangfix.pl $< > $(LI)/$*.clang.i
+	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+	    -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w $(LI)/$*.clang.i > $@
+
+$(FF)/libgcc.roots $(FF)/libgcc.units &: $(LIBGCC_C:%=$(LI)/%.json) $(LIBGCC_ASM:%=$(LI)/%.dump)
+	mkdir -p $(FF)
+	test "$$(for a in libgcc.a libgcc_eh.a; do $(XPRE)ar t $(LOBJ)/$$a; done | sed 's/\.o$$//' | sort)" = "$$(echo $(LIBGCC_C) $(LIBGCC_ASM) $(LIBGCC_NOCLANG) | tr ' ' '\n' | sort)" \
+	    || { echo "libgcc: LIBGCC_C, LIBGCC_ASM and LIBGCC_NOCLANG are not the objects of $(LOBJ)/libgcc.a and libgcc_eh.a"; exit 1; }
+	for o in $(LIBGCC_C); do $(XPRE)nm --defined-only -g $(LOBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done | sort -u > $(FF)/libgcc.roots
+	for o in $(LIBGCC_C); do echo "$(LI)/$$o.json=$(LI)/$$o.i"; done > $(FF)/libgcc.units
+
+$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+	cp ../libgcc/license.ff.txt $(FF)/libgcc.ff.txt
+	$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --keep-going --page gcc --target $(GTARGET) @$(FF)/libgcc.units -- @$(FF)/libgcc.roots \
+	    >> $(FF)/libgcc.ff.txt 2> $(FF)/libgcc.c2ff.err || { tail -5 $(FF)/libgcc.c2ff.err; exit 1; }
+	echo 'gcc asm:' > $(FF)/libgcc.asm.page.txt
+	perl ../compiler/gen/s2ff.pl --header $(LIBGCC_ASM:%=$(LI)/%.s) | sed 's/^/  /' >> $(FF)/libgcc.asm.page.txt
+	for a in $(LIBGCC_ASM); do \
+	    $(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $(LI)/$$a.s $(LI)/$$a.dump > $(FF)/libgcc.asm.txt || exit 1; \
+	    sed 's/^/  /' $(FF)/libgcc.asm.txt >> $(FF)/libgcc.asm.page.txt; \
+	done
+	$(LAYERS) $(FF)/libgcc.asm.page.txt >> $(FF)/libgcc.ff.txt
+	cat builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) >> $(FF)/libgcc.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/libgcc.ff.txt > $@
+	@echo "libgcc.ff: $$(grep -c '^c2ff: left out' $(FF)/libgcc.c2ff.err) names left out, why in $(FF)/libgcc.c2ff.err"
+
+# The tree's own check: libgcc-licenses, its license at its root and each
+# page's files' headers (also of its folder, the files a program includes).
+# Its functions are checked by the milestones gccrt and unwind (above),
+# against gcc's libgcc.a and libgcc_eh.a, and their round trip is
+# gccrt-roundtrip's (libgcc-roundtrip), with glibc's C, which they call.
+$(FF)/gccrt.ff: $(FF)/libgcc.roots
+libgcc-roundtrip: gccrt-roundtrip
+libgcc-licenses: $(FF)/libgcc.ff $(FF)/libgcc/index.ff
+	$(LICENSES_PL) --pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff
+libgcc-checks: libgcc-roundtrip libgcc-licenses
+.PHONY: libgcc-ref libgcc-checks libgcc-licenses libgcc-roundtrip
 
 # ---- glibc's own tests -----------------------------------------------------------
 # The tests of an area of glibc (AREA: one of its directories, string,
@@ -966,8 +1125,9 @@ $(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).c2ff) $(TI)/support.rea
 	    $(foreach o,$(TOBJS_$*),--object $(TI)/$(o).json=$(TI)/$(o).i) $(foreach o,$(SUPPORT),$(TI)/$(o).json=$(TI)/$(o).i) -- main > $(TFF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(TFF)/$*-prog.ff.txt > $@
 
+TTPCFLAGS_tests := $(if $(LIBGCC_glibc),-g)
 $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC)
-	$(RUN) -t 900 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
+	$(RUN) -t 900 $(TTPC_RUN) $(TTPCFLAGS_tests) $(SHARED) $< $@ > $@.lst
 
 # a test's result: its steps, each to its log, the first that fails the
 # result's reason; then the runs (tests.pl run), stdin the test's .input

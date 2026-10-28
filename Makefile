@@ -15,7 +15,7 @@
 #                   stage1 == stage2; and so on x86_64, aarch64 and arm from
 #                   their own seeds (hosts/<host>/ttpc.s), without riscv64
 #   make gcroots    keep glibc's source and toolchains (GLIBC_SRC, GLIBC_CC*,
-#                   GLIBC_HEADERS*, C2FF_CLANG) alive in nix gc, as
+#                   GLIBC_HEADERS*, C2FF_CLANG, LIBGCC_HEADERS) alive in nix gc, as
 #                   ~/.cache/ttp/gcroots/<name>
 #   make git-setup  register the ff diff and merge drivers (.gitattributes)
 #                   in this repository's git config
@@ -64,7 +64,8 @@ compiler-check: compiler
 # (natively on this one, under qemu-<host> on the others), whose stage1 must
 # be what the riscv64 chain makes for it; then its C programs run. The
 # x86_64 seed is built from hex0: hex0, hex2, M1 and asm assemble ttpc.s
-# (SEED=hex: hex2 from ttpc.hex2; SEED=gnu: binutils from ttpc.s).
+# (SEED=hex: hex2 from ttpc.hex2; SEED=gnu: binutils from ttpc.s); the
+# riscv64 seed too, hex0 and hex2 from ttpc.hex2 so far (SEED=gnu the same).
 bootstrap:
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstraps
 
@@ -76,7 +77,7 @@ bootstrap:
 # a gc root, ~/.cache/ttp/gcroots/<name>, which `make gcroots` points at
 # what the flake names now.
 GCROOTS := $(HOME)/.cache/ttp/gcroots
-GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG
+GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS
 gcroots:
 	@mkdir -p $(GCROOTS)
 	@for v in $(GCROOT_VARS); do \
@@ -144,7 +145,7 @@ PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
 PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
-PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 \
+PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 \
 	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 \
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm \
@@ -193,6 +194,10 @@ endef
 $(foreach m,$(PC_MS),$(eval $(call pc_milestone,$(m))))
 pc-generic-riscv64: pc-units-riscv64
 	$(call pc_step,generic-riscv64,$(call PC_GLIBC) generic-check generic-roundtrip)
+# libgcc in ff (src/libgcc): its tree's licenses (its functions are the
+# milestones gccrt's and unwind's, their round trip gccrt's)
+pc-libgcc-riscv64: pc-units-riscv64
+	$(call pc_step,libgcc-riscv64,$(call PC_GLIBC) libgcc-licenses)
 pc-units-aarch64: pc-bootstrap pc-gbuild
 	$(call pc_step,units-aarch64,$(call PC_GLIBC,aarch64) units-ready)
 define pc_a64

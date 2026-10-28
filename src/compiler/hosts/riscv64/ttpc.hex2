@@ -1,0 +1,2147 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# hosts/riscv64/ttpc.s as hex2 text, made by gen/mkhex.pl from GNU as's and ld's output:
+# the whole executable in the order of its bytes. :label defines a label
+# at the address of the next byte; &label is label's address in 4 bytes
+# (abs32, the low half of a .dword). The code's references XOR their
+# field into the instruction after them, which is written with that
+# field zero; d is label minus the instruction's address: ~label
+# auipc's U (d + 0x800, its bits 31:12), !label the I of the addi, ld
+# or jalr after the auipc (d + 4, from the auipc, its bits 11:0), @label
+# a branch's B, $label jal's J, |label c.beqz's and c.bnez's CB, *label
+# c.j's CJ;
+# ^address sets the address of the next byte (where the file and the
+# addresses part: the data segment, the labels of the bss). Every other
+# pair of hex digits is a byte; '#' and ';' start a comment to the end of
+# the line. A reference that is not to a label alone (label+8, or with
+# an immediate after it) is written out. Each line is followed by the asm
+# line of hosts/riscv64/ttpc.s it comes from; hex2 reads only what is before the '#'.
+#
+^00010000                               # the first byte of the file is at this address
+#
+# The ELF header
+7F454C46020101000000000000000000        # e_ident: the magic 7f "ELF", ELFCLASS64, little endian, EV_CURRENT, System V, padding
+0200                                    # e_type = 0x2: ET_EXEC, an executable
+F300                                    # e_machine = 0xf3: EM_RISCV
+01000000                                # e_version = 0x1: EV_CURRENT
+B000010000000000                        # e_entry = 0x100b0: the address of _start
+4000000000000000                        # e_phoff = 0x40: the program headers follow
+1018000000000000                        # e_shoff = 0x1810: the section headers, at the end
+01000000                                # e_flags = 0x1: EF_RISCV_RVC, compressed instructions; the soft-float ABI
+4000                                    # e_ehsize = 0x40: this header
+3800                                    # e_phentsize = 0x38: a program header
+0200                                    # e_phnum = 0x2: program headers
+4000                                    # e_shentsize = 0x40: a section header
+0600                                    # e_shnum = 0x6: section headers
+0500                                    # e_shstrndx = 0x5: the section of the section names
+#
+# Program header 0
+01000000                                # p_type = 0x1: 1: PT_LOAD
+05000000                                # p_flags = 0x5: 4 R, 2 W, 1 X
+0000000000000000                        # p_offset = 0x0: from this file offset
+0000010000000000                        # p_vaddr = 0x10000: to this address
+0000010000000000                        # p_paddr = 0x10000: the same
+8916000000000000                        # p_filesz = 0x1689: bytes of the file
+8916000000000000                        # p_memsz = 0x1689: bytes of memory, the rest zero
+0010000000000000                        # p_align = 0x1000: a page
+#
+# Program header 1
+01000000                                # p_type = 0x1: 1: PT_LOAD
+06000000                                # p_flags = 0x6: 4 R, 2 W, 1 X
+9016000000000000                        # p_offset = 0x1690: from this file offset
+9026010000000000                        # p_vaddr = 0x12690: to this address
+9026010000000000                        # p_paddr = 0x12690: the same
+5801000000000000                        # p_filesz = 0x158: bytes of the file
+7004450000000000                        # p_memsz = 0x450470: bytes of memory, the rest zero
+0010000000000000                        # p_align = 0x1000: a page
+#
+# The section .text, from here its lines of hosts/riscv64/ttpc.s
+# ttpc.s — the trust project compiler, in RISC-V assembly, without libc.
+#
+# FROZEN: this is stage0, the seed of the bootstrap (see PLAN.md). ttpc's
+# source is ttpc.ff now; this file only has to assemble it, and stays
+# as it is so that the chain starts from something small and auditable.
+#
+# A static Linux riscv64 program (run it with qemu-riscv64 on another host).
+# It talks to the kernel only through ecall: it opens the ff file named by
+# its first argument and loads it into memory as a tree of NODEs.
+#
+#   ttpc <file.ff>          prints the tree, one node per line
+#   ttpc <file.ff> <out>    assembles it into the static executable <out>
+#
+# Assembling: a node whose content ends in ':' is a function, its leading
+# children that are leaves are its parameters. Any other node is a call, its
+# children are the arguments. The root's children are pages. The functions
+# on every page but the last are definitions: instructions, macros,
+# constants. The last page is the program: its functions are placed, they
+# are labels whose children are emitted where they stand (nested ones are
+# local labels, found innermost scope first), and its calls are emitted in
+# order. Pass 1 finds every label's address, pass 2 emits.
+#
+# A function whose body (the children after its parameters) holds only
+# fields, fixed fields (funct3:, ...) and slice calls (imm[11:0] imm), is an
+# encoding: an instruction or a data word of 8 to 64 bits. A call runs in
+# one of three contexts:
+#
+#   code   a call of an encoding is encoded and emitted, a call of any
+#          other function expands its body in code context.
+#   field  encoding: the fields, MSB first. A fixed field is its bits; a
+#          slice call runs in exec context and leaves its value in a0, its
+#          width is in its name.
+#   exec   runs at assemble time on vregs. The ops of exec_ops are built
+#          in, the seed; everything else is defined by the tree.
+#
+# An argument with children is a call, run in exec context: its value is
+# a0. A leaf argument is a decimal or 0x number, a parameter, a register
+# (its number in code context, its vreg in exec context), pc, a label (its
+# address) or a constant (a function without parameters, run in exec
+# context). The builtins: ascii, align, reserve, origin, bss (see
+# code_call) and size (see exec_call).
+#
+# Registers are the functions "x10 a0:", their number is their child "01010".
+# The output file is exactly what the program emits: its ELF header is ff
+# too (elf_header in macros.ff.txt).
+#
+# ff on disk, one node, depth-first (children inline, before the content):
+#   hash          byte[32]
+#   children_len  u8
+#   children      node × children_len
+#   content_len   u8
+#   content       byte × content_len    // no NUL termination: may be binary
+#
+# NODE in memory (64 bytes, naturally aligned):
+#   0   hash          byte[32]
+#   32  children_len  int8
+#   40  children      NODE**            // -> pointer array in ptrs
+#   48  content_len   int8
+#   56  content       char*             // -> into buf, not copied
+
+#     .equ SYS_openat, 56
+#     .equ SYS_close, 57
+#     .equ SYS_read, 63
+#     .equ SYS_write, 64
+#     .equ SYS_exit, 93
+
+#     .equ AT_FDCWD, -100
+#     .equ O_RDONLY, 0
+#     .equ O_CREAT_WRONLY_TRUNC, 01 | 0100 | 01000
+#     .equ MODE_0755, 0755
+#     .equ STDOUT, 1
+#     .equ STDERR, 2
+
+#     .equ CH_space, 32
+#     .equ CH_minus, 45
+#     .equ CH_zero, 48
+#     .equ CH_colon, 58
+#     .equ CH_lbracket, 91
+#     .equ CH_rbracket, 93
+#     .equ CH_bar, 124
+#     .equ CH_a, 97
+#     .equ CH_x, 120
+
+    # A frame binds the parameters of a call: count, then (param NODE*,
+    # value) pairs.
+#     .equ MAX_PARAMS, 8
+#     .equ FRAME_count, 0
+#     .equ FRAME_params, 8
+#     .equ FRAME_size, 8 + MAX_PARAMS * 16
+
+#     .equ VREG_a0, 10
+#     .equ OUT_SIZE, 1 << 16
+#     .equ MAX_DEPTH, 64                  # nesting of placed functions
+
+    # A label: a placed function, its address and the address after it.
+#     .equ LABEL_node, 0
+#     .equ LABEL_addr, 8
+#     .equ LABEL_end, 16
+#     .equ LABEL_size, 24
+
+    # An exec op: its name, NUL-padded, and its code.
+#     .equ OP_name, 0
+#     .equ OP_code, 8
+#     .equ OP_size, 16
+
+#     .equ NODE_hash, 0
+#     .equ NODE_children_len, 32
+#     .equ NODE_children, 40
+#     .equ NODE_content_len, 48
+#     .equ NODE_content, 56
+#     .equ NODE_size, 64
+
+#     .equ BUF_SIZE, 1 << 20
+    # Every node takes at least 34 bytes on disk, so a full buf holds fewer
+    # than MAX_NODES nodes: the node and pointer arenas cannot overflow.
+#     .equ MAX_NODES, BUF_SIZE / 32
+
+#     .section .text
+#     .globl _start
+:_start                                 # _start:
+8262                                    #     ld      t0, 0(sp)                   # argc
+0943                                    #     li      t1, 2
+@usage 63C06200                         #     blt     t0, t1, usage
+0D43                                    #     li      t1, 3
+@usage 63405300                         #     bgt     t0, t1, usage
+@_start.1 63C06200                      #     blt     t0, t1, 1f
+6263                                    #     ld      t1, 24(sp)                  # argv[2]
+~out_path 97030000 !out_path 93830300   #     la      t2, out_path
+23B06300                                #     sd      t1, 0(t2)
+:_start.1 C265                          # 1:  ld      a1, 16(sp)                  # argv[1]
+
+1305C0F9                                #     li      a0, AT_FDCWD
+0146                                    #     li      a2, O_RDONLY
+8146                                    #     li      a3, 0
+93088003                                #     li      a7, SYS_openat
+73000000                                #     ecall
+@open_failed 63400500                   #     bltz    a0, open_failed
+2A8A                                    #     mv      s4, a0                      # fd
+
+    # Read the whole file into buf.
+~buf 17040000 !buf 13040400             #     la      s0, buf
+A284                                    #     mv      s1, s0
+B7021000                                #     li      t0, BUF_SIZE
+B30A5400                                #     add     s5, s0, t0                  # end of buf
+:read_loop                              # read_loop:
+@too_large 63805401                     #     beq     s1, s5, too_large
+5285                                    #     mv      a0, s4
+A685                                    #     mv      a1, s1
+33869A40                                #     sub     a2, s5, s1
+9308F003                                #     li      a7, SYS_read
+73000000                                #     ecall
+@read_failed 63400500                   #     bltz    a0, read_failed
+|read_done 01C1                         #     beqz    a0, read_done
+AA94                                    #     add     s1, s1, a0
+*read_loop 01A0                         #     j       read_loop
+:read_done                              # read_done:
+5285                                    #     mv      a0, s4
+93089003                                #     li      a7, SYS_close
+73000000                                #     ecall
+
+~nodes 17090000 !nodes 13090900         #     la      s2, nodes
+~ptrs 97090000 !ptrs 93890900           #     la      s3, ptrs
+~parse_node 97000000 !parse_node E7800000 #     call    parse_node
+@trailing 63109400                      #     bne     s0, s1, trailing
+~out_path 97020000 !out_path 93820200   #     la      t0, out_path
+83B20200                                #     ld      t0, 0(t0)
+@assemble 63900200                      #     bnez    t0, assemble
+8145                                    #     li      a1, 0
+~print_node 97000000 !print_node E7800000 #     call    print_node
+
+0145                                    #     li      a0, 0
+$exit 6F000000                          #     j       exit
+
+# assemble: places the last page of root a0, the program, twice: pass 1
+# finds the address of every label, pass 2 emits with them. Then writes
+# the output file.
+:assemble                               # assemble:
+2A8B                                    #     mv      s6, a0                      # root
+~collect_syms 97000000 !collect_syms E7800000 #     call    collect_syms
+83420B02                                #     lbu     t0, NODE_children_len(s6)
+@assemble.2 63800200                    #     beqz    t0, 2f
+03338B02                                #     ld      t1, NODE_children(s6)
+8E02                                    #     slli    t0, t0, 3
+1693                                    #     add     t1, t1, t0
+833B83FF                                #     ld      s7, -8(t1)                  # the program page
+054C                                    #     li      s8, 1                       # pass
+:assemble.1 ~pass 97020000 !pass 93820200 # 1:  la      t0, pass
+23B08201                                #     sd      s8, 0(t0)
+~cur_pc 97020000 !cur_pc 93820200       #     la      t0, cur_pc
+23B00200                                #     sd      zero, 0(t0)
+~in_bss 97020000 !in_bss 93820200       #     la      t0, in_bss
+23B00200                                #     sd      zero, 0(t0)
+~out_end 97020000 !out_end 93820200     #     la      t0, out_end
+~outbuf 17030000 !outbuf 13030300       #     la      t1, outbuf
+23B06200                                #     sd      t1, 0(t0)
+~label_next 97020000 !label_next 93820200 #     la      t0, label_next
+~labels 17030000 !labels 13030300       #     la      t1, labels
+23B06200                                #     sd      t1, 0(t0)
+~scopes 97020000 !scopes 93820200       #     la      t0, scopes                  # the page is the outermost scope
+23B07201                                #     sd      s7, 0(t0)
+~scope_depth 97020000 !scope_depth 93820200 #     la      t0, scope_depth
+0543                                    #     li      t1, 1
+23B06200                                #     sd      t1, 0(t0)
+5E85                                    #     mv      a0, s7
+~run_placed 97000000 !run_placed E7800000 #     call    run_placed
+050C                                    #     addi    s8, s8, 1
+8D42                                    #     li      t0, 3
+@assemble.1 63105C00                    #     bne     s8, t0, 1b
+:assemble.2 ~write_output 97000000 !write_output E7800000 # 2:  call    write_output
+0145                                    #     li      a0, 0
+$exit 6F000000                          #     j       exit
+
+# The errors of loading, within branch reach (4 KiB) of _start and
+# parse_node.
+:usage                                  # usage:
+~msg_usage 97050000 !msg_usage 93850500 #     la      a1, msg_usage
+7946                                    #     li      a2, msg_usage_len
+$die 6F000000                           #     j       die
+:open_failed                            # open_failed:
+~msg_open 97050000 !msg_open 93850500   #     la      a1, msg_open
+5D46                                    #     li      a2, msg_open_len
+$die 6F000000                           #     j       die
+:read_failed                            # read_failed:
+~msg_read 97050000 !msg_read 93850500   #     la      a1, msg_read
+4946                                    #     li      a2, msg_read_len
+$die 6F000000                           #     j       die
+:too_large                              # too_large:
+~msg_large 97050000 !msg_large 93850500 #     la      a1, msg_large
+5546                                    #     li      a2, msg_large_len
+$die 6F000000                           #     j       die
+:truncated                              # truncated:
+~msg_truncated 97050000 !msg_truncated 93850500 #     la      a1, msg_truncated
+5546                                    #     li      a2, msg_truncated_len
+$die 6F000000                           #     j       die
+:trailing                               # trailing:
+~msg_trailing 97050000 !msg_trailing 93850500 #     la      a1, msg_trailing
+13069002                                #     li      a2, msg_trailing_len
+$die 6F000000                           #     j       die
+
+# parse_node: reads the node at s0 into a new NODE, recursing on its
+# children, and leaves s0 just past it. Returns the NODE in a0.
+:parse_node                             # parse_node:
+0111                                    #     addi    sp, sp, -32
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # this NODE
+56E8                                    #     sd      s5, 16(sp)                  # next slot in its children array
+5AEC                                    #     sd      s6, 24(sp)                  # children left to parse
+
+93021402                                #     addi    t0, s0, 33                  # hash + children_len
+@truncated 63E05400                     #     bgtu    t0, s1, truncated
+4A8A                                    #     mv      s4, s2
+13090904                                #     addi    s2, s2, NODE_size
+
+13030002                                #     li      t1, 32                      # copy the hash
+D283                                    #     mv      t2, s4
+:parse_node.1 034E0400                  # 1:  lbu     t3, 0(s0)
+2380C301                                #     sb      t3, NODE_hash(t2)
+0504                                    #     addi    s0, s0, 1
+8503                                    #     addi    t2, t2, 1
+7D13                                    #     addi    t1, t1, -1
+@parse_node.1 63100300                  #     bnez    t1, 1b
+
+034B0400                                #     lbu     s6, 0(s0)
+0504                                    #     addi    s0, s0, 1
+23006A03                                #     sb      s6, NODE_children_len(s4)
+CE8A                                    #     mv      s5, s3
+23345A03                                #     sd      s5, NODE_children(s4)
+93123B00                                #     slli    t0, s6, 3
+9699                                    #     add     s3, s3, t0
+:parse_node.2 @parse_node.3 63000B00    # 2:  beqz    s6, 3f
+~parse_node 97000000 !parse_node E7800000 #     call    parse_node
+23B0AA00                                #     sd      a0, 0(s5)
+A10A                                    #     addi    s5, s5, 8
+7D1B                                    #     addi    s6, s6, -1
+*parse_node.2 01A0                      #     j       2b
+
+:parse_node.3 @truncated 63709400       # 3:  bgeu    s0, s1, truncated
+83420400                                #     lbu     t0, 0(s0)
+0504                                    #     addi    s0, s0, 1
+23085A02                                #     sb      t0, NODE_content_len(s4)
+233C8A02                                #     sd      s0, NODE_content(s4)
+1694                                    #     add     s0, s0, t0
+@truncated 63E08400                     #     bgtu    s0, s1, truncated
+
+5285                                    #     mv      a0, s4
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+0561                                    #     addi    sp, sp, 32
+8280                                    #     ret
+
+# print_node: prints NODE a0 at depth a1 as "<hash[0..4] in hex>  <indent>
+# <content>", then its children one level deeper.
+:print_node                             # print_node:
+7971                                    #     addi    sp, sp, -48
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # this NODE
+56E8                                    #     sd      s5, 16(sp)                  # depth
+5AEC                                    #     sd      s6, 24(sp)                  # counter
+5EF0                                    #     sd      s7, 32(sp)                  # next child pointer
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+
+~hexbuf 97020000 !hexbuf 93820200       #     la      t0, hexbuf
+~hexdigits 17030000 !hexdigits 13030300 #     la      t1, hexdigits
+9143                                    #     li      t2, 4
+528E                                    #     mv      t3, s4
+:print_node.1 834E0E00                  # 1:  lbu     t4, NODE_hash(t3)
+13DF4E00                                #     srli    t5, t4, 4
+1A9F                                    #     add     t5, t1, t5
+034F0F00                                #     lbu     t5, 0(t5)
+2380E201                                #     sb      t5, 0(t0)
+93FEFE00                                #     andi    t4, t4, 15
+9A9E                                    #     add     t4, t1, t4
+83CE0E00                                #     lbu     t4, 0(t4)
+A380D201                                #     sb      t4, 1(t0)
+8902                                    #     addi    t0, t0, 2
+050E                                    #     addi    t3, t3, 1
+FD13                                    #     addi    t2, t2, -1
+@print_node.1 63900300                  #     bnez    t2, 1b
+~hexbuf 97050000 !hexbuf 93850500       #     la      a1, hexbuf
+2946                                    #     li      a2, 10
+~write_out 97000000 !write_out E7800000 #     call    write_out
+
+568B                                    #     mv      s6, s5
+:print_node.2 @print_node.3 63000B00    # 2:  beqz    s6, 3f
+~indent 97050000 !indent 93850500       #     la      a1, indent
+0946                                    #     li      a2, 2
+~write_out 97000000 !write_out E7800000 #     call    write_out
+7D1B                                    #     addi    s6, s6, -1
+*print_node.2 01A0                      #     j       2b
+
+:print_node.3 83358A03                  # 3:  ld      a1, NODE_content(s4)
+03460A03                                #     lbu     a2, NODE_content_len(s4)
+~write_out 97000000 !write_out E7800000 #     call    write_out
+~newline 97050000 !newline 93850500     #     la      a1, newline
+0546                                    #     li      a2, 1
+~write_out 97000000 !write_out E7800000 #     call    write_out
+
+034B0A02                                #     lbu     s6, NODE_children_len(s4)
+833B8A02                                #     ld      s7, NODE_children(s4)
+:print_node.4 @print_node.5 63000B00    # 4:  beqz    s6, 5f
+03B50B00                                #     ld      a0, 0(s7)
+93851A00                                #     addi    a1, s5, 1
+~print_node 97000000 !print_node E7800000 #     call    print_node
+A10B                                    #     addi    s7, s7, 8
+7D1B                                    #     addi    s6, s6, -1
+*print_node.4 01A0                      #     j       4b
+
+:print_node.5 8260                      # 5:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+4561                                    #     addi    sp, sp, 48
+8280                                    #     ret
+
+# ---------------------------------------------------------------------------
+# Names
+# ---------------------------------------------------------------------------
+
+# streq: a0 = 1 when the a1 bytes at a0 equal the a3 bytes at a2, else 0.
+:streq                                  # streq:
+@streq.2 6390D500                       #     bne     a1, a3, 2f
+:streq.1 |streq.3 81C1                  # 1:  beqz    a1, 3f
+83420500                                #     lbu     t0, 0(a0)
+03430600                                #     lbu     t1, 0(a2)
+@streq.2 63906200                       #     bne     t0, t1, 2f
+0505                                    #     addi    a0, a0, 1
+0506                                    #     addi    a2, a2, 1
+FD15                                    #     addi    a1, a1, -1
+*streq.1 01A0                           #     j       1b
+:streq.2 0145                           # 2:  li      a0, 0
+8280                                    #     ret
+:streq.3 0545                           # 3:  li      a0, 1
+8280                                    #     ret
+
+# is_fn: a0 = 1 when NODE a0 is a function (its content ends in ':'), else 0.
+:is_fn                                  # is_fn:
+83420503                                #     lbu     t0, NODE_content_len(a0)
+@is_fn.1 63800200                       #     beqz    t0, 1f
+03338503                                #     ld      t1, NODE_content(a0)
+1693                                    #     add     t1, t1, t0
+0343F3FF                                #     lbu     t1, -1(t1)
+130363FC                                #     addi    t1, t1, -CH_colon
+13351300                                #     seqz    a0, t1
+8280                                    #     ret
+:is_fn.1 0145                           # 1:  li      a0, 0
+8280                                    #     ret
+
+# param_count: a0 = the number of parameters of function NODE a0: its
+# leading children that are leaves and no function.
+:param_count                            # param_count:
+0111                                    #     addi    sp, sp, -32
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # children left
+56E8                                    #     sd      s5, 16(sp)                  # next child
+5AEC                                    #     sd      s6, 24(sp)                  # count
+034A0502                                #     lbu     s4, NODE_children_len(a0)
+833A8502                                #     ld      s5, NODE_children(a0)
+014B                                    #     li      s6, 0
+:param_count.1 @param_count.2 63000A00  # 1:  beqz    s4, 2f
+03B50A00                                #     ld      a0, 0(s5)
+83420502                                #     lbu     t0, NODE_children_len(a0)
+@param_count.2 63900200                 #     bnez    t0, 2f
+~is_fn 97000000 !is_fn E7800000         #     call    is_fn
+|param_count.2 01E1                     #     bnez    a0, 2f
+050B                                    #     addi    s6, s6, 1
+A10A                                    #     addi    s5, s5, 8
+7D1A                                    #     addi    s4, s4, -1
+*param_count.1 01A0                     #     j       1b
+:param_count.2 5A85                     # 2:  mv      a0, s6
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+0561                                    #     addi    sp, sp, 32
+8280                                    #     ret
+
+# is_insn: a0 = 1 when function NODE a0 is an encoding (an instruction or
+# a data word), else 0: its body, the children after its parameters, is not
+# empty and holds only fields, fixed fields (functions) and slice calls (a
+# '[' in the name).
+:is_insn                                # is_insn:
+0111                                    #     addi    sp, sp, -32
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # fields left
+56E8                                    #     sd      s5, 16(sp)                  # next field
+5AEC                                    #     sd      s6, 24(sp)                  # the function
+2A8B                                    #     mv      s6, a0
+~param_count 97000000 !param_count E7800000 #     call    param_count
+034A0B02                                #     lbu     s4, NODE_children_len(s6)
+330AAA40                                #     sub     s4, s4, a0
+833A8B02                                #     ld      s5, NODE_children(s6)
+0E05                                    #     slli    a0, a0, 3
+AA9A                                    #     add     s5, s5, a0
+0145                                    #     li      a0, 0
+@is_insn.3 63000A00                     #     beqz    s4, 3f
+:is_insn.1 0545                         # 1:  li      a0, 1
+@is_insn.3 63000A00                     #     beqz    s4, 3f
+03B50A00                                #     ld      a0, 0(s5)
+~is_fn 97000000 !is_fn E7800000         #     call    is_fn
+|is_insn.2 01E1                         #     bnez    a0, 2f
+83B20A00                                #     ld      t0, 0(s5)
+03B58203                                #     ld      a0, NODE_content(t0)
+83C50203                                #     lbu     a1, NODE_content_len(t0)
+1306B005                                #     li      a2, CH_lbracket
+~has_byte 97000000 !has_byte E7800000   #     call    has_byte
+|is_insn.3 01C1                         #     beqz    a0, 3f
+:is_insn.2 A10A                         # 2:  addi    s5, s5, 8
+7D1A                                    #     addi    s4, s4, -1
+*is_insn.1 01A0                         #     j       1b
+:is_insn.3 8260                         # 3:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+0561                                    #     addi    sp, sp, 32
+8280                                    #     ret
+
+# has_byte: a0 = 1 when byte a2 is among the a1 bytes at a0, else 0.
+:has_byte                               # has_byte:
+:has_byte.1 |has_byte.2 81C1            # 1:  beqz    a1, 2f
+83420500                                #     lbu     t0, 0(a0)
+@has_byte.3 6380C200                    #     beq     t0, a2, 3f
+0505                                    #     addi    a0, a0, 1
+FD15                                    #     addi    a1, a1, -1
+*has_byte.1 01A0                        #     j       1b
+:has_byte.2 0145                        # 2:  li      a0, 0
+8280                                    #     ret
+:has_byte.3 0545                        # 3:  li      a0, 1
+8280                                    #     ret
+
+# collect_syms: stores every function among the children of the pages of
+# root a0 in syms, but for the last page: the program, it is placed.
+:collect_syms                           # collect_syms:
+3971                                    #     addi    sp, sp, -64
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # pages left
+56E8                                    #     sd      s5, 16(sp)                  # next page
+5AEC                                    #     sd      s6, 24(sp)                  # next free slot in syms
+5EF0                                    #     sd      s7, 32(sp)                  # children of the page left
+62F4                                    #     sd      s8, 40(sp)                  # next child
+034A0502                                #     lbu     s4, NODE_children_len(a0)
+833A8502                                #     ld      s5, NODE_children(a0)
+~syms 170B0000 !syms 130B0B00           #     la      s6, syms
+@collect_syms.4 63000A00                #     beqz    s4, 4f
+7D1A                                    #     addi    s4, s4, -1                  # not the last page: it is placed
+:collect_syms.1 @collect_syms.4 63000A00 # 1:  beqz    s4, 4f
+83B20A00                                #     ld      t0, 0(s5)
+83CB0202                                #     lbu     s7, NODE_children_len(t0)
+03BC8202                                #     ld      s8, NODE_children(t0)
+:collect_syms.2 @collect_syms.3 63800B00 # 2:  beqz    s7, 3f
+03350C00                                #     ld      a0, 0(s8)
+~is_fn 97000000 !is_fn E7800000         #     call    is_fn
+|collect_syms.5 01C1                    #     beqz    a0, 5f
+83320C00                                #     ld      t0, 0(s8)
+23305B00                                #     sd      t0, 0(s6)
+210B                                    #     addi    s6, s6, 8
+:collect_syms.5 210C                    # 5:  addi    s8, s8, 8
+FD1B                                    #     addi    s7, s7, -1
+*collect_syms.2 01A0                    #     j       2b
+:collect_syms.3 A10A                    # 3:  addi    s5, s5, 8
+7D1A                                    #     addi    s4, s4, -1
+*collect_syms.1 01A0                    #     j       1b
+:collect_syms.4 ~syms_end 97020000 !syms_end 93820200 # 4:  la      t0, syms_end
+23B06201                                #     sd      s6, 0(t0)
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+2161                                    #     addi    sp, sp, 64
+8280                                    #     ret
+
+# find_fn: a0 = the function named by the a1 bytes at a0 (its content
+# without the ':'), or 0.
+:find_fn                                # find_fn:
+7971                                    #     addi    sp, sp, -48
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # next sym
+56E8                                    #     sd      s5, 16(sp)                  # end of syms
+5AEC                                    #     sd      s6, 24(sp)                  # name
+5EF0                                    #     sd      s7, 32(sp)                  # name length
+2A8B                                    #     mv      s6, a0
+AE8B                                    #     mv      s7, a1
+~syms 170A0000 !syms 130A0A00           #     la      s4, syms
+~syms_end 970A0000 !syms_end 938A0A00   #     la      s5, syms_end
+83BA0A00                                #     ld      s5, 0(s5)
+:find_fn.1 0145                         # 1:  li      a0, 0
+@find_fn.2 63005A01                     #     beq     s4, s5, 2f
+83320A00                                #     ld      t0, 0(s4)
+03B68203                                #     ld      a2, NODE_content(t0)
+83C60203                                #     lbu     a3, NODE_content_len(t0)
+FD16                                    #     addi    a3, a3, -1
+5A85                                    #     mv      a0, s6
+DE85                                    #     mv      a1, s7
+~streq 97000000 !streq E7800000         #     call    streq
+210A                                    #     addi    s4, s4, 8
+|find_fn.1 01C1                         #     beqz    a0, 1b
+03358AFF                                #     ld      a0, -8(s4)
+:find_fn.2 8260                         # 2:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+4561                                    #     addi    sp, sp, 48
+8280                                    #     ret
+
+# find_reg: a0 = the number of the register named by the a1 bytes at a0, or
+# -1. A register is a function of two words, "x10 a0:", either one is its
+# name; its number is the bits of its child.
+:find_reg                               # find_reg:
+5D71                                    #     addi    sp, sp, -80
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # next sym
+56E8                                    #     sd      s5, 16(sp)                  # end of syms
+5AEC                                    #     sd      s6, 24(sp)                  # name
+5EF0                                    #     sd      s7, 32(sp)                  # name length
+62F4                                    #     sd      s8, 40(sp)                  # the sym
+66F8                                    #     sd      s9, 48(sp)                  # its content
+6AFC                                    #     sd      s10, 56(sp)                 # its length without the ':'
+EEE0                                    #     sd      s11, 64(sp)                 # length of its first word
+2A8B                                    #     mv      s6, a0
+AE8B                                    #     mv      s7, a1
+~syms 170A0000 !syms 130A0A00           #     la      s4, syms
+~syms_end 970A0000 !syms_end 938A0A00   #     la      s5, syms_end
+83BA0A00                                #     ld      s5, 0(s5)
+:find_reg.1 @find_reg.5 63005A01        # 1:  beq     s4, s5, 5f
+033C0A00                                #     ld      s8, 0(s4)
+210A                                    #     addi    s4, s4, 8
+83420C02                                #     lbu     t0, NODE_children_len(s8)
+@find_reg.1 63800200                    #     beqz    t0, 1b
+833C8C03                                #     ld      s9, NODE_content(s8)
+034D0C03                                #     lbu     s10, NODE_content_len(s8)
+7D1D                                    #     addi    s10, s10, -1
+814D                                    #     li      s11, 0                      # find the space
+:find_reg.2 @find_reg.1 6380AD01        # 2:  beq     s11, s10, 1b
+B382BC01                                #     add     t0, s9, s11
+83C20200                                #     lbu     t0, 0(t0)
+13030002                                #     li      t1, CH_space
+@find_reg.3 63806200                    #     beq     t0, t1, 3f
+850D                                    #     addi    s11, s11, 1
+*find_reg.2 01A0                        #     j       2b
+:find_reg.3 5A85                        # 3:  mv      a0, s6
+DE85                                    #     mv      a1, s7
+6686                                    #     mv      a2, s9
+EE86                                    #     mv      a3, s11
+~streq 97000000 !streq E7800000         #     call    streq
+|find_reg.4 01E1                        #     bnez    a0, 4f
+5A85                                    #     mv      a0, s6
+DE85                                    #     mv      a1, s7
+3386BC01                                #     add     a2, s9, s11
+0506                                    #     addi    a2, a2, 1
+B306BD41                                #     sub     a3, s10, s11
+FD16                                    #     addi    a3, a3, -1
+~streq 97000000 !streq E7800000         #     call    streq
+|find_reg.1 01C1                        #     beqz    a0, 1b
+:find_reg.4 83328C02                    # 4:  ld      t0, NODE_children(s8)
+83B20200                                #     ld      t0, 0(t0)
+03B58203                                #     ld      a0, NODE_content(t0)
+83C50203                                #     lbu     a1, NODE_content_len(t0)
+~parse_bits 97000000 !parse_bits E7800000 #     call    parse_bits
+*find_reg.6 01A0                        #     j       6f
+:find_reg.5 7D55                        # 5:  li      a0, -1
+:find_reg.6 8260                        # 6:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+C27C                                    #     ld      s9, 48(sp)
+627D                                    #     ld      s10, 56(sp)
+866D                                    #     ld      s11, 64(sp)
+6161                                    #     addi    sp, sp, 80
+8280                                    #     ret
+
+# ---------------------------------------------------------------------------
+# Numbers
+# ---------------------------------------------------------------------------
+
+# parse_bits: a0 = the a1 binary digits at a0 ("0010011") as a number.
+:parse_bits                             # parse_bits:
+8142                                    #     li      t0, 0
+:parse_bits.1 |parse_bits.2 81C1        # 1:  beqz    a1, 2f
+03430500                                #     lbu     t1, 0(a0)
+130303FD                                #     addi    t1, t1, -CH_zero
+8602                                    #     slli    t0, t0, 1
+B3E26200                                #     or      t0, t0, t1
+0505                                    #     addi    a0, a0, 1
+FD15                                    #     addi    a1, a1, -1
+*parse_bits.1 01A0                      #     j       1b
+:parse_bits.2 1685                      # 2:  mv      a0, t0
+8280                                    #     ret
+
+# parse_dec: reads the decimal digits from a0 up to at most a1; a0 = their
+# value, a1 = just past them.
+:parse_dec                              # parse_dec:
+8142                                    #     li      t0, 0
+A943                                    #     li      t2, 10
+:parse_dec.1 @parse_dec.2 6300B500      # 1:  beq     a0, a1, 2f
+03430500                                #     lbu     t1, 0(a0)
+130303FD                                #     addi    t1, t1, -CH_zero
+@parse_dec.2 63707300                   #     bgeu    t1, t2, 2f
+B3827202                                #     mul     t0, t0, t2
+9A92                                    #     add     t0, t0, t1
+0505                                    #     addi    a0, a0, 1
+*parse_dec.1 01A0                       #     j       1b
+:parse_dec.2 AA85                       # 2:  mv      a1, a0
+1685                                    #     mv      a0, t0
+8280                                    #     ret
+
+# parse_hex: reads the hex digits (0-9, a-f) from a0 up to at most a1;
+# a0 = their value, a1 = just past them.
+:parse_hex                              # parse_hex:
+8142                                    #     li      t0, 0
+:parse_hex.1 @parse_hex.3 6300B500      # 1:  beq     a0, a1, 3f
+03430500                                #     lbu     t1, 0(a0)
+930303FD                                #     addi    t2, t1, -CH_zero
+294E                                    #     li      t3, 10
+@parse_hex.2 63E0C301                   #     bltu    t2, t3, 2f
+9303F3F9                                #     addi    t2, t1, -CH_a
+194E                                    #     li      t3, 6
+@parse_hex.3 63F0C301                   #     bgeu    t2, t3, 3f
+A903                                    #     addi    t2, t2, 10
+:parse_hex.2 9202                       # 2:  slli    t0, t0, 4
+B3E27200                                #     or      t0, t0, t2
+0505                                    #     addi    a0, a0, 1
+*parse_hex.1 01A0                       #     j       1b
+:parse_hex.3 AA85                       # 3:  mv      a1, a0
+1685                                    #     mv      a0, t0
+8280                                    #     ret
+
+# parse_num: a0 = the a1 bytes at a0 as a number, decimal or 0x hex, with
+# an optional '-', and a1 = 1; or a1 = 0 when they are no number.
+:parse_num                              # parse_num:
+0111                                    #     addi    sp, sp, -32
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # negative?
+56E8                                    #     sd      s5, 16(sp)                  # first digit
+5AEC                                    #     sd      s6, 24(sp)                  # end
+AA95                                    #     add     a1, a0, a1
+2E8B                                    #     mv      s6, a1
+014A                                    #     li      s4, 0
+@parse_num.2 6300B500                   #     beq     a0, a1, 2f
+83420500                                #     lbu     t0, 0(a0)
+1303D002                                #     li      t1, CH_minus
+@parse_num.1 63906200                   #     bne     t0, t1, 1f
+054A                                    #     li      s4, 1
+0505                                    #     addi    a0, a0, 1
+:parse_num.1 AA8A                       # 1:  mv      s5, a0
+B382A540                                #     sub     t0, a1, a0                  # 0x and a digit at least?
+0D43                                    #     li      t1, 3
+@parse_num.5 63C06200                   #     blt     t0, t1, 5f
+83420500                                #     lbu     t0, 0(a0)
+13030003                                #     li      t1, CH_zero
+@parse_num.5 63906200                   #     bne     t0, t1, 5f
+83421500                                #     lbu     t0, 1(a0)
+13038007                                #     li      t1, CH_x
+@parse_num.5 63906200                   #     bne     t0, t1, 5f
+0905                                    #     addi    a0, a0, 2
+890A                                    #     addi    s5, s5, 2
+~parse_hex 97000000 !parse_hex E7800000 #     call    parse_hex
+*parse_num.6 01A0                       #     j       6f
+:parse_num.5 ~parse_dec 97000000 !parse_dec E7800000 # 5:  call    parse_dec
+:parse_num.6 @parse_num.2 63805501      # 6:  beq     a1, s5, 2f                  # no digits
+@parse_num.2 63906501                   #     bne     a1, s6, 2f                  # something after them
+@parse_num.3 63000A00                   #     beqz    s4, 3f
+3305A040                                #     neg     a0, a0
+:parse_num.3 8545                       # 3:  li      a1, 1
+*parse_num.4 01A0                       #     j       4f
+:parse_num.2 8145                       # 2:  li      a1, 0
+:parse_num.4 8260                       # 4:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+0561                                    #     addi    sp, sp, 32
+8280                                    #     ret
+
+# slice_width: a0 = the width of the slice named by the a1 bytes at a0: the
+# sum of hi-lo+1 over the segments of "imm[20|10:1|11|19:12]".
+:slice_width                            # slice_width:
+3971                                    #     addi    sp, sp, -64
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # cursor
+56E8                                    #     sd      s5, 16(sp)                  # end
+5AEC                                    #     sd      s6, 24(sp)                  # name
+5EF0                                    #     sd      s7, 32(sp)                  # name length
+62F4                                    #     sd      s8, 40(sp)                  # width
+2A8B                                    #     mv      s6, a0
+AE8B                                    #     mv      s7, a1
+2A8A                                    #     mv      s4, a0
+B30AB500                                #     add     s5, a0, a1
+014C                                    #     li      s8, 0
+:slice_width.1 @slice_width.9 63005A01  # 1:  beq     s4, s5, 9f                  # skip to just past the '['
+83420A00                                #     lbu     t0, 0(s4)
+050A                                    #     addi    s4, s4, 1
+1303B005                                #     li      t1, CH_lbracket
+@slice_width.1 63906200                 #     bne     t0, t1, 1b
+:slice_width.2 5285                     # 2:  mv      a0, s4                      # a segment: hi or hi:lo
+D685                                    #     mv      a1, s5
+~parse_dec 97000000 !parse_dec E7800000 #     call    parse_dec
+@slice_width.9 63804501                 #     beq     a1, s4, 9f
+2E8A                                    #     mv      s4, a1
+050C                                    #     addi    s8, s8, 1
+@slice_width.9 63005A01                 #     beq     s4, s5, 9f
+83420A00                                #     lbu     t0, 0(s4)
+1303A003                                #     li      t1, CH_colon
+@slice_width.3 63906200                 #     bne     t0, t1, 3f
+2AF8                                    #     sd      a0, 48(sp)                  # hi
+050A                                    #     addi    s4, s4, 1
+5285                                    #     mv      a0, s4
+D685                                    #     mv      a1, s5
+~parse_dec 97000000 !parse_dec E7800000 #     call    parse_dec
+@slice_width.9 63804501                 #     beq     a1, s4, 9f
+2E8A                                    #     mv      s4, a1
+C272                                    #     ld      t0, 48(sp)
+B382A240                                #     sub     t0, t0, a0
+169C                                    #     add     s8, s8, t0
+@slice_width.9 63005A01                 #     beq     s4, s5, 9f
+83420A00                                #     lbu     t0, 0(s4)
+:slice_width.3 050A                     # 3:  addi    s4, s4, 1
+1303C007                                #     li      t1, CH_bar
+@slice_width.2 63806200                 #     beq     t0, t1, 2b
+1303D005                                #     li      t1, CH_rbracket
+@slice_width.9 63906200                 #     bne     t0, t1, 9f
+@slice_width.9 63105A01                 #     bne     s4, s5, 9f
+6285                                    #     mv      a0, s8
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+2161                                    #     addi    sp, sp, 64
+8280                                    #     ret
+:slice_width.9 ~msg_slice 97050000 !msg_slice 93850500 # 9:  la      a1, msg_slice
+4546                                    #     li      a2, msg_slice_len
+DA86                                    #     mv      a3, s6
+5E87                                    #     mv      a4, s7
+$die_name 6F000000                      #     j       die_name
+
+# ---------------------------------------------------------------------------
+# Calls
+# ---------------------------------------------------------------------------
+
+# frame_lookup: looks up the parameter named by the a2 bytes at a1 in frame
+# a0 (0: none). a0 = 1 and a1 = its value when found, else a0 = 0.
+:frame_lookup                           # frame_lookup:
+7971                                    #     addi    sp, sp, -48
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # pairs left
+56E8                                    #     sd      s5, 16(sp)                  # next pair
+5AEC                                    #     sd      s6, 24(sp)                  # name
+5EF0                                    #     sd      s7, 32(sp)                  # name length
+|frame_lookup.2 01C1                    #     beqz    a0, 2f
+2E8B                                    #     mv      s6, a1
+B28B                                    #     mv      s7, a2
+033A0500                                #     ld      s4, FRAME_count(a0)
+930A8500                                #     addi    s5, a0, FRAME_params
+:frame_lookup.1 @frame_lookup.2 63000A00 # 1:  beqz    s4, 2f
+83B20A00                                #     ld      t0, 0(s5)
+03B68203                                #     ld      a2, NODE_content(t0)
+83C60203                                #     lbu     a3, NODE_content_len(t0)
+5A85                                    #     mv      a0, s6
+DE85                                    #     mv      a1, s7
+~streq 97000000 !streq E7800000         #     call    streq
+|frame_lookup.3 01E1                    #     bnez    a0, 3f
+C10A                                    #     addi    s5, s5, 16
+7D1A                                    #     addi    s4, s4, -1
+*frame_lookup.1 01A0                    #     j       1b
+:frame_lookup.2 0145                    # 2:  li      a0, 0
+*frame_lookup.4 01A0                    #     j       4f
+:frame_lookup.3 83B58A00                # 3:  ld      a1, 8(s5)
+:frame_lookup.4 8260                    # 4:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+4561                                    #     addi    sp, sp, 48
+8280                                    #     ret
+
+# eval_arg: a0 = the value of argument NODE a1 in frame a0, in context a2
+# (0 code, 1 exec). An argument with children is a call that runs in exec
+# context, its value is what it leaves in a0. A leaf is, in this order: a
+# decimal or 0x number, a parameter, a register (its number in code
+# context, its vreg in exec context), pc (the address being assembled), a
+# label (its address) or a constant (a function without parameters, run in
+# exec context).
+:eval_arg                               # eval_arg:
+3971                                    #     addi    sp, sp, -64
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # frame
+56E8                                    #     sd      s5, 16(sp)                  # the argument
+5AEC                                    #     sd      s6, 24(sp)                  # context
+5EF0                                    #     sd      s7, 32(sp)                  # its name
+62F4                                    #     sd      s8, 40(sp)                  # name length
+66F8                                    #     sd      s9, 48(sp)                  # a function of that name
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+328B                                    #     mv      s6, a2
+83C20A02                                #     lbu     t0, NODE_children_len(s5)
+@eval_arg.1 63800200                    #     beqz    t0, 1f
+5685                                    #     mv      a0, s5                      # a call
+D285                                    #     mv      a1, s4
+~exec_call 97000000 !exec_call E7800000 #     call    exec_call
+*eval_arg.7 01A0                        #     j       7f
+:eval_arg.1 83BB8A03                    # 1:  ld      s7, NODE_content(s5)
+03CC0A03                                #     lbu     s8, NODE_content_len(s5)
+5E85                                    #     mv      a0, s7
+E285                                    #     mv      a1, s8
+~parse_num 97000000 !parse_num E7800000 #     call    parse_num
+|eval_arg.9 81E1                        #     bnez    a1, 9f
+5285                                    #     mv      a0, s4
+DE85                                    #     mv      a1, s7
+6286                                    #     mv      a2, s8
+~frame_lookup 97000000 !frame_lookup E7800000 #     call    frame_lookup
+|eval_arg.2 01C1                        #     beqz    a0, 2f
+2E85                                    #     mv      a0, a1
+*eval_arg.9 01A0                        #     j       9f
+:eval_arg.2 5E85                        # 2:  mv      a0, s7
+E285                                    #     mv      a1, s8
+~find_reg 97000000 !find_reg E7800000   #     call    find_reg
+@eval_arg.3 63400500                    #     bltz    a0, 3f
+@eval_arg.9 63000B00                    #     beqz    s6, 9f
+~vregs 97020000 !vregs 93820200         #     la      t0, vregs
+0E05                                    #     slli    a0, a0, 3
+AA92                                    #     add     t0, t0, a0
+03B50200                                #     ld      a0, 0(t0)
+*eval_arg.9 01A0                        #     j       9f
+:eval_arg.3 5E85                        # 3:  mv      a0, s7
+E285                                    #     mv      a1, s8
+~str_pc 17060000 !str_pc 13060600       #     la      a2, str_pc
+8946                                    #     li      a3, 2
+~streq 97000000 !streq E7800000         #     call    streq
+|eval_arg.4 01C1                        #     beqz    a0, 4f
+~cur_pc 97020000 !cur_pc 93820200       #     la      t0, cur_pc
+03B50200                                #     ld      a0, 0(t0)
+*eval_arg.9 01A0                        #     j       9f
+:eval_arg.4 5E85                        # 4:  mv      a0, s7
+E285                                    #     mv      a1, s8
+~find_label 97000000 !find_label E7800000 #     call    find_label
+|eval_arg.5 01C1                        #     beqz    a0, 5f
+~label_addr 97000000 !label_addr E7800000 #     call    label_addr
+*eval_arg.9 01A0                        #     j       9f
+:eval_arg.5 5E85                        # 5:  mv      a0, s7
+E285                                    #     mv      a1, s8
+~find_fn 97000000 !find_fn E7800000     #     call    find_fn
+|eval_arg.8 01C1                        #     beqz    a0, 8f
+AA8C                                    #     mv      s9, a0
+~is_insn 97000000 !is_insn E7800000     #     call    is_insn
+|eval_arg.8 01E1                        #     bnez    a0, 8f
+6685                                    #     mv      a0, s9
+~param_count 97000000 !param_count E7800000 #     call    param_count
+|eval_arg.8 01E1                        #     bnez    a0, 8f
+5685                                    #     mv      a0, s5                      # a constant
+D285                                    #     mv      a1, s4
+~exec_call 97000000 !exec_call E7800000 #     call    exec_call
+:eval_arg.7 ~vregs 97020000 !vregs 93820200 # 7:  la      t0, vregs
+03B50205                                #     ld      a0, VREG_a0*8(t0)
+:eval_arg.9 8260                        # 9:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+C27C                                    #     ld      s9, 48(sp)
+2161                                    #     addi    sp, sp, 64
+8280                                    #     ret
+:eval_arg.8 ~msg_name 97050000 !msg_name 93850500 # 8:  la      a1, msg_name
+5146                                    #     li      a2, msg_name_len
+DE86                                    #     mv      a3, s7
+6287                                    #     mv      a4, s8
+$die_name 6F000000                      #     j       die_name
+
+# bind: fills frame a4 for call a1 of function a0: each parameter with the
+# value of its argument, evaluated in frame a2 and context a3.
+:bind                                   # bind:
+3971                                    #     addi    sp, sp, -64
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # next parameter
+56E8                                    #     sd      s5, 16(sp)                  # next argument
+5AEC                                    #     sd      s6, 24(sp)                  # caller's frame
+5EF0                                    #     sd      s7, 32(sp)                  # context
+62F4                                    #     sd      s8, 40(sp)                  # next pair in the new frame
+66F8                                    #     sd      s9, 48(sp)                  # parameters left
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+328B                                    #     mv      s6, a2
+B68B                                    #     mv      s7, a3
+3A8C                                    #     mv      s8, a4
+~param_count 97000000 !param_count E7800000 #     call    param_count
+AA8C                                    #     mv      s9, a0
+83C20A02                                #     lbu     t0, NODE_children_len(s5)
+~msg_args 97050000 !msg_args 93850500   #     la      a1, msg_args
+13061002                                #     li      a2, msg_args_len
+@bind.3 63909201                        #     bne     t0, s9, 3f
+A142                                    #     li      t0, MAX_PARAMS
+~msg_params 97050000 !msg_params 93850500 #     la      a1, msg_params
+6D46                                    #     li      a2, msg_params_len
+@bind.3 63E09201                        #     bgtu    s9, t0, 3f
+23309C01                                #     sd      s9, FRAME_count(s8)
+210C                                    #     addi    s8, s8, FRAME_params
+033A8A02                                #     ld      s4, NODE_children(s4)
+83BA8A02                                #     ld      s5, NODE_children(s5)
+:bind.1 @bind.2 63800C00                # 1:  beqz    s9, 2f
+83320A00                                #     ld      t0, 0(s4)
+23305C00                                #     sd      t0, 0(s8)
+5A85                                    #     mv      a0, s6
+83B50A00                                #     ld      a1, 0(s5)
+5E86                                    #     mv      a2, s7
+~eval_arg 97000000 !eval_arg E7800000   #     call    eval_arg
+2334AC00                                #     sd      a0, 8(s8)
+210A                                    #     addi    s4, s4, 8
+A10A                                    #     addi    s5, s5, 8
+410C                                    #     addi    s8, s8, 16
+FD1C                                    #     addi    s9, s9, -1
+*bind.1 01A0                            #     j       1b
+:bind.2 8260                            # 2:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+C27C                                    #     ld      s9, 48(sp)
+2161                                    #     addi    sp, sp, 64
+8280                                    #     ret
+:bind.3 83B68A03                        # 3:  ld      a3, NODE_content(s5)
+03C70A03                                #     lbu     a4, NODE_content_len(s5)
+$die_name 6F000000                      #     j       die_name
+
+# run_body: calls a2 (code_call or exec_call) with frame a1 on each child
+# of NODE a0 from child a3 on, skipping the functions (definitions).
+:run_body                               # run_body:
+7971                                    #     addi    sp, sp, -48
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # children left
+56E8                                    #     sd      s5, 16(sp)                  # next child
+5AEC                                    #     sd      s6, 24(sp)                  # frame
+5EF0                                    #     sd      s7, 32(sp)                  # handler
+034A0502                                #     lbu     s4, NODE_children_len(a0)
+330ADA40                                #     sub     s4, s4, a3
+833A8502                                #     ld      s5, NODE_children(a0)
+93923600                                #     slli    t0, a3, 3
+969A                                    #     add     s5, s5, t0
+2E8B                                    #     mv      s6, a1
+B28B                                    #     mv      s7, a2
+:run_body.1 @run_body.3 63000A00        # 1:  beqz    s4, 3f
+03B50A00                                #     ld      a0, 0(s5)
+~is_fn 97000000 !is_fn E7800000         #     call    is_fn
+|run_body.2 01E1                        #     bnez    a0, 2f
+03B50A00                                #     ld      a0, 0(s5)
+DA85                                    #     mv      a1, s6
+829B                                    #     jalr    s7
+:run_body.2 A10A                        # 2:  addi    s5, s5, 8
+7D1A                                    #     addi    s4, s4, -1
+*run_body.1 01A0                        #     j       1b
+:run_body.3 8260                        # 3:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+4561                                    #     addi    sp, sp, 48
+8280                                    #     ret
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+
+# run_placed: runs the children of NODE a0, the program page or a placed
+# function, in order: a function is placed, a call runs in code context.
+:run_placed                             # run_placed:
+0111                                    #     addi    sp, sp, -32
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # children left
+56E8                                    #     sd      s5, 16(sp)                  # next child
+034A0502                                #     lbu     s4, NODE_children_len(a0)
+833A8502                                #     ld      s5, NODE_children(a0)
+:run_placed.1 @run_placed.4 63000A00    # 1:  beqz    s4, 4f
+03B50A00                                #     ld      a0, 0(s5)
+~is_fn 97000000 !is_fn E7800000         #     call    is_fn
+|run_placed.2 01C1                      #     beqz    a0, 2f
+03B50A00                                #     ld      a0, 0(s5)
+~place 97000000 !place E7800000         #     call    place
+*run_placed.3 01A0                      #     j       3f
+:run_placed.2 03B50A00                  # 2:  ld      a0, 0(s5)
+8145                                    #     li      a1, 0                       # no frame: placed code has no parameters
+~code_call 97000000 !code_call E7800000 #     call    code_call
+:run_placed.3 A10A                      # 3:  addi    s5, s5, 8
+7D1A                                    #     addi    s4, s4, -1
+*run_placed.1 01A0                      #     j       1b
+:run_placed.4 8260                      # 4:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+0561                                    #     addi    sp, sp, 32
+8280                                    #     ret
+
+# place: places function a0 at cur_pc. Pass 1 adds it to labels, pass 2
+# checks that it is still there; then its children run in its scope, and
+# its end is recorded.
+:place                                  # place:
+0111                                    #     addi    sp, sp, -32
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # the function
+56E8                                    #     sd      s5, 16(sp)                  # its LABEL
+2A8A                                    #     mv      s4, a0
+~scope_depth 97020000 !scope_depth 93820200 #     la      t0, scope_depth             # push its scope
+03B30200                                #     ld      t1, 0(t0)
+93030004                                #     li      t2, MAX_DEPTH
+@place.3 63007300                       #     beq     t1, t2, 3f
+~scopes 97030000 !scopes 93830300       #     la      t2, scopes
+131E3300                                #     slli    t3, t1, 3
+F293                                    #     add     t2, t2, t3
+23B04301                                #     sd      s4, 0(t2)
+0503                                    #     addi    t1, t1, 1
+23B06200                                #     sd      t1, 0(t0)
+~cur_pc 970E0000 !cur_pc 938E0E00       #     la      t4, cur_pc
+83BE0E00                                #     ld      t4, 0(t4)
+~pass 97020000 !pass 93820200           #     la      t0, pass
+83B20200                                #     ld      t0, 0(t0)
+0543                                    #     li      t1, 1
+@place.1 63906200                       #     bne     t0, t1, 1f
+~labels_end 97020000 !labels_end 93820200 #     la      t0, labels_end              # pass 1: a new label
+83BA0200                                #     ld      s5, 0(t0)
+13838A01                                #     addi    t1, s5, LABEL_size
+23B06200                                #     sd      t1, 0(t0)
+23B04A01                                #     sd      s4, LABEL_node(s5)
+23B4DA01                                #     sd      t4, LABEL_addr(s5)
+*place.2 01A0                           #     j       2f
+:place.1 ~label_next 97020000 !label_next 93820200 # 1:  la      t0, label_next              # pass 2: the same, at the same place
+83BA0200                                #     ld      s5, 0(t0)
+13838A01                                #     addi    t1, s5, LABEL_size
+23B06200                                #     sd      t1, 0(t0)
+03B30A00                                #     ld      t1, LABEL_node(s5)
+@place.4 63104301                       #     bne     t1, s4, 4f
+03B38A00                                #     ld      t1, LABEL_addr(s5)
+@place.4 6310D301                       #     bne     t1, t4, 4f
+:place.2 5285                           # 2:  mv      a0, s4
+~run_placed 97000000 !run_placed E7800000 #     call    run_placed
+~cur_pc 97020000 !cur_pc 93820200       #     la      t0, cur_pc
+83B20200                                #     ld      t0, 0(t0)
+23B85A00                                #     sd      t0, LABEL_end(s5)
+~scope_depth 97020000 !scope_depth 93820200 #     la      t0, scope_depth
+03B30200                                #     ld      t1, 0(t0)
+7D13                                    #     addi    t1, t1, -1
+23B06200                                #     sd      t1, 0(t0)
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+0561                                    #     addi    sp, sp, 32
+8280                                    #     ret
+:place.3 ~msg_depth 97050000 !msg_depth 93850500 # 3:  la      a1, msg_depth
+5D46                                    #     li      a2, msg_depth_len
+*place.5 01A0                           #     j       5f
+:place.4 ~msg_moved 97050000 !msg_moved 93850500 # 4:  la      a1, msg_moved
+13066002                                #     li      a2, msg_moved_len
+:place.5 83368A03                       # 5:  ld      a3, NODE_content(s4)
+03470A03                                #     lbu     a4, NODE_content_len(s4)
+$die_name 6F000000                      #     j       die_name
+
+# find_label: a0 = the placed function named by the a1 bytes at a0, or 0:
+# among the functions in the innermost scope first, then outward to the
+# program page.
+:find_label                             # find_label:
+7971                                    #     addi    sp, sp, -48
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # name
+56E8                                    #     sd      s5, 16(sp)                  # name length
+5AEC                                    #     sd      s6, 24(sp)                  # just past the scope being searched
+5EF0                                    #     sd      s7, 32(sp)                  # its children left
+62F4                                    #     sd      s8, 40(sp)                  # next child
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+~scope_depth 97020000 !scope_depth 93820200 #     la      t0, scope_depth
+83B20200                                #     ld      t0, 0(t0)
+8E02                                    #     slli    t0, t0, 3
+~scopes 170B0000 !scopes 130B0B00       #     la      s6, scopes
+169B                                    #     add     s6, s6, t0
+:find_label.1 ~scopes 97020000 !scopes 93820200 # 1:  la      t0, scopes
+@find_label.4 63005B00                  #     beq     s6, t0, 4f
+611B                                    #     addi    s6, s6, -8
+83320B00                                #     ld      t0, 0(s6)
+83CB0202                                #     lbu     s7, NODE_children_len(t0)
+03BC8202                                #     ld      s8, NODE_children(t0)
+:find_label.2 @find_label.1 63800B00    # 2:  beqz    s7, 1b
+03350C00                                #     ld      a0, 0(s8)
+~is_fn 97000000 !is_fn E7800000         #     call    is_fn
+|find_label.3 01C1                      #     beqz    a0, 3f
+83320C00                                #     ld      t0, 0(s8)
+03B68203                                #     ld      a2, NODE_content(t0)
+83C60203                                #     lbu     a3, NODE_content_len(t0)
+FD16                                    #     addi    a3, a3, -1
+5285                                    #     mv      a0, s4
+D685                                    #     mv      a1, s5
+~streq 97000000 !streq E7800000         #     call    streq
+|find_label.3 01C1                      #     beqz    a0, 3f
+03350C00                                #     ld      a0, 0(s8)
+*find_label.5 01A0                      #     j       5f
+:find_label.3 210C                      # 3:  addi    s8, s8, 8
+FD1B                                    #     addi    s7, s7, -1
+*find_label.2 01A0                      #     j       2b
+:find_label.4 0145                      # 4:  li      a0, 0
+:find_label.5 8260                      # 5:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+4561                                    #     addi    sp, sp, 48
+8280                                    #     ret
+
+# label_entry: a0 = the LABEL of placed function a0, or 0 when pass 1 has
+# not met it yet.
+:label_entry                            # label_entry:
+~labels 97020000 !labels 93820200       #     la      t0, labels
+~labels_end 17030000 !labels_end 13030300 #     la      t1, labels_end
+03330300                                #     ld      t1, 0(t1)
+:label_entry.1 @label_entry.2 63806200  # 1:  beq     t0, t1, 2f
+83B30200                                #     ld      t2, LABEL_node(t0)
+@label_entry.3 6380A300                 #     beq     t2, a0, 3f
+E102                                    #     addi    t0, t0, LABEL_size
+*label_entry.1 01A0                     #     j       1b
+:label_entry.2 0145                     # 2:  li      a0, 0
+8280                                    #     ret
+:label_entry.3 1685                     # 3:  mv      a0, t0
+8280                                    #     ret
+
+# label_addr: a0 = the address of placed function a0 (0 when pass 1 has
+# not met it yet).
+:label_addr                             # label_addr:
+4111                                    #     addi    sp, sp, -16
+06E0                                    #     sd      ra, 0(sp)
+~label_entry 97000000 !label_entry E7800000 #     call    label_entry
+|label_addr.1 01C1                      #     beqz    a0, 1f
+0865                                    #     ld      a0, LABEL_addr(a0)
+:label_addr.1 8260                      # 1:  ld      ra, 0(sp)
+4101                                    #     addi    sp, sp, 16
+8280                                    #     ret
+
+# lookup_call: a0 = the function that call a0 calls; dies when unknown.
+:lookup_call                            # lookup_call:
+4111                                    #     addi    sp, sp, -16
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # the call
+2A8A                                    #     mv      s4, a0
+03358A03                                #     ld      a0, NODE_content(s4)
+83450A03                                #     lbu     a1, NODE_content_len(s4)
+~find_fn 97000000 !find_fn E7800000     #     call    find_fn
+|lookup_call.1 01C1                     #     beqz    a0, 1f
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+4101                                    #     addi    sp, sp, 16
+8280                                    #     ret
+:lookup_call.1 ~msg_function 97050000 !msg_function 93850500 # 1:  la      a1, msg_function
+6146                                    #     li      a2, msg_function_len
+83368A03                                #     ld      a3, NODE_content(s4)
+03470A03                                #     lbu     a4, NODE_content_len(s4)
+*die_name 01A0                          #     j       die_name
+
+#     .equ CALL_frame, 32                 # the new frame on the stack
+#     .equ CALL_stack, (CALL_frame + FRAME_size + 15) & ~15
+
+# code_call: runs call a0 in code context, in frame a1: an instruction is
+# encoded and emitted, any other function expands its body. The builtins:
+#   ascii <bytes>   emits the content of its argument as it is
+#   align n         pads with zeros up to a multiple of n
+#   reserve n       n zero bytes
+#   origin n        the address of what follows
+#   bss             from here on align and reserve only move the address
+:code_call                              # code_call:
+7171                                    #     addi    sp, sp, -CALL_stack
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # the call
+56E8                                    #     sd      s5, 16(sp)                  # caller's frame
+5AEC                                    #     sd      s6, 24(sp)                  # the function
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+~str_ascii 97050000 !str_ascii 93850500 #     la      a1, str_ascii
+1546                                    #     li      a2, 5
+~is_named 97000000 !is_named E7800000   #     call    is_named
+|code_call.3 01E1                       #     bnez    a0, 3f
+5285                                    #     mv      a0, s4
+~str_align 97050000 !str_align 93850500 #     la      a1, str_align
+1546                                    #     li      a2, 5
+~is_named 97000000 !is_named E7800000   #     call    is_named
+|code_call.4 01E1                       #     bnez    a0, 4f
+5285                                    #     mv      a0, s4
+~str_reserve 97050000 !str_reserve 93850500 #     la      a1, str_reserve
+1D46                                    #     li      a2, 7
+~is_named 97000000 !is_named E7800000   #     call    is_named
+|code_call.5 01E1                       #     bnez    a0, 5f
+5285                                    #     mv      a0, s4
+~str_origin 97050000 !str_origin 93850500 #     la      a1, str_origin
+1946                                    #     li      a2, 6
+~is_named 97000000 !is_named E7800000   #     call    is_named
+|code_call.6 01E1                       #     bnez    a0, 6f
+5285                                    #     mv      a0, s4
+~str_bss 97050000 !str_bss 93850500     #     la      a1, str_bss
+0D46                                    #     li      a2, 3
+~is_named 97000000 !is_named E7800000   #     call    is_named
+|code_call.7 01E1                       #     bnez    a0, 7f
+5285                                    #     mv      a0, s4
+~lookup_call 97000000 !lookup_call E7800000 #     call    lookup_call
+2A8B                                    #     mv      s6, a0
+D285                                    #     mv      a1, s4
+5686                                    #     mv      a2, s5
+8146                                    #     li      a3, 0
+1810                                    #     addi    a4, sp, CALL_frame
+~bind 97000000 !bind E7800000           #     call    bind
+5A85                                    #     mv      a0, s6
+~is_insn 97000000 !is_insn E7800000     #     call    is_insn
+|code_call.1 01C1                       #     beqz    a0, 1f
+5A85                                    #     mv      a0, s6
+0C10                                    #     addi    a1, sp, CALL_frame
+~encode 97000000 !encode E7800000       #     call    encode
+5286                                    #     mv      a2, s4
+~emit 97000000 !emit E7800000           #     call    emit
+*code_call.2 01A0                       #     j       2f
+:code_call.1 5A85                       # 1:  mv      a0, s6
+~param_count 97000000 !param_count E7800000 #     call    param_count
+AA86                                    #     mv      a3, a0
+5A85                                    #     mv      a0, s6
+0C10                                    #     addi    a1, sp, CALL_frame
+~code_call 17060000 !code_call 13060600 #     la      a2, code_call
+~run_body 97000000 !run_body E7800000   #     call    run_body
+:code_call.2 8260                       # 2:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+4D61                                    #     addi    sp, sp, CALL_stack
+8280                                    #     ret
+:code_call.3 83420A02                   # 3:  lbu     t0, NODE_children_len(s4)   # ascii
+0543                                    #     li      t1, 1
+@wrong_args 63906200                    #     bne     t0, t1, wrong_args
+83328A02                                #     ld      t0, NODE_children(s4)
+83B20200                                #     ld      t0, 0(t0)
+03B58203                                #     ld      a0, NODE_content(t0)
+83C50203                                #     lbu     a1, NODE_content_len(t0)
+~emit_raw 97000000 !emit_raw E7800000   #     call    emit_raw
+*code_call.2 01A0                       #     j       2b
+:code_call.4 5285                       # 4:  mv      a0, s4                      # align
+D685                                    #     mv      a1, s5
+~one_arg 97000000 !one_arg E7800000     #     call    one_arg
+~cur_pc 97020000 !cur_pc 93820200       #     la      t0, cur_pc
+83B20200                                #     ld      t0, 0(t0)
+33F3A202                                #     remu    t1, t0, a0
+@code_call.2 63000300                   #     beqz    t1, 2b
+33056540                                #     sub     a0, a0, t1
+~skip 97000000 !skip E7800000           #     call    skip
+*code_call.2 01A0                       #     j       2b
+:code_call.5 5285                       # 5:  mv      a0, s4                      # reserve
+D685                                    #     mv      a1, s5
+~one_arg 97000000 !one_arg E7800000     #     call    one_arg
+~skip 97000000 !skip E7800000           #     call    skip
+*code_call.2 01A0                       #     j       2b
+:code_call.6 5285                       # 6:  mv      a0, s4                      # origin
+D685                                    #     mv      a1, s5
+~one_arg 97000000 !one_arg E7800000     #     call    one_arg
+~cur_pc 97020000 !cur_pc 93820200       #     la      t0, cur_pc
+23B0A200                                #     sd      a0, 0(t0)
+*code_call.2 01A0                       #     j       2b
+:code_call.7 83420A02                   # 7:  lbu     t0, NODE_children_len(s4)   # bss
+@wrong_args 63900200                    #     bnez    t0, wrong_args
+~in_bss 97020000 !in_bss 93820200       #     la      t0, in_bss
+0543                                    #     li      t1, 1
+23B06200                                #     sd      t1, 0(t0)
+*code_call.2 01A0                       #     j       2b
+
+# wrong_args: dies about call s4 having the wrong number of arguments.
+:wrong_args                             # wrong_args:
+~msg_args 97050000 !msg_args 93850500   #     la      a1, msg_args
+13061002                                #     li      a2, msg_args_len
+83368A03                                #     ld      a3, NODE_content(s4)
+03470A03                                #     lbu     a4, NODE_content_len(s4)
+*die_name 01A0                          #     j       die_name
+
+# one_arg: a0 = the value of the one argument of builtin call a0, in frame
+# a1 and code context.
+:one_arg                                # one_arg:
+4111                                    #     addi    sp, sp, -16
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # the call
+2A8A                                    #     mv      s4, a0
+83420A02                                #     lbu     t0, NODE_children_len(s4)
+0543                                    #     li      t1, 1
+@wrong_args 63906200                    #     bne     t0, t1, wrong_args
+2E85                                    #     mv      a0, a1
+83358A02                                #     ld      a1, NODE_children(s4)
+8C61                                    #     ld      a1, 0(a1)
+0146                                    #     li      a2, 0
+~eval_arg 97000000 !eval_arg E7800000   #     call    eval_arg
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+4101                                    #     addi    sp, sp, 16
+8280                                    #     ret
+
+# is_named: a0 = 1 when the content of NODE a0 is the a2 bytes at a1.
+:is_named                               # is_named:
+B286                                    #     mv      a3, a2
+2E86                                    #     mv      a2, a1
+83450503                                #     lbu     a1, NODE_content_len(a0)
+087D                                    #     ld      a0, NODE_content(a0)
+$streq 6F000000                         #     j       streq
+
+# exec_call: runs call a0 in exec context, in frame a1: an instruction is
+# executed on vregs, any other function runs its body. The builtin
+# size <label> leaves the size of the label in a0.
+:exec_call                              # exec_call:
+7171                                    #     addi    sp, sp, -CALL_stack
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # the call
+56E8                                    #     sd      s5, 16(sp)                  # caller's frame
+5AEC                                    #     sd      s6, 24(sp)                  # the function
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+~str_size 97050000 !str_size 93850500   #     la      a1, str_size
+1146                                    #     li      a2, 4
+~is_named 97000000 !is_named E7800000   #     call    is_named
+|exec_call.3 01E1                       #     bnez    a0, 3f
+5285                                    #     mv      a0, s4
+~lookup_call 97000000 !lookup_call E7800000 #     call    lookup_call
+2A8B                                    #     mv      s6, a0
+~is_insn 97000000 !is_insn E7800000     #     call    is_insn
+|exec_call.1 01C1                       #     beqz    a0, 1f
+5A85                                    #     mv      a0, s6
+D285                                    #     mv      a1, s4
+5686                                    #     mv      a2, s5
+~execute 97000000 !execute E7800000     #     call    execute
+*exec_call.2 01A0                       #     j       2f
+:exec_call.1 5A85                       # 1:  mv      a0, s6
+D285                                    #     mv      a1, s4
+5686                                    #     mv      a2, s5
+8546                                    #     li      a3, 1
+1810                                    #     addi    a4, sp, CALL_frame
+~bind 97000000 !bind E7800000           #     call    bind
+5A85                                    #     mv      a0, s6
+~param_count 97000000 !param_count E7800000 #     call    param_count
+AA86                                    #     mv      a3, a0
+5A85                                    #     mv      a0, s6
+0C10                                    #     addi    a1, sp, CALL_frame
+~exec_call 17060000 !exec_call 13060600 #     la      a2, exec_call
+~run_body 97000000 !run_body E7800000   #     call    run_body
+:exec_call.2 8260                       # 2:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+4D61                                    #     addi    sp, sp, CALL_stack
+8280                                    #     ret
+:exec_call.3 83420A02                   # 3:  lbu     t0, NODE_children_len(s4)   # size
+0543                                    #     li      t1, 1
+@wrong_args 63906200                    #     bne     t0, t1, wrong_args
+83328A02                                #     ld      t0, NODE_children(s4)
+03BB0200                                #     ld      s6, 0(t0)                   # the label
+03358B03                                #     ld      a0, NODE_content(s6)
+83450B03                                #     lbu     a1, NODE_content_len(s6)
+~find_label 97000000 !find_label E7800000 #     call    find_label
+|exec_call.5 01C1                       #     beqz    a0, 5f
+~label_entry 97000000 !label_entry E7800000 #     call    label_entry
+8142                                    #     li      t0, 0                       # not met yet in pass 1
+|exec_call.4 01C1                       #     beqz    a0, 4f
+83320501                                #     ld      t0, LABEL_end(a0)
+03338500                                #     ld      t1, LABEL_addr(a0)
+B3826240                                #     sub     t0, t0, t1
+:exec_call.4 ~vregs 17030000 !vregs 13030300 # 4:  la      t1, vregs
+23385304                                #     sd      t0, VREG_a0*8(t1)
+*exec_call.2 01A0                       #     j       2b
+:exec_call.5 ~msg_name 97050000 !msg_name 93850500 # 5:  la      a1, msg_name
+5146                                    #     li      a2, msg_name_len
+83368B03                                #     ld      a3, NODE_content(s6)
+03470B03                                #     lbu     a4, NODE_content_len(s6)
+*die_name 01A0                          #     j       die_name
+
+# execute: executes call a1 of instruction a0 in frame a2, on vregs: the
+# parameter rd names the destination register, the other two give the
+# values v0 and v1 in parameter order, and rd = v1 op v0, op found by name
+# in exec_ops (the seed).
+:execute                                # execute:
+1D71                                    #     addi    sp, sp, -96
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # the call
+56E8                                    #     sd      s5, 16(sp)                  # frame
+5AEC                                    #     sd      s6, 24(sp)                  # next parameter
+5EF0                                    #     sd      s7, 32(sp)                  # next argument
+62F4                                    #     sd      s8, 40(sp)                  # parameters left
+66F8                                    #     sd      s9, 48(sp)                  # destination register
+6AFC                                    #     sd      s10, 56(sp)                 # values so far
+    # 64(sp), 72(sp): v0, v1
+2E8A                                    #     mv      s4, a1
+B28A                                    #     mv      s5, a2
+2A8B                                    #     mv      s6, a0
+~param_count 97000000 !param_count E7800000 #     call    param_count
+2A8C                                    #     mv      s8, a0
+83420A02                                #     lbu     t0, NODE_children_len(s4)
+@execute.8 63908201                     #     bne     t0, s8, 8f
+033B8B02                                #     ld      s6, NODE_children(s6)
+833B8A02                                #     ld      s7, NODE_children(s4)
+814C                                    #     li      s9, 0
+014D                                    #     li      s10, 0
+:execute.1 @execute.3 63000C00          # 1:  beqz    s8, 3f
+83320B00                                #     ld      t0, 0(s6)
+03B58203                                #     ld      a0, NODE_content(t0)
+83C50203                                #     lbu     a1, NODE_content_len(t0)
+~str_rd 17060000 !str_rd 13060600       #     la      a2, str_rd
+8946                                    #     li      a3, 2
+~streq 97000000 !streq E7800000         #     call    streq
+|execute.2 01C1                         #     beqz    a0, 2f
+83B20B00                                #     ld      t0, 0(s7)                   # rd: a register name
+03B58203                                #     ld      a0, NODE_content(t0)
+83C50203                                #     lbu     a1, NODE_content_len(t0)
+~find_reg 97000000 !find_reg E7800000   #     call    find_reg
+@execute.7 63400500                     #     bltz    a0, 7f
+AA8C                                    #     mv      s9, a0
+*execute.6 01A0                         #     j       6f
+:execute.2 8942                         # 2:  li      t0, 2
+@execute.9 63005D00                     #     beq     s10, t0, 9f                 # more than two values: no seed op
+5685                                    #     mv      a0, s5
+83B50B00                                #     ld      a1, 0(s7)
+0546                                    #     li      a2, 1
+~eval_arg 97000000 !eval_arg E7800000   #     call    eval_arg
+93123D00                                #     slli    t0, s10, 3
+8A92                                    #     add     t0, sp, t0
+23B0A204                                #     sd      a0, 64(t0)
+050D                                    #     addi    s10, s10, 1
+:execute.6 210B                         # 6:  addi    s6, s6, 8
+A10B                                    #     addi    s7, s7, 8
+7D1C                                    #     addi    s8, s8, -1
+*execute.1 01A0                         #     j       1b
+:execute.3 8942                         # 3:  li      t0, 2
+@execute.9 63105D00                     #     bne     s10, t0, 9f
+033B8A03                                #     ld      s6, NODE_content(s4)        # find the op by name
+834B0A03                                #     lbu     s7, NODE_content_len(s4)
+A142                                    #     li      t0, 8
+@execute.9 63E07201                     #     bgtu    s7, t0, 9f
+~exec_ops 170C0000 !exec_ops 130C0C00   #     la      s8, exec_ops
+:execute.10 ~exec_ops_end 97020000 !exec_ops_end 93820200 # 10: la      t0, exec_ops_end
+@execute.9 63005C00                     #     beq     s8, t0, 9f
+5A85                                    #     mv      a0, s6
+DE85                                    #     mv      a1, s7
+6286                                    #     mv      a2, s8
+DE86                                    #     mv      a3, s7
+~streq 97000000 !streq E7800000         #     call    streq
+|execute.11 01C1                        #     beqz    a0, 11f
+A142                                    #     li      t0, 8                       # and the op's name ends there
+@execute.12 63805B00                    #     beq     s7, t0, 12f
+B3027C01                                #     add     t0, s8, s7
+83C20200                                #     lbu     t0, 0(t0)
+@execute.12 63800200                    #     beqz    t0, 12f
+:execute.11 410C                        # 11: addi    s8, s8, OP_size
+*execute.10 01A0                        #     j       10b
+:execute.12 8662                        # 12: ld      t0, 64(sp)
+2663                                    #     ld      t1, 72(sp)
+033E8C00                                #     ld      t3, OP_code(s8)
+028E                                    #     jr      t3
+:execute.7 ~msg_register 97050000 !msg_register 93850500 # 7:  la      a1, msg_register
+5946                                    #     li      a2, msg_register_len
+83B20B00                                #     ld      t0, 0(s7)
+83B68203                                #     ld      a3, NODE_content(t0)
+03C70203                                #     lbu     a4, NODE_content_len(t0)
+*die_name 01A0                          #     j       die_name
+:execute.8 *wrong_args 01A0             # 8:  j       wrong_args
+:execute.9 ~msg_execute 97050000 !msg_execute 93850500 # 9:  la      a1, msg_execute
+5946                                    #     li      a2, msg_execute_len
+83368A03                                #     ld      a3, NODE_content(s4)
+03470A03                                #     lbu     a4, NODE_content_len(s4)
+*die_name 01A0                          #     j       die_name
+
+# The ops of exec_ops: t2 = t1 op t0, then exec_store, still in the frame
+# of execute.
+:op_add                                 # op_add:
+B3035300                                #     add     t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_sub                                 # op_sub:
+B3035340                                #     sub     t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_and                                 # op_and:
+B3735300                                #     and     t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_or                                  # op_or:
+B3635300                                #     or      t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_xor                                 # op_xor:
+B3435300                                #     xor     t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_sll                                 # op_sll:
+B3135300                                #     sll     t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_srl                                 # op_srl:
+B3535300                                #     srl     t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_sra                                 # op_sra:
+B3535340                                #     sra     t2, t1, t0
+*exec_store 01A0                        #     j       exec_store
+:op_mul                                 # op_mul:
+B3035302                                #     mul     t2, t1, t0
+# exec_store: stores t2 in the destination vreg s9 and returns from execute.
+:exec_store                             # exec_store:
+@exec_store.1 63800C00                  #     beqz    s9, 1f                      # x0 stays 0
+~vregs 97020000 !vregs 93820200         #     la      t0, vregs
+13933C00                                #     slli    t1, s9, 3
+9A92                                    #     add     t0, t0, t1
+23B07200                                #     sd      t2, 0(t0)
+:exec_store.1 8260                      # 1:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+C27C                                    #     ld      s9, 48(sp)
+627D                                    #     ld      s10, 56(sp)
+2561                                    #     addi    sp, sp, 96
+8280                                    #     ret
+
+# ---------------------------------------------------------------------------
+# Encoding and output
+# ---------------------------------------------------------------------------
+
+# encode: encodes instruction a0, its parameters bound in frame a1: a0 =
+# the word, a1 = its width in bits (8, 16, 32 or 64). The fields come MSB
+# first: word = word << width | value.
+:encode                                 # encode:
+5D71                                    #     addi    sp, sp, -80
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # the instruction
+56E8                                    #     sd      s5, 16(sp)                  # frame
+5AEC                                    #     sd      s6, 24(sp)                  # fields left
+5EF0                                    #     sd      s7, 32(sp)                  # next field
+62F4                                    #     sd      s8, 40(sp)                  # word
+66F8                                    #     sd      s9, 48(sp)                  # width so far
+6AFC                                    #     sd      s10, 56(sp)                 # width of this field
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+~param_count 97000000 !param_count E7800000 #     call    param_count
+034B0A02                                #     lbu     s6, NODE_children_len(s4)
+330BAB40                                #     sub     s6, s6, a0
+833B8A02                                #     ld      s7, NODE_children(s4)
+0E05                                    #     slli    a0, a0, 3
+AA9B                                    #     add     s7, s7, a0
+014C                                    #     li      s8, 0
+814C                                    #     li      s9, 0
+:encode.1 @encode.4 63000B00            # 1:  beqz    s6, 4f
+03B50B00                                #     ld      a0, 0(s7)
+~is_fn 97000000 !is_fn E7800000         #     call    is_fn
+83B20B00                                #     ld      t0, 0(s7)
+|encode.2 01C1                          #     beqz    a0, 2f
+03C30202                                #     lbu     t1, NODE_children_len(t0)   # a fixed field: its child is its bits
+@encode.8 63000300                      #     beqz    t1, 8f
+03B38202                                #     ld      t1, NODE_children(t0)
+03330300                                #     ld      t1, 0(t1)
+03358303                                #     ld      a0, NODE_content(t1)
+83450303                                #     lbu     a1, NODE_content_len(t1)
+2E8D                                    #     mv      s10, a1
+~parse_bits 97000000 !parse_bits E7800000 #     call    parse_bits
+*encode.3 01A0                          #     j       3f
+:encode.2 1685                          # 2:  mv      a0, t0                      # a slice call: run it, value in a0
+D685                                    #     mv      a1, s5
+~exec_call 97000000 !exec_call E7800000 #     call    exec_call
+83B20B00                                #     ld      t0, 0(s7)
+03B58203                                #     ld      a0, NODE_content(t0)
+83C50203                                #     lbu     a1, NODE_content_len(t0)
+~slice_width 97000000 !slice_width E7800000 #     call    slice_width
+2A8D                                    #     mv      s10, a0
+~vregs 97020000 !vregs 93820200         #     la      t0, vregs
+03B50205                                #     ld      a0, VREG_a0*8(t0)
+:encode.3 93020004                      # 3:  li      t0, 64
+@encode.10 63005D00                     #     beq     s10, t0, 10f                # a 64-bit field is the whole word
+8542                                    #     li      t0, 1
+B392A201                                #     sll     t0, t0, s10
+FD12                                    #     addi    t0, t0, -1
+33755500                                #     and     a0, a0, t0
+331CAC01                                #     sll     s8, s8, s10
+:encode.10 336CAC00                     # 10: or      s8, s8, a0
+EA9C                                    #     add     s9, s9, s10
+A10B                                    #     addi    s7, s7, 8
+7D1B                                    #     addi    s6, s6, -1
+*encode.1 01A0                          #     j       1b
+:encode.4 A142                          # 4:  li      t0, 8
+@encode.5 63805C00                      #     beq     s9, t0, 5f
+C142                                    #     li      t0, 16
+@encode.5 63805C00                      #     beq     s9, t0, 5f
+93020002                                #     li      t0, 32
+@encode.5 63805C00                      #     beq     s9, t0, 5f
+93020004                                #     li      t0, 64
+@encode.9 63905C00                      #     bne     s9, t0, 9f
+:encode.5 6285                          # 5:  mv      a0, s8
+E685                                    #     mv      a1, s9
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+827B                                    #     ld      s7, 32(sp)
+227C                                    #     ld      s8, 40(sp)
+C27C                                    #     ld      s9, 48(sp)
+627D                                    #     ld      s10, 56(sp)
+6161                                    #     addi    sp, sp, 80
+8280                                    #     ret
+:encode.8 ~msg_field 97050000 !msg_field 93850500 # 8:  la      a1, msg_field
+13060002                                #     li      a2, msg_field_len
+83B68203                                #     ld      a3, NODE_content(t0)
+03C70203                                #     lbu     a4, NODE_content_len(t0)
+*die_name 01A0                          #     j       die_name
+:encode.9 ~msg_width 97050000 !msg_width 93850500 # 9:  la      a1, msg_width
+13069002                                #     li      a2, msg_width_len
+83368A03                                #     ld      a3, NODE_content(s4)
+03470A03                                #     lbu     a4, NODE_content_len(s4)
+*die_name 01A0                          #     j       die_name
+
+# emit: emits the a1-bit word a0, little endian, and in pass 2 prints it
+# as "<hex>  <name of call a2>".
+:emit                                   # emit:
+7971                                    #     addi    sp, sp, -48
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # word
+56E8                                    #     sd      s5, 16(sp)                  # width
+5AEC                                    #     sd      s6, 24(sp)                  # the call
+    # 32(sp): the word in memory
+2A8A                                    #     mv      s4, a0
+AE8A                                    #     mv      s5, a1
+328B                                    #     mv      s6, a2
+52F0                                    #     sd      s4, 32(sp)
+0810                                    #     addi    a0, sp, 32
+93D53A00                                #     srli    a1, s5, 3
+~emit_raw 97000000 !emit_raw E7800000   #     call    emit_raw
+~pass 97020000 !pass 93820200           #     la      t0, pass
+83B20200                                #     ld      t0, 0(t0)
+0943                                    #     li      t1, 2
+@emit.5 63906200                        #     bne     t0, t1, 5f
+~linebuf 97020000 !linebuf 93820200     #     la      t0, linebuf
+~hexdigits 17030000 !hexdigits 13030300 #     la      t1, hexdigits
+93D32A00                                #     srli    t2, s5, 2                   # hex digits
+138ECAFF                                #     addi    t3, s5, -4                  # shift of the next one
+:emit.3 @emit.4 63800300                # 3:  beqz    t2, 4f
+B35ECA01                                #     srl     t4, s4, t3
+93FEFE00                                #     andi    t4, t4, 15
+9A9E                                    #     add     t4, t1, t4
+83CE0E00                                #     lbu     t4, 0(t4)
+2380D201                                #     sb      t4, 0(t0)
+8502                                    #     addi    t0, t0, 1
+711E                                    #     addi    t3, t3, -4
+FD13                                    #     addi    t2, t2, -1
+*emit.3 01A0                            #     j       3b
+:emit.4 930E0002                        # 4:  li      t4, CH_space
+2380D201                                #     sb      t4, 0(t0)
+A380D201                                #     sb      t4, 1(t0)
+8902                                    #     addi    t0, t0, 2
+~linebuf 97050000 !linebuf 93850500     #     la      a1, linebuf
+3386B240                                #     sub     a2, t0, a1
+~write_out 97000000 !write_out E7800000 #     call    write_out
+83358B03                                #     ld      a1, NODE_content(s6)
+03460B03                                #     lbu     a2, NODE_content_len(s6)
+~write_out 97000000 !write_out E7800000 #     call    write_out
+~newline 97050000 !newline 93850500     #     la      a1, newline
+0546                                    #     li      a2, 1
+~write_out 97000000 !write_out E7800000 #     call    write_out
+:emit.5 8260                            # 5:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+C26A                                    #     ld      s5, 16(sp)
+626B                                    #     ld      s6, 24(sp)
+4561                                    #     addi    sp, sp, 48
+8280                                    #     ret
+
+# emit_raw: appends the a1 bytes at a0 to outbuf and moves cur_pc past
+# them.
+:emit_raw                               # emit_raw:
+~in_bss 97020000 !in_bss 93820200       #     la      t0, in_bss
+83B20200                                #     ld      t0, 0(t0)
+@emitted_in_bss 63900200                #     bnez    t0, emitted_in_bss
+~out_end 970F0000 !out_end 938F0F00     #     la      t6, out_end
+83B20F00                                #     ld      t0, 0(t6)
+~outbuf 17030000 !outbuf 13030300       #     la      t1, outbuf
+C163                                    #     li      t2, OUT_SIZE
+1E93                                    #     add     t1, t1, t2
+338EB200                                #     add     t3, t0, a1
+@out_full 6360C301                      #     bgtu    t3, t1, out_full
+~cur_pc 970E0000 !cur_pc 938E0E00       #     la      t4, cur_pc
+03BF0E00                                #     ld      t5, 0(t4)
+2E9F                                    #     add     t5, t5, a1
+23B0EE01                                #     sd      t5, 0(t4)
+:emit_raw.1 |emit_raw.2 81C1            # 1:  beqz    a1, 2f
+83430500                                #     lbu     t2, 0(a0)
+23807200                                #     sb      t2, 0(t0)
+0505                                    #     addi    a0, a0, 1
+8502                                    #     addi    t0, t0, 1
+FD15                                    #     addi    a1, a1, -1
+*emit_raw.1 01A0                        #     j       1b
+:emit_raw.2 23B05F00                    # 2:  sd      t0, 0(t6)
+8280                                    #     ret
+
+# skip: moves cur_pc a0 bytes on: by emitting zero bytes, or after bss
+# only the address.
+:skip                                   # skip:
+4111                                    #     addi    sp, sp, -16
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # bytes left
+2A8A                                    #     mv      s4, a0
+~in_bss 97020000 !in_bss 93820200       #     la      t0, in_bss
+83B20200                                #     ld      t0, 0(t0)
+@skip.1 63800200                        #     beqz    t0, 1f
+~cur_pc 97020000 !cur_pc 93820200       #     la      t0, cur_pc
+03B30200                                #     ld      t1, 0(t0)
+5293                                    #     add     t1, t1, s4
+23B06200                                #     sd      t1, 0(t0)
+*skip.2 01A0                            #     j       2f
+:skip.1 @skip.2 63000A00                # 1:  beqz    s4, 2f
+~zero_byte 17050000 !zero_byte 13050500 #     la      a0, zero_byte
+8545                                    #     li      a1, 1
+~emit_raw 97000000 !emit_raw E7800000   #     call    emit_raw
+7D1A                                    #     addi    s4, s4, -1
+*skip.1 01A0                            #     j       1b
+:skip.2 8260                            # 2:  ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+4101                                    #     addi    sp, sp, 16
+8280                                    #     ret
+
+# write_output: writes outbuf, everything emitted, to the file out_path.
+:write_output                           # write_output:
+4111                                    #     addi    sp, sp, -16
+06E0                                    #     sd      ra, 0(sp)
+52E4                                    #     sd      s4, 8(sp)                   # fd
+1305C0F9                                #     li      a0, AT_FDCWD
+~out_path 97050000 !out_path 93850500   #     la      a1, out_path
+8C61                                    #     ld      a1, 0(a1)
+13061024                                #     li      a2, O_CREAT_WRONLY_TRUNC
+9306D01E                                #     li      a3, MODE_0755
+93088003                                #     li      a7, SYS_openat
+73000000                                #     ecall
+@create_failed 63400500                 #     bltz    a0, create_failed
+2A8A                                    #     mv      s4, a0
+~outbuf 97050000 !outbuf 93850500       #     la      a1, outbuf
+~out_end 97020000 !out_end 93820200     #     la      t0, out_end
+03B60200                                #     ld      a2, 0(t0)
+0D8E                                    #     sub     a2, a2, a1
+~write_all 97000000 !write_all E7800000 #     call    write_all
+5285                                    #     mv      a0, s4
+93089003                                #     li      a7, SYS_close
+73000000                                #     ecall
+8260                                    #     ld      ra, 0(sp)
+226A                                    #     ld      s4, 8(sp)
+4101                                    #     addi    sp, sp, 16
+8280                                    #     ret
+
+# write_all: writes the a2 bytes at a1 to fd a0, however many writes it
+# takes.
+:write_all                              # write_all:
+AA82                                    #     mv      t0, a0
+:write_all.1 |write_all.2 01C2          # 1:  beqz    a2, 2f
+1685                                    #     mv      a0, t0
+93080004                                #     li      a7, SYS_write
+73000000                                #     ecall
+@write_failed 6350A000                  #     blez    a0, write_failed
+AA95                                    #     add     a1, a1, a0
+098E                                    #     sub     a2, a2, a0
+*write_all.1 01A0                       #     j       1b
+:write_all.2 8280                       # 2:  ret
+
+# write_out: writes a2 bytes at a1 to stdout.
+:write_out                              # write_out:
+0545                                    #     li      a0, STDOUT
+93080004                                #     li      a7, SYS_write
+73000000                                #     ecall
+8280                                    #     ret
+
+:create_failed                          # create_failed:
+~msg_create 97050000 !msg_create 93850500 #     la      a1, msg_create
+13060002                                #     li      a2, msg_create_len
+*die 01A0                               #     j       die
+:write_failed                           # write_failed:
+~msg_write 97050000 !msg_write 93850500 #     la      a1, msg_write
+4D46                                    #     li      a2, msg_write_len
+*die 01A0                               #     j       die
+:out_full                               # out_full:
+~msg_full 97050000 !msg_full 93850500   #     la      a1, msg_full
+5D46                                    #     li      a2, msg_full_len
+*die 01A0                               #     j       die
+:emitted_in_bss                         # emitted_in_bss:
+~msg_bss 97050000 !msg_bss 93850500     #     la      a1, msg_bss
+6146                                    #     li      a2, msg_bss_len
+*die 01A0                               #     j       die
+
+# die_name: writes the a2-byte message at a1 and the a4-byte name at a3 to
+# stderr, then a newline, and exits with status 1.
+:die_name                               # die_name:
+368A                                    #     mv      s4, a3
+BA8A                                    #     mv      s5, a4
+0945                                    #     li      a0, STDERR
+93080004                                #     li      a7, SYS_write
+73000000                                #     ecall
+0945                                    #     li      a0, STDERR
+D285                                    #     mv      a1, s4
+5686                                    #     mv      a2, s5
+93080004                                #     li      a7, SYS_write
+73000000                                #     ecall
+~newline 97050000 !newline 93850500     #     la      a1, newline
+0546                                    #     li      a2, 1
+
+# die: writes the a2-byte message at a1 to stderr and exits with status 1.
+:die                                    # die:
+0945                                    #     li      a0, STDERR
+93080004                                #     li      a7, SYS_write
+73000000                                #     ecall
+0545                                    #     li      a0, 1
+:exit                                   # exit:
+9308D005                                #     li      a7, SYS_exit
+73000000                                #     ecall
+#
+# The section .rodata, from here its lines of hosts/riscv64/ttpc.s
+#     .section .rodata
+:msg_usage 75736167653A2074747063203C66696C # msg_usage:      .ascii "usage: ttpc <file.ff> [<out>]\n"
+652E66663E205B3C6F75743E5D0A
+#     .equ msg_usage_len, . - msg_usage
+:msg_open 747470633A2063616E6E6F74206F7065 # msg_open:       .ascii "ttpc: cannot open file\n"
+6E2066696C650A
+#     .equ msg_open_len, . - msg_open
+:msg_read 747470633A2072656164206661696C65 # msg_read:       .ascii "ttpc: read failed\n"
+640A
+#     .equ msg_read_len, . - msg_read
+:msg_large 747470633A2066696C6520746F6F206C # msg_large:      .ascii "ttpc: file too large\n"
+617267650A
+#     .equ msg_large_len, . - msg_large
+:msg_truncated 747470633A207472756E636174656420 # msg_truncated:  .ascii "ttpc: truncated node\n"
+6E6F64650A
+#     .equ msg_truncated_len, . - msg_truncated
+:msg_trailing 747470633A20747261696C696E672062 # msg_trailing:   .ascii "ttpc: trailing bytes after the root node\n"
+79746573206166746572207468652072
+6F6F74206E6F64650A
+#     .equ msg_trailing_len, . - msg_trailing
+:msg_create 747470633A2063616E6E6F7420637265 # msg_create:     .ascii "ttpc: cannot create output file\n"
+617465206F75747075742066696C650A
+#     .equ msg_create_len, . - msg_create
+:msg_write 747470633A207772697465206661696C # msg_write:      .ascii "ttpc: write failed\n"
+65640A
+#     .equ msg_write_len, . - msg_write
+:msg_full 747470633A206F757470757420746F6F # msg_full:       .ascii "ttpc: output too large\n"
+206C617267650A
+#     .equ msg_full_len, . - msg_full
+# Followed by the name they are about:
+:msg_function 747470633A20756E6B6E6F776E206675 # msg_function:   .ascii "ttpc: unknown function: "
+6E6374696F6E3A20
+#     .equ msg_function_len, . - msg_function
+:msg_name 747470633A20756E6B6E6F776E206E61 # msg_name:       .ascii "ttpc: unknown name: "
+6D653A20
+#     .equ msg_name_len, . - msg_name
+:msg_args 747470633A2077726F6E67206E756D62 # msg_args:       .ascii "ttpc: wrong number of arguments: "
+6572206F6620617267756D656E74733A
+20
+#     .equ msg_args_len, . - msg_args
+:msg_params 747470633A20746F6F206D616E792070 # msg_params:     .ascii "ttpc: too many parameters: "
+6172616D65746572733A20
+#     .equ msg_params_len, . - msg_params
+:msg_register 747470633A206E6F7420612072656769 # msg_register:   .ascii "ttpc: not a register: "
+737465723A20
+#     .equ msg_register_len, . - msg_register
+:msg_execute 747470633A2063616E6E6F7420657865 # msg_execute:    .ascii "ttpc: cannot execute: "
+637574653A20
+#     .equ msg_execute_len, . - msg_execute
+:msg_field 747470633A206669786564206669656C # msg_field:      .ascii "ttpc: fixed field without bits: "
+6420776974686F757420626974733A20
+#     .equ msg_field_len, . - msg_field
+:msg_slice 747470633A2062616420736C6963653A # msg_slice:      .ascii "ttpc: bad slice: "
+20
+#     .equ msg_slice_len, . - msg_slice
+:msg_width 747470633A207769647468206973206E # msg_width:      .ascii "ttpc: width is not 8, 16, 32 or 64 bits: "
+6F7420382C2031362C203332206F7220
+363420626974733A20
+#     .equ msg_width_len, . - msg_width
+:msg_moved 747470633A206C6162656C206D6F7665 # msg_moved:      .ascii "ttpc: label moved between the passes: "
+64206265747765656E20746865207061
+737365733A20
+#     .equ msg_moved_len, . - msg_moved
+:msg_depth 747470633A206E657374656420746F6F # msg_depth:      .ascii "ttpc: nested too deep: "
+20646565703A20
+#     .equ msg_depth_len, . - msg_depth
+:msg_bss 747470633A20656D6974746564206166 # msg_bss:        .ascii "ttpc: emitted after bss\n"
+746572206273730A
+#     .equ msg_bss_len, . - msg_bss
+:hexdigits 30313233343536373839616263646566 # hexdigits:      .ascii "0123456789abcdef"
+:indent 2020                            # indent:         .ascii "  "
+:newline 0A                             # newline:        .ascii "\n"
+:str_rd 7264                            # str_rd:         .ascii "rd"
+:str_pc 7063                            # str_pc:         .ascii "pc"
+:str_size 73697A65                      # str_size:       .ascii "size"
+:str_ascii 6173636969                   # str_ascii:      .ascii "ascii"
+:str_align 616C69676E                   # str_align:      .ascii "align"
+:str_reserve 72657365727665             # str_reserve:    .ascii "reserve"
+:str_origin 6F726967696E                # str_origin:     .ascii "origin"
+:str_bss 627373                         # str_bss:        .ascii "bss"
+:zero_byte 00                           # zero_byte:      .byte 0
+
+00000000000000                          # padding to .data's file offset
+^00012690                               # .data is at this address (another segment)
+#
+# The section .data, from here its lines of hosts/riscv64/ttpc.s
+#     .section .data
+:hexbuf 30303030303030302020            # hexbuf:         .ascii "00000000  "         # hash prefix of a printed line
+000000000000                            #     .balign 8
+:out_path 0000000000000000              # out_path:       .dword 0                    # argv[2], 0 when only printing
+:out_end &outbuf 00000000               # out_end:        .dword outbuf               # next free byte in outbuf
+:syms_end &syms 00000000                # syms_end:       .dword syms                 # next free slot in syms
+:labels_end &labels 00000000            # labels_end:     .dword labels               # next free LABEL (pass 1)
+:label_next &labels 00000000            # label_next:     .dword labels               # next LABEL to check (pass 2)
+:pass 0000000000000000                  # pass:           .dword 0                    # 1 or 2
+:cur_pc 0000000000000000                # cur_pc:         .dword 0                    # address of the next byte
+:in_bss 0000000000000000                # in_bss:         .dword 0                    # 1 after the builtin bss
+:scope_depth 0000000000000000           # scope_depth:    .dword 0                    # placed functions in scopes
+
+# The exec seed: the instructions that exec context runs itself, rd = v1 op
+# v0, with v0 and v1 the other operands in parameter order (rs2 rs1, or imm
+# rs1, or shamt rs1).
+:exec_ops                               # exec_ops:
+6164640000000000                        #     .ascii "add\0\0\0\0\0"
+&op_add 00000000                        #     .dword op_add
+6164646900000000                        #     .ascii "addi\0\0\0\0"
+&op_add 00000000                        #     .dword op_add
+7375620000000000                        #     .ascii "sub\0\0\0\0\0"
+&op_sub 00000000                        #     .dword op_sub
+616E640000000000                        #     .ascii "and\0\0\0\0\0"
+&op_and 00000000                        #     .dword op_and
+616E646900000000                        #     .ascii "andi\0\0\0\0"
+&op_and 00000000                        #     .dword op_and
+6F72000000000000                        #     .ascii "or\0\0\0\0\0\0"
+&op_or 00000000                         #     .dword op_or
+6F72690000000000                        #     .ascii "ori\0\0\0\0\0"
+&op_or 00000000                         #     .dword op_or
+786F720000000000                        #     .ascii "xor\0\0\0\0\0"
+&op_xor 00000000                        #     .dword op_xor
+786F726900000000                        #     .ascii "xori\0\0\0\0"
+&op_xor 00000000                        #     .dword op_xor
+736C6C0000000000                        #     .ascii "sll\0\0\0\0\0"
+&op_sll 00000000                        #     .dword op_sll
+736C6C6900000000                        #     .ascii "slli\0\0\0\0"
+&op_sll 00000000                        #     .dword op_sll
+73726C0000000000                        #     .ascii "srl\0\0\0\0\0"
+&op_srl 00000000                        #     .dword op_srl
+73726C6900000000                        #     .ascii "srli\0\0\0\0"
+&op_srl 00000000                        #     .dword op_srl
+7372610000000000                        #     .ascii "sra\0\0\0\0\0"
+&op_sra 00000000                        #     .dword op_sra
+7372616900000000                        #     .ascii "srai\0\0\0\0"
+&op_sra 00000000                        #     .dword op_sra
+6D756C0000000000                        #     .ascii "mul\0\0\0\0\0"
+&op_mul 00000000                        #     .dword op_mul
+:exec_ops_end                           # exec_ops_end:
+
+#
+# The section .bss: no bytes in the file, only its labels
+#     .section .bss
+#     .balign 8
+^000127E8 :nodes                        # nodes:          .skip MAX_NODES * NODE_size
+^002127E8 :ptrs                         # ptrs:           .skip MAX_NODES * 8
+^002527E8 :syms                         # syms:           .skip MAX_NODES * 8         # the function NODEs, see collect_syms
+^002927E8 :labels                       # labels:         .skip MAX_NODES * LABEL_size
+^003527E8 :scopes                       # scopes:         .skip MAX_DEPTH * 8         # the placed functions around pc
+^003529E8 :vregs                        # vregs:          .skip 32 * 8                # the registers of exec context
+^00352AE8 :linebuf                      # linebuf:        .skip 24                    # hex of an emitted word
+^00352B00 :outbuf                       # outbuf:         .skip OUT_SIZE
+^00362B00 :buf                          # buf:            .skip BUF_SIZE
+
+# Registers that live across the whole program:
+#   s0  parse cursor in buf
+#   s1  end of the loaded bytes
+#   s2  next free NODE in nodes
+#   s3  next free slot in ptrs
+
+#
+# The section .shstrtab: the names of the sections
+00                                      # ""
+2E736873747274616200                    # ".shstrtab"
+2E7465787400                            # ".text"
+2E726F6461746100                        # ".rodata"
+2E6461746100                            # ".data"
+2E62737300                              # ".bss"
+00000000                                # padding to the section headers
+#
+# Section header 0
+00000000                                # sh_name = 0x0: its name at this offset of .shstrtab
+00000000                                # sh_type = 0x0: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0000000000000000                        # sh_flags = 0x0: 1 W, 2 A, 4 X
+0000000000000000                        # sh_addr = 0x0: its address
+0000000000000000                        # sh_offset = 0x0: its file offset
+0000000000000000                        # sh_size = 0x0: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0000000000000000                        # sh_addralign = 0x0
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 1: .text
+0B000000                                # sh_name = 0xb: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0600000000000000                        # sh_flags = 0x6: 1 W, 2 A, 4 X
+B000010000000000                        # sh_addr = 0x100b0: its address
+B000000000000000                        # sh_offset = 0xb0: its file offset
+7C13000000000000                        # sh_size = 0x137c: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0200000000000000                        # sh_addralign = 0x2
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 2: .rodata
+11000000                                # sh_name = 0x11: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0200000000000000                        # sh_flags = 0x2: 1 W, 2 A, 4 X
+2C14010000000000                        # sh_addr = 0x1142c: its address
+2C14000000000000                        # sh_offset = 0x142c: its file offset
+5D02000000000000                        # sh_size = 0x25d: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0100000000000000                        # sh_addralign = 0x1
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 3: .data
+19000000                                # sh_name = 0x19: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0300000000000000                        # sh_flags = 0x3: 1 W, 2 A, 4 X
+9026010000000000                        # sh_addr = 0x12690: its address
+9016000000000000                        # sh_offset = 0x1690: its file offset
+5801000000000000                        # sh_size = 0x158: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0800000000000000                        # sh_addralign = 0x8
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 4: .bss
+1F000000                                # sh_name = 0x1f: its name at this offset of .shstrtab
+08000000                                # sh_type = 0x8: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0300000000000000                        # sh_flags = 0x3: 1 W, 2 A, 4 X
+E827010000000000                        # sh_addr = 0x127e8: its address
+E817000000000000                        # sh_offset = 0x17e8: its file offset
+1803450000000000                        # sh_size = 0x450318: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0800000000000000                        # sh_addralign = 0x8
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 5: .shstrtab
+01000000                                # sh_name = 0x1: its name at this offset of .shstrtab
+03000000                                # sh_type = 0x3: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0000000000000000                        # sh_flags = 0x0: 1 W, 2 A, 4 X
+0000000000000000                        # sh_addr = 0x0: its address
+E817000000000000                        # sh_offset = 0x17e8: its file offset
+2400000000000000                        # sh_size = 0x24: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0100000000000000                        # sh_addralign = 0x1
+0000000000000000                        # sh_entsize = 0x0
