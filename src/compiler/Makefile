@@ -440,12 +440,12 @@ $(foreach t,$(TARGETS),$(eval $(call target,$(t))))
 # process that checks the second pass against the first's samples) and -j6
 # (the second pass on six) is the bytes and listing of one process; cnow,
 # cct, ctasm and ctmix run compile time in the first pass, which the
-# second's shares then take up. On x86_64 by its own stage2.
-JTTPC := $(if $(filter x86_64,$(ARCH)),$(BUILD)/x86_64/stage2,$(QEMU) $(BOOT)/stage2)
-ctest-j: $(CPROGS:%=$(P)/%.celf) $(foreach t,$(TARGETS),$(patsubst %,$(P)/$(t)/%.celf,$(filter-out $(CSKIP_$(t)),$(CPORTABLE)) $(CONLY_$(t)))) $(if $(filter x86_64,$(ARCH)),$(BUILD)/x86_64/stage2,$(BOOT)/stage2)
+# second's shares then take up. By riscv64's stage2, whose compile
+# time (the host's) ctasm needs.
+ctest-j: $(CPROGS:%=$(P)/%.celf) $(foreach t,$(TARGETS),$(patsubst %,$(P)/$(t)/%.celf,$(filter-out $(CSKIP_$(t)),$(CPORTABLE)) $(CONLY_$(t)))) $(BOOT)/stage2
 	@set -e; d=$(P)/j; mkdir -p $$d; \
 	one() { for j in 0 6; do \
-	    $(JTTPC) -j$$j --target $$1 $(TTPCFLAGS) $(SHARED) progs/$$2.ff $$d/$$2.$$1.$$j > $$d/$$2.$$1.$$j.lst; \
+	    $(QEMU) $(BOOT)/stage2 -j$$j --target $$1 $(TTPCFLAGS) $(SHARED) progs/$$2.ff $$d/$$2.$$1.$$j > $$d/$$2.$$1.$$j.lst; \
 	    cmp $$d/$$2.$$1.$$j $$3.celf; cmp $$d/$$2.$$1.$$j.lst $$3.lst; done; rm -f $$d/$$2.$$1.*; }; \
 	for p in $(CPROGS); do one riscv64 $$p $(P)/$$p; done; \
 	$(foreach t,$(TARGETS),for p in $(filter-out $(CSKIP_$(t)),$(CPORTABLE)) $(CONLY_$(t)); do one $(t) $$p $(P)/$(t)/$$p; done;) \
