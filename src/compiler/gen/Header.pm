@@ -26,8 +26,9 @@ use warnings;
 use Exporter qw(import);
 use FF ();
 use File::Spec;
+use Cwd ();
 
-our @EXPORT_OK = qw(source_of leading_comment leading_header spdx notice_lines header_text header_of shown_path real_path GENERATED NOHEADER license_nodes);
+our @EXPORT_OK = qw(source_of leading_comment leading_header spdx notice_lines header_text header_of shown_path real_path GENERATED NOHEADER NOHEADER_GCC license_nodes unit_label);
 
 # The source file of a .i or .s (its first two line markers), or nothing
 # for a generated one (<stdin>: a system call from syscalls.list).
@@ -98,6 +99,8 @@ sub spdx_one {
     }
     return unless $lic;
     return "$lic WITH GCC-exception-2.0" if $t =~ /unlimited permission to link the compiled version of this file/i;
+    # (libgcc's: the GPL with the GCC Runtime Library Exception)
+    return "$lic WITH GCC-exception-3.1" if $t =~ /GCC Runtime Library Exception, version 3\.1/i;
     $lic;
 }
 
@@ -134,6 +137,35 @@ sub header_text {
 use constant GENERATED => 'generated from syscalls.list; glibc-2.44 COPYING.LIB';
 # and a source that begins with code, no comment (glibc's stdlib/inlines.c)
 use constant NOHEADER => 'no header of its own; glibc-2.44 COPYING.LIB';
+# (and one of gcc's, libgcc's enable-execute-stack-empty.c: libgcc's license)
+use constant NOHEADER_GCC => 'no header of its own; gcc-16.2.0 COPYING3 and COPYING.RUNTIME';
+
+# The source trees a file comes from, by the variable that names each:
+# glibc's (GLIBC_SRC) and gcc's (LIBGCC_SRC, the libgcc of src/libgcc),
+# each with its name in a page's comments, and the license and line of a
+# file without a header of its own.
+my @roots = (
+    { var => 'GLIBC_SRC', name => 'glibc-2.44', spdx => 'LGPL-2.1-or-later', none => NOHEADER },
+    { var => 'LIBGCC_SRC', name => 'gcc-16.2.0', spdx => 'GPL-3.0-or-later WITH GCC-exception-3.1', none => NOHEADER_GCC },
+);
+# A file's tree and its path in it; glibc's (and the path as it is) for a
+# file of none (one glibc's build made, in obj/)
+sub root_of {
+    my ($p) = @_;
+    for my $r (@roots) {
+        my $s = $ENV{ $r->{var} } // next;
+        $s =~ s{/+$}{};
+        return ($r, $1) if $p =~ m{^\Q$s\E/(.*)$};
+    }
+    ($roots[0], $p);
+}
+# The name of the tree a .i or .s is made of (its source's): what a
+# function's comment names with its unit
+my %label;
+sub unit_label {
+    my ($i) = @_;
+    $label{$i} //= do { my $s = -e $i ? source_of($i) : undef; defined $s ? (root_of($s))[0]{name} : $roots[0]{name} };
+}
 
 # A path resolved against a folder, without its .. parts.
 sub resolve {
@@ -142,6 +174,8 @@ sub resolve {
     $p = defined $cwd ? "$cwd/$p" : File::Spec->rel2abs($p) unless $p =~ m{^/};
     1 while $p =~ s{/(?!\.\./)[^/]+/\.\./}{/};
     $p =~ s{//+}{/}g;
+    # (a link in libgcc's build to its source: enable-execute-stack.c)
+    $p = Cwd::abs_path($p) if defined $ENV{LIBGCC_SRC} && -l $p;
     $p;
 }
 
@@ -189,20 +223,17 @@ sub leading_header {
     substr($text, length $first, ($lic // $head) - length $first);
 }
 
-# A file as a page names it: from glibc's source folder (GLIBC_SRC), else
-# as it is (a file the build made, in obj/).
-sub shown_path {
-    my ($p) = @_;
-    my $src = $ENV{GLIBC_SRC};
-    return $p unless defined $src;
-    $src =~ s{/+$}{};
-    $p =~ m{^\Q$src\E/(.*)$} ? $1 : $p;
-}
+# A file as a page names it: from its tree's source folder (GLIBC_SRC,
+# LIBGCC_SRC), else as it is (a file the build made, in obj/).
+sub shown_path { (root_of($_[0]))[1] }
+# (and back: glibc's, else gcc's where it has that file)
 sub real_path {
     my ($p) = @_;
     return $p if $p =~ m{^/};
     defined $ENV{GLIBC_SRC} or die "header: GLIBC_SRC is not set: run this in `nix develop`\n";
-    "$ENV{GLIBC_SRC}/$p";
+    my $g = "$ENV{GLIBC_SRC}/$p";
+    return "$ENV{LIBGCC_SRC}/$p" if !-e $g && defined $ENV{LIBGCC_SRC} && -e "$ENV{LIBGCC_SRC}/$p";
+    $g;
 }
 
 sub slurp { my ($f) = @_; open my $h, '<:raw', $f or die "header: cannot open $f: $!\n"; local $/; <$h> }
@@ -228,11 +259,12 @@ sub header_of {
             $first //= [$f, $h] if defined $src && $f eq $src;
             next;
         }
-        return { file => shown_path($f), spdx => $x, lines => [lines_ok($f, notice_lines($h))] };
+        return { file => shown_path($f), name => (root_of($f))[0]{name}, spdx => $x, lines => [lines_ok($f, notice_lines($h))] };
     }
-    return { file => shown_path($first->[0]), spdx => 'LGPL-2.1-or-later', lines => [lines_ok($first->[0], notice_lines($first->[1]))] } if $first;
-    return { file => '<stdin>', spdx => 'LGPL-2.1-or-later', lines => [GENERATED] } unless defined $src;
-    { file => shown_path($src), spdx => 'LGPL-2.1-or-later', lines => [NOHEADER] };
+    return { file => '<stdin>', name => $roots[0]{name}, spdx => 'LGPL-2.1-or-later', lines => [GENERATED] } unless defined $src;
+    my ($r) = root_of($src);
+    return { file => shown_path($first->[0]), name => $r->{name}, spdx => $r->{spdx}, lines => [lines_ok($first->[0], notice_lines($first->[1]))] } if $first;
+    { file => shown_path($src), name => $r->{name}, spdx => $r->{spdx}, lines => [$r->{none}] };
 }
 
 sub lines_ok {
@@ -254,7 +286,7 @@ sub license_nodes {
     for my $i (@ifiles) { my $x = header_of($i); $h{ $x->{file} } //= $x }
     map {
         my $x = $h{$_};
-        (FF::node('comment', FF::node("glibc-2.44 $x->{file}")),
+        (FF::node('comment', FF::node("$x->{name} $x->{file}")),
          FF::node('license', map { FF::node($_) } $x->{spdx}, @{ $x->{lines} }))
     } sort keys %h;
 }

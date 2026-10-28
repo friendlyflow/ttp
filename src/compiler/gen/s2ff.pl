@@ -49,7 +49,7 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use FF qw(node write_txt);
-use Header qw(license_nodes);
+use Header qw(license_nodes unit_label);
 
 my $page = 'glibc asm';
 my @files;
@@ -257,6 +257,9 @@ sub canon {
 # ---- the source --------------------------------------------------------------
 my (@fns, $fn, $block, $file, $line);
 ($file, $line) = ($src =~ s{.*/}{}r, 0);     # (a .s of gcc's has no line marks)
+# (the name of its tree, glibc-2.44, or gcc-16.2.0 for libgcc's, whose
+# files are named from gcc's folder)
+my $label = unit_label($src);
 my $n = 0;
 my $pos = 0;        # the bytes GNU as made so far
 my $ends = 1;       # the last instruction does not run on (a return, a jump)
@@ -296,7 +299,7 @@ sub finish {
 open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
 while (my $l = <$s>) {
     chomp $l;
-    if ($l =~ /^# (\d+) "([^"]*)"/) { ($line, $file) = ($1 - 1, $2 =~ s{^(\.\./)+}{}r); next }
+    if ($l =~ /^# (\d+) "([^"]*)"/) { ($line, $file) = ($1 - 1, $2 =~ s{^(\.\./)+}{}r =~ s{^gcc-[\d.]+/}{}r); next }
     $line++;
     # a # starts a comment (.S's own, kept by cpp: dl-trampoline's), outside a text
     $l =~ s/\s*#.*$// unless $l =~ /"/;
@@ -371,11 +374,11 @@ while (my $l = <$s>) {
                 # a label, so that they are placed together; asm first (which
                 # in asm is nothing) makes it an entry C may call: ttpc places
                 # the function that holds it
-                $block = node("$name:", node('asm'), node('comment', node("glibc-2.44 $file:$line")));
+                $block = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
                 push @{$fn->{children}}, $block;
             } else {
                 finish();
-                $fn = node("$name:", node('asm'), node('comment', node("glibc-2.44 $file:$line")));
+                $fn = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
                 push @fns, $fn;
                 undef $block;
                 $ends = 0;      # none of its own yet: it runs on into what follows
