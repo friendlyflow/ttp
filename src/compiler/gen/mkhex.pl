@@ -45,6 +45,9 @@ my $a64 = $arch eq 'aarch64';
 my $arm = $arch eq 'arm';
 my $fixed = $rv || $a64 || $arm;    # 4-byte instructions, read from their bits
 my $W = $arm ? 4 : 8;               # ELF32 or ELF64: a word of the headers
+# arm's programs are linked at their BASE, where they run: their movw and
+# movt take absolute addresses (the others' code is pc-relative)
+my $ARMBASE = 0x10000;
 # x86_64: as the Makefile's SEED=gnu and make hex; riscv64 the same: the
 # seed as -march=rv64imac (ttpc.s's ASFLAGS) without the arch attribute,
 # ld without relaxing, symbols or a page of its own for the code; the
@@ -68,7 +71,7 @@ else { run("${X}as", @as, "-aln=$t/l", '--listing-cont-lines=1000000', $src, '-o
 my $bin;
 if ($mode ne 'hex2') {
     my $o = "$t/o";
-    if ($fixed) { run("${X}ld", @ld, '-Ttext=0', '-e', '0', "$t/o", '-o', "$t/e"); $o = "$t/e" }
+    if ($fixed) { run("${X}ld", @ld, sprintf('-Ttext=0x%x', $arm ? $ARMBASE : 0), '-e', '0', "$t/o", '-o', "$t/e"); $o = "$t/e" }
     run("${X}objcopy", '-O', 'binary', '-j', '.text', $o, "$t/bin");
 } else {
     run("${X}ld", @ld, '-e', '_start', "$t/o", '-o', "$t/u");
@@ -79,7 +82,7 @@ $bin = slurp("$t/bin");
 # the sections: name -> [addr, file offset, size, nobits]
 my (%sec, @order);
 if ($mode ne 'hex2') {
-    %sec = ('.text' => [0, 0, length $bin, 0]);
+    %sec = ('.text' => [$arm ? $ARMBASE : 0, 0, length $bin, 0]);
     @order = ('.text');
 } else {
     for (split /\n/, out("${X}readelf -SW $t/bin")) {
@@ -1004,7 +1007,14 @@ if ($mode eq 'm1') {
 if ($mode eq 'flat') {
     push @out, "# $src as hex2 text, made by gen/mkhex.pl: each line the bytes of",
         "# one asm line, then the line. :label defines a label at the address",
-        $a64 ? ("# of the next byte (from 0, the file's first byte); ^~label writes 3",
+        $arm ? ("# of the next byte (from BASE, the file's first byte's: ^ below);",
+            "# ^~label writes 3 bytes, imm24 of B, BL or B<cond> ((label minus the",
+            "# instruction's address minus 8) / 4), the byte after them is cond and",
+            "# the opcode; !label and ~label XOR label's address into the MOVW",
+            "# (:lower16:) and the MOVT (:upper16:) after them, each written with its",
+            "# immediate zero. hex2 reads only what is before each '#'.", '#',
+            row(sprintf('^%08X', $ARMBASE), 'the first byte is at BASE, where it runs'))
+        : $a64 ? ("# of the next byte (from 0, the file's first byte); ^~label writes 3",
             "# bytes, imm26's low 24 bits of B or BL (label minus the instruction's",
             "# address, / 4), the byte after them the rest; \@label (imm19 of B.cond,",
             "# CBZ, CBNZ), ~label (ADRP's page) and !label (the ADD :lo12: after it)",
