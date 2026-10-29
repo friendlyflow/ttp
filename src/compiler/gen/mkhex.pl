@@ -802,6 +802,94 @@ if ($mode eq 'm1' && $a64) {
     exit 0;
 }
 
+# m1 for arm: each instruction as stage0-posix's armv7l M1 writes it, a
+# DEFINE of all its bits named as the instruction (objdump's text, its
+# first space '_', no other spaces, no '#', no comment: mov_r0,1
+# ldr_r0,[r1,4]), but a reference to a label: ^~label then the top byte of
+# B, BL or B<cond>, cond and the opcode, named as stage0-posix's
+# (JUMP_ALWAYS EA, CALL_ALWAYS EB, JUMP_EQUAL 0A, JUMP_NE 1A, and so on as
+# JUMP_<cond> CALL_<cond>), !label movw_rN and ~label movt_rN for la's pair
+# (the instruction with its immediate zero)
+if ($mode eq 'm1' && $arm) {
+    my (%def, @rows, %dis);
+    for (split /\n/, out("${X}objdump -d --no-show-raw-insn $t/e")) {
+        $dis{ hex $1 } = $2 if /^\s*([0-9a-f]+):\s+(\S.*?)\s*$/;
+    }
+    my $nm = sub {
+        my $s = shift;
+        $s =~ s{\s*[@;].*}{};
+        $s =~ s/\s+/_/;
+        $s =~ s/\s+//g;
+        $s =~ s/#//g;
+        return $s;
+    };
+    my $put = sub {
+        my ($name, $v, $why) = @_;
+        die "mkhex: $name is $def{$name}[0] and $v\n" if $def{$name} && $def{$name}[0] ne $v;
+        $def{$name} //= [$v, $why];
+        return $name;
+    };
+    my %cname = (eq => 'EQUAL', ne => 'NE', al => 'ALWAYS');
+    my ($addr) = @{ $sec{'.text'} };
+    for my $l (@{ $bysec{'.text'} }) {
+        my $t = $l->{text};
+        die "mkhex: line $l->{n}: a local label\n" if grep { defined $_->{num} } @{ $l->{labels} };
+        my $defs = join ' ', map { ":$_->{name}" } @{ $l->{labels} };
+        if (!defined $l->{off}) {
+            push @rows, $defs ne '' ? row($defs, $t) : $t eq '' ? '' : cm($t);
+            next;
+        }
+        my $b = substr $bin, $l->{off}, $l->{end} - $l->{off};
+        if ($l->{mn} =~ /^\./) {
+            my $str = $l->{mn} eq '.asciz' && $l->{ops} =~ /^"([^"\\]*)"$/ ? $1 : undef;
+            if (defined $str && "$str\0" eq $b && $str !~ /[\s'"]/) { push @rows, row(join(' ', grep { $_ ne '' } $defs, "\"$str\""), $t); next }
+            my @h = unpack '(H32)*', $b;
+            push @rows, row(join(' ', grep { $_ ne '' } $defs, uc shift @h), $t), map { uc } @h;
+            next;
+        }
+        my @tok;
+        for (my $p = $l->{off}; $p < $l->{end}; $p += 4) {
+            my $w = rd($p, 4);
+            my $d = $dis{ $addr + $p } // die sprintf "mkhex: line %d: no disassembly at 0x%x\n", $l->{n}, $addr + $p;
+            if (($w & 0x0e000000) == 0x0a000000 && $w >> 28 != 15) {
+                my $lab = name_at($addr + $p + 8 + 4 * sxb($w & 0xffffff, 24), $l->{ops}) // die "mkhex: line $l->{n}: no label at the target of $t\n";
+                my $c = $armcond[$w >> 28];
+                my $k = ($w >> 24 & 1 ? 'CALL_' : 'JUMP_') . ($cname{$c} // uc $c);
+                push @tok, "^~$lab", $put->($k, sprintf('%02X', $w >> 24), sprintf('%s: cond %04b %s, 101, L %d, after ^~label\'s 3 bytes (imm24)', $w >> 24 & 1 ? 'BL' : 'B', $w >> 28, $c, $w >> 24 & 1));
+            } elsif (($w & 0x0ff00000) == 0x03000000 && ($l->{mn} eq 'la' || $l->{ops} =~ /:lower16:/)) {
+                my $w2 = $p + 8 <= $l->{end} ? rd($p + 4, 4) : die "mkhex: line $l->{n}: a movw alone\n";
+                die "mkhex: line $l->{n}: a movw without its movt\n" unless ($w2 & 0x0ff00000) == 0x03400000 && (($w2 >> 12) & 15) == (($w >> 12) & 15);
+                my $imm = sub { (($_[0] >> 4) & 0xf000) | ($_[0] & 0xfff) };
+                my $lab = name_at($imm->($w2) << 16 | $imm->($w), $l->{ops}) // die "mkhex: line $l->{n}: no label at the movw pair's target\n";
+                my $r = $armreg[($w >> 12) & 15];
+                push @tok, "!$lab", $put->("movw_$r", &le($w & ~0x000f0fff, 4), 'MOVW: cond 0011 0000 imm4 Rd imm12, the immediate zero (!label)'),
+                    "~$lab", $put->("movt_$r", &le($w2 & ~0x000f0fff, 4), 'MOVT: cond 0011 0100 imm4 Rd imm12, the immediate zero (~label)');
+                $p += 4;
+            } else {
+                die sprintf "mkhex: line %d: ldr literal or adr: %s\n", $l->{n}, $t
+                    if ($w & 0x0f7f0000) == 0x051f0000 || ($w & 0x0fef0000) == 0x028f0000 || ($w & 0x0fef0000) == 0x024f0000;
+                push @tok, $put->($nm->($d), &le($w, 4), '');
+            }
+        }
+        push @rows, row(join(' ', grep { $_ ne '' } $defs, @tok), $t);
+    }
+    push @out, "# $src as M1 text, made by gen/mkhex.pl, as stage0-posix's armv7l",
+        "# M1 writes ARM: first a DEFINE for each instruction it uses, its 4 bytes",
+        "# (little endian), named as objdump writes it (its first space '_', no",
+        "# other spaces, no '#'), and for the references to labels: JUMP_ALWAYS",
+        "# CALL_ALWAYS JUMP_EQUAL JUMP_NE ... the top byte of B, BL, B<cond> (cond",
+        "# and the opcode) after hex2's ^~label (imm24, its 3 low bytes), movw_rN",
+        "# after !label and movt_rN after ~label (la's pair, the immediate zero:",
+        "# hex2 XORs in label's low and high 16 bits). Then each asm line: :label",
+        "# for its labels, then its instructions. Data is hex or a \"string\" (its",
+        "# bytes, then 00). It starts at BASE (^00010000). M1 reads only what is",
+        "# before each '#'; M1's hex2 text is made by hex2.", '#';
+    push @out, map { row("DEFINE $_ $def{$_}[0]", $def{$_}[1]) } sort keys %def;
+    push @out, '#', row(sprintf('^%08X', $ARMBASE), 'the first byte is at BASE, where it runs'), @rows;
+    print "$_\n" for @out;
+    exit 0;
+}
+
 # m1 for riscv64: each instruction as stage0-posix's riscv64 M1 writes
 # it: its registers (rd_a0 rs1_sp rs2_t0, the fields as words) and
 # immediate (!n I, @n S, ~n U) or label (@label B, $label J, ~label and
