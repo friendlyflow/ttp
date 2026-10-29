@@ -1,0 +1,615 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/aarch64/M1.s as hex2 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then the line. :label defines a label at the address
+# of the next byte (from 0, the file's first byte); %label is the 4
+# bytes of label minus the address after them (rel32), !label the same
+# in 1 byte (rel8). hex2 reads only what is before each '#'.
+#
+# M1 for aarch64 Linux: a macro assembler, hex2 with names. The third link
+# of the bootstrap, built by hex2 from hosts/aarch64/M1.hex2 (made from
+# this file once by gen/mkhex.pl, a dev aid; the chain never reads this
+# file). It turns hosts/aarch64/asm.M1 into hex2 text, which hex2 makes
+# into asm, the assembler of the seed's asm. As stage0-posix's M1.
+#
+#   M1 < file.M1 > file.hex2
+#
+# The input is tokens: bytes up to a space, tab or newline (any byte up to
+# 0x20). '#' and ';' start a comment to the end of the line. A token
+#   DEFINE name value   makes name a macro: every other token name, before
+#                       or after, becomes the text value (hex digits)
+#   "text"              the hex of the bytes of text, then 00 (a C string;
+#                       text is every byte up to the next '"')
+#   'text'              text as it is (raw hex2 text, spaces too)
+#   !n @n %n            the number n in 1, 2 or 4 bytes, little endian, as
+#                       hex: decimal, or hex after 0x, '-' before it for a
+#                       negative one; it must fit, signed or unsigned
+#   :name ^~name @name ~name !name &name ^hex
+#                       hex2's labels, references and addresses, as they are
+#                       (after ! @ % a name, not a number)
+#   a macro's name      its value
+#   hex digits          as they are (raw hex2 text)
+# Anything else is an error. Out go the tokens' texts, each followed by a
+# space, and a newline for each newline of the input: hex2 text, line by
+# line as the input. The input is read whole, then twice: the first pass
+# collects the macros, the second writes. On an unknown macro, a macro
+# defined twice, a number that is none or does not fit, a string without
+# its end, a full table, input or output and a failed read or write it
+# says so on stderr and ends with status 1; else with 0.
+#
+# One flat file, loaded at BASE by its first program header, read and
+# run; the second maps the memory it writes, MACROS to the end of OUTPUT.
+# The registers:
+#   x20  the next byte of the input        x21  the end of the input
+#   x22  the next byte of the output       x23  the pass, 1 or 2
+#   x24  the next free macro
+# A macro is 32 bytes: the address of its name in the input, the name's
+# length, the address of its value, the value's length.
+
+#     .equ BASE, 0x600000
+#     .equ MACROS, 0x700000               // 65536 macros of 32 bytes
+#     .equ MACROS_END, MACROS + 0x10000 * 32
+#     .equ INPUT, 0x900000                // 16 MiB of input
+#     .equ INPUT_END, INPUT + 0x1000000
+#     .equ OUTPUT, 0x1900000              // 64 MiB of output
+#     .equ OUTPUT_END, OUTPUT + 0x4000000
+#     .equ SYS_read, 63
+#     .equ SYS_write, 64
+#     .equ SYS_exit, 93
+
+# la: reg = the address of sym, as ttpc.s's
+#     .macro la reg, sym
+#     adrp    \reg, \sym
+#     add     \reg, \reg, :lo12:\sym
+#     .endm
+
+:ehdr                                   # ehdr:                                   // the ELF header, 64 bytes
+7F454C46                                #     .byte 0x7f, 0x45, 0x4c, 0x46        // e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                                      #     .byte 2                             // EI_CLASS: ELFCLASS64
+01                                      #     .byte 1                             // EI_DATA: ELFDATA2LSB, little endian
+01                                      #     .byte 1                             // EI_VERSION: EV_CURRENT
+00                                      #     .byte 0                             // EI_OSABI: System V
+0000000000000000                        #     .byte 0, 0, 0, 0, 0, 0, 0, 0        // EI_ABIVERSION 0, then padding to 16
+0200                                    #     .hword 2                            // e_type: ET_EXEC, an executable
+B700                                    #     .hword 0xb7                         // e_machine: EM_AARCH64
+01000000                                #     .word 1                             // e_version: EV_CURRENT
+B001600000000000                        #     .dword BASE + _start - ehdr         // e_entry: the address of _start
+4000000000000000                        #     .dword phdr - ehdr                  // e_phoff: the program headers follow
+0000000000000000                        #     .dword 0                            // e_shoff: no section headers
+00000000                                #     .word 0                             // e_flags: none on aarch64
+4000                                    #     .hword 64                           // e_ehsize: this header's size
+3800                                    #     .hword 56                           // e_phentsize: a program header's size
+0200                                    #     .hword 2                            // e_phnum: two program headers
+0000                                    #     .hword 0                            // e_shentsize: no section headers
+0000                                    #     .hword 0                            // e_shnum: none
+0000                                    #     .hword 0                            // e_shstrndx: none
+:phdr                                   # phdr:                                   // the program: 56 bytes
+01000000                                #     .word 1                             // p_type: PT_LOAD
+05000000                                #     .word 5                             // p_flags: PF_R | PF_X, read and run
+0000000000000000                        #     .dword 0                            // p_offset: from the file's first byte
+0000600000000000                        #     .dword BASE                         // p_vaddr: loaded at BASE
+0000600000000000                        #     .dword BASE                         // p_paddr: the same
+FC07000000000000                        #     .dword end - ehdr                   // p_filesz: the whole file
+FC07000000000000                        #     .dword end - ehdr                   // p_memsz: the same
+0010000000000000                        #     .dword 0x1000                       // p_align: a page
+                                        # its memory: 56 bytes
+01000000                                #     .word 1                             // p_type: PT_LOAD
+06000000                                #     .word 6                             // p_flags: PF_R | PF_W, read and write
+0000000000000000                        #     .dword 0                            // p_offset: none of the file
+0000700000000000                        #     .dword MACROS                       // p_vaddr: the macros, input, output
+0000700000000000                        #     .dword MACROS                       // p_paddr: the same
+0000000000000000                        #     .dword 0                            // p_filesz: none, all zero
+0000200500000000                        #     .dword OUTPUT_END - MACROS          // p_memsz: to the end of the output
+0010000000000000                        #     .dword 0x1000                       // p_align: a page
+
+:str_define 444546494E45                # str_define:     .ascii "DEFINE"
+:digits 30313233343536373839414243444546 # digits:         .ascii "0123456789ABCDEF\n"
+0A
+:msg_unknown 4D313A20756E6B6E6F776E206D616372 # msg_unknown:    .ascii "M1: unknown macro: "
+6F3A20
+#     .equ msg_unknown_len, . - msg_unknown
+:msg_twice 4D313A206D6163726F20646566696E65 # msg_twice:      .ascii "M1: macro defined twice: "
+642074776963653A20
+#     .equ msg_twice_len, . - msg_twice
+:msg_range 4D313A206E756D626572206F7574206F # msg_range:      .ascii "M1: number out of range: "
+662072616E67653A20
+#     .equ msg_range_len, . - msg_range
+:msg_number 4D313A206E6F742061206E756D626572 # msg_number:     .ascii "M1: not a number: "
+3A20
+#     .equ msg_number_len, . - msg_number
+:msg_string 4D313A20737472696E6720776974686F # msg_string:     .ascii "M1: string without its end"
+75742069747320656E64
+#     .equ msg_string_len, . - msg_string
+:msg_value 4D313A20444546494E4520776974686F # msg_value:      .ascii "M1: DEFINE without its value"
+7574206974732076616C7565
+#     .equ msg_value_len, . - msg_value
+:msg_many 4D313A20746F6F206D616E79206D6163 # msg_many:       .ascii "M1: too many macros"
+726F73
+#     .equ msg_many_len, . - msg_many
+:msg_large 4D313A20696E70757420746F6F206C61 # msg_large:      .ascii "M1: input too large"
+726765
+#     .equ msg_large_len, . - msg_large
+:msg_long 4D313A206F757470757420746F6F206C # msg_long:       .ascii "M1: output too large"
+61726765
+#     .equ msg_long_len, . - msg_long
+:msg_read 4D313A2072656164206661696C6564 # msg_read:       .ascii "M1: read failed"
+#     .equ msg_read_len, . - msg_read
+:msg_write 4D313A207772697465206661696C6564 # msg_write:      .ascii "M1: write failed"
+#     .equ msg_write_len, . - msg_write
+000000                                  #     .balign 4                           // the code, 4-byte aligned (zeros)
+
+:_start                                 # _start:                                 // read all of stdin into INPUT
+1512A0D2                                #     movz    x21, #0x90, lsl #16         // INPUT: the end of what is read
+:read                                   # read:
+0232A0D2                                #     movz    x2, #0x190, lsl #16         // INPUT_END
+420015CB                                #     sub     x2, x2, x21                 // the room left
+@too_large 020000B4                     #     cbz     x2, too_large
+E80780D2                                #     movz    x8, #SYS_read
+000080D2                                #     movz    x0, #0                      // fd 0, stdin
+E10315AA                                #     orr     x1, xzr, x21                // after what is read
+010000D4                                #     svc     #0
+1F0000F1                                #     cmp     x0, #0
+@read_failed 0B000054                   #     b.lt    read_failed
+@read_all 00000054                      #     b.eq    read_all                    // the end of stdin
+B502008B                                #     add     x21, x21, x0
+^~read 17                               #     b       read
+:read_all                               # read_all:
+180EA0D2                                #     movz    x24, #0x70, lsl #16         // MACROS: no macros yet
+1632A0D2                                #     movz    x22, #0x190, lsl #16        // OUTPUT: no output yet
+370080D2                                #     movz    x23, #1                     // pass 1
+:pass                                   # pass:
+1412A0D2                                #     movz    x20, #0x90, lsl #16         // INPUT: from the first byte
+:loop                                   # loop:                                   // the next token
+^~token 94                              #     bl      token
+@pass_end 000000B5                      #     cbnz    x0, pass_end
+5F1800F1                                #     cmp     x2, #6                      // DEFINE?
+@not_define 01000054                    #     b.ne    not_define
+~str_define 09000090 !str_define 29010091 #     la      x9, str_define
+EA0301AA                                #     orr     x10, xzr, x1
+2B180091                                #     add     x11, x1, #6
+:define_byte                            # define_byte:
+2C014039                                #     ldrb    w12, [x9]
+4D014039                                #     ldrb    w13, [x10]
+9F010DEB                                #     cmp     x12, x13
+@not_define 01000054                    #     b.ne    not_define
+29050091                                #     add     x9, x9, #1
+4A050091                                #     add     x10, x10, #1
+5F010BEB                                #     cmp     x10, x11
+@define_byte 01000054                   #     b.ne    define_byte
+^~define 14                             #     b       define
+:not_define                             # not_define:
+FF0600F1                                #     cmp     x23, #1                     // pass 1 only looks for DEFINE
+@loop 00000054                          #     b.eq    loop
+29004039                                #     ldrb    w9, [x1]                    // its first byte
+3F8900F1                                #     cmp     x9, #0x22                   // '"': a string
+@string 00000054                        #     b.eq    string
+3F9D00F1                                #     cmp     x9, #0x27                   // "'": raw text
+@raw 00000054                           #     b.eq    raw
+330080D2                                #     movz    x19, #1                     // '!': 1 byte
+3F8500F1                                #     cmp     x9, #0x21
+@sized 00000054                         #     b.eq    sized
+930080D2                                #     movz    x19, #4                     // '%': 4 bytes
+3F9500F1                                #     cmp     x9, #0x25
+@sized 00000054                         #     b.eq    sized
+530080D2                                #     movz    x19, #2                     // '@': 2 bytes
+3F0101F1                                #     cmp     x9, #0x40
+@sized 00000054                         #     b.eq    sized
+3FE900F1                                #     cmp     x9, #0x3a                   // ':' '&' '^' '~': for hex2
+@copy 00000054                          #     b.eq    copy
+3F9900F1                                #     cmp     x9, #0x26
+@copy 00000054                          #     b.eq    copy
+3F7901F1                                #     cmp     x9, #0x5e
+@copy 00000054                          #     b.eq    copy
+3FF901F1                                #     cmp     x9, #0x7e
+@copy 00000054                          #     b.eq    copy
+^~find 94                               #     bl      find                        // a macro: its value
+@expand 000000B4                        #     cbz     x0, expand
+E30301AA                                #     orr     x3, xzr, x1                 // else only hex digits, as they are
+2400028B                                #     add     x4, x1, x2
+:hex_only                               # hex_only:
+60004039                                #     ldrb    w0, [x3]
+^~hexval 94                             #     bl      hexval
+1F0000F1                                #     cmp     x0, #0
+@unknown 0B000054                       #     b.lt    unknown
+63040091                                #     add     x3, x3, #1
+7F0004EB                                #     cmp     x3, x4
+@hex_only 01000054                      #     b.ne    hex_only
+:copy                                   # copy:                                   // the token as it is, then a space
+^~put_text 94                           #     bl      put_text
+^~loop 17                               #     b       loop
+:expand                                 # expand:
+E10303AA                                #     orr     x1, xzr, x3                 // its value
+E20304AA                                #     orr     x2, xzr, x4
+^~copy 17                               #     b       copy
+
+:define                                 # define:                                 // DEFINE name value
+^~token 94                              #     bl      token                       // the name
+@no_value 000000B5                      #     cbnz    x0, no_value
+F90301AA                                #     orr     x25, xzr, x1
+FA0302AA                                #     orr     x26, xzr, x2
+^~token 94                              #     bl      token                       // the value
+@no_value 000000B5                      #     cbnz    x0, no_value
+FF0600F1                                #     cmp     x23, #1                     // stored in pass 1, skipped in pass 2
+@loop 01000054                          #     b.ne    loop
+FB0301AA                                #     orr     x27, xzr, x1                // the value
+FC0302AA                                #     orr     x28, xzr, x2
+E10319AA                                #     orr     x1, xzr, x25                // the name
+E2031AAA                                #     orr     x2, xzr, x26
+^~find 94                               #     bl      find
+@twice 000000B4                         #     cbz     x0, twice
+0912A0D2                                #     movz    x9, #0x90, lsl #16          // MACROS_END
+1F0309EB                                #     cmp     x24, x9
+@too_many 02000054                      #     b.hs    too_many
+010300F9                                #     str     x1, [x24]                   // its name
+020700F9                                #     str     x2, [x24, #8]               // its length
+1B0B00F9                                #     str     x27, [x24, #16]             // its value
+1C0F00F9                                #     str     x28, [x24, #24]             // its length
+18830091                                #     add     x24, x24, #32
+^~loop 17                               #     b       loop
+
+:string                                 # string:                                 // "text": its bytes as hex, then 00
+21040091                                #     add     x1, x1, #1                  // after the '"'
+420800D1                                #     sub     x2, x2, #2                  // without both '"'
+@string_end 020000B4                    #     cbz     x2, string_end
+:string_byte                            # string_byte:
+20004039                                #     ldrb    w0, [x1]
+^~put_hex 94                            #     bl      put_hex
+21040091                                #     add     x1, x1, #1
+420400D1                                #     sub     x2, x2, #1
+@string_byte 020000B5                   #     cbnz    x2, string_byte
+:string_end                             # string_end:
+000080D2                                #     movz    x0, #0                      // the 00
+^~put_hex 94                            #     bl      put_hex
+000480D2                                #     movz    x0, #0x20
+^~put 94                                #     bl      put
+^~loop 17                               #     b       loop
+
+:raw                                    # raw:                                    // 'text': text as it is
+21040091                                #     add     x1, x1, #1
+420800D1                                #     sub     x2, x2, #2
+^~put_text 94                           #     bl      put_text
+^~loop 17                               #     b       loop
+
+:sized                                  # sized:                                  // !n @n %n: x19 bytes of n; else a label
+29044039                                #     ldrb    w9, [x1, #1]                // a digit or '-' after the sign
+3FB500F1                                #     cmp     x9, #0x2d
+@number 00000054                        #     b.eq    number
+29C100D1                                #     sub     x9, x9, #0x30
+3F2500F1                                #     cmp     x9, #9
+@number 09000054                        #     b.ls    number
+^~copy 17                               #     b       copy                        // !name @name %name: for hex2
+:number                                 # number:
+F90301AA                                #     orr     x25, xzr, x1                // the token, for a message
+FA0302AA                                #     orr     x26, xzr, x2
+21040091                                #     add     x1, x1, #1                  // after the sign
+420400D1                                #     sub     x2, x2, #1
+^~parse 94                              #     bl      parse
+E10319AA                                #     orr     x1, xzr, x25
+E2031AAA                                #     orr     x2, xzr, x26
+@bad_number 000000B5                    #     cbnz    x0, bad_number
+69F27DD3                                #     lsl     x9, x19, #3                 // fits: -2^(8n-1) <= n < 2^(8n)
+2A0080D2                                #     movz    x10, #1
+4A21C99A                                #     lslv    x10, x10, x9                // 2^(8n)
+4BFD41D3                                #     lsr     x11, x10, #1                // 2^(8n-1)
+6C000B8B                                #     add     x12, x3, x11                // + 2^(8n-1): from 0 ...
+6B010A8B                                #     add     x11, x11, x10               // ... to below 2^(8n) + 2^(8n-1)
+9F010BEB                                #     cmp     x12, x11
+@range 02000054                         #     b.hs    range
+:number_byte                            # number_byte:                            // the low byte first
+E00303AA                                #     orr     x0, xzr, x3
+^~put_hex 94                            #     bl      put_hex
+63FC48D3                                #     lsr     x3, x3, #8
+730600D1                                #     sub     x19, x19, #1
+@number_byte 130000B5                   #     cbnz    x19, number_byte
+000480D2                                #     movz    x0, #0x20
+^~put 94                                #     bl      put
+^~loop 17                               #     b       loop
+
+:pass_end                               # pass_end:
+F7060091                                #     add     x23, x23, #1
+FF0A00F1                                #     cmp     x23, #2                     // after pass 1, pass 2
+@pass 00000054                          #     b.eq    pass
+0132A0D2                                #     movz    x1, #0x190, lsl #16         // OUTPUT: after pass 2, write it
+:write                                  # write:
+C20201CB                                #     sub     x2, x22, x1                 // what is left
+@done 020000B4                          #     cbz     x2, done
+080880D2                                #     movz    x8, #SYS_write
+200080D2                                #     movz    x0, #1                      // fd 1, stdout
+010000D4                                #     svc     #0
+1F0000F1                                #     cmp     x0, #0
+@write_failed 0D000054                  #     b.le    write_failed
+2100008B                                #     add     x1, x1, x0
+^~write 17                              #     b       write
+:done                                   # done:
+000080D2                                #     movz    x0, #0                      // status 0
+^~exit 14                               #     b       exit
+
+:token                                  # token:                                  // the next token: x1, x2, x0 = 0; x0 = 1 at the end
+9F0215EB                                #     cmp     x20, x21
+@no_token 02000054                      #     b.hs    no_token
+89024039                                #     ldrb    w9, [x20]
+3F8D00F1                                #     cmp     x9, #0x23                   // '#': a comment
+@comment 00000054                       #     b.eq    comment
+3FED00F1                                #     cmp     x9, #0x3b                   // ';': a comment
+@comment 00000054                       #     b.eq    comment
+3F8100F1                                #     cmp     x9, #0x20                   // a space, tab, newline, ...
+@word 08000054                          #     b.hi    word
+94060091                                #     add     x20, x20, #1
+3F2900F1                                #     cmp     x9, #0x0a                   // a newline goes out in pass 2
+@token 01000054                         #     b.ne    token
+FF0600F1                                #     cmp     x23, #1
+@token 00000054                         #     b.eq    token
+0AB2A0D2                                #     movz    x10, #0x590, lsl #16        // OUTPUT_END
+DF020AEB                                #     cmp     x22, x10
+@too_long 02000054                      #     b.hs    too_long
+C9020039                                #     strb    w9, [x22]
+D6060091                                #     add     x22, x22, #1
+^~token 17                              #     b       token
+:comment                                # comment:                                // skip to the newline
+94060091                                #     add     x20, x20, #1
+9F0215EB                                #     cmp     x20, x21
+@no_token 02000054                      #     b.hs    no_token
+89024039                                #     ldrb    w9, [x20]
+3F2900F1                                #     cmp     x9, #0x0a
+@comment 01000054                       #     b.ne    comment
+^~token 17                              #     b       token
+:word                                   # word:
+E10314AA                                #     orr     x1, xzr, x20                // its first byte
+94060091                                #     add     x20, x20, #1
+3F8900F1                                #     cmp     x9, #0x22                   // '"' or "'": to the same again
+@quoted 00000054                        #     b.eq    quoted
+3F9D00F1                                #     cmp     x9, #0x27
+@quoted 00000054                        #     b.eq    quoted
+:word_byte                              # word_byte:
+9F0215EB                                #     cmp     x20, x21
+@word_end 02000054                      #     b.hs    word_end
+8A024039                                #     ldrb    w10, [x20]
+5F8100F1                                #     cmp     x10, #0x20                  // ends at a space, tab, newline
+@word_end 09000054                      #     b.ls    word_end
+94060091                                #     add     x20, x20, #1
+^~word_byte 17                          #     b       word_byte
+:quoted                                 # quoted:
+9F0215EB                                #     cmp     x20, x21
+@unterminated 02000054                  #     b.hs    unterminated
+8A024039                                #     ldrb    w10, [x20]
+5F0109EB                                #     cmp     x10, x9
+@quoted_end 00000054                    #     b.eq    quoted_end
+94060091                                #     add     x20, x20, #1
+^~quoted 17                             #     b       quoted
+:quoted_end                             # quoted_end:
+94060091                                #     add     x20, x20, #1                // after the closing one
+:word_end                               # word_end:
+820201CB                                #     sub     x2, x20, x1
+000080D2                                #     movz    x0, #0
+C0035FD6                                #     ret
+:no_token                               # no_token:
+200080D2                                #     movz    x0, #1
+C0035FD6                                #     ret
+
+:parse                                  # parse:                                  // x3 = the number x1, x2, x0 = 0; x0 = 1 if none
+030080D2                                #     movz    x3, #0
+0D0080D2                                #     movz    x13, #0                     // 1 if negative
+@not_number 020000B4                    #     cbz     x2, not_number
+29004039                                #     ldrb    w9, [x1]
+3FB500F1                                #     cmp     x9, #0x2d                   // '-'
+@parse_base 01000054                    #     b.ne    parse_base
+2D0080D2                                #     movz    x13, #1
+21040091                                #     add     x1, x1, #1
+420400D1                                #     sub     x2, x2, #1
+@not_number 020000B4                    #     cbz     x2, not_number
+:parse_base                             # parse_base:
+5F0800F1                                #     cmp     x2, #2                      // 0x: hex
+@decimal_digit 09000054                 #     b.ls    decimal_digit
+29004039                                #     ldrb    w9, [x1]
+3FC100F1                                #     cmp     x9, #0x30
+@decimal_digit 01000054                 #     b.ne    decimal_digit
+29044039                                #     ldrb    w9, [x1, #1]
+3FE101F1                                #     cmp     x9, #0x78                   // 'x'
+@parse_hex 00000054                     #     b.eq    parse_hex
+3F6101F1                                #     cmp     x9, #0x58                   // 'X'
+@decimal_digit 01000054                 #     b.ne    decimal_digit
+:parse_hex                              # parse_hex:
+21080091                                #     add     x1, x1, #2
+420800D1                                #     sub     x2, x2, #2
+:hex_digit                              # hex_digit:
+29004039                                #     ldrb    w9, [x1]
+2AC100D1                                #     sub     x10, x9, #0x30              // '0'-'9' to 0-9
+5F2900F1                                #     cmp     x10, #10
+@hex_add 03000054                       #     b.lo    hex_add
+2A0501D1                                #     sub     x10, x9, #0x41              // 'A'-'F' to 0-5
+5F1900F1                                #     cmp     x10, #6
+@hex_letter 03000054                    #     b.lo    hex_letter
+2A8501D1                                #     sub     x10, x9, #0x61              // 'a'-'f' to 0-5
+5F1900F1                                #     cmp     x10, #6
+@not_number 02000054                    #     b.hs    not_number
+:hex_letter                             # hex_letter:
+4A290091                                #     add     x10, x10, #10
+:hex_add                                # hex_add:
+4311038B                                #     add     x3, x10, x3, lsl #4
+21040091                                #     add     x1, x1, #1
+420400D1                                #     sub     x2, x2, #1
+@hex_digit 020000B5                     #     cbnz    x2, hex_digit
+^~parse_sign 14                         #     b       parse_sign
+:decimal_digit                          # decimal_digit:
+29004039                                #     ldrb    w9, [x1]
+2AC100D1                                #     sub     x10, x9, #0x30              // '0'-'9'
+5F2500F1                                #     cmp     x10, #9
+@not_number 08000054                    #     b.hi    not_number
+4B0180D2                                #     movz    x11, #10
+63280B9B                                #     madd    x3, x3, x11, x10
+21040091                                #     add     x1, x1, #1
+420400D1                                #     sub     x2, x2, #1
+@decimal_digit 020000B5                 #     cbnz    x2, decimal_digit
+:parse_sign                             # parse_sign:
+@parsed 0D0000B4                        #     cbz     x13, parsed
+E30303CB                                #     sub     x3, xzr, x3                 // neg x3
+:parsed                                 # parsed:
+000080D2                                #     movz    x0, #0
+C0035FD6                                #     ret
+:not_number                             # not_number:
+200080D2                                #     movz    x0, #1
+C0035FD6                                #     ret
+
+:hexval                                 # hexval:                                 // x0 = the value of hex digit x0, or -1
+09C000D1                                #     sub     x9, x0, #0x30               // '0'-'9' to 0-9
+3F2900F1                                #     cmp     x9, #10
+@hexval_done 03000054                   #     b.lo    hexval_done
+090401D1                                #     sub     x9, x0, #0x41               // 'A'-'F' to 0-5
+3F1900F1                                #     cmp     x9, #6
+@hexval_letter 03000054                 #     b.lo    hexval_letter
+098401D1                                #     sub     x9, x0, #0x61               // 'a'-'f' to 0-5
+3F1900F1                                #     cmp     x9, #6
+@hexval_letter 03000054                 #     b.lo    hexval_letter
+00008092                                #     movn    x0, #0                      // none: -1
+C0035FD6                                #     ret
+:hexval_letter                          # hexval_letter:
+29290091                                #     add     x9, x9, #10                 // 10-15
+:hexval_done                            # hexval_done:
+E00309AA                                #     orr     x0, xzr, x9
+C0035FD6                                #     ret
+
+:find                                   # find:                                   // x3, x4 = the value of macro x1, x2, x0 = 0; x0 = 1 if none
+090EA0D2                                #     movz    x9, #0x70, lsl #16          // MACROS
+:find_next                              # find_next:
+3F0118EB                                #     cmp     x9, x24
+@not_found 02000054                     #     b.hs    not_found
+2A0540F9                                #     ldr     x10, [x9, #8]               // the same length
+5F0102EB                                #     cmp     x10, x2
+@find_on 01000054                       #     b.ne    find_on
+2A0140F9                                #     ldr     x10, [x9]                   // and the same bytes
+EB0301AA                                #     orr     x11, xzr, x1
+2C00028B                                #     add     x12, x1, x2
+:find_byte                              # find_byte:
+7F010CEB                                #     cmp     x11, x12
+@found 00000054                         #     b.eq    found
+4D014039                                #     ldrb    w13, [x10]
+6E014039                                #     ldrb    w14, [x11]
+BF010EEB                                #     cmp     x13, x14
+@find_on 01000054                       #     b.ne    find_on
+4A050091                                #     add     x10, x10, #1
+6B050091                                #     add     x11, x11, #1
+^~find_byte 17                          #     b       find_byte
+:find_on                                # find_on:
+29810091                                #     add     x9, x9, #32
+^~find_next 17                          #     b       find_next
+:not_found                              # not_found:
+200080D2                                #     movz    x0, #1
+C0035FD6                                #     ret
+:found                                  # found:
+230940F9                                #     ldr     x3, [x9, #16]
+240D40F9                                #     ldr     x4, [x9, #24]
+000080D2                                #     movz    x0, #0
+C0035FD6                                #     ret
+
+:put_text                               # put_text:                               // writes x1, x2, then a space
+0AB2A0D2                                #     movz    x10, #0x590, lsl #16        // OUTPUT_END
+:put_text_byte                          # put_text_byte:
+@put_space 020000B4                     #     cbz     x2, put_space
+DF020AEB                                #     cmp     x22, x10
+@too_long 02000054                      #     b.hs    too_long
+29004039                                #     ldrb    w9, [x1]
+C9020039                                #     strb    w9, [x22]
+D6060091                                #     add     x22, x22, #1
+21040091                                #     add     x1, x1, #1
+420400D1                                #     sub     x2, x2, #1
+^~put_text_byte 17                      #     b       put_text_byte
+:put_space                              # put_space:
+000480D2                                #     movz    x0, #0x20
+:put                                    # put:                                    // writes the byte x0
+0AB2A0D2                                #     movz    x10, #0x590, lsl #16        // OUTPUT_END
+DF020AEB                                #     cmp     x22, x10
+@too_long 02000054                      #     b.hs    too_long
+C0020039                                #     strb    w0, [x22]
+D6060091                                #     add     x22, x22, #1
+C0035FD6                                #     ret
+
+:put_hex                                # put_hex:                                // writes the byte x0 as two hex digits
+0AB2A0D2                                #     movz    x10, #0x590, lsl #16        // OUTPUT_END
+CB0A0091                                #     add     x11, x22, #2
+7F010AEB                                #     cmp     x11, x10
+@too_long 08000054                      #     b.hi    too_long
+~digits 09000090 !digits 29010091       #     la      x9, digits
+0A1C44D3                                #     ubfx    x10, x0, #4, #4             // its high half
+2A010A8B                                #     add     x10, x9, x10
+4A014039                                #     ldrb    w10, [x10]
+CA020039                                #     strb    w10, [x22]
+0A0C40D3                                #     ubfx    x10, x0, #0, #4             // its low half
+2A010A8B                                #     add     x10, x9, x10
+4A014039                                #     ldrb    w10, [x10]
+CA060039                                #     strb    w10, [x22, #1]
+D60A0091                                #     add     x22, x22, #2
+C0035FD6                                #     ret
+
+:unknown                                # unknown:
+~msg_unknown 03000090 !msg_unknown 63000091 #     la      x3, msg_unknown
+640280D2                                #     movz    x4, #msg_unknown_len
+^~die 14                                #     b       die
+:twice                                  # twice:
+~msg_twice 03000090 !msg_twice 63000091 #     la      x3, msg_twice
+240380D2                                #     movz    x4, #msg_twice_len
+^~die 14                                #     b       die
+:range                                  # range:
+~msg_range 03000090 !msg_range 63000091 #     la      x3, msg_range
+240380D2                                #     movz    x4, #msg_range_len
+^~die 14                                #     b       die
+:bad_number                             # bad_number:
+~msg_number 03000090 !msg_number 63000091 #     la      x3, msg_number
+440280D2                                #     movz    x4, #msg_number_len
+^~die 14                                #     b       die
+:unterminated                           # unterminated:
+~msg_string 03000090 !msg_string 63000091 #     la      x3, msg_string
+440380D2                                #     movz    x4, #msg_string_len
+^~die_plain 14                          #     b       die_plain
+:no_value                               # no_value:
+~msg_value 03000090 !msg_value 63000091 #     la      x3, msg_value
+840380D2                                #     movz    x4, #msg_value_len
+^~die_plain 14                          #     b       die_plain
+:too_many                               # too_many:
+~msg_many 03000090 !msg_many 63000091   #     la      x3, msg_many
+640280D2                                #     movz    x4, #msg_many_len
+^~die_plain 14                          #     b       die_plain
+:too_large                              # too_large:
+~msg_large 03000090 !msg_large 63000091 #     la      x3, msg_large
+640280D2                                #     movz    x4, #msg_large_len
+^~die_plain 14                          #     b       die_plain
+:too_long                               # too_long:
+~msg_long 03000090 !msg_long 63000091   #     la      x3, msg_long
+840280D2                                #     movz    x4, #msg_long_len
+^~die_plain 14                          #     b       die_plain
+:read_failed                            # read_failed:
+~msg_read 03000090 !msg_read 63000091   #     la      x3, msg_read
+E40180D2                                #     movz    x4, #msg_read_len
+^~die_plain 14                          #     b       die_plain
+:write_failed                           # write_failed:
+~msg_write 03000090 !msg_write 63000091 #     la      x3, msg_write
+040280D2                                #     movz    x4, #msg_write_len
+:die_plain                              # die_plain:
+020080D2                                #     movz    x2, #0                      // no token
+:die                                    # die:                                    // message x3, x4, then token x1, x2
+F90301AA                                #     orr     x25, xzr, x1
+FA0302AA                                #     orr     x26, xzr, x2
+E10303AA                                #     orr     x1, xzr, x3
+E20304AA                                #     orr     x2, xzr, x4
+^~ewrite 94                             #     bl      ewrite
+E10319AA                                #     orr     x1, xzr, x25
+E2031AAA                                #     orr     x2, xzr, x26
+^~ewrite 94                             #     bl      ewrite
+~digits 01000090 !digits 21000091       #     la      x1, digits                  // digits ends with the newline
+21400091                                #     add     x1, x1, #16
+220080D2                                #     movz    x2, #1
+^~ewrite 94                             #     bl      ewrite
+200080D2                                #     movz    x0, #1                      // status 1
+:exit                                   # exit:
+A80B80D2                                #     movz    x8, #SYS_exit
+010000D4                                #     svc     #0
+:ewrite                                 # ewrite:                                 // writes x1, x2 to stderr
+080880D2                                #     movz    x8, #SYS_write
+400080D2                                #     movz    x0, #2                      // fd 2, stderr
+010000D4                                #     svc     #0
+C0035FD6                                #     ret
+:end                                    # end:

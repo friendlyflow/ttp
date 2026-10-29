@@ -325,6 +325,8 @@ sub fields_a64 {
             if ($name) { push @f, [$p, 4, "~$name", &le($w & ~0x60ffffe0, 4)], [$p + 4, 4, "!$name", &le($w2 & ~0x003ffc00, 4)] }
             else { push @raw, sprintf 'adrp pair to 0x%x', $tgt }
             $p += 4;
+        } elsif (($w & 0x7e000000) == 0x36000000 || ($w & 0x9f000000) == 0x10000000 || ($w & 0x3b000000) == 0x18000000) {
+            die sprintf "mkhex: line %d: tbz, tbnz, adr or ldr literal (no hex2 reference for it): %s\n", $l->{n}, $l->{text};
         }
     }
     return (\@f, @raw ? ' (written out: ' . join(', ', @raw) . ')' : '');
