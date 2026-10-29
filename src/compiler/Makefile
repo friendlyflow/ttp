@@ -307,7 +307,8 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # set output (next to cws.ff), each the bytes the command line makes.
 # cwsdebug.ff makes chello twice, with set debug (as -g) and without; run
 # with -g, both as -g (gsame); cwsopt.ff so with set optimise (as -O) and
-# cfib, run with -O both as -O. cinclude is chello including its shared page,
+# cfib, run with -O both as -O. cwsjobs.ff so with set jobs (as -j 4: the same bytes),
+# run with -j3 both the same again. cinclude is chello including its shared page,
 # --print prints a tree as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
@@ -339,6 +340,13 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -O $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
 	cmp $(P)/cwsopt $(P)/cfib.O
 	cmp $(P)/cwsopt-O $(P)/cfib.O
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsjobs.ff > cwsjobs.lst
+	cmp $(P)/cwsjobs $(P)/cfib.celf
+	cmp $(P)/cwsjobs-j $(P)/cfib.celf
+	rm $(P)/cwsjobs $(P)/cwsjobs-j
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -j3 $(CURDIR)/progs/cwsjobs.ff > cwsjobs.lst
+	cmp $(P)/cwsjobs $(P)/cfib.celf
+	cmp $(P)/cwsjobs-j $(P)/cfib.celf
 	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
@@ -427,6 +435,21 @@ ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE
 .PHONY: check-$(1) ctest-$(1)
 endef
 $(foreach t,$(TARGETS),$(eval $(call target,$(t))))
+
+# -j: each ctest, for riscv64 and for every target, compiled with -j0 (one
+# process that checks the second pass against the first's samples) and -j6
+# (the second pass on six) is the bytes and listing of one process; cnow,
+# cct, ctasm and ctmix run compile time in the first pass, which the
+# second's shares then take up. By riscv64's stage2, whose compile
+# time (the host's) ctasm needs.
+ctest-j: $(CPROGS:%=$(P)/%.celf) $(foreach t,$(TARGETS),$(patsubst %,$(P)/$(t)/%.celf,$(filter-out $(CSKIP_$(t)),$(CPORTABLE)) $(CONLY_$(t)))) $(BOOT)/stage2
+	@set -e; d=$(P)/j; mkdir -p $$d; \
+	one() { for j in 0 6; do \
+	    $(QEMU) $(BOOT)/stage2 -j$$j --target $$1 $(TTPCFLAGS) $(SHARED) progs/$$2.ff $$d/$$2.$$1.$$j > $$d/$$2.$$1.$$j.lst; \
+	    cmp $$d/$$2.$$1.$$j $$3.celf; cmp $$d/$$2.$$1.$$j.lst $$3.lst; done; rm -f $$d/$$2.$$1.*; }; \
+	for p in $(CPROGS); do one riscv64 $$p $(P)/$$p; done; \
+	$(foreach t,$(TARGETS),for p in $(filter-out $(CSKIP_$(t)),$(CPORTABLE)) $(CONLY_$(t)); do one $(t) $$p $(P)/$(t)/$$p; done;) \
+	echo "ctest-j: every ctest on riscv64 $(TARGETS), with -j0 and -j6 the bytes and listing of one process"
 
 # the forms GNU as picks for glibc's asm (isa/x86_64gnu.pl): every one in
 # progs/x86_64/gnu.ff (mkgnu.pl), byte for byte its GNU twin gnu.s

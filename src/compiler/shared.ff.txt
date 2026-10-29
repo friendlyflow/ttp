@@ -373,6 +373,11 @@ comment
 set optimise:
   w
 comment
+  set jobs w n: compile time, workspace w compiles with -j n (its second pass on n processes, the same bytes; 0 checks, 1 is one); without it, as this compile was run: with -j n, every workspace is.
+set jobs:
+  w
+  n
+comment
   add file w path: compile time, a tree for workspace w; the last one is its program, the ones before it its definitions, as on the command line.
 add file:
   w
