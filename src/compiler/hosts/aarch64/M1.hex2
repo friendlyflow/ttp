@@ -7,9 +7,12 @@
 #
 # gen/hex/aarch64/M1.s as hex2 text, made by gen/mkhex.pl: each line the bytes of
 # one asm line, then the line. :label defines a label at the address
-# of the next byte (from 0, the file's first byte); %label is the 4
-# bytes of label minus the address after them (rel32), !label the same
-# in 1 byte (rel8). hex2 reads only what is before each '#'.
+# of the next byte (from 0, the file's first byte); ^~label writes 3
+# bytes, imm26's low 24 bits of B or BL (label minus the instruction's
+# address, / 4), the byte after them the rest; @label (imm19 of B.cond,
+# CBZ, CBNZ), ~label (ADRP's page) and !label (the ADD :lo12: after it)
+# XOR their field into the instruction after them, written with that
+# field zero. hex2 reads only what is before each '#'.
 #
 # M1 for aarch64 Linux: a macro assembler, hex2 with names. The third link
 # of the bootstrap, built by hex2 from hosts/aarch64/M1.hex2 (made from

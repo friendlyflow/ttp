@@ -590,6 +590,98 @@ sub m1num {
     return $sign . ($v < 0 ? ($v > -4096 ? $v : sprintf '-0x%x', -$v) : $v < 4096 ? $v : sprintf '0x%x', $v);
 }
 
+# m1 for aarch64: each instruction as stage0-posix's aarch64 M1 writes it,
+# a DEFINE of all its bits named as the instruction (objdump's text, its
+# first space '_', no other spaces, no '#': mov_x8,93 ldr_x0,[x0]), but a
+# reference to a label: ^~label then FBRANCH FCALL (14 94, forward) or
+# RBRANCH RCALL (17 97, back) for B and BL, @label then the instruction
+# without the label (its imm19 zero) for B.cond, CBZ, CBNZ, ~label adrp_xN
+# and !label add_xN,xN,:lo12: for la's pair
+if ($mode eq 'm1' && $a64) {
+    my (%def, @rows, %dis);
+    for (split /\n/, out("${X}objdump -d --no-show-raw-insn $t/e")) {
+        $dis{ hex $1 } = $2 if /^\s*([0-9a-f]+):\s+(\S.*?)\s*$/;
+    }
+    my $nm = sub {
+        my $s = shift;
+        $s =~ s{\s*//.*}{};
+        $s =~ s/\s+/_/;
+        $s =~ s/\s+//g;
+        $s =~ s/#//g;
+        return $s;
+    };
+    my $put = sub {
+        my ($name, $v, $why) = @_;
+        die "mkhex: $name is $def{$name}[0] and $v\n" if $def{$name} && $def{$name}[0] ne $v;
+        $def{$name} //= [$v, $why];
+        return $name;
+    };
+    for my $l (@{ $bysec{'.text'} }) {
+        my $t = $l->{text};
+        die "mkhex: line $l->{n}: a local label\n" if grep { defined $_->{num} } @{ $l->{labels} };
+        my $defs = join ' ', map { ":$_->{name}" } @{ $l->{labels} };
+        if (!defined $l->{off}) {
+            push @rows, $defs ne '' ? row($defs, $t) : $t eq '' ? '' : cm($t);
+            next;
+        }
+        my $b = substr $bin, $l->{off}, $l->{end} - $l->{off};
+        if ($l->{mn} =~ /^\./) {
+            my $str = $l->{mn} eq '.asciz' && $l->{ops} =~ /^"([^"\\]*)"$/ ? $1 : undef;
+            if (defined $str && "$str\0" eq $b && $str !~ /[\s'"]/) { push @rows, row(join(' ', grep { $_ ne '' } $defs, "\"$str\""), $t); next }
+            my @h = unpack '(H32)*', $b;
+            push @rows, row(join(' ', grep { $_ ne '' } $defs, uc shift @h), $t), map { uc } @h;
+            next;
+        }
+        my @tok;
+        for (my $p = $l->{off}; $p < $l->{end}; $p += 4) {
+            my $w = rd($p, 4);
+            my $d = $dis{$p} // die sprintf "mkhex: line %d: no disassembly at 0x%x\n", $l->{n}, $p;
+            if (($w & 0x7c000000) == 0x14000000) {
+                my $imm = sxb($w & 0x3ffffff, 26);
+                my $lab = name_at($p + 4 * $imm, $l->{ops}) // die "mkhex: line $l->{n}: no label at the target of $t\n";
+                my $k = ($w >> 31 ? 'CALL' : 'BRANCH');
+                die "mkhex: line $l->{n}: a branch beyond 24 bits\n" if $imm >= 1 << 23 || $imm < -(1 << 23);
+                push @tok, "^~$lab", $put->(($imm >= 0 ? 'F' : 'R') . $k, sprintf('%02X', $w >> 24),
+                    ($w >> 31 ? 'BL' : 'B') . ': the top byte of op 00101 imm26, after ^~label\'s 3 bytes, ' . ($imm >= 0 ? 'forward' : 'back'));
+            } elsif (($w & 0xff000010) == 0x54000000 || ($w & 0x7e000000) == 0x34000000) {
+                my $lab = name_at($p + 4 * sxb(($w >> 5) & 0x7ffff, 19), $l->{ops}) // die "mkhex: line $l->{n}: no label at the target of $t\n";
+                (my $n = $nm->($d)) =~ s/,?[0-9a-f]+(<[^>]*>)?$//;
+                $n =~ s/_$//;
+                push @tok, "\@$lab", $put->($n, &le($w & ~0x00ffffe0, 4), sprintf('%s, imm19 zero (@label)', ($w & 0xff000010) == 0x54000000 ? 'B.cond: 0101010 0 imm19 0 cond ' . $cond[$w & 15] : ($w >> 24 & 1 ? 'CBNZ' : 'CBZ') . ': sf 011010 op imm19 Rt'));
+            } elsif (($w & 0x9f000000) == 0x90000000) {
+                my $w2 = $p + 8 <= $l->{end} ? rd($p + 4, 4) : die "mkhex: line $l->{n}: an adrp alone\n";
+                die "mkhex: line $l->{n}: an adrp without its add\n" unless ($w2 & 0xffc00000) == 0x91000000 && (($w2 >> 5) & 31) == ($w & 31);
+                my $page = 4096 * sxb(((($w >> 5) & 0x7ffff) << 2) | (($w >> 29) & 3), 21) + ($p & ~0xfff);
+                my $lab = name_at($page + (($w2 >> 10) & 0xfff), $l->{ops}) // die "mkhex: line $l->{n}: no label at the adrp's target\n";
+                my ($r, $r2) = ($w & 31, ($w2 & 31));
+                push @tok, "~$lab", $put->("adrp_x$r", &le($w & ~0x60ffffe0, 4), 'ADRP: op immlo 10000 immhi Rd, the immediate zero (~label)'),
+                    "!$lab", $put->("add_x$r2,x$r,:lo12:", &le($w2 & ~0x003ffc00, 4), 'ADD (immediate): imm12 zero (!label)');
+                $p += 4;
+            } else {
+                die sprintf "mkhex: line %d: tbz, tbnz, adr or ldr literal: %s\n", $l->{n}, $t
+                    if ($w & 0x7e000000) == 0x36000000 || ($w & 0x9f000000) == 0x10000000 || ($w & 0x3b000000) == 0x18000000;
+                push @tok, $put->($nm->($d), &le($w, 4), '');
+            }
+        }
+        push @rows, row(join(' ', grep { $_ ne '' } $defs, @tok), $t);
+    }
+    push @out, "# $src as M1 text, made by gen/mkhex.pl, as stage0-posix's aarch64",
+        "# M1 writes AArch64: first a DEFINE for each instruction it uses, its 4",
+        "# bytes (little endian), named as objdump writes it (its first space '_',",
+        "# no other spaces, no '#'), and for the references to labels the",
+        "# instruction with that field zero: FBRANCH FCALL RBRANCH RCALL the top",
+        "# byte of B or BL forward or back, after hex2's ^~label (its 3 low bytes),",
+        "# b.cond cbz_xN cbnz_xN after \@label (imm19), adrp_xN after ~label (its",
+        "# page), add_xN,xN,:lo12: after !label (its low 12 bits). Then each asm",
+        "# line: :label for its labels, then its instructions. Data is hex or a",
+        "# \"string\" (its bytes, then 00). M1 reads only what is before each '#';",
+        "# M1's hex2 text is made by hex2.", '#';
+    push @out, map { row("DEFINE $_ $def{$_}[0]", $def{$_}[1]) } sort keys %def;
+    push @out, '#', @rows;
+    print "$_\n" for @out;
+    exit 0;
+}
+
 # m1 for riscv64: each instruction as stage0-posix's riscv64 M1 writes
 # it: its registers (rd_a0 rs1_sp rs2_t0, the fields as words) and
 # immediate (!n I, @n S, ~n U) or label (@label B, $label J, ~label and
@@ -795,7 +887,13 @@ if ($mode eq 'm1') {
 if ($mode eq 'flat') {
     push @out, "# $src as hex2 text, made by gen/mkhex.pl: each line the bytes of",
         "# one asm line, then the line. :label defines a label at the address",
-        $rv ? ("# of the next byte (from 0, the file's first byte); a reference",
+        $a64 ? ("# of the next byte (from 0, the file's first byte); ^~label writes 3",
+            "# bytes, imm26's low 24 bits of B or BL (label minus the instruction's",
+            "# address, / 4), the byte after them the rest; \@label (imm19 of B.cond,",
+            "# CBZ, CBNZ), ~label (ADRP's page) and !label (the ADD :lo12: after it)",
+            "# XOR their field into the instruction after them, written with that",
+            "# field zero. hex2 reads only what is before each '#'.", '#')
+        :         $rv ? ("# of the next byte (from 0, the file's first byte); a reference",
             "# (\@label B, \$label J, ~label and !label an auipc and the instruction",
             "# after it) XORs label minus the instruction's address into the",
             "# immediate field of the instruction after it, written with that field",
