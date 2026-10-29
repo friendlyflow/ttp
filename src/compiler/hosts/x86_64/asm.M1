@@ -25,7 +25,6 @@ DEFINE add_$i8,eax 83C0                 # 83, ModRM 11 000 000, then imm8
 DEFINE add_$i8,rax 4883C0               # REX.W, 83, ModRM 11 000 000, then imm8
 DEFINE add_$i8,rbx 4883C3               # REX.W, 83, ModRM 11 000 011, then imm8
 DEFINE add_$i8,rdi 4883C7               # REX.W, 83, ModRM 11 000 111, then imm8
-DEFINE add_d32(rbp),rax 480385          # REX.W, 03, ModRM 10 000 101, then disp32
 DEFINE add_d32(rbp,rcx,8),rax 480384CD  # REX.W, 03, ModRM 10 000 100, SIB 11 001 101, then disp32
 DEFINE add_d32(rbp,rdx,8),rax 480384D5  # REX.W, 03, ModRM 10 000 100, SIB 11 010 101, then disp32
 DEFINE add_d8(rbp),rax 480345           # REX.W, 03, ModRM 01 000 101, then disp8
@@ -495,8 +494,8 @@ B000600000000000                        #     .quad BASE + _start - ehdr        
 0000000000000000                        #     .quad 0                             # p_offset: from the file's first byte
 0000600000000000                        #     .quad BASE                          # p_vaddr: loaded at BASE
 0000600000000000                        #     .quad BASE                          # p_paddr: the same
-A92A000000000000                        #     .quad end - ehdr                    # p_filesz: the whole file
-A92A000000000000                        #     .quad end - ehdr                    # p_memsz: the same
+9B2A000000000000                        #     .quad end - ehdr                    # p_filesz: the whole file
+9B2A000000000000                        #     .quad end - ehdr                    # p_memsz: the same
 0010000000000000                        #     .quad 0x1000                        # p_align: a page
                                         # its memory: 56 bytes
 01000000                                #     .long 1                             # p_type: PT_LOAD
@@ -2249,11 +2248,9 @@ add_d8(rbp),rax !104                    #     add     V_loc+24(%rbp), %rax
 mov_d32(rbp),rcx %152                   #     mov     V_align+32(%rbp), %rcx
 call %alignup                           #     call    alignup
 mov_rax,d32(rbp) %192                   #     mov     %rax, V_base+32(%rbp)       # .bss
-sub_d32(rbp),rax %184                   #     sub     V_base+24(%rbp), %rax
-add_d32(rbp),rax %224                   #     add     V_off+24(%rbp), %rax
+mov_d32(rbp),rax %224                   #     mov     V_off+24(%rbp), %rax        # its file offset, and .shstrtab's: the end
+add_d8(rbp),rax !104                    #     add     V_loc+24(%rbp), %rax        # of .data (ld's, though .bss be aligned)
 mov_rax,d32(rbp) %232                   #     mov     %rax, V_off+32(%rbp)
-mov_d32(rbp),rax %224                   #     mov     V_off+24(%rbp), %rax        # .shstrtab after .data
-add_d8(rbp),rax !104                    #     add     V_loc+24(%rbp), %rax
 mov_rax,d32(rbp) %240                   #     mov     %rax, V_shstr(%rbp)
 add_$i32,rax %36                        #     add     $shstrtab_len, %rax         # then the section headers
 mov_$i32,ecx %8                         #     mov     $8, %ecx
