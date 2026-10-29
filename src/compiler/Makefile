@@ -525,6 +525,7 @@ SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
 SLDFLAGS_x86_64 := -s -z noseparate-code
 SLDFLAGS_aarch64 := -s -z noseparate-code -Ttext=0x4000b0
+SLDFLAGS_arm := -s -T hosts/arm/ttpc.ld
 # The hex seed (lane H): on the hosts of HEXHOSTS the chain builds the seed
 # without binutils, from hosts/<host>/hex0, a binary of a few hundred bytes
 # that is its commented text hex0.hex0 (make hex checks both): hex0 makes
@@ -544,10 +545,15 @@ SLDFLAGS_aarch64 := -s -z noseparate-code -Ttext=0x4000b0
 # -Ttext=0x4000b0: aarch64-none-elf's script (no SIZEOF_HEADERS) put .text a
 # page after the headers, 74 KB of zeros; at 0x4000b0, after the headers
 # (64 + 2 * 56 bytes) in the first page, it is the Linux script's layout,
-# the native ld's, and both make the same 8960 bytes. SEED=asm takes ttpc.hex2 on a
-# host of HEXHOSTS without M1 and asm (not in ASMHOSTS).
+# the native ld's, and both make the same 8960 bytes. On arm ld -s -T
+# hosts/arm/ttpc.ld: arm-none-eabi's script adds two empty sections
+# (.persistent, .noinit) and puts .text a page after the headers, the native
+# Linux ld's may save a page by DATA_SEGMENT_ALIGN; with the script's layout
+# (the Linux one's start, the data on the next page at the same offset) both
+# make the same 7796 bytes. SEED=asm takes ttpc.hex2 on a host of HEXHOSTS
+# without M1 and asm (not in ASMHOSTS).
 SEED ?= asm
-HEXHOSTS := x86_64 riscv64 aarch64
+HEXHOSTS := x86_64 riscv64 aarch64 arm
 ASMHOSTS := x86_64 riscv64 aarch64
 # the flat tools (M1.s, asm.s) as binutils makes them, for make hex:
 # riscv64's RV64IM without relaxing, linked at 0 (gas keeps relocations
@@ -568,7 +574,7 @@ define host
 $(BUILD)/$(1):
 	mkdir -p $$@
 
-$(BUILD)/$(1)/seed.gnu: hosts/$(1)/ttpc.s | $(BUILD)/$(1)
+$(BUILD)/$(1)/seed.gnu: hosts/$(1)/ttpc.s $(wildcard hosts/$(1)/ttpc.ld) | $(BUILD)/$(1)
 	$(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) $$< -o $$@.o
 	$(SEEDCROSS_$(1))ld -static $(SLDFLAGS_$(1)) -e _start $$@.o -o $$@
 
