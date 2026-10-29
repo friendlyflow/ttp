@@ -2074,9 +2074,7 @@ data_place:                             // .data, then .bss from address x0; x0 
     ldr     x1, [x19, #V_align+32]
     bl      alignup
     str     x0, [x19, #V_base+32]       // .bss
-    ldr     x9, [x19, #V_loc+32]        // its end at a multiple of 8, then ALIGN(8)
-    add     x9, x9, #7
-    and     x9, x9, #-8
+    ldr     x9, [x19, #V_loc+32]        // its end at a multiple of 8
     add     x0, x0, x9
     mov     x1, #8
     bl      alignup
@@ -2116,9 +2114,13 @@ headers_bytes:
     add     x9, x9, #8
     cmp     x9, x10
     b.ne    headers_bytes
-    ldr     x0, [x19, #V_loc+32]        // ld's script ends .bss at a multiple of 8
+    ldr     x0, [x19, #V_base+32]       // ld's script ends .bss at a multiple of 8
+    ldr     x9, [x19, #V_loc+32]        // (its address)
+    add     x0, x0, x9
     mov     x1, #8
     bl      alignup
+    ldr     x9, [x19, #V_base+32]
+    sub     x0, x0, x9
     str     x0, [x19, #V_loc+32]
     mov     x0, #OUTBUF
     la      x1, elf_headers

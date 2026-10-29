@@ -91,7 +91,6 @@ DEFINE add_x9,x9,0x10 29410091
 DEFINE add_x9,x9,0x18 29610091
 DEFINE add_x9,x9,0x30 29C10091
 DEFINE add_x9,x9,0x600 29011891
-DEFINE add_x9,x9,0x7 291D0091
 DEFINE add_x9,x9,0x8 29210091
 DEFINE add_x9,x9,:lo12: 29010091        # ADD (immediate): imm12 zero (!label)
 DEFINE add_x9,x9,x0 2901008B
@@ -128,7 +127,6 @@ DEFINE and_x9,x9,0x3f 29154092
 DEFINE and_x9,x9,0x7ffff 29494092
 DEFINE and_x9,x9,0xf000 290D7492
 DEFINE and_x9,x9,0xfff 292D4092
-DEFINE and_x9,x9,0xfffffffffffffff8 29F17D92
 DEFINE asr_x0,x0,2 00FC4293
 DEFINE asr_x0,x9,x0 2029C09A
 DEFINE asr_x10,x10,x9 4A29C99A
@@ -236,7 +234,7 @@ DEFINE eor_x22,x22,0x40000000 D60262D2
 DEFINE eor_x9,x9,0x1 290140D2
 DEFINE ldr_w22,[x9,12] 360D40B9
 DEFINE ldr_x0,[x0] 000040F9
-DEFINE ldr_x0,[x19,104] 603640F9
+DEFINE ldr_x0,[x19,184] 605E40F9
 DEFINE ldr_x0,[x19,232] 607640F9
 DEFINE ldr_x0,[x19,240] 607A40F9
 DEFINE ldr_x0,[x19,24] 600E40F9
@@ -690,6 +688,7 @@ DEFINE strb_w9,[x1] 29000039
 DEFINE sub_sp,sp,0x10 FF4300D1
 DEFINE sub_sp,sp,0x20 FF8300D1
 DEFINE sub_sp,sp,0x30 FFC300D1
+DEFINE sub_x0,x0,x9 000009CB
 DEFINE sub_x0,x10,0x21 408500D1
 DEFINE sub_x0,x3,x0 600000CB
 DEFINE sub_x0,x9,0x1 200500D1
@@ -895,8 +894,8 @@ B000600000000000                        #     .dword BASE + _start - ehdr       
 0000000000000000                        #     .dword 0                            // p_offset: from the file's first byte
 0000600000000000                        #     .dword BASE                         // p_vaddr: loaded at BASE
 0000600000000000                        #     .dword BASE                         // p_paddr: the same
-372A000000000000                        #     .dword end - ehdr                   // p_filesz: the whole file
-372A000000000000                        #     .dword end - ehdr                   // p_memsz: the same
+3F2A000000000000                        #     .dword end - ehdr                   // p_filesz: the whole file
+3F2A000000000000                        #     .dword end - ehdr                   // p_memsz: the same
 0010000000000000                        #     .dword 0x1000                       // p_align: a page
                                         # its memory: 56 bytes
 01000000                                #     .word 1                             // p_type: PT_LOAD
@@ -2803,9 +2802,7 @@ add_x0,x0,x9                            #     add     x0, x0, x9
 ldr_x1,[x19,144]                        #     ldr     x1, [x19, #V_align+32]
 ^~alignup FCALL                         #     bl      alignup
 str_x0,[x19,184]                        #     str     x0, [x19, #V_base+32]       // .bss
-ldr_x9,[x19,104]                        #     ldr     x9, [x19, #V_loc+32]        // its end at a multiple of 8, then ALIGN(8)
-add_x9,x9,0x7                           #     add     x9, x9, #7
-and_x9,x9,0xfffffffffffffff8            #     and     x9, x9, #-8
+ldr_x9,[x19,104]                        #     ldr     x9, [x19, #V_loc+32]        // its end at a multiple of 8
 add_x0,x0,x9                            #     add     x0, x0, x9
 mov_x1,0x8                              #     mov     x1, #8
 ^~alignup FCALL                         #     bl      alignup
@@ -2845,9 +2842,13 @@ ldr_x11,[x9]                            #     ldr     x11, [x9]
 add_x9,x9,0x8                           #     add     x9, x9, #8
 cmp_x9,x10                              #     cmp     x9, x10
 @headers_bytes b.ne                     #     b.ne    headers_bytes
-ldr_x0,[x19,104]                        #     ldr     x0, [x19, #V_loc+32]        // ld's script ends .bss at a multiple of 8
+ldr_x0,[x19,184]                        #     ldr     x0, [x19, #V_base+32]       // ld's script ends .bss at a multiple of 8
+ldr_x9,[x19,104]                        #     ldr     x9, [x19, #V_loc+32]        // (its address)
+add_x0,x0,x9                            #     add     x0, x0, x9
 mov_x1,0x8                              #     mov     x1, #8
 ^~alignup RCALL                         #     bl      alignup
+ldr_x9,[x19,184]                        #     ldr     x9, [x19, #V_base+32]
+sub_x0,x0,x9                            #     sub     x0, x0, x9
 str_x0,[x19,104]                        #     str     x0, [x19, #V_loc+32]
 mov_x0,0x2610000                        #     mov     x0, #OUTBUF
 ~elf_headers adrp_x1 !elf_headers add_x1,x1,:lo12: #     la      x1, elf_headers
@@ -3082,37 +3083,37 @@ sub_x2,x2,x1                            #     sub     x2, x2, x1
 1F2003D5                                #     .balign 8
 :directives                             # directives:                             // name, its routine
 2E61736369690000                        #     .ascii ".ascii\0\0"
-A0EEFFFFFFFFFFFF                        #     .dword d_ascii - directives
+98EEFFFFFFFFFFFF                        #     .dword d_ascii - directives
 2E617363697A0000                        #     .ascii ".asciz\0\0"
-98EEFFFFFFFFFFFF                        #     .dword d_asciz - directives
+90EEFFFFFFFFFFFF                        #     .dword d_asciz - directives
 2E62616C69676E00                        #     .ascii ".balign\0"
-E0EDFFFFFFFFFFFF                        #     .dword d_balign - directives
+D8EDFFFFFFFFFFFF                        #     .dword d_balign - directives
 2E62797465000000                        #     .ascii ".byte\0\0\0"
-54EEFFFFFFFFFFFF                        #     .dword d_byte - directives
+4CEEFFFFFFFFFFFF                        #     .dword d_byte - directives
 2E68776F72640000                        #     .ascii ".hword\0\0"
-5CEEFFFFFFFFFFFF                        #     .dword d_half - directives
+54EEFFFFFFFFFFFF                        #     .dword d_half - directives
 2E776F7264000000                        #     .ascii ".word\0\0\0"
-64EEFFFFFFFFFFFF                        #     .dword d_word - directives
+5CEEFFFFFFFFFFFF                        #     .dword d_word - directives
 2E64776F72640000                        #     .ascii ".dword\0\0"
-6CEEFFFFFFFFFFFF                        #     .dword d_dword - directives
+64EEFFFFFFFFFFFF                        #     .dword d_dword - directives
 2E65717500000000                        #     .ascii ".equ\0\0\0\0"
-80EDFFFFFFFFFFFF                        #     .dword d_equ - directives
+78EDFFFFFFFFFFFF                        #     .dword d_equ - directives
 2E676C6F626C0000                        #     .ascii ".globl\0\0"
-0CEDFFFFFFFFFFFF                        #     .dword d_globl - directives
+04EDFFFFFFFFFFFF                        #     .dword d_globl - directives
 2E73656374696F6E                        #     .ascii ".section"
-18EDFFFFFFFFFFFF                        #     .dword d_section - directives
+10EDFFFFFFFFFFFF                        #     .dword d_section - directives
 2E736B6970000000                        #     .ascii ".skip\0\0\0"
-34EEFFFFFFFFFFFF                        #     .dword d_skip - directives
+2CEEFFFFFFFFFFFF                        #     .dword d_skip - directives
 2E74657874000000                        #     .ascii ".text\0\0\0"
-64EDFFFFFFFFFFFF                        #     .dword d_text - directives
+5CEDFFFFFFFFFFFF                        #     .dword d_text - directives
 2E64617461000000                        #     .ascii ".data\0\0\0"
-6CEDFFFFFFFFFFFF                        #     .dword d_data - directives
+64EDFFFFFFFFFFFF                        #     .dword d_data - directives
 2E62737300000000                        #     .ascii ".bss\0\0\0\0"
-74EDFFFFFFFFFFFF                        #     .dword d_bss - directives
+6CEDFFFFFFFFFFFF                        #     .dword d_bss - directives
 2E6D6163726F0000                        #     .ascii ".macro\0\0"
-14F0FFFFFFFFFFFF                        #     .dword d_macro - directives
+0CF0FFFFFFFFFFFF                        #     .dword d_macro - directives
 2E656E646D000000                        #     .ascii ".endm\0\0\0"
-E8F0FFFFFFFFFFFF                        #     .dword d_endm - directives
+E0F0FFFFFFFFFFFF                        #     .dword d_endm - directives
 0000000000000000                        #     .dword 0
 
 :sections                               # sections:                               // 1-4
@@ -3168,151 +3169,151 @@ E8F0FFFFFFFFFFFF                        #     .dword d_endm - directives
 
 :mnemonics                              # mnemonics:                              // name, its routine, its base bits, its other bits
 6D6F760000000000                        #     .ascii "mov\0\0\0\0\0"
-50F1FFFF00000000                        #     .word   h_mov - mnemonics, 0x00000000
+48F1FFFF00000000                        #     .word   h_mov - mnemonics, 0x00000000
 0000000000000000                        #     .dword  0
 6164640000000000                        #     .ascii "add\0\0\0\0\0"
-3CF3FFFF00000000                        #     .word   h_addsub - mnemonics, 0x00000000
+34F3FFFF00000000                        #     .word   h_addsub - mnemonics, 0x00000000
 0000000000000000                        #     .dword  0
 7375620000000000                        #     .ascii "sub\0\0\0\0\0"
-3CF3FFFF00000040                        #     .word   h_addsub - mnemonics, 0x40000000
+34F3FFFF00000040                        #     .word   h_addsub - mnemonics, 0x40000000
 0000000000000000                        #     .dword  0
 6164647300000000                        #     .ascii "adds\0\0\0\0"
-3CF3FFFF00000020                        #     .word   h_addsub - mnemonics, 0x20000000
+34F3FFFF00000020                        #     .word   h_addsub - mnemonics, 0x20000000
 0000000000000000                        #     .dword  0
 7375627300000000                        #     .ascii "subs\0\0\0\0"
-3CF3FFFF00000060                        #     .word   h_addsub - mnemonics, 0x60000000
+34F3FFFF00000060                        #     .word   h_addsub - mnemonics, 0x60000000
 0000000000000000                        #     .dword  0
 636D700000000000                        #     .ascii "cmp\0\0\0\0\0"
-10F3FFFF00000060                        #     .word   h_cmp - mnemonics, 0x60000000
+08F3FFFF00000060                        #     .word   h_cmp - mnemonics, 0x60000000
 0000000000000000                        #     .dword  0
 6E65670000000000                        #     .ascii "neg\0\0\0\0\0"
-28F3FFFF0000004B                        #     .word   h_neg - mnemonics, 0x4b000000
+20F3FFFF0000004B                        #     .word   h_neg - mnemonics, 0x4b000000
 0000000000000000                        #     .dword  0
 616E640000000000                        #     .ascii "and\0\0\0\0\0"
-1CF4FFFF00000000                        #     .word   h_logic - mnemonics, 0x00000000
+14F4FFFF00000000                        #     .word   h_logic - mnemonics, 0x00000000
 0000000000000000                        #     .dword  0
 6F72720000000000                        #     .ascii "orr\0\0\0\0\0"
-1CF4FFFF00000020                        #     .word   h_logic - mnemonics, 0x20000000
+14F4FFFF00000020                        #     .word   h_logic - mnemonics, 0x20000000
 0000000000000000                        #     .dword  0
 656F720000000000                        #     .ascii "eor\0\0\0\0\0"
-1CF4FFFF00000040                        #     .word   h_logic - mnemonics, 0x40000000
+14F4FFFF00000040                        #     .word   h_logic - mnemonics, 0x40000000
 0000000000000000                        #     .dword  0
 6C736C0000000000                        #     .ascii "lsl\0\0\0\0\0"
-7CF4FFFF0020C01A                        #     .word   h_shift - mnemonics, 0x1ac02000
+74F4FFFF0020C01A                        #     .word   h_shift - mnemonics, 0x1ac02000
 0000000000000000                        #     .dword  0
 6C73720000000000                        #     .ascii "lsr\0\0\0\0\0"
-7CF4FFFF0024C01A                        #     .word   h_shift - mnemonics, 0x1ac02400
+74F4FFFF0024C01A                        #     .word   h_shift - mnemonics, 0x1ac02400
 0100000000000000                        #     .dword  1
 6173720000000000                        #     .ascii "asr\0\0\0\0\0"
-7CF4FFFF0028C01A                        #     .word   h_shift - mnemonics, 0x1ac02800
+74F4FFFF0028C01A                        #     .word   h_shift - mnemonics, 0x1ac02800
 0200000000000000                        #     .dword  2
 6D756C0000000000                        #     .ascii "mul\0\0\0\0\0"
-04F5FFFF007C001B                        #     .word   h_rrr - mnemonics, 0x1b007c00
+FCF4FFFF007C001B                        #     .word   h_rrr - mnemonics, 0x1b007c00
 0000000000000000                        #     .dword  0
 7564697600000000                        #     .ascii "udiv\0\0\0\0"
-04F5FFFF0008C01A                        #     .word   h_rrr - mnemonics, 0x1ac00800
+FCF4FFFF0008C01A                        #     .word   h_rrr - mnemonics, 0x1ac00800
 0000000000000000                        #     .dword  0
 7364697600000000                        #     .ascii "sdiv\0\0\0\0"
-04F5FFFF000CC01A                        #     .word   h_rrr - mnemonics, 0x1ac00c00
+FCF4FFFF000CC01A                        #     .word   h_rrr - mnemonics, 0x1ac00c00
 0000000000000000                        #     .dword  0
 6D73756200000000                        #     .ascii "msub\0\0\0\0"
-18F5FFFF0080001B                        #     .word   h_msub - mnemonics, 0x1b008000
+10F5FFFF0080001B                        #     .word   h_msub - mnemonics, 0x1b008000
 0000000000000000                        #     .dword  0
 6373657400000000                        #     .ascii "cset\0\0\0\0"
-38F5FFFFE0079F1A                        #     .word   h_cset - mnemonics, 0x1a9f07e0
+30F5FFFFE0079F1A                        #     .word   h_cset - mnemonics, 0x1a9f07e0
 0000000000000000                        #     .dword  0
 6C64720000000000                        #     .ascii "ldr\0\0\0\0\0"
-88F5FFFF000040F9                        #     .word   h_ldst - mnemonics, 0xf9400000
+80F5FFFF000040F9                        #     .word   h_ldst - mnemonics, 0xf9400000
 0300000000000000                        #     .dword  3
 7374720000000000                        #     .ascii "str\0\0\0\0\0"
-88F5FFFF000000F9                        #     .word   h_ldst - mnemonics, 0xf9000000
+80F5FFFF000000F9                        #     .word   h_ldst - mnemonics, 0xf9000000
 0300000000000000                        #     .dword  3
 6C64726200000000                        #     .ascii "ldrb\0\0\0\0"
-88F5FFFF00004039                        #     .word   h_ldst - mnemonics, 0x39400000
+80F5FFFF00004039                        #     .word   h_ldst - mnemonics, 0x39400000
 0000000000000000                        #     .dword  0
 7374726200000000                        #     .ascii "strb\0\0\0\0"
-88F5FFFF00000039                        #     .word   h_ldst - mnemonics, 0x39000000
+80F5FFFF00000039                        #     .word   h_ldst - mnemonics, 0x39000000
 0000000000000000                        #     .dword  0
 6200000000000000                        #     .ascii "b\0\0\0\0\0\0\0"
-28F6FFFF00000014                        #     .word   h_b - mnemonics, 0x14000000
+20F6FFFF00000014                        #     .word   h_b - mnemonics, 0x14000000
 0000000000000000                        #     .dword  0
 626C000000000000                        #     .ascii "bl\0\0\0\0\0\0"
-28F6FFFF00000094                        #     .word   h_b - mnemonics, 0x94000000
+20F6FFFF00000094                        #     .word   h_b - mnemonics, 0x94000000
 0000000000000000                        #     .dword  0
 622E657100000000                        #     .ascii "b.eq\0\0\0\0"
-44F6FFFF00000054                        #     .word   h_bcond - mnemonics, 0x54000000
+3CF6FFFF00000054                        #     .word   h_bcond - mnemonics, 0x54000000
 0000000000000000                        #     .dword  0
 622E6E6500000000                        #     .ascii "b.ne\0\0\0\0"
-44F6FFFF01000054                        #     .word   h_bcond - mnemonics, 0x54000001
+3CF6FFFF01000054                        #     .word   h_bcond - mnemonics, 0x54000001
 0000000000000000                        #     .dword  0
 622E687300000000                        #     .ascii "b.hs\0\0\0\0"
-44F6FFFF02000054                        #     .word   h_bcond - mnemonics, 0x54000002
+3CF6FFFF02000054                        #     .word   h_bcond - mnemonics, 0x54000002
 0000000000000000                        #     .dword  0
 622E6C6F00000000                        #     .ascii "b.lo\0\0\0\0"
-44F6FFFF03000054                        #     .word   h_bcond - mnemonics, 0x54000003
+3CF6FFFF03000054                        #     .word   h_bcond - mnemonics, 0x54000003
 0000000000000000                        #     .dword  0
 622E6D6900000000                        #     .ascii "b.mi\0\0\0\0"
-44F6FFFF04000054                        #     .word   h_bcond - mnemonics, 0x54000004
+3CF6FFFF04000054                        #     .word   h_bcond - mnemonics, 0x54000004
 0000000000000000                        #     .dword  0
 622E706C00000000                        #     .ascii "b.pl\0\0\0\0"
-44F6FFFF05000054                        #     .word   h_bcond - mnemonics, 0x54000005
+3CF6FFFF05000054                        #     .word   h_bcond - mnemonics, 0x54000005
 0000000000000000                        #     .dword  0
 622E767300000000                        #     .ascii "b.vs\0\0\0\0"
-44F6FFFF06000054                        #     .word   h_bcond - mnemonics, 0x54000006
+3CF6FFFF06000054                        #     .word   h_bcond - mnemonics, 0x54000006
 0000000000000000                        #     .dword  0
 622E766300000000                        #     .ascii "b.vc\0\0\0\0"
-44F6FFFF07000054                        #     .word   h_bcond - mnemonics, 0x54000007
+3CF6FFFF07000054                        #     .word   h_bcond - mnemonics, 0x54000007
 0000000000000000                        #     .dword  0
 622E686900000000                        #     .ascii "b.hi\0\0\0\0"
-44F6FFFF08000054                        #     .word   h_bcond - mnemonics, 0x54000008
+3CF6FFFF08000054                        #     .word   h_bcond - mnemonics, 0x54000008
 0000000000000000                        #     .dword  0
 622E6C7300000000                        #     .ascii "b.ls\0\0\0\0"
-44F6FFFF09000054                        #     .word   h_bcond - mnemonics, 0x54000009
+3CF6FFFF09000054                        #     .word   h_bcond - mnemonics, 0x54000009
 0000000000000000                        #     .dword  0
 622E676500000000                        #     .ascii "b.ge\0\0\0\0"
-44F6FFFF0A000054                        #     .word   h_bcond - mnemonics, 0x5400000a
+3CF6FFFF0A000054                        #     .word   h_bcond - mnemonics, 0x5400000a
 0000000000000000                        #     .dword  0
 622E6C7400000000                        #     .ascii "b.lt\0\0\0\0"
-44F6FFFF0B000054                        #     .word   h_bcond - mnemonics, 0x5400000b
+3CF6FFFF0B000054                        #     .word   h_bcond - mnemonics, 0x5400000b
 0000000000000000                        #     .dword  0
 622E677400000000                        #     .ascii "b.gt\0\0\0\0"
-44F6FFFF0C000054                        #     .word   h_bcond - mnemonics, 0x5400000c
+3CF6FFFF0C000054                        #     .word   h_bcond - mnemonics, 0x5400000c
 0000000000000000                        #     .dword  0
 622E6C6500000000                        #     .ascii "b.le\0\0\0\0"
-44F6FFFF0D000054                        #     .word   h_bcond - mnemonics, 0x5400000d
+3CF6FFFF0D000054                        #     .word   h_bcond - mnemonics, 0x5400000d
 0000000000000000                        #     .dword  0
 622E616C00000000                        #     .ascii "b.al\0\0\0\0"
-44F6FFFF0E000054                        #     .word   h_bcond - mnemonics, 0x5400000e
+3CF6FFFF0E000054                        #     .word   h_bcond - mnemonics, 0x5400000e
 0000000000000000                        #     .dword  0
 622E6E7600000000                        #     .ascii "b.nv\0\0\0\0"
-44F6FFFF0F000054                        #     .word   h_bcond - mnemonics, 0x5400000f
+3CF6FFFF0F000054                        #     .word   h_bcond - mnemonics, 0x5400000f
 0000000000000000                        #     .dword  0
 622E637300000000                        #     .ascii "b.cs\0\0\0\0"
-44F6FFFF02000054                        #     .word   h_bcond - mnemonics, 0x54000002
+3CF6FFFF02000054                        #     .word   h_bcond - mnemonics, 0x54000002
 0000000000000000                        #     .dword  0
 622E636300000000                        #     .ascii "b.cc\0\0\0\0"
-44F6FFFF03000054                        #     .word   h_bcond - mnemonics, 0x54000003
+3CF6FFFF03000054                        #     .word   h_bcond - mnemonics, 0x54000003
 0000000000000000                        #     .dword  0
 63627A0000000000                        #     .ascii "cbz\0\0\0\0\0"
-64F6FFFF00000034                        #     .word   h_cbz - mnemonics, 0x34000000
+5CF6FFFF00000034                        #     .word   h_cbz - mnemonics, 0x34000000
 0000000000000000                        #     .dword  0
 63626E7A00000000                        #     .ascii "cbnz\0\0\0\0"
-64F6FFFF00000035                        #     .word   h_cbz - mnemonics, 0x35000000
+5CF6FFFF00000035                        #     .word   h_cbz - mnemonics, 0x35000000
 0000000000000000                        #     .dword  0
 7265740000000000                        #     .ascii "ret\0\0\0\0\0"
-04F7FFFF00005FD6                        #     .word   h_ret - mnemonics, 0xd65f0000
+FCF6FFFF00005FD6                        #     .word   h_ret - mnemonics, 0xd65f0000
 0000000000000000                        #     .dword  0
 6272000000000000                        #     .ascii "br\0\0\0\0\0\0"
-2CF7FFFF00001FD6                        #     .word   h_br - mnemonics, 0xd61f0000
+24F7FFFF00001FD6                        #     .word   h_br - mnemonics, 0xd61f0000
 0000000000000000                        #     .dword  0
 626C720000000000                        #     .ascii "blr\0\0\0\0\0"
-2CF7FFFF00003FD6                        #     .word   h_br - mnemonics, 0xd63f0000
+24F7FFFF00003FD6                        #     .word   h_br - mnemonics, 0xd63f0000
 0000000000000000                        #     .dword  0
 7376630000000000                        #     .ascii "svc\0\0\0\0\0"
-3CF7FFFF010000D4                        #     .word   h_svc - mnemonics, 0xd4000001
+34F7FFFF010000D4                        #     .word   h_svc - mnemonics, 0xd4000001
 0000000000000000                        #     .dword  0
 6164727000000000                        #     .ascii "adrp\0\0\0\0"
-C4F6FFFF00000090                        #     .word   h_adrp - mnemonics, 0x90000000
+BCF6FFFF00000090                        #     .word   h_adrp - mnemonics, 0x90000000
 0000000000000000                        #     .dword  0
 0000000000000000                        #     .dword  0
 :elf_headers                            # elf_headers:                            // ld's: the ELF header and the two program headers, 0xb0 bytes
