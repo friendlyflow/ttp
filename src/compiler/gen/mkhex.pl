@@ -39,10 +39,12 @@ sub out { my $c = shift; my $o = `$c`; die "mkhex: $c failed\n" if $?; $o }
 sub slurp { open my $f, '<:raw', $_[0] or die "mkhex: $_[0]: $!\n"; local $/; <$f> }
 
 # the host: the folder of <prog.s>, gen/hex/<host>/ or hosts/<host>/
-my $arch = $src =~ m{(?:^|/)(x86_64|riscv64|aarch64)/[^/]*$} ? $1 : die "mkhex: $src is not in a folder x86_64/, riscv64/ or aarch64/\n";
+my $arch = $src =~ m{(?:^|/)(x86_64|riscv64|aarch64|arm)/[^/]*$} ? $1 : die "mkhex: $src is not in a folder x86_64/, riscv64/, aarch64/ or arm/\n";
 my $rv = $arch eq 'riscv64';
 my $a64 = $arch eq 'aarch64';
-my $fixed = $rv || $a64;    # 4-byte instructions, read from their bits
+my $arm = $arch eq 'arm';
+my $fixed = $rv || $a64 || $arm;    # 4-byte instructions, read from their bits
+my $W = $arm ? 4 : 8;               # ELF32 or ELF64: a word of the headers
 # x86_64: as the Makefile's SEED=gnu and make hex; riscv64 the same: the
 # seed as -march=rv64imac (ttpc.s's ASFLAGS) without the arch attribute,
 # ld without relaxing, symbols or a page of its own for the code; the
@@ -50,10 +52,14 @@ my $fixed = $rv || $a64;    # 4-byte instructions, read from their bits
 # a branch in its own section).
 # aarch64: as without flags; the seed ld -Ttext=0x4000b0 (the Makefile's
 # SLDFLAGS_aarch64), the programs linked at 0.
-my $X = $rv ? 'riscv64-none-elf-' : $a64 ? 'aarch64-none-elf-' : '';
-my @as = $a64 ? () : $rv ? ('-march=' . ($mode eq 'hex2' ? 'rv64imac' : 'rv64im'), '-mabi=lp64', '-mno-arch-attr', $mode eq 'hex2' ? () : '-mno-relax')
+# arm: as -march=armv7-a; the seed ld -T hosts/arm/ttpc.ld (SLDFLAGS_arm),
+# the programs linked at 0.
+my $X = $rv ? 'riscv64-none-elf-' : $a64 ? 'aarch64-none-elf-' : $arm ? 'arm-none-eabi-' : '';
+(my $script = $src) =~ s{[^/]*$}{ttpc.ld};
+my @as = $a64 ? () : $arm ? ('-march=armv7-a') : $rv ? ('-march=' . ($mode eq 'hex2' ? 'rv64imac' : 'rv64im'), '-mabi=lp64', '-mno-arch-attr', $mode eq 'hex2' ? () : '-mno-relax')
     : ('-mx86-used-note=no');
-my @ld = ('-static', ($rv ? '--no-relax' : ()), '-z', 'noseparate-code', ($a64 && $mode eq 'hex2' ? '-Ttext=0x4000b0' : ()));
+my @ld = $arm ? ('-static', $mode eq 'hex2' ? ('-T', $script) : ())
+    : ('-static', ($rv ? '--no-relax' : ()), '-z', 'noseparate-code', ($a64 && $mode eq 'hex2' ? '-Ttext=0x4000b0' : ()));
 # riscv64's gas cannot list ttpc.s (a listing makes `li a2, msg_len` of an
 # .equ of `. - msg` an error): the lines' offsets come from a copy with a
 # label before and after each line, assembled apart
@@ -127,6 +133,7 @@ for my $n (1 .. @src) {
     my $s = $src[$n - 1];
     my $code = $s;
     if ($a64) { $code =~ s{//.*}{} }
+    elsif ($arm) { $code =~ s/^((?:[^"@]|"(?:[^"\\]|\\.)*")*)@.*/$1/ }
     else {
         $code =~ s/\s#.*//;
         $code =~ s/^#.*//;
@@ -191,7 +198,13 @@ if ($mode eq 'hex2') {
     }
     my $rs;
     for (split /\n/, out("${X}readelf -rW $t/o")) {
-        $rs = $1 if /'\.rela(\.\w+)'/;
+        $rs = $1 if /'\.rela?(\.\w+)'/;
+        # arm: REL, the addend in the bytes; only the .words (the code's
+        # references are read from its instructions, fields_arm)
+        if ($arm && /^([0-9a-f]+)\s+[0-9a-f]+\s+(R_\w+)/) {
+            $reloc{$rs}{ hex $1 } = [$2] if $2 eq 'R_ARM_ABS32';
+            next;
+        }
         next unless /^([0-9a-f]+)\s+[0-9a-f]+\s+(R_\w+)\s+[0-9a-f]+\s+(\S+)\s*([+-])\s*([0-9a-f]+)/;
         # riscv64: only the .dwords; the code's references are read from
         # its instructions (fields_rv)
@@ -418,11 +431,114 @@ sub a64why {
     return @r;
 }
 
+# arm: a line's references as tokens, [start, length, token, the bytes
+# after it]: B, BL, B<cond> ^~ (3 bytes, then the top byte: cond and the
+# opcode), a MOVW :lower16: ! and the MOVT :upper16: after it ~ (each
+# written with its immediate zero)
+my @armcond = qw(eq ne cs cc mi pl vs vc hi ls ge lt gt le al nv);
+sub fields_arm {
+    my ($l) = @_;
+    my ($addr, $foff) = @{ $sec{ $l->{sec} } };
+    my ($o, $e) = ($l->{off}, $l->{end});
+    my (@f, @raw);
+    for (my $p = $o; $p < $e; $p += 4) {
+        my $P = $addr + $p;
+        my $w = rd($foff + $p, 4);
+        if (($w & 0x0e000000) == 0x0a000000 && $w >> 28 != 15) {
+            my $tgt = $P + 8 + 4 * sxb($w & 0xffffff, 24);
+            my $name = name_at($tgt, $l->{ops});
+            if ($name) { push @f, [$p, 4, "^~$name", sprintf '%02X', $w >> 24] }
+            else { push @raw, sprintf 'b to 0x%x', $tgt }
+        } elsif (($w & 0x0ff00000) == 0x03000000 && $l->{ops} =~ /:lower16:|^\s*\w+\s*,/ && ($l->{mn} eq 'la' || $l->{ops} =~ /:lower16:/)) {
+            my $w2 = $p + 8 <= $e ? rd($foff + $p + 4, 4) : 0;
+            die "mkhex: line $l->{n}: a movw :lower16: without its movt after it\n"
+                unless ($w2 & 0x0ff00000) == 0x03400000 && (($w2 >> 12) & 15) == (($w >> 12) & 15);
+            my $imm = sub { (($_[0] >> 4) & 0xf000) | ($_[0] & 0xfff) };
+            my $tgt = $imm->($w2) << 16 | $imm->($w);
+            my $name = name_at($tgt, $l->{ops});
+            if ($name) { push @f, [$p, 4, "!$name", &le($w & ~0x000f0fff, 4)], [$p + 4, 4, "~$name", &le($w2 & ~0x000f0fff, 4)] }
+            else { push @raw, sprintf 'movw, movt of 0x%x', $tgt }
+            $p += 4;
+        } elsif (($w & 0x0f7f0000) == 0x051f0000 || ($w & 0x0fef0000) == 0x028f0000 || ($w & 0x0fef0000) == 0x024f0000) {
+            die sprintf "mkhex: line %d: ldr literal or adr (no hex2 reference for it): %s\n", $l->{n}, $l->{text};
+        }
+    }
+    return (\@f, @raw ? ' (written out: ' . join(', ', @raw) . ')' : '');
+}
+
+# arm: an instruction's fields as the Arm manual draws its encoding (ARM
+# state), for the hand check of hex0's text: its 32 bits cut at the
+# fields, MSB first, then what they say
+my @armdp = qw(AND EOR SUB RSB ADD ADC SBC RSC TST TEQ CMP CMN ORR MOV BIC MVN);
+my @armreg = (map({ "r$_" } 0 .. 12), 'sp', 'lr', 'pc');
+my @armsh = qw(lsl lsr asr ror);
+sub armwhy {
+    my ($b) = @_;
+    my @r;
+    for (my $p = 0; $p + 4 <= length $b; $p += 4) {
+        my $w = 0;
+        $w |= ord(substr $b, $p + $_, 1) << 8 * $_ for 0 .. 3;
+        my $f = sub { ($w >> $_[0]) & ((1 << $_[1]) - 1) };
+        my ($cond, $rn, $rd, $rm) = ($w >> 28, $f->(16, 4), $f->(12, 4), $w & 15);
+        my $c = sprintf 'cond %04b %s', $cond, $armcond[$cond];
+        my ($k, $cut, $what);
+        if (($w & 0x0ffffff0) == 0x012fff10 || ($w & 0x0ffffff0) == 0x012fff30) {
+            $k = $f->(5, 1) ? 'BLX (register)' : 'BX';
+            ($cut, $what) = ([4, 8, 12, 4, 4], "$c, Rm $armreg[$rm]");
+        } elsif (($w & 0x0fb00000) == 0x03000000) {
+            $k = $f->(22, 1) ? 'MOVT' : 'MOVW';
+            ($cut, $what) = ([4, 8, 4, 4, 12], sprintf '%s, imm4 %d, Rd %s, imm12 %d: imm16 0x%x', $c, $f->(16, 4), $armreg[$rd], $f->(0, 12), $f->(16, 4) << 12 | $f->(0, 12));
+        } elsif (($w & 0x0c000000) == 0x00000000 && !(($w & 0x02000090) == 0x00000090) && !(($w & 0x01900000) == 0x01000000)) {
+            my ($I, $op, $S) = ($f->(25, 1), $f->(21, 4), $f->(20, 1));
+            $k = $armdp[$op];
+            my $hd = sprintf '%s, I %d, opcode %04b %s, S %d, Rn %s, Rd %s', $c, $I, $op, lc $k, $S,
+                ($op == 13 || $op == 15 ? 'none' : $armreg[$rn]), ($op >= 8 && $op <= 11 ? 'none (only the flags)' : $armreg[$rd]);
+            if ($I) {
+                my ($rot, $i8) = ($f->(8, 4), $f->(0, 8));
+                my $v = (($i8 >> 2 * $rot) | ($i8 << (32 - 2 * $rot))) & 0xffffffff;
+                $k .= ' (immediate)';
+                ($cut, $what) = ([4, 2, 1, 4, 1, 4, 4, 4, 8], sprintf '%s, rotate %d, imm8 %d (%d)', $hd, $rot, $i8, $v);
+            } elsif ($f->(4, 1) == 0) {
+                $k .= ' (register)';
+                ($cut, $what) = ([4, 2, 1, 4, 1, 4, 4, 5, 2, 1, 4], sprintf '%s, imm5 %d, type %02b %s, Rm %s', $hd, $f->(7, 5), $f->(5, 2), $armsh[$f->(5, 2)], $armreg[$rm]);
+            } else {
+                $k .= ' (register-shifted register)';
+                ($cut, $what) = ([4, 2, 1, 4, 1, 4, 4, 4, 1, 2, 1, 4], sprintf '%s, Rs %s, type %02b %s, Rm %s', $hd, $armreg[$f->(8, 4)], $f->(5, 2), $armsh[$f->(5, 2)], $armreg[$rm]);
+            }
+        } elsif (($w & 0x0c000000) == 0x04000000 && !(($w & 0x02000010) == 0x02000010)) {
+            my ($I, $P, $U, $B, $W, $L) = map { $f->($_, 1) } 25, 24, 23, 22, 21, 20;
+            $k = ($L ? 'LDR' : 'STR') . ($B ? 'B' : '') . ($I ? ' (register)' : ' (immediate)');
+            my $hd = sprintf '%s, I %d, P %d, U %d %s, B %d, W %d, L %d %s, Rn %s, Rt %s', $c, $I, $P, $U, $U ? 'add' : 'subtract', $B, $W, $L, $L ? 'load' : 'store', $armreg[$rn], $armreg[$rd];
+            $hd .= $P ? ($W ? ' (pre-indexed, written back)' : ' (offset)') : ' (post-indexed)';
+            if ($I) { ($cut, $what) = ([4, 3, 1, 1, 1, 1, 1, 4, 4, 5, 2, 1, 4], sprintf '%s, imm5 %d, type %s, Rm %s', $hd, $f->(7, 5), $armsh[$f->(5, 2)], $armreg[$rm]) }
+            else { ($cut, $what) = ([4, 3, 1, 1, 1, 1, 1, 4, 4, 12], sprintf '%s, imm12 %d', $hd, $f->(0, 12)) }
+        } elsif (($w & 0x0e000000) == 0x08000000) {
+            my ($P, $U, $W, $L) = map { $f->($_, 1) } 24, 23, 21, 20;
+            $k = ($L ? 'LDM' : 'STM') . ($P ? 'D' : 'I') . ($U ? ($P ? 'X' : 'A') : ($P ? 'B' : 'A'));
+            $k = $L ? 'LDMIA (pop)' : 'STMDB (push)' if $rn == 13 && $W && $L == $U && $L != $P;
+            ($cut, $what) = ([4, 3, 1, 1, 1, 1, 1, 4, 16], sprintf '%s, P %d, U %d, S %d, W %d, L %d, Rn %s, registers {%s}', $c, $P, $U, $f->(22, 1), $W, $L, $armreg[$rn], join(', ', map { $armreg[$_] } grep { $w >> $_ & 1 } 0 .. 15));
+        } elsif (($w & 0x0e000000) == 0x0a000000) {
+            my $imm = sxb($w & 0xffffff, 24);
+            $k = $f->(24, 1) ? 'BL' : 'B';
+            ($cut, $what) = ([4, 3, 1, 24], sprintf '%s, L %d %s, imm24 %d (offset %d, from the instruction + 8)', $c, $f->(24, 1), $f->(24, 1) ? 'with link' : 'without link', $imm, 4 * $imm);
+        } elsif (($w & 0x0f000000) == 0x0f000000) {
+            $k = 'SVC';
+            ($cut, $what) = ([4, 4, 24], sprintf '%s, imm24 %d', $c, $f->(0, 24));
+        } else { die sprintf "mkhex: no encoding of %08x in armwhy\n", $w }
+        my $bits = sprintf '%032b', $w;
+        my @g;
+        for (@$cut) { push @g, substr $bits, 0, $_, '' }
+        push @r, "$k " . join(' ', @g) . ": $what";
+    }
+    return @r;
+}
+
 # a line's bytes as tokens: [start, length, token] for each reference
 sub fields {
     my ($l) = @_;
     return fields_rv($l) if $rv && $l->{sec} eq '.text' && $l->{mn} !~ /^\./;
     return fields_a64($l) if $a64 && $l->{sec} eq '.text' && $l->{mn} !~ /^\./;
+    return fields_arm($l) if $arm && $l->{sec} eq '.text' && $l->{mn} !~ /^\./;
     my ($addr, $foff) = @{ $sec{ $l->{sec} } };
     my ($o, $e) = ($l->{off}, $l->{end});
     my (@f, @raw, $rel);
@@ -439,11 +555,11 @@ sub fields {
             my $name = $k == 0 ? name_at($tgt, $l->{ops}) : undef;
             if ($name) { push @f, [$p, 4, "%$name"] }
             else { my $to = $tgt + $k; push @raw, sprintf('rel32 to %s', name_at($to, $l->{ops}) // sprintf '0x%x', $to) . ($k ? ", from the end of the instruction, $k bytes after the field" : '') }
-        } elsif ($type eq 'R_X86_64_64' || $type eq 'R_RISCV_64' || $type eq 'R_AARCH64_ABS64') {
-            my $v = rd($foff + $p, 8);
+        } elsif ($type eq 'R_X86_64_64' || $type eq 'R_RISCV_64' || $type eq 'R_AARCH64_ABS64' || $type eq 'R_ARM_ABS32') {
+            my $v = rd($foff + $p, $W);
             my $name = $v >> 32 ? undef : name_at($v, $l->{ops});
             if ($name) { push @f, [$p, 4, "&$name"] }
-            else { push @raw, sprintf 'abs64 0x%x', $v }
+            else { push @raw, sprintf 'abs%d 0x%x', 8 * $W, $v }
         } else { die "mkhex: relocation $type\n" }
     }
     my $len = $e - $o;
@@ -477,7 +593,7 @@ sub hexline {
     return join ' ', @tok;
 }
 
-sub cm { my $c = shift; $c =~ s{^(\s*)//}{$1#} if $a64; $c =~ /^\s*#/ ? $c : "# $c" }
+sub cm { my $c = shift; $c =~ s{^(\s*)//}{$1#} if $a64; $c =~ s{^(\s*)@}{$1#} if $arm; $c =~ /^\s*#/ ? $c : "# $c" }
 
 sub row {
     my ($code, $comment) = @_;
@@ -520,6 +636,7 @@ sub section_rows {
             push @r, row(uc shift @b, "$a  $t"), map { uc } @b;
             push @r, row('', sprintf '%-6s%s', '', rvwhy($b)) if $rv && $l->{mn} !~ /^\./;
             push @r, map { row('', sprintf '%-6s%s', '', $_) } a64why($b) if $a64 && $l->{mn} !~ /^\./;
+            push @r, map { row('', sprintf '%-6s%s', '', $_) } armwhy($b) if $arm && $l->{mn} !~ /^\./;
             next;
         }
         if (!defined $l->{off}) {
@@ -908,22 +1025,26 @@ if ($mode eq 'flat') {
 
 # hex2: the ELF header and program headers, field by field
 my @ehdr = (
-    [16, 'e_ident', 'the magic 7f "ELF", ELFCLASS64, little endian, EV_CURRENT, System V, padding'],
-    [2, 'e_type', 'ET_EXEC, an executable'], [2, 'e_machine', $rv ? 'EM_RISCV' : $a64 ? 'EM_AARCH64' : 'EM_X86_64'], [4, 'e_version', 'EV_CURRENT'],
-    [8, 'e_entry', 'the address of _start'], [8, 'e_phoff', 'the program headers follow'],
-    [8, 'e_shoff', 'the section headers, at the end'], [4, 'e_flags', $rv ? 'EF_RISCV_RVC, compressed instructions; the soft-float ABI' : $a64 ? 'none on aarch64' : 'none on x86_64'],
+    [16, 'e_ident', 'the magic 7f "ELF", ' . ($arm ? 'ELFCLASS32' : 'ELFCLASS64') . ', little endian, EV_CURRENT, System V, padding'],
+    [2, 'e_type', 'ET_EXEC, an executable'], [2, 'e_machine', $rv ? 'EM_RISCV' : $a64 ? 'EM_AARCH64' : $arm ? 'EM_ARM' : 'EM_X86_64'], [4, 'e_version', 'EV_CURRENT'],
+    [$W, 'e_entry', 'the address of _start'], [$W, 'e_phoff', 'the program headers follow'],
+    [$W, 'e_shoff', 'the section headers, at the end'], [4, 'e_flags', $rv ? 'EF_RISCV_RVC, compressed instructions; the soft-float ABI' : $a64 ? 'none on aarch64' : $arm ? 'EF_ARM_EABI_VER5, EF_ARM_ABI_FLOAT_SOFT' : 'none on x86_64'],
     [2, 'e_ehsize', 'this header'], [2, 'e_phentsize', 'a program header'],
     [2, 'e_phnum', 'program headers'], [2, 'e_shentsize', 'a section header'],
     [2, 'e_shnum', 'section headers'], [2, 'e_shstrndx', 'the section of the section names']);
-my @phdr = (
+my @phdr = $arm ? (
+    [4, 'p_type', '1: PT_LOAD'], [4, 'p_offset', 'from this file offset'],
+    [4, 'p_vaddr', 'to this address'], [4, 'p_paddr', 'the same'], [4, 'p_filesz', 'bytes of the file'],
+    [4, 'p_memsz', 'bytes of memory, the rest zero'], [4, 'p_flags', '4 R, 2 W, 1 X'], [4, 'p_align', 'a page']) : (
     [4, 'p_type', '1: PT_LOAD'], [4, 'p_flags', '4 R, 2 W, 1 X'], [8, 'p_offset', 'from this file offset'],
     [8, 'p_vaddr', 'to this address'], [8, 'p_paddr', 'the same'], [8, 'p_filesz', 'bytes of the file'],
     [8, 'p_memsz', 'bytes of memory, the rest zero'], [8, 'p_align', 'a page']);
 my @shdr = (
-    [4, 'sh_name', 'its name at this offset of .shstrtab'], [4, 'sh_type', '1 PROGBITS, 3 STRTAB, 8 NOBITS'],
-    [8, 'sh_flags', '1 W, 2 A, 4 X'], [8, 'sh_addr', 'its address'], [8, 'sh_offset', 'its file offset'],
-    [8, 'sh_size', 'its size'], [4, 'sh_link', ''], [4, 'sh_info', ''], [8, 'sh_addralign', ''],
-    [8, 'sh_entsize', '']);
+    [4, 'sh_name', 'its name at this offset of .shstrtab'], [4, 'sh_type', '1 PROGBITS, 3 STRTAB, 8 NOBITS' . ($arm ? ', 0x70000003 ARM_ATTRIBUTES' : '')],
+    [$W, 'sh_flags', '1 W, 2 A, 4 X'], [$W, 'sh_addr', 'its address'], [$W, 'sh_offset', 'its file offset'],
+    [$W, 'sh_size', 'its size'], [4, 'sh_link', ''], [4, 'sh_info', ''], [$W, 'sh_addralign', ''],
+    [$W, 'sh_entsize', '']);
+my ($PH, $SH) = $arm ? (32, 40) : (56, 64);    # a program header's and a section header's size
 sub fieldrows {
     my ($o, $fs) = @_;
     my @r;
@@ -937,14 +1058,23 @@ sub fieldrows {
     return @r;
 }
 
-my $phoff = rd(32, 8);
-my $phnum = rd(56, 2);
-my $shoff = rd(40, 8);
-my $shnum = rd(60, 2);
+my $phoff = $arm ? rd(28, 4) : rd(32, 8);
+my $phnum = $arm ? rd(44, 2) : rd(56, 2);
+my $shoff = $arm ? rd(32, 4) : rd(40, 8);
+my $shnum = $arm ? rd(48, 2) : rd(60, 2);
 my $shstr = $sec{'.shstrtab'} or die "mkhex: no .shstrtab\n";
-my ($delta) = rd($phoff + 16, 8) - rd($phoff + 8, 8);
+my ($delta) = $arm ? rd($phoff + 8, 4) - rd($phoff + 4, 4) : rd($phoff + 16, 8) - rd($phoff + 8, 8);
 push @out, "# $src as hex2 text, made by gen/mkhex.pl from GNU as's and ld's output:",
     "# the whole executable in the order of its bytes. :label defines a label",
+    $arm ? (
+    "# at the address of the next byte; &label is label's address in 4 bytes",
+    "# (abs32, a .word). The code's references: ^~label (stage0-posix's B, BL",
+    "# and B<cond>) writes 3 bytes, imm24, (d - 8) / 4 (d is label minus the",
+    "# instruction's address, the pc reads 8 ahead), the byte after them is",
+    "# cond and the opcode (EA b, EB bl, 0A beq, ...); !label and ~label XOR",
+    "# label's address into the MOVW (:lower16:, its low 16 bits) and the MOVT",
+    "# (:upper16:, its high 16 bits) after them, each written with its imm4",
+    "# and imm12 zero;") :
     $a64 ? (
     "# at the address of the next byte; &label is label's address in 4 bytes",
     "# (abs32, the low half of a .dword). The code's references: ^~label",
@@ -977,14 +1107,25 @@ push @out, "# $src as hex2 text, made by gen/mkhex.pl from GNU as's and ld's out
 push @out, fieldrows(0, \@ehdr);
 for my $i (0 .. $phnum - 1) {
     push @out, '#', "# Program header $i";
-    push @out, fieldrows($phoff + 56 * $i, \@phdr);
+    push @out, fieldrows($phoff + $PH * $i, \@phdr);
 }
-my $pos = $phoff + 56 * $phnum;
+my $pos = $phoff + $PH * $phnum;
 for my $s (grep { !$sec{$_}[3] && $_ ne '.shstrtab' } @order) {
     my ($addr, $foff, $size) = @{ $sec{$s} };
     die "mkhex: $s before the file position\n" if $foff < $pos;
     if ($foff > $pos) {
         push @out, row(uc unpack('H*', substr $bin, $pos, $foff - $pos), "padding to ${s}'s file offset");
+    }
+    if ($s eq '.ARM.attributes') {    # not loaded: gas's build attributes for .arch armv7-a
+        my @a = (1 => "format 'A'", 4 => "the subsection's length, 0x1c", 6 => '"aeabi" and its 0', 5 => 'Tag_File 1, then the length of its attributes, 0x12',
+            5 => 'Tag_CPU_name 5: "7-A" and its 0', 2 => 'Tag_CPU_arch 6: 10, v7', 2 => "Tag_CPU_arch_profile 7: 'A', application",
+            2 => 'Tag_ARM_ISA_use 8: 1, yes', 2 => 'Tag_THUMB_ISA_use 9: 2, Thumb-2');
+        push @out, '#', "# The section $s: gas's build attributes (not loaded), as readelf -A says them";
+        my $q = $foff;
+        while (@a) { my ($n, $why) = splice @a, 0, 2; push @out, row(uc unpack('H*', substr $bin, $q, $n), $why); $q += $n }
+        die "mkhex: $s is not as gas writes it for armv7-a\n" if $q != $foff + $size || substr($bin, $foff, $size) ne pack('H*', '411c000000616561626900011200000005372d4100060a074108010902');
+        $pos = $foff + $size;
+        next;
     }
     if ($addr - $foff != $delta) {
         $delta = $addr - $foff;
@@ -1013,11 +1154,11 @@ while ($p < $so + $ss) {
 $pos = $so + $ss;
 push @out, row(uc unpack('H*', substr $bin, $pos, $shoff - $pos), 'padding to the section headers') if $shoff > $pos;
 for my $i (0 .. $shnum - 1) {
-    my $o = $shoff + 64 * $i;
+    my $o = $shoff + $SH * $i;
     my $nm = rd($o, 4);
     my $z = index($bin, "\0", $so + $nm);
     push @out, '#', sprintf('# Section header %d%s', $i, $i ? ': ' . substr($bin, $so + $nm, $z - $so - $nm) : '');
     push @out, fieldrows($o, \@shdr);
 }
-die "mkhex: bytes after the section headers\n" if $shoff + 64 * $shnum != length $bin;
+die "mkhex: bytes after the section headers\n" if $shoff + $SH * $shnum != length $bin;
 print "$_\n" for @out;
