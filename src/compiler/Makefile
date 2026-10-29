@@ -501,6 +501,7 @@ SASFLAGS_x86_64 := -mx86-used-note=no
 SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
 SLDFLAGS_x86_64 := -s -z noseparate-code
+SLDFLAGS_aarch64 := -s -z noseparate-code -Ttext=0x4000b0
 # The hex seed (lane H): on the hosts of HEXHOSTS the chain builds the seed
 # without binutils, from hosts/<host>/hex0, a binary of a few hundred bytes
 # that is its commented text hex0.hex0 (make hex checks both): hex0 makes
@@ -516,10 +517,14 @@ SLDFLAGS_x86_64 := -s -z noseparate-code
 # matches gas's compressed instructions and branch relaxation); its
 # binutils' seed is as -mno-arch-attr (the attribute's string names the
 # version of binutils) and ld --no-relax -s -z noseparate-code, so the
-# cross and the native binutils agree too. SEED=asm takes ttpc.hex2 on a
+# cross and the native binutils agree too. On aarch64 ld -s -z noseparate-code
+# -Ttext=0x4000b0: aarch64-none-elf's script (no SIZEOF_HEADERS) put .text a
+# page after the headers, 74 KB of zeros; at 0x4000b0, after the headers
+# (64 + 2 * 56 bytes) in the first page, it is the Linux script's layout,
+# the native ld's, and both make the same 8960 bytes. SEED=asm takes ttpc.hex2 on a
 # host of HEXHOSTS without M1 and asm (not in ASMHOSTS).
 SEED ?= asm
-HEXHOSTS := x86_64 riscv64
+HEXHOSTS := x86_64 riscv64 aarch64
 ASMHOSTS := x86_64 riscv64
 # the flat tools (M1.s, asm.s) as binutils makes them, for make hex:
 # riscv64's RV64IM without relaxing, linked at 0 (gas keeps relocations
