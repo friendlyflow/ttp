@@ -494,8 +494,8 @@ B000600000000000                        #     .quad BASE + _start - ehdr        
 0000000000000000                        #     .quad 0                             # p_offset: from the file's first byte
 0000600000000000                        #     .quad BASE                          # p_vaddr: loaded at BASE
 0000600000000000                        #     .quad BASE                          # p_paddr: the same
-9B2A000000000000                        #     .quad end - ehdr                    # p_filesz: the whole file
-9B2A000000000000                        #     .quad end - ehdr                    # p_memsz: the same
+A92A000000000000                        #     .quad end - ehdr                    # p_filesz: the whole file
+A92A000000000000                        #     .quad end - ehdr                    # p_memsz: the same
 0010000000000000                        #     .quad 0x1000                        # p_align: a page
                                         # its memory: 56 bytes
 01000000                                #     .long 1                             # p_type: PT_LOAD
@@ -2288,9 +2288,11 @@ je32 %empty_section                     #     je      empty_section
 inc_ecx                                 #     inc     %ecx
 cmp_$i8,ecx !4                          #     cmp     $4, %ecx
 jbe8 !headers_bytes                     #     jbe     headers_bytes
-mov_d8(rbp),rax !112                    #     mov     V_loc+32(%rbp), %rax        # ld's script ends .bss at a multiple of 8
+mov_d32(rbp),rax %192                   #     mov     V_base+32(%rbp), %rax       # ld's script ends .bss at a multiple of 8
+add_d8(rbp),rax !112                    #     add     V_loc+32(%rbp), %rax        # (its address)
 mov_$i32,ecx %8                         #     mov     $8, %ecx
 call %alignup                           #     call    alignup
+sub_d32(rbp),rax %192                   #     sub     V_base+32(%rbp), %rax
 mov_rax,d8(rbp) !112                    #     mov     %rax, V_loc+32(%rbp)
 mov_$i32,edi %0x2470000                 #     mov     $OUTBUF, %edi
 lea_rel(rip),rsi %elf_headers           #     lea     elf_headers(%rip), %rsi

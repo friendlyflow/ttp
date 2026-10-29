@@ -2274,9 +2274,13 @@ headers_bytes:
     beq     t2, zero, empty_section
     addi    t0, t0, 8
     bne     t0, t1, headers_bytes
-    ld      a0, V_loc+32(s0)            # ld's script ends .bss at a multiple of 8
+    ld      a0, V_base+32(s0)           # ld's script ends .bss at a multiple of 8
+    ld      t0, V_loc+32(s0)            # (its address)
+    add     a0, a0, t0
     li      a1, 8
     jal     ra, alignup
+    ld      t0, V_base+32(s0)
+    sub     a0, a0, t0
     sd      a0, V_loc+32(s0)
     li      a0, OUTBUF
     la      a1, elf_headers
