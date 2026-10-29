@@ -54,7 +54,11 @@ those of one process (stdlib-prog for riscv64: natively 7.1 s, with `-j2`
 5.2 s, `-j4` 4.1 s, `-j6` 4.0 s; riscv64's ttpc under qemu 83, 60, 49 and
 46 s; the first pass, half of it, stays on one). `-j0` is a debugging aid:
 one process whose second pass checks that it meets the state the first
-recorded at each place a share could start.
+recorded at each place a share could start. The Makefiles compile with
+`-j$(TTPCJ)`, 4 (`TTPCJ=1`: one process), by every ttpc that has `-j`
+(stage1, stage2 and each host's), never by the frozen links; one `-j4`
+compile of stdlib-prog peaks at 135 MiB (154 MiB under qemu), against
+101 MiB on one.
 
 The root [Makefile](Makefile) calls the per-component Makefiles in
 [src/os](src/os/Makefile) and [src/compiler](src/compiler/Makefile),
