@@ -1,0 +1,605 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/riscv64/M1.s as hex2 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then the line. :label defines a label at the address
+# of the next byte (from 0, the file's first byte); a reference
+# (@label B, $label J, ~label and !label an auipc and the instruction
+# after it) XORs label minus the instruction's address into the
+# immediate field of the instruction after it, written with that field
+# zero. hex2 reads only what is before each '#'.
+#
+# M1 for riscv64 Linux: a macro assembler, hex2 with names. The third link
+# of the bootstrap, built by hex2 from hosts/riscv64/M1.hex2 (made from
+# this file once by gen/mkhex.pl, a dev aid; the chain never reads this
+# file). It turns hosts/riscv64/asm.M1 into hex2 text, which hex2 makes
+# into asm, the assembler of the seed's asm. As stage0-posix's M1 with
+# --architecture riscv64 (mescc-tools M1-macro.c, express_word).
+#
+#   M1 < file.M1 > file.hex2
+#
+# The input is tokens: bytes up to a space, tab or newline (any byte up to
+# 0x20). '#' and ';' start a comment to the end of the line. A token
+#   DEFINE name value   makes name a macro: every other token name, before
+#                       or after, becomes the text value (hex2 text: hex
+#                       digits, or a word .hex)
+#   "text"              the hex of the bytes of text, then 00 (a C string;
+#                       text is every byte up to the next '"')
+#   'text'              text as it is (raw hex2 text, spaces too)
+#   !n @n ~n            the number n in an instruction's immediate field,
+#                       as a word for hex2 (.hex, XORed into the next 4
+#                       bytes written: the instruction, written with that
+#                       field zero): ! I (n's bits 11:0 to 31:20), @ S
+#                       (11:5 to 31:25, 4:0 to 11:7), ~ U (bits 31:12 of n
+#                       + 0x800, the upper part of a lui or auipc whose
+#                       addi adds n's low 12 bits, signed: !n); ! and @
+#                       must fit in 12 bits, ~ in 32, signed or unsigned
+#   $n %n               n in 2 or 4 bytes, little endian, as hex; it must
+#                       fit, signed or unsigned
+#                       (n: decimal, or hex after 0x, '-' before it for a
+#                       negative one)
+#   :name ~name !name @name $name |name *name &name ^hex .hex
+#                       hex2's labels, references, addresses and words, as
+#                       they are (a sign followed by a digit or '-' is a
+#                       number, above)
+#   a macro's name      its value
+#   hex digits          as they are (raw hex2 text)
+# Anything else is an error. Out go the tokens' texts, each followed by a
+# space, and a newline for each newline of the input: hex2 text, line by
+# line as the input. The input is read whole, then twice: the first pass
+# collects the macros, the second writes. On an unknown macro, a macro
+# defined twice, a number that is none or does not fit, a string without
+# its end, a full table, input or output and a failed read or write it
+# says so on stderr and ends with status 1; else with 0.
+#
+# One flat file, loaded at BASE by its first program header, read and
+# run; the second maps the memory it writes, MACROS to the end of OUTPUT.
+# RV64IM, no compressed instructions. The registers:
+#   s2  the next byte of the input          s3  the end of the input
+#   s4  the next byte of the output         s5  the pass, 1 or 2
+#   s6  the next free macro
+#   s7  a number's bits (12, 16 or 32)      s8  its kind (below, sized)
+#   s9, s10, s11  the return address of token, put_hex and put_text
+# The routines take and give a0-a3 and use the t registers; token gives a
+# token as a1 (its first byte), a2 (its length), a0 = 1 at the end of the
+# input. A macro is 32 bytes: the address of its name in the input, the
+# name's length, the address of its value, the value's length.
+
+#     .equ BASE, 0x600000
+#     .equ MACROS, 0x700000               # 65536 macros of 32 bytes
+#     .equ MACROS_END, MACROS + 0x10000 * 32
+#     .equ INPUT, 0x900000                # 16 MiB of input
+#     .equ INPUT_END, INPUT + 0x1000000
+#     .equ OUTPUT, 0x1900000              # 64 MiB of output
+#     .equ OUTPUT_END, OUTPUT + 0x4000000
+#     .equ SYS_read, 63
+#     .equ SYS_write, 64
+#     .equ SYS_exit, 93
+
+:ehdr                                   # ehdr:                                   # the ELF header, 64 bytes
+7F454C46                                #     .byte 0x7f, 0x45, 0x4c, 0x46        # e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                                      #     .byte 2                             # EI_CLASS: ELFCLASS64
+01                                      #     .byte 1                             # EI_DATA: ELFDATA2LSB, little endian
+01                                      #     .byte 1                             # EI_VERSION: EV_CURRENT
+00                                      #     .byte 0                             # EI_OSABI: System V
+0000000000000000                        #     .byte 0, 0, 0, 0, 0, 0, 0, 0        # EI_ABIVERSION 0, then padding to 16
+0200                                    #     .half 2                             # e_type: ET_EXEC, an executable
+F300                                    #     .half 0xf3                          # e_machine: EM_RISCV
+01000000                                #     .word 1                             # e_version: EV_CURRENT
+B801600000000000                        #     .dword BASE + _start - ehdr         # e_entry: the address of _start
+4000000000000000                        #     .dword phdr - ehdr                  # e_phoff: the program headers follow
+0000000000000000                        #     .dword 0                            # e_shoff: no section headers
+00000000                                #     .word 0                             # e_flags: no RVC, soft float (none used)
+4000                                    #     .half 64                            # e_ehsize: this header's size
+3800                                    #     .half 56                            # e_phentsize: a program header's size
+0200                                    #     .half 2                             # e_phnum: two program headers
+0000                                    #     .half 0                             # e_shentsize: no section headers
+0000                                    #     .half 0                             # e_shnum: none
+0000                                    #     .half 0                             # e_shstrndx: none
+:phdr                                   # phdr:                                   # the program: 56 bytes
+01000000                                #     .word 1                             # p_type: PT_LOAD
+05000000                                #     .word 5                             # p_flags: PF_R | PF_X, read and run
+0000000000000000                        #     .dword 0                            # p_offset: from the file's first byte
+0000600000000000                        #     .dword BASE                         # p_vaddr: loaded at BASE
+0000600000000000                        #     .dword BASE                         # p_paddr: the same
+CC07000000000000                        #     .dword end - ehdr                   # p_filesz: the whole file
+CC07000000000000                        #     .dword end - ehdr                   # p_memsz: the same
+0010000000000000                        #     .dword 0x1000                       # p_align: a page
+                                        # its memory: 56 bytes
+01000000                                #     .word 1                             # p_type: PT_LOAD
+06000000                                #     .word 6                             # p_flags: PF_R | PF_W, read and write
+0000000000000000                        #     .dword 0                            # p_offset: none of the file
+0000700000000000                        #     .dword MACROS                       # p_vaddr: the macros, input, output
+0000700000000000                        #     .dword MACROS                       # p_paddr: the same
+0000000000000000                        #     .dword 0                            # p_filesz: none, all zero
+0000200500000000                        #     .dword OUTPUT_END - MACROS          # p_memsz: to the end of the output
+0010000000000000                        #     .dword 0x1000                       # p_align: a page
+
+:str_define 444546494E45                # str_define:     .ascii "DEFINE"
+:digits 30313233343536373839414243444546 # digits:         .ascii "0123456789ABCDEF\n"
+0A
+:msg_unknown 4D313A20756E6B6E6F776E206D616372 # msg_unknown:    .asciz "M1: unknown macro: "
+6F3A2000
+:msg_twice 4D313A206D6163726F20646566696E65 # msg_twice:      .asciz "M1: macro defined twice: "
+642074776963653A2000
+:msg_range 4D313A206E756D626572206F7574206F # msg_range:      .asciz "M1: number out of range: "
+662072616E67653A2000
+:msg_number 4D313A206E6F742061206E756D626572 # msg_number:     .asciz "M1: not a number: "
+3A2000
+:msg_string 4D313A20737472696E6720776974686F # msg_string:     .asciz "M1: string without its end"
+75742069747320656E6400
+:msg_value 4D313A20444546494E4520776974686F # msg_value:      .asciz "M1: DEFINE without its value"
+7574206974732076616C756500
+:msg_many 4D313A20746F6F206D616E79206D6163 # msg_many:       .asciz "M1: too many macros"
+726F7300
+:msg_large 4D313A20696E70757420746F6F206C61 # msg_large:      .asciz "M1: input too large"
+72676500
+:msg_long 4D313A206F757470757420746F6F206C # msg_long:       .asciz "M1: output too large"
+6172676500
+:msg_read 4D313A2072656164206661696C656400 # msg_read:       .asciz "M1: read failed"
+:msg_write 4D313A207772697465206661696C6564 # msg_write:      .asciz "M1: write failed"
+00
+#     .balign 4                           # the code, 4-byte aligned (zeros)
+
+:_start                                 # _start:                                 # read all of stdin into INPUT
+B7099000                                #     li      s3, INPUT                   # the end of what is read
+:read                                   # read:
+37069001                                #     li      a2, INPUT_END
+33063641                                #     sub     a2, a2, s3                  # the room left
+@too_large 63000600                     #     beq     a2, zero, too_large
+9308F003                                #     li      a7, SYS_read
+13050000                                #     li      a0, 0                       # fd 0, stdin
+93850900                                #     mv      a1, s3                      # after what is read
+73000000                                #     ecall
+@read_failed 63400500                   #     blt     a0, zero, read_failed
+@read_all 63000500                      #     beq     a0, zero, read_all          # the end of stdin
+B389A900                                #     add     s3, s3, a0
+$read 6F000000                          #     j       read
+:read_all                               # read_all:
+370B7000                                #     li      s6, MACROS                  # no macros yet
+370A9001                                #     li      s4, OUTPUT                  # no output yet
+930A1000                                #     li      s5, 1                       # pass 1
+:pass                                   # pass:
+37099000                                #     li      s2, INPUT                   # from the first byte
+:loop                                   # loop:                                   # the next token
+$token EF0C0000                         #     jal     s9, token
+@pass_end 63100500                      #     bne     a0, zero, pass_end
+93026000                                #     li      t0, 6                       # DEFINE?
+@not_define 63105600                    #     bne     a2, t0, not_define
+~str_define 17030000 !str_define 13030300 #     la      t1, str_define
+93830500                                #     mv      t2, a1
+138E6500                                #     addi    t3, a1, 6
+:define_byte                            # define_byte:
+@define 6380C301                        #     beq     t2, t3, define
+834E0300                                #     lbu     t4, 0(t1)
+03CF0300                                #     lbu     t5, 0(t2)
+@not_define 6390EE01                    #     bne     t4, t5, not_define
+13031300                                #     addi    t1, t1, 1
+93831300                                #     addi    t2, t2, 1
+$define_byte 6F000000                   #     j       define_byte
+:not_define                             # not_define:
+93021000                                #     li      t0, 1                       # pass 1 only looks for DEFINE
+@loop 63805A00                          #     beq     s5, t0, loop
+03C50500                                #     lbu     a0, 0(a1)                   # its first byte
+93022002                                #     li      t0, 0x22                    # '"': a string
+@string 63005500                        #     beq     a0, t0, string
+93027002                                #     li      t0, 0x27                    # "'": raw text
+@raw 63005500                           #     beq     a0, t0, raw
+930BC000                                #     li      s7, 12                      # '!': I, 12 bits
+130C0000                                #     li      s8, 0
+93021002                                #     li      t0, 0x21
+@sized 63005500                         #     beq     a0, t0, sized
+130C1000                                #     li      s8, 1                       # '@': S, 12 bits
+93020004                                #     li      t0, 0x40
+@sized 63005500                         #     beq     a0, t0, sized
+930B0002                                #     li      s7, 32                      # '~': U, 32 bits
+130C2000                                #     li      s8, 2
+9302E007                                #     li      t0, 0x7e
+@sized 63005500                         #     beq     a0, t0, sized
+930B0001                                #     li      s7, 16                      # '$': 2 bytes
+130C3000                                #     li      s8, 3
+93024002                                #     li      t0, 0x24
+@sized 63005500                         #     beq     a0, t0, sized
+930B0002                                #     li      s7, 32                      # '%': 4 bytes, a number only
+130C4000                                #     li      s8, 4
+93025002                                #     li      t0, 0x25
+@sized 63005500                         #     beq     a0, t0, sized
+9302A003                                #     li      t0, 0x3a                    # ':' '|' '*' '&' '^' '.': for hex2
+@copy 63005500                          #     beq     a0, t0, copy
+9302C007                                #     li      t0, 0x7c
+@copy 63005500                          #     beq     a0, t0, copy
+9302A002                                #     li      t0, 0x2a
+@copy 63005500                          #     beq     a0, t0, copy
+93026002                                #     li      t0, 0x26
+@copy 63005500                          #     beq     a0, t0, copy
+9302E005                                #     li      t0, 0x5e
+@copy 63005500                          #     beq     a0, t0, copy
+9302E002                                #     li      t0, 0x2e
+@copy 63005500                          #     beq     a0, t0, copy
+$find EF000000                          #     jal     ra, find                    # a macro: its value
+@expand 63100500                        #     bne     a0, zero, expand
+13830500                                #     mv      t1, a1                      # else only hex digits, as they are
+B383C500                                #     add     t2, a1, a2
+:hex_only                               # hex_only:
+03450300                                #     lbu     a0, 0(t1)
+$hexval EF000000                        #     jal     ra, hexval                  # (keeps t1, t2)
+@unknown 63400500                       #     blt     a0, zero, unknown
+13031300                                #     addi    t1, t1, 1
+@hex_only 63107300                      #     bne     t1, t2, hex_only
+:copy                                   # copy:                                   # the token as it is, then a space
+$put_text EF0D0000                      #     jal     s11, put_text
+$loop 6F000000                          #     j       loop
+:expand                                 # expand:
+83350501                                #     ld      a1, 16(a0)                  # its value
+03368501                                #     ld      a2, 24(a0)
+$copy 6F000000                          #     j       copy
+
+:define                                 # define:                                 # DEFINE name value
+$token EF0C0000                         #     jal     s9, token                   # the name
+@no_value 63100500                      #     bne     a0, zero, no_value
+93860500                                #     mv      a3, a1
+930F0600                                #     mv      t6, a2
+$token EF0C0000                         #     jal     s9, token                   # the value
+@no_value 63100500                      #     bne     a0, zero, no_value
+93021000                                #     li      t0, 1                       # stored in pass 1, skipped in pass 2
+@loop 63905A00                          #     bne     s5, t0, loop
+938E0500                                #     mv      t4, a1                      # the value
+130F0600                                #     mv      t5, a2
+93850600                                #     mv      a1, a3                      # the name
+13860F00                                #     mv      a2, t6
+$find EF000000                          #     jal     ra, find                    # (keeps t4, t5)
+@twice 63100500                         #     bne     a0, zero, twice
+B7029000                                #     li      t0, MACROS_END
+@too_many 63705B00                      #     bgeu    s6, t0, too_many
+2330BB00                                #     sd      a1, 0(s6)                   # its name
+2334CB00                                #     sd      a2, 8(s6)                   # its length
+2338DB01                                #     sd      t4, 16(s6)                  # its value
+233CEB01                                #     sd      t5, 24(s6)                  # its length
+130B0B02                                #     addi    s6, s6, 32
+$loop 6F000000                          #     j       loop
+
+:string                                 # string:                                 # "text": its bytes as hex, then 00
+93851500                                #     addi    a1, a1, 1                   # after the '"'
+1306E6FF                                #     addi    a2, a2, -2                  # without both '"'
+B386C500                                #     add     a3, a1, a2                  # the end
+:string_byte                            # string_byte:
+@string_end 6380D500                    #     beq     a1, a3, string_end
+03C50500                                #     lbu     a0, 0(a1)
+$put_hex 6F0D0000                       #     jal     s10, put_hex                # (keeps a1, a3)
+93851500                                #     addi    a1, a1, 1
+$string_byte 6F000000                   #     j       string_byte
+:string_end                             # string_end:
+13050000                                #     li      a0, 0                       # the 00
+$put_hex 6F0D0000                       #     jal     s10, put_hex
+13050002                                #     li      a0, 0x20
+$put EF000000                           #     jal     ra, put
+$loop 6F000000                          #     j       loop
+
+:raw                                    # raw:                                    # 'text': text as it is
+93851500                                #     addi    a1, a1, 1
+1306E6FF                                #     addi    a2, a2, -2
+$copy 6F000000                          #     j       copy
+
+:sized                                  # sized:                                  # !n @n ~n $n %n: n of kind s8; else a label
+03C51500                                #     lbu     a0, 1(a1)                   # a digit or '-' after the sign
+9302D002                                #     li      t0, 0x2d
+@number 63005500                        #     beq     a0, t0, number
+130505FD                                #     addi    a0, a0, -0x30
+9302A000                                #     li      t0, 10
+@number 63605500                        #     bltu    a0, t0, number
+93024000                                #     li      t0, 4                       # '%' only with a number
+@unknown 63005C00                       #     beq     s8, t0, unknown
+$copy 6F000000                          #     j       copy                        # ~name !name @name $name: for hex2
+:number                                 # number:
+$parse EF000000                         #     jal     ra, parse                   # a0 = n, of a1 + 1, a2 - 1
+@bad_number 63900600                    #     bne     a3, zero, bad_number
+93021000                                #     li      t0, 1                       # fits: -2^(s7-1) <= n < 2^s7
+B3927201                                #     sll     t0, t0, s7                  # 2^s7
+13D31200                                #     srli    t1, t0, 1                   # 2^(s7-1)
+B3036500                                #     add     t2, a0, t1                  # + 2^(s7-1): from 0 ...
+33035300                                #     add     t1, t1, t0                  # ... to below 2^s7 + 2^(s7-1)
+@range 63F06300                         #     bgeu    t2, t1, range
+93023000                                #     li      t0, 3                       # $ %: the bytes of n
+@bytes 63705C00                         #     bgeu    s8, t0, bytes
+@word_i 63000C00                        #     beq     s8, zero, word_i
+93021000                                #     li      t0, 1
+@word_s 63005C00                        #     beq     s8, t0, word_s
+B71200009B820280                        #     li      t0, 0x800                   # U: (n + 0x800) & 0xfffff000
+33055500                                #     add     a0, a0, t0
+1355C500                                #     srli    a0, a0, 12
+1315C500                                #     slli    a0, a0, 12
+$word 6F000000                          #     j       word
+:word_i                                 # word_i:                                 # I: n's bits 11:0 to 31:20
+13154503                                #     slli    a0, a0, 52
+13550502                                #     srli    a0, a0, 32
+$word 6F000000                          #     j       word
+:word_s                                 # word_s:                                 # S: 11:5 to 31:25, 4:0 to 11:7
+9372F501                                #     andi    t0, a0, 0x1f
+93927200                                #     slli    t0, t0, 7
+13555500                                #     srli    a0, a0, 5
+1375F507                                #     andi    a0, a0, 0x7f
+13159501                                #     slli    a0, a0, 25
+33655500                                #     or      a0, a0, t0
+:word                                   # word:                                   # .hex: the 4 bytes of a0, the low first
+93060500                                #     mv      a3, a0
+1305E002                                #     li      a0, 0x2e
+$put EF000000                           #     jal     ra, put
+13850600                                #     mv      a0, a3
+930B0002                                #     li      s7, 32
+:bytes                                  # bytes:                                  # s7 / 8 bytes of a0, the low first
+93060500                                #     mv      a3, a0
+:number_byte                            # number_byte:
+13F5F60F                                #     andi    a0, a3, 0xff
+$put_hex 6F0D0000                       #     jal     s10, put_hex                # (keeps a1, a3)
+93D68600                                #     srli    a3, a3, 8
+938B8BFF                                #     addi    s7, s7, -8
+@number_byte 63900B00                   #     bne     s7, zero, number_byte
+13050002                                #     li      a0, 0x20
+$put EF000000                           #     jal     ra, put
+$loop 6F000000                          #     j       loop
+
+:pass_end                               # pass_end:
+938A1A00                                #     addi    s5, s5, 1
+93022000                                #     li      t0, 2                       # after pass 1, pass 2
+@pass 63805A00                          #     beq     s5, t0, pass
+B7059001                                #     li      a1, OUTPUT                  # after pass 2, write the output
+:write                                  # write:
+3306BA40                                #     sub     a2, s4, a1                  # what is left
+@done 63000600                          #     beq     a2, zero, done
+93080004                                #     li      a7, SYS_write
+13051000                                #     li      a0, 1                       # fd 1, stdout
+73000000                                #     ecall
+@write_failed 6350A000                  #     bge     zero, a0, write_failed
+B385A500                                #     add     a1, a1, a0
+$write 6F000000                         #     j       write
+:done                                   # done:
+13050000                                #     li      a0, 0                       # status 0
+$exit 6F000000                          #     j       exit
+
+:token                                  # token:                                  # the next token: a1, a2; a0 = 1 at the end
+@no_token 63703901                      #     bgeu    s2, s3, no_token
+03450900                                #     lbu     a0, 0(s2)
+93023002                                #     li      t0, 0x23                    # '#': a comment
+@comment 63005500                       #     beq     a0, t0, comment
+9302B003                                #     li      t0, 0x3b                    # ';': a comment
+@comment 63005500                       #     beq     a0, t0, comment
+93020002                                #     li      t0, 0x20                    # a space, tab, newline, ...
+@word_start 63E0A200                    #     bltu    t0, a0, word_start
+13091900                                #     addi    s2, s2, 1
+9302A000                                #     li      t0, 0x0a                    # a newline goes out in pass 2
+@token 63105500                         #     bne     a0, t0, token
+93021000                                #     li      t0, 1
+@token 63805A00                         #     beq     s5, t0, token
+$put EF000000                           #     jal     ra, put
+$token 6F000000                         #     j       token
+:comment                                # comment:                                # skip to the newline
+13091900                                #     addi    s2, s2, 1
+@no_token 63703901                      #     bgeu    s2, s3, no_token
+03430900                                #     lbu     t1, 0(s2)
+9302A000                                #     li      t0, 0x0a
+@comment 63105300                       #     bne     t1, t0, comment
+$token 6F000000                         #     j       token
+:word_start                             # word_start:
+93050900                                #     mv      a1, s2                      # its first byte
+13091900                                #     addi    s2, s2, 1
+93022002                                #     li      t0, 0x22                    # '"' or "'": to the same again
+@quoted 63005500                        #     beq     a0, t0, quoted
+93027002                                #     li      t0, 0x27
+@quoted 63005500                        #     beq     a0, t0, quoted
+:word_byte                              # word_byte:
+@word_end 63703901                      #     bgeu    s2, s3, word_end
+03430900                                #     lbu     t1, 0(s2)
+93020002                                #     li      t0, 0x20                    # ends at a space, tab, newline
+@word_end 63F06200                      #     bgeu    t0, t1, word_end
+13091900                                #     addi    s2, s2, 1
+$word_byte 6F000000                     #     j       word_byte
+:quoted                                 # quoted:
+@unterminated 63703901                  #     bgeu    s2, s3, unterminated
+03430900                                #     lbu     t1, 0(s2)
+13091900                                #     addi    s2, s2, 1                   # after it (the closing one too)
+@quoted 6310A300                        #     bne     t1, a0, quoted
+:word_end                               # word_end:
+3306B940                                #     sub     a2, s2, a1
+13050000                                #     li      a0, 0
+67800C00                                #     jr      s9
+:no_token                               # no_token:
+13051000                                #     li      a0, 1
+67800C00                                #     jr      s9
+
+:parse                                  # parse:                                  # a0 = the number a1 + 1, a2 - 1; a3 = 1 if none
+138E1500                                #     addi    t3, a1, 1                   # after the sign
+B38EC500                                #     add     t4, a1, a2                  # the end
+13050000                                #     li      a0, 0
+130F0000                                #     li      t5, 0                       # 1 if negative
+@not_number 6300DE01                    #     beq     t3, t4, not_number
+03430E00                                #     lbu     t1, 0(t3)
+9302D002                                #     li      t0, 0x2d                    # '-'
+@parse_base 63105300                    #     bne     t1, t0, parse_base
+130F1000                                #     li      t5, 1
+130E1E00                                #     addi    t3, t3, 1
+@not_number 6300DE01                    #     beq     t3, t4, not_number
+:parse_base                             # parse_base:
+B382CE41                                #     sub     t0, t4, t3                  # 0x and a digit at least: hex
+13032000                                #     li      t1, 2
+@decimal_digit 63705300                 #     bgeu    t1, t0, decimal_digit
+03430E00                                #     lbu     t1, 0(t3)
+93020003                                #     li      t0, 0x30
+@decimal_digit 63105300                 #     bne     t1, t0, decimal_digit
+03431E00                                #     lbu     t1, 1(t3)
+13630302                                #     ori     t1, t1, 0x20                # 'X' as 'x'
+93028007                                #     li      t0, 0x78
+@decimal_digit 63105300                 #     bne     t1, t0, decimal_digit
+130E2E00                                #     addi    t3, t3, 2
+:hex_digit                              # hex_digit:
+930F0500                                #     mv      t6, a0
+03450E00                                #     lbu     a0, 0(t3)
+93830000                                #     mv      t2, ra
+$hexval EF000000                        #     jal     ra, hexval
+93800300                                #     mv      ra, t2
+@not_number 63400500                    #     blt     a0, zero, not_number
+939F4F00                                #     slli    t6, t6, 4
+3365F501                                #     or      a0, a0, t6
+130E1E00                                #     addi    t3, t3, 1
+@hex_digit 6310DE01                     #     bne     t3, t4, hex_digit
+$parse_sign 6F000000                    #     j       parse_sign
+:decimal_digit                          # decimal_digit:
+03430E00                                #     lbu     t1, 0(t3)
+130303FD                                #     addi    t1, t1, -0x30               # '0'-'9'
+9302A000                                #     li      t0, 10
+@not_number 63705300                    #     bgeu    t1, t0, not_number
+9302A000                                #     li      t0, 10
+33055502                                #     mul     a0, a0, t0
+33056500                                #     add     a0, a0, t1
+130E1E00                                #     addi    t3, t3, 1
+@decimal_digit 6310DE01                 #     bne     t3, t4, decimal_digit
+:parse_sign                             # parse_sign:
+@parsed 63000F00                        #     beq     t5, zero, parsed
+3305A040                                #     neg     a0, a0
+:parsed                                 # parsed:
+93060000                                #     li      a3, 0
+67800000                                #     ret
+:not_number                             # not_number:
+93061000                                #     li      a3, 1
+67800000                                #     ret
+
+:hexval                                 # hexval:                                 # a0 = the value of hex digit a0, or -1 (uses t0)
+130505FD                                #     addi    a0, a0, -0x30               # '0'-'9' to 0-9
+9302A000                                #     li      t0, 10
+@hexval_done 63605500                   #     bltu    a0, t0, hexval_done
+13650502                                #     ori     a0, a0, 0x20                # 'A'-'F' to 'a'-'f' (0x11-0x16 to 0x31-0x36)
+1305F5FC                                #     addi    a0, a0, -0x31               # 'a'-'f' to 0-5
+93026000                                #     li      t0, 6
+@no_digit 63705500                      #     bgeu    a0, t0, no_digit
+1305A500                                #     addi    a0, a0, 10                  # 10-15
+:hexval_done                            # hexval_done:
+67800000                                #     ret
+:no_digit                               # no_digit:
+1305F0FF                                #     li      a0, -1
+67800000                                #     ret
+
+:find                                   # find:                                   # a0 = the macro of name a1, a2, or 0 (uses t0-t3, t6)
+37057000                                #     li      a0, MACROS
+:find_next                              # find_next:
+@not_found 63706501                     #     bgeu    a0, s6, not_found
+83328500                                #     ld      t0, 8(a0)                   # the same length
+@find_on 6390C200                       #     bne     t0, a2, find_on
+03330500                                #     ld      t1, 0(a0)                   # and the same bytes
+93830500                                #     mv      t2, a1
+338EC500                                #     add     t3, a1, a2
+:find_byte                              # find_byte:
+@found 6380C301                         #     beq     t2, t3, found
+83420300                                #     lbu     t0, 0(t1)
+83CF0300                                #     lbu     t6, 0(t2)
+@find_on 6390F201                       #     bne     t0, t6, find_on
+13031300                                #     addi    t1, t1, 1
+93831300                                #     addi    t2, t2, 1
+$find_byte 6F000000                     #     j       find_byte
+:find_on                                # find_on:
+13050502                                #     addi    a0, a0, 32
+$find_next 6F000000                     #     j       find_next
+:not_found                              # not_found:
+13050000                                #     li      a0, 0
+:found                                  # found:
+67800000                                #     ret
+
+:put_text                               # put_text:                               # writes a1, a2, then a space (returns by s11)
+B386C500                                #     add     a3, a1, a2
+:put_text_byte                          # put_text_byte:
+@put_text_end 6380D500                  #     beq     a1, a3, put_text_end
+03C50500                                #     lbu     a0, 0(a1)
+$put EF000000                           #     jal     ra, put
+93851500                                #     addi    a1, a1, 1
+$put_text_byte 6F000000                 #     j       put_text_byte
+:put_text_end                           # put_text_end:
+13050002                                #     li      a0, 0x20
+$put EF000000                           #     jal     ra, put
+67800D00                                #     jr      s11
+
+:put_hex                                # put_hex:                                # writes the byte a0 as two hex digits (returns by s10)
+9373F500                                #     andi    t2, a0, 15
+13554500                                #     srli    a0, a0, 4
+~digits 17030000 !digits 13030300       #     la      t1, digits
+33056500                                #     add     a0, a0, t1
+03450500                                #     lbu     a0, 0(a0)
+$put EF000000                           #     jal     ra, put                     # (keeps t1, t2)
+33856300                                #     add     a0, t2, t1
+03450500                                #     lbu     a0, 0(a0)
+$put EF000000                           #     jal     ra, put
+67000D00                                #     jr      s10
+
+:put                                    # put:                                    # writes the byte a0 (uses t0)
+B7029005                                #     li      t0, OUTPUT_END
+@too_long 63705A00                      #     bgeu    s4, t0, too_long
+2300AA00                                #     sb      a0, 0(s4)
+130A1A00                                #     addi    s4, s4, 1
+67800000                                #     ret
+
+:unknown                                # unknown:
+~msg_unknown 97060000 !msg_unknown 93860600 #     la      a3, msg_unknown
+$die 6F000000                           #     j       die
+:twice                                  # twice:
+~msg_twice 97060000 !msg_twice 93860600 #     la      a3, msg_twice
+$die 6F000000                           #     j       die
+:range                                  # range:
+~msg_range 97060000 !msg_range 93860600 #     la      a3, msg_range
+$die 6F000000                           #     j       die
+:bad_number                             # bad_number:
+~msg_number 97060000 !msg_number 93860600 #     la      a3, msg_number
+$die 6F000000                           #     j       die
+:unterminated                           # unterminated:
+~msg_string 97060000 !msg_string 93860600 #     la      a3, msg_string
+$die_plain 6F000000                     #     j       die_plain
+:no_value                               # no_value:
+~msg_value 97060000 !msg_value 93860600 #     la      a3, msg_value
+$die_plain 6F000000                     #     j       die_plain
+:too_many                               # too_many:
+~msg_many 97060000 !msg_many 93860600   #     la      a3, msg_many
+$die_plain 6F000000                     #     j       die_plain
+:too_large                              # too_large:
+~msg_large 97060000 !msg_large 93860600 #     la      a3, msg_large
+$die_plain 6F000000                     #     j       die_plain
+:too_long                               # too_long:
+~msg_long 97060000 !msg_long 93860600   #     la      a3, msg_long
+$die_plain 6F000000                     #     j       die_plain
+:read_failed                            # read_failed:
+~msg_read 97060000 !msg_read 93860600   #     la      a3, msg_read
+$die_plain 6F000000                     #     j       die_plain
+:write_failed                           # write_failed:
+~msg_write 97060000 !msg_write 93860600 #     la      a3, msg_write
+:die_plain                              # die_plain:
+13060000                                #     li      a2, 0                       # no token
+:die                                    # die:                                    # message a3 (to its 0), then token a1, a2
+13870600                                #     mv      a4, a3
+:die_length                             # die_length:
+83420700                                #     lbu     t0, 0(a4)
+@die_write 63800200                     #     beq     t0, zero, die_write
+13071700                                #     addi    a4, a4, 1
+$die_length 6F000000                    #     j       die_length
+:die_write                              # die_write:
+3307D740                                #     sub     a4, a4, a3
+938C0500                                #     mv      s9, a1
+130D0600                                #     mv      s10, a2
+93850600                                #     mv      a1, a3
+13060700                                #     mv      a2, a4
+$ewrite EF000000                        #     jal     ra, ewrite
+93850C00                                #     mv      a1, s9
+13060D00                                #     mv      a2, s10
+$ewrite EF000000                        #     jal     ra, ewrite
+~digits 97050000 !digits 93850500       #     la      a1, digits                  # digits ends with the newline
+93850501                                #     addi    a1, a1, 16
+13061000                                #     li      a2, 1
+$ewrite EF000000                        #     jal     ra, ewrite
+13051000                                #     li      a0, 1                       # status 1
+:exit                                   # exit:
+9308D005                                #     li      a7, SYS_exit
+73000000                                #     ecall
+:ewrite                                 # ewrite:                                 # writes a1, a2 to stderr
+93080004                                #     li      a7, SYS_write
+13052000                                #     li      a0, 2                       # fd 2, stderr
+73000000                                #     ecall
+67800000                                #     ret
+:end                                    # end:

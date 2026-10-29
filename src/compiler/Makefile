@@ -307,7 +307,8 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 # set output (next to cws.ff), each the bytes the command line makes.
 # cwsdebug.ff makes chello twice, with set debug (as -g) and without; run
 # with -g, both as -g (gsame); cwsopt.ff so with set optimise (as -O) and
-# cfib, run with -O both as -O. cinclude is chello including its shared page,
+# cfib, run with -O both as -O. cwsjobs.ff so with set jobs (as -j 4: the same bytes),
+# run with -j3 both the same again. cinclude is chello including its shared page,
 # --print prints a tree as stage0 does, and cwsnofile, cwsplace and cincludelate fail to compile
 # with their message. cws.ff writes into ../../../build/compiler/progs, the
 # default BUILD.
@@ -339,6 +340,13 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -O $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
 	cmp $(P)/cwsopt $(P)/cfib.O
 	cmp $(P)/cwsopt-O $(P)/cfib.O
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsjobs.ff > cwsjobs.lst
+	cmp $(P)/cwsjobs $(P)/cfib.celf
+	cmp $(P)/cwsjobs-j $(P)/cfib.celf
+	rm $(P)/cwsjobs $(P)/cwsjobs-j
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -j3 $(CURDIR)/progs/cwsjobs.ff > cwsjobs.lst
+	cmp $(P)/cwsjobs $(P)/cfib.celf
+	cmp $(P)/cwsjobs-j $(P)/cfib.celf
 	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
@@ -428,6 +436,21 @@ ctest-$(1): $(patsubst %,$(P)/$(1)/%.celf,$(filter-out $(CSKIP_$(1)),$(CPORTABLE
 endef
 $(foreach t,$(TARGETS),$(eval $(call target,$(t))))
 
+# -j: each ctest, for riscv64 and for every target, compiled with -j0 (one
+# process that checks the second pass against the first's samples) and -j6
+# (the second pass on six) is the bytes and listing of one process; cnow,
+# cct, ctasm and ctmix run compile time in the first pass, which the
+# second's shares then take up. By riscv64's stage2, whose compile
+# time (the host's) ctasm needs.
+ctest-j: $(CPROGS:%=$(P)/%.celf) $(foreach t,$(TARGETS),$(patsubst %,$(P)/$(t)/%.celf,$(filter-out $(CSKIP_$(t)),$(CPORTABLE)) $(CONLY_$(t)))) $(BOOT)/stage2
+	@set -e; d=$(P)/j; mkdir -p $$d; \
+	one() { for j in 0 6; do \
+	    $(QEMU) $(BOOT)/stage2 -j$$j --target $$1 $(TTPCFLAGS) $(SHARED) progs/$$2.ff $$d/$$2.$$1.$$j > $$d/$$2.$$1.$$j.lst; \
+	    cmp $$d/$$2.$$1.$$j $$3.celf; cmp $$d/$$2.$$1.$$j.lst $$3.lst; done; rm -f $$d/$$2.$$1.*; }; \
+	for p in $(CPROGS); do one riscv64 $$p $(P)/$$p; done; \
+	$(foreach t,$(TARGETS),for p in $(filter-out $(CSKIP_$(t)),$(CPORTABLE)) $(CONLY_$(t)); do one $(t) $$p $(P)/$(t)/$$p; done;) \
+	echo "ctest-j: every ctest on riscv64 $(TARGETS), with -j0 and -j6 the bytes and listing of one process"
+
 # the forms GNU as picks for glibc's asm (isa/x86_64gnu.pl): every one in
 # progs/x86_64/gnu.ff (mkgnu.pl), byte for byte its GNU twin gnu.s
 $(P)/x86_64/gnu.elf: progs/x86_64/gnu.ff $(SHARED) $(X86GNU) $(BOOT)/stage2 | $(P)/x86_64
@@ -501,6 +524,7 @@ SASFLAGS_x86_64 := -mx86-used-note=no
 SASFLAGS_aarch64 :=
 SASFLAGS_arm := -march=armv7-a
 SLDFLAGS_x86_64 := -s -z noseparate-code
+SLDFLAGS_aarch64 := -s -z noseparate-code -Ttext=0x4000b0
 # The hex seed (lane H): on the hosts of HEXHOSTS the chain builds the seed
 # without binutils, from hosts/<host>/hex0, a binary of a few hundred bytes
 # that is its commented text hex0.hex0 (make hex checks both): hex0 makes
@@ -512,14 +536,26 @@ SLDFLAGS_x86_64 := -s -z noseparate-code
 # the GNU property note, the symbols (which name the object file) and the
 # page of its own for the code, so that the cross and the native binutils
 # agree.
-# riscv64 (the bootstrap's own seed, $(BIN)) has hex0, hex2 and ttpc.hex2
-# so far: SEED=asm takes ttpc.hex2 there (ASMHOSTS have M1 and asm). Its
+# riscv64 (the bootstrap's own seed, $(BIN)) has them all too (its asm
+# matches gas's compressed instructions and branch relaxation); its
 # binutils' seed is as -mno-arch-attr (the attribute's string names the
-# version of binutils) and ld -s -z noseparate-code, so the cross and the
-# native binutils agree too.
+# version of binutils) and ld --no-relax -s -z noseparate-code, so the
+# cross and the native binutils agree too. On aarch64 ld -s -z noseparate-code
+# -Ttext=0x4000b0: aarch64-none-elf's script (no SIZEOF_HEADERS) put .text a
+# page after the headers, 74 KB of zeros; at 0x4000b0, after the headers
+# (64 + 2 * 56 bytes) in the first page, it is the Linux script's layout,
+# the native ld's, and both make the same 8960 bytes. SEED=asm takes ttpc.hex2 on a
+# host of HEXHOSTS without M1 and asm (not in ASMHOSTS).
 SEED ?= asm
-HEXHOSTS := x86_64 riscv64
-ASMHOSTS := x86_64
+HEXHOSTS := x86_64 riscv64 aarch64
+ASMHOSTS := x86_64 riscv64 aarch64
+# the flat tools (M1.s, asm.s) as binutils makes them, for make hex:
+# riscv64's RV64IM without relaxing, linked at 0 (gas keeps relocations
+# even for a branch in its own section); aarch64's linked at 0 too (its
+# adrp pairs: relocations)
+SEEDCROSS_riscv64 := $(CROSS)
+TOOLASFLAGS_x86_64 := $(SASFLAGS_x86_64)
+TOOLASFLAGS_riscv64 := -march=rv64im -mabi=lp64 -mno-arch-attr -mno-relax
 seedkind = $(if $(filter $(1),$(HEXHOSTS)),$(if $(filter asm,$(SEED)),$(if $(filter $(1),$(ASMHOSTS)),asm,hex),$(SEED)),gnu)
 RUN_riscv64 := $(QEMU)
 SEED_FF := ttpc1.ff $(PROGS:%=$(NL)/progs/riscv64/%.ff)
@@ -705,8 +741,9 @@ $(BUILD)/$(1)/seed.asm: $(BUILD)/$(1)/asm hosts/$(1)/ttpc.s
 
 hexasm-$(1): hex-$(1) $(BUILD)/$(1)/M1 $(BUILD)/$(1)/asm $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu
 	@set -e; d=$(BUILD)/$(1)/hex; mkdir -p $$$$d; \
-	for f in M1 asm; do $(SEEDCROSS_$(1))as $(SASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
-	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.o $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
+	for f in M1 asm; do $(SEEDCROSS_$(1))as $(TOOLASFLAGS_$(1)) gen/hex/$(1)/$$$$f.s -o $$$$d/$$$$f.o; \
+	$(if $(filter riscv64 aarch64,$(1)),$(SEEDCROSS_$(1))ld -Ttext=0 -e 0 $$$$d/$$$$f.o -o $$$$d/$$$$f.e 2> /dev/null,cp $$$$d/$$$$f.o $$$$d/$$$$f.e); \
+	$(SEEDCROSS_$(1))objcopy -O binary -j .text $$$$d/$$$$f.e $$$$d/$$$$f.gnu; cmp $(BUILD)/$(1)/$$$$f $$$$d/$$$$f.gnu; done; \
 	echo "hex-$(1): M1 ($$$$(wc -c < $(BUILD)/$(1)/M1) bytes), made by hex2 of M1.hex2 ($$$$(wc -l < hosts/$(1)/M1.hex2) lines), is what binutils makes of gen/hex/$(1)/M1.s"; \
 	echo "hex-$(1): asm ($$$$(wc -c < $(BUILD)/$(1)/asm) bytes), made by M1 and hex2 of asm.M1 ($$$$(wc -l < hosts/$(1)/asm.M1) lines), is what binutils makes of gen/hex/$(1)/asm.s"; \
 	cmp $(BUILD)/$(1)/seed.asm $(BUILD)/$(1)/seed.gnu; \

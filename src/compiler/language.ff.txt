@@ -75,6 +75,7 @@ ff, the language ttpc compiles
       align n, reserve n, origin n, bss, size label
   targets
     ttpc --target riscv64|x86_64|aarch64|arm; riscv64 without it
+    ttpc -j n: the second pass on n processes (at most 64), output and listing byte for byte as on one; -j0, a debugging aid, checks on one that the second pass meets the state the first recorded where a process would start
     the shared page holds what every target has (byte half word dword bits rel), the builtins declared, then one section per target, groups inside
     the shared page ends in a compile time lambda that calls the section --target names; calling a section puts its definitions in scope
     a program is assembled with the target's definitions, compile time with the host's (the machine ttpc runs on)
@@ -610,6 +611,6 @@ ff, the language ttpc compiles
               rbx
   build files
     ttpc build.ff, one tree and no output: runs its top level compile time lambdas, writes nothing of its own
-    workspace makes one; set target w section, set output w path, set debug w (as -g), set optimise w (as -O), add file w path (the last is the program), compile w queues it
+    workspace makes one; set target w section, set output w path, set debug w (as -g), set optimise w (as -O), set jobs w n (as -j n), add file w path (the last is the program), compile w queues it
     a workspace is a long: w:, long, workspace
     paths are from the folder of the file whose code runs the word

@@ -1,0 +1,734 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/aarch64/hex2.s as hex0 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then its file offset and the line. hex0 reads only the
+# hex digits before each '#'.
+#
+# hex2 for aarch64 Linux: hex0 with labels. The second link of the
+# bootstrap, built by hex0 from hosts/aarch64/hex2.hex0 (made from this
+# file once by gen/mkhex.pl, a dev aid; the chain never reads this file).
+# It builds the seed, ttpc, from hosts/aarch64/ttpc.hex2.
+#
+#   hex2 < file.hex2 > file
+#
+# As hex0: each pair of hex digits is a byte, '#' and ';' start a comment
+# to the end of the line, every other byte is skipped. And the address of
+# the next byte, which starts at 0 and counts every byte written:
+#   :name    defines the label name, at that address
+#   &name    4 bytes, little endian: name's address (an abs32; a .dword's
+#            low half)
+#   ^hex     the address of the next byte is this hex number (where a
+#            file's addresses jump: its next segment, the labels of a bss)
+#   ^~name   stage0-posix's branch (B, BL): d, name's address minus the
+#            address of the next byte (the instruction's own), in 26 bits,
+#            a multiple of 4; its 3 bytes are written: imm26's low 24 bits
+#            (d / 4). The byte after them, written as hex, has imm26's top
+#            2 bits and the opcode: 14 B and 94 BL forward, 17 and 97 back.
+# and AArch64's other references, which stage0-posix's hex2 does without
+# (its code loads addresses from words after it): each scatters its bits
+# into an instruction's immediate field and XORs them into the next bytes
+# written (the instruction, written with that field zero), as riscv64's:
+#   ~name    ADRP: name's page minus the instruction's page (the low 12
+#            bits of each cleared), in 33 bits: bits 13:12 to 30:29
+#            (immlo), 32:14 to 23:5 (immhi)
+#   !name    ADD's :lo12:, after an ADRP: name's address, its bits 11:0 to
+#            21:10 (imm12); unchecked
+#   @name    B.cond, CBZ, CBNZ (and LDR literal): d in 21 bits, a multiple
+#            of 4, bits 20:2 to 23:5 (imm19)
+# Their bit layouts are the table kinds before the code, each a list of
+# (from bit, bits, to bit) as the Arm manual draws the fields. A name is
+# every byte after the sign up to a space, tab or newline. The input is
+# read whole, then twice: the first pass gives every label its address,
+# the second writes. On an unknown label, a label defined twice, a
+# reference out of range, a full table or input and a failed read or
+# write it says so on stderr and ends with status 1; else with 0.
+#
+# One flat file, loaded at BASE by its first program header, read and
+# run; the second maps the memory it writes, LABELS to the end of INPUT.
+# The registers:
+#   x20  the next byte of the input          x21  the end of the input
+#   x22  the address of the next byte        x23  the pass, 1 or 2
+#   x24  the high half of a byte, or -1      x25  the next free label
+#   x26  the bits to XOR into the next bytes written, the lowest first
+# A label is 24 bytes: the address of its name in the input, the name's
+# length, its address.
+
+#     .equ BASE, 0x600000
+#     .equ LABELS, 0x700000               // 65536 labels of 24 bytes
+#     .equ LABELS_END, LABELS + 0x10000 * 24
+#     .equ INPUT, 0x900000                // 16 MiB of input
+#     .equ INPUT_END, INPUT + 0x1000000
+#     .equ SYS_read, 63
+#     .equ SYS_write, 64
+#     .equ SYS_exit, 93
+
+# 0000  ehdr:                                   // the ELF header, 64 bytes
+7F454C46                # 0000      .byte 0x7f, 0x45, 0x4c, 0x46        // e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                      # 0004      .byte 2                             // EI_CLASS: ELFCLASS64
+01                      # 0005      .byte 1                             // EI_DATA: ELFDATA2LSB, little endian
+01                      # 0006      .byte 1                             // EI_VERSION: EV_CURRENT
+00                      # 0007      .byte 0                             // EI_OSABI: System V
+0000000000000000        # 0008      .byte 0, 0, 0, 0, 0, 0, 0, 0        // EI_ABIVERSION 0, then padding to 16
+0200                    # 0010      .hword 2                            // e_type: ET_EXEC, an executable
+B700                    # 0012      .hword 0xb7                         // e_machine: EM_AARCH64
+01000000                # 0014      .word 1                             // e_version: EV_CURRENT
+7001600000000000        # 0018      .dword BASE + _start - ehdr         // e_entry: the address of _start
+4000000000000000        # 0020      .dword phdr - ehdr                  // e_phoff: the program headers follow
+0000000000000000        # 0028      .dword 0                            // e_shoff: no section headers
+00000000                # 0030      .word 0                             // e_flags: none on aarch64
+4000                    # 0034      .hword 64                           // e_ehsize: this header's size
+3800                    # 0036      .hword 56                           // e_phentsize: a program header's size
+0200                    # 0038      .hword 2                            // e_phnum: two program headers
+0000                    # 003a      .hword 0                            // e_shentsize: no section headers
+0000                    # 003c      .hword 0                            // e_shnum: none
+0000                    # 003e      .hword 0                            // e_shstrndx: none
+# 0040  phdr:                                   // the program: 56 bytes
+01000000                # 0040      .word 1                             // p_type: PT_LOAD
+05000000                # 0044      .word 5                             // p_flags: PF_R | PF_X, read and run
+0000000000000000        # 0048      .dword 0                            // p_offset: from the file's first byte
+0000600000000000        # 0050      .dword BASE                         // p_vaddr: loaded at BASE
+0000600000000000        # 0058      .dword BASE                         // p_paddr: the same
+9805000000000000        # 0060      .dword end - ehdr                   // p_filesz: the whole file
+9805000000000000        # 0068      .dword end - ehdr                   // p_memsz: the same
+0010000000000000        # 0070      .dword 0x1000                       // p_align: a page
+                                        # its memory: 56 bytes
+01000000                # 0078      .word 1                             // p_type: PT_LOAD
+06000000                # 007c      .word 6                             // p_flags: PF_R | PF_W, read and write
+0000000000000000        # 0080      .dword 0                            // p_offset: none of the file
+0000700000000000        # 0088      .dword LABELS                       // p_vaddr: the labels, then the input
+0000700000000000        # 0090      .dword LABELS                       // p_paddr: the same
+0000000000000000        # 0098      .dword 0                            // p_filesz: none, all zero
+0000200100000000        # 00a0      .dword INPUT_END - LABELS           // p_memsz: to the end of the input
+0010000000000000        # 00a8      .dword 0x1000                       // p_align: a page
+
+# The kinds of reference: its sign; its mode (1: name's address, not d;
+# 2: the pages' d; 4: its bytes written, not XORed); the bits it must fit
+# in, signed; how many low bits must be zero; its pieces, then each piece:
+# the bit it starts at, its bits, the bit of the field it goes to.
+# 00b0  kinds:
+5E041A0201              # 00b0      .byte 0x5e, 4, 26, 2, 1             // '^' (^~name) B, BL: 3 bytes written
+021800                  # 00b5      .byte 2, 24, 0                      //   imm26[23:0], d[25:2]
+7E02210002              # 00b8      .byte 0x7e, 2, 33, 0, 2             // '~' ADRP: the pages' d
+0C021D                  # 00bd      .byte 12, 2, 29                     //   immlo, d[13:12] to 30:29
+0E1305                  # 00c0      .byte 14, 19, 5                     //   immhi, d[32:14] to 23:5
+2101400001              # 00c3      .byte 0x21, 1, 64, 0, 1             // '!' ADD :lo12:, name's address
+000C0A                  # 00c8      .byte 0, 12, 10                     //   imm12, bits 11:0 to 21:10
+4000150201              # 00cb      .byte 0x40, 0, 21, 2, 1             // '@' B.cond, CBZ, CBNZ: imm19
+021305                  # 00d0      .byte 2, 19, 5                      //   d[20:2] to 23:5
+00                      # 00d3      .byte 0                             // the end of the kinds
+
+686578323A20756E6B6E6F776E206C61 # 00d4  msg_unknown:    .asciz "hex2: unknown label: "
+62656C3A2000
+686578323A206C6162656C2064656669 # 00ea  msg_twice:      .asciz "hex2: label defined twice: "
+6E65642074776963653A2000
+686578323A206F7574206F662072616E # 0106  msg_range:      .asciz "hex2: out of range: "
+67653A2000
+686578323A20746F6F206D616E79206C # 011b  msg_many:       .asciz "hex2: too many labels"
+6162656C7300
+686578323A20696E70757420746F6F20 # 0131  msg_large:      .asciz "hex2: input too large"
+6C6172676500
+686578323A2072656164206661696C65 # 0147  msg_read:       .asciz "hex2: read failed"
+6400
+686578323A207772697465206661696C # 0159  msg_write:      .asciz "hex2: write failed"
+656400
+0A                      # 016c  newline:        .ascii "\n"
+000000                  # 016d      .balign 4                           // the code, 4-byte aligned (zeros)
+
+# 0170  _start:                                 // read all of stdin into INPUT
+1512A0D2                # 0170      movz    x21, #0x90, lsl #16         // INPUT: the end of what is read
+#       MOVZ 1 10 100101 01 0000000010010000 10101: sf 1, opc 10 movz, hw 1 (lsl 16), imm16 144, Rd x21
+# 0174  read:
+0232A0D2                # 0174      movz    x2, #0x190, lsl #16         // INPUT_END
+#       MOVZ 1 10 100101 01 0000000110010000 00010: sf 1, opc 10 movz, hw 1 (lsl 16), imm16 400, Rd x2
+420015CB                # 0178      sub     x2, x2, x21                 // the room left
+#       SUB (shifted register) 1 1 0 01011 00 0 10101 000000 00010 00010: sf 1, op 1, S 0, shift lsl, Rm x21, imm6 0, Rn x2, Rd x2
+221D00B4                # 017c      cbz     x2, too_large
+#       CBZ 1 011010 0 0000000000011101001 00010: sf 1, op 0, imm19 233 (offset 932), Rt x2
+E80780D2                # 0180      movz    x8, #SYS_read
+#       MOVZ 1 10 100101 00 0000000000111111 01000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 63, Rd x8
+000080D2                # 0184      movz    x0, #0                      // fd 0, stdin
+#       MOVZ 1 10 100101 00 0000000000000000 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x0
+E10315AA                # 0188      orr     x1, xzr, x21                // mov x1, x21: after what is read
+#       ORR (shifted register) 1 01 01010 00 0 10101 000000 11111 00001: sf 1, opc 01, shift lsl, N 0, Rm x21, imm6 0, Rn xzr, Rd x1
+010000D4                # 018c      svc     #0
+#       SVC 11010100 000 0000000000000000 000 01: imm16 0
+1F0000F1                # 0190      cmp     x0, #0
+#       SUBS (immediate) 1 1 1 100010 0 000000000000 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 0, Rn x0, Rd xzr
+AB1C0054                # 0194      b.lt    read_failed
+#       B.cond 0101010 0 0000000000011100101 0 1011: imm19 229 (offset 916), cond 1011 lt
+60000054                # 0198      b.eq    read_all                    // the end of stdin
+#       B.cond 0101010 0 0000000000000000011 0 0000: imm19 3 (offset 12), cond 0000 eq
+B502008B                # 019c      add     x21, x21, x0
+#       ADD (shifted register) 1 0 0 01011 00 0 00000 000000 10101 10101: sf 1, op 0, S 0, shift lsl, Rm x0, imm6 0, Rn x21, Rd x21
+F5FFFF17                # 01a0      b       read
+#       B 0 00101 11111111111111111111110101: op 0 without link, imm26 -11 (offset -44)
+# 01a4  read_all:
+190EA0D2                # 01a4      movz    x25, #0x70, lsl #16         // LABELS: no labels yet
+#       MOVZ 1 10 100101 01 0000000001110000 11001: sf 1, opc 10 movz, hw 1 (lsl 16), imm16 112, Rd x25
+370080D2                # 01a8      movz    x23, #1                     // pass 1
+#       MOVZ 1 10 100101 00 0000000000000001 10111: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x23
+# 01ac  pass:
+1412A0D2                # 01ac      movz    x20, #0x90, lsl #16         // INPUT: from the first byte
+#       MOVZ 1 10 100101 01 0000000010010000 10100: sf 1, opc 10 movz, hw 1 (lsl 16), imm16 144, Rd x20
+160080D2                # 01b0      movz    x22, #0                     // at address 0
+#       MOVZ 1 10 100101 00 0000000000000000 10110: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x22
+18008092                # 01b4      movn    x24, #0                     // -1: no high half
+#       MOVN 1 00 100101 00 0000000000000000 11000: sf 1, opc 00 movn, hw 0 (lsl 0), imm16 0, Rd x24
+1A0080D2                # 01b8      movz    x26, #0                     // nothing to XOR
+#       MOVZ 1 10 100101 00 0000000000000000 11010: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x26
+# 01bc  loop:                                   // the next byte of the input
+9F0215EB                # 01bc      cmp     x20, x21
+#       SUBS (shifted register) 1 1 1 01011 00 0 10101 000000 10100 11111: sf 1, op 1, S 1, shift lsl, Rm x21, imm6 0, Rn x20, Rd xzr
+42050054                # 01c0      b.hs    pass_end
+#       B.cond 0101010 0 0000000000000101010 0 0010: imm19 42 (offset 168), cond 0010 hs
+80024039                # 01c4      ldrb    w0, [x20]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 10100 00000: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x20, Rt w0
+94060091                # 01c8      add     x20, x20, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 10100 10100: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x20, Rd x20
+1F8C00F1                # 01cc      cmp     x0, #0x23                   // '#': a comment
+#       SUBS (immediate) 1 1 1 100010 0 000000100011 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 35, Rn x0, Rd xzr
+E0030054                # 01d0      b.eq    comment
+#       B.cond 0101010 0 0000000000000011111 0 0000: imm19 31 (offset 124), cond 0000 eq
+1FEC00F1                # 01d4      cmp     x0, #0x3b                   // ';': a comment
+#       SUBS (immediate) 1 1 1 100010 0 000000111011 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 59, Rn x0, Rd xzr
+A0030054                # 01d8      b.eq    comment
+#       B.cond 0101010 0 0000000000000011101 0 0000: imm19 29 (offset 116), cond 0000 eq
+1FE800F1                # 01dc      cmp     x0, #0x3a                   // ':': a label
+#       SUBS (immediate) 1 1 1 100010 0 000000111010 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 58, Rn x0, Rd xzr
+E0040054                # 01e0      b.eq    define
+#       B.cond 0101010 0 0000000000000100111 0 0000: imm19 39 (offset 156), cond 0000 eq
+1F9800F1                # 01e4      cmp     x0, #0x26                   // '&': abs32
+#       SUBS (immediate) 1 1 1 100010 0 000000100110 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 38, Rn x0, Rd xzr
+40060054                # 01e8      b.eq    abs32
+#       B.cond 0101010 0 0000000000000110010 0 0000: imm19 50 (offset 200), cond 0000 eq
+1F7801F1                # 01ec      cmp     x0, #0x5e                   // '^': a branch or an address
+#       SUBS (immediate) 1 1 1 100010 0 000001011110 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 94, Rn x0, Rd xzr
+20080054                # 01f0      b.eq    caret
+#       B.cond 0101010 0 0000000000001000001 0 0000: imm19 65 (offset 260), cond 0000 eq
+EAF5FF10                # 01f4      adr     x10, kinds                  // a reference of one of the kinds?
+#       ADR 0 00 10000 1111111111110101111 01010: op 0, immlo 00, immhi -81, imm -324 (offset -324), Rd x10
+# 01f8  kind:
+49014039                # 01f8      ldrb    w9, [x10]                   // its sign, 0 after the last
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 01010 01001: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x10, Rt w9
+290100B4                # 01fc      cbz     x9, digit
+#       CBZ 1 011010 0 0000000000000001001 01001: sf 1, op 0, imm19 9 (offset 36), Rt x9
+1F0009EB                # 0200      cmp     x0, x9
+#       SUBS (shifted register) 1 1 1 01011 00 0 01001 000000 00000 11111: sf 1, op 1, S 1, shift lsl, Rm x9, imm6 0, Rn x0, Rd xzr
+60080054                # 0204      b.eq    reference
+#       B.cond 0101010 0 0000000000001000011 0 0000: imm19 67 (offset 268), cond 0000 eq
+4B114039                # 0208      ldrb    w11, [x10, #4]              // its pieces, 3 bytes each
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000100 01010 01011: size 00 (1 bytes), V 0, opc 01 load, imm12 4 (offset 4), Rn x10, Rt w11
+4A150091                # 020c      add     x10, x10, #5                // after its 5 bytes
+#       ADD (immediate) 1 0 0 100010 0 000000000101 01010 01010: sf 1, op 0 add, S 0, sh 0, imm12 5, Rn x10, Rd x10
+4A010B8B                # 0210      add     x10, x10, x11
+#       ADD (shifted register) 1 0 0 01011 00 0 01011 000000 01010 01010: sf 1, op 0, S 0, shift lsl, Rm x11, imm6 0, Rn x10, Rd x10
+4A010B8B                # 0214      add     x10, x10, x11
+#       ADD (shifted register) 1 0 0 01011 00 0 01011 000000 01010 01010: sf 1, op 0, S 0, shift lsl, Rm x11, imm6 0, Rn x10, Rd x10
+4A010B8B                # 0218      add     x10, x10, x11
+#       ADD (shifted register) 1 0 0 01011 00 0 01011 000000 01010 01010: sf 1, op 0, S 0, shift lsl, Rm x11, imm6 0, Rn x10, Rd x10
+F7FFFF17                # 021c      b       kind
+#       B 0 00101 11111111111111111111110111: op 0 without link, imm26 -9 (offset -36)
+# 0220  digit:
+7C000094                # 0220      bl      hexval                      // x0 = its value, or -1
+#       BL 1 00101 00000000000000000001111100: op 1 with link, imm26 124 (offset 496)
+1F0000F1                # 0224      cmp     x0, #0
+#       SUBS (immediate) 1 1 1 100010 0 000000000000 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 0, Rn x0, Rd xzr
+ABFCFF54                # 0228      b.lt    loop                        // not a hex digit: skipped
+#       B.cond 0101010 0 1111111111111100101 0 1011: imm19 -27 (offset -108), cond 1011 lt
+1F0300F1                # 022c      cmp     x24, #0                     // the first digit of a pair?
+#       SUBS (immediate) 1 1 1 100010 0 000000000000 11000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 0, Rn x24, Rd xzr
+AB000054                # 0230      b.lt    high
+#       B.cond 0101010 0 0000000000000000101 0 1011: imm19 5 (offset 20), cond 1011 lt
+0010188B                # 0234      add     x0, x0, x24, lsl #4         // the second: high half, then this one
+#       ADD (shifted register) 1 0 0 01011 00 0 11000 000100 00000 00000: sf 1, op 0, S 0, shift lsl, Rm x24, imm6 4, Rn x0, Rd x0
+A4000094                # 0238      bl      emit
+#       BL 1 00101 00000000000000000010100100: op 1 with link, imm26 164 (offset 656)
+18008092                # 023c      movn    x24, #0                     // the next pair
+#       MOVN 1 00 100101 00 0000000000000000 11000: sf 1, opc 00 movn, hw 0 (lsl 0), imm16 0, Rd x24
+DFFFFF17                # 0240      b       loop
+#       B 0 00101 11111111111111111111011111: op 0 without link, imm26 -33 (offset -132)
+# 0244  high:
+F80300AA                # 0244      orr     x24, xzr, x0                // keep it for the second digit
+#       ORR (shifted register) 1 01 01010 00 0 00000 000000 11111 11000: sf 1, opc 01, shift lsl, N 0, Rm x0, imm6 0, Rn xzr, Rd x24
+DDFFFF17                # 0248      b       loop
+#       B 0 00101 11111111111111111111011101: op 0 without link, imm26 -35 (offset -140)
+# 024c  comment:                                // skip to the end of the line
+9F0215EB                # 024c      cmp     x20, x21
+#       SUBS (shifted register) 1 1 1 01011 00 0 10101 000000 10100 11111: sf 1, op 1, S 1, shift lsl, Rm x21, imm6 0, Rn x20, Rd xzr
+62FBFF54                # 0250      b.hs    loop
+#       B.cond 0101010 0 1111111111111011011 0 0010: imm19 -37 (offset -148), cond 0010 hs
+80024039                # 0254      ldrb    w0, [x20]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 10100 00000: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x20, Rt w0
+94060091                # 0258      add     x20, x20, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 10100 10100: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x20, Rd x20
+1F2800F1                # 025c      cmp     x0, #0x0a                   // '\n'
+#       SUBS (immediate) 1 1 1 100010 0 000000001010 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 10, Rn x0, Rd xzr
+61FFFF54                # 0260      b.ne    comment
+#       B.cond 0101010 0 1111111111111111011 0 0001: imm19 -5 (offset -20), cond 0001 ne
+D6FFFF17                # 0264      b       loop
+#       B 0 00101 11111111111111111111010110: op 0 without link, imm26 -42 (offset -168)
+# 0268  pass_end:
+F7060091                # 0268      add     x23, x23, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 10111 10111: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x23, Rd x23
+FF0A00F1                # 026c      cmp     x23, #2                     // after pass 1, pass 2
+#       SUBS (immediate) 1 1 1 100010 0 000000000010 10111 11111: sf 1, op 1 sub, S 1, sh 0, imm12 2, Rn x23, Rd xzr
+E0F9FF54                # 0270      b.eq    pass
+#       B.cond 0101010 0 1111111111111001111 0 0000: imm19 -49 (offset -196), cond 0000 eq
+000080D2                # 0274      movz    x0, #0                      // after pass 2, status 0
+#       MOVZ 1 10 100101 00 0000000000000000 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x0
+C2000014                # 0278      b       exit
+#       B 0 00101 00000000000000000011000010: op 0 without link, imm26 194 (offset 776)
+
+# 027c  define:                                 // :name
+73000094                # 027c      bl      name
+#       BL 1 00101 00000000000000000001110011: op 1 with link, imm26 115 (offset 460)
+FF0600F1                # 0280      cmp     x23, #1                     // only in pass 1
+#       SUBS (immediate) 1 1 1 100010 0 000000000001 10111 11111: sf 1, op 1 sub, S 1, sh 0, imm12 1, Rn x23, Rd xzr
+C1F9FF54                # 0284      b.ne    loop
+#       B.cond 0101010 0 1111111111111001110 0 0001: imm19 -50 (offset -200), cond 0001 ne
+7A000094                # 0288      bl      find
+#       BL 1 00101 00000000000000000001111010: op 1 with link, imm26 122 (offset 488)
+E01300B5                # 028c      cbnz    x0, twice
+#       CBNZ 1 011010 1 0000000000010011111 00000: sf 1, op 1, imm19 159 (offset 636), Rt x0
+0911A0D2                # 0290      movz    x9, #0x88, lsl #16          // LABELS_END
+#       MOVZ 1 10 100101 01 0000000010001000 01001: sf 1, opc 10 movz, hw 1 (lsl 16), imm16 136, Rd x9
+3F0309EB                # 0294      cmp     x25, x9
+#       SUBS (shifted register) 1 1 1 01011 00 0 01001 000000 11001 11111: sf 1, op 1, S 1, shift lsl, Rm x9, imm6 0, Rn x25, Rd xzr
+02140054                # 0298      b.hs    too_many
+#       B.cond 0101010 0 0000000000010100000 0 0010: imm19 160 (offset 640), cond 0010 hs
+210300F9                # 029c      str     x1, [x25]                   // its name
+#       STR (immediate, unsigned offset) 11 111 0 01 00 000000000000 11001 00001: size 11 (8 bytes), V 0, opc 00 store, imm12 0 (offset 0), Rn x25, Rt x1
+220700F9                # 02a0      str     x2, [x25, #8]               // its length
+#       STR (immediate, unsigned offset) 11 111 0 01 00 000000000001 11001 00010: size 11 (8 bytes), V 0, opc 00 store, imm12 1 (offset 8), Rn x25, Rt x2
+360B00F9                # 02a4      str     x22, [x25, #16]             // its address
+#       STR (immediate, unsigned offset) 11 111 0 01 00 000000000010 11001 10110: size 11 (8 bytes), V 0, opc 00 store, imm12 2 (offset 16), Rn x25, Rt x22
+39630091                # 02a8      add     x25, x25, #24
+#       ADD (immediate) 1 0 0 100010 0 000000011000 11001 11001: sf 1, op 0 add, S 0, sh 0, imm12 24, Rn x25, Rd x25
+C4FFFF17                # 02ac      b       loop
+#       B 0 00101 11111111111111111111000100: op 0 without link, imm26 -60 (offset -240)
+
+# 02b0  abs32:                                  // &name
+66000094                # 02b0      bl      name
+#       BL 1 00101 00000000000000000001100110: op 1 with link, imm26 102 (offset 408)
+FF0600F1                # 02b4      cmp     x23, #1                     // pass 1 only counts its 4 bytes
+#       SUBS (immediate) 1 1 1 100010 0 000000000001 10111 11111: sf 1, op 1 sub, S 1, sh 0, imm12 1, Rn x23, Rd xzr
+A0010054                # 02b8      b.eq    skip4
+#       B.cond 0101010 0 0000000000000001101 0 0000: imm19 13 (offset 52), cond 0000 eq
+6D000094                # 02bc      bl      find
+#       BL 1 00101 00000000000000000001101101: op 1 with link, imm26 109 (offset 436)
+001200B4                # 02c0      cbz     x0, unknown
+#       CBZ 1 011010 0 0000000000010010000 00000: sf 1, op 0, imm19 144 (offset 576), Rt x0
+1B0840F9                # 02c4      ldr     x27, [x0, #16]              // its address
+#       LDR (immediate, unsigned offset) 11 111 0 01 01 000000000010 00000 11011: size 11 (8 bytes), V 0, opc 01 load, imm12 2 (offset 16), Rn x0, Rt x27
+69FF60D3                # 02c8      lsr     x9, x27, #32                // fits in 32 bits, unsigned
+#       UBFM 1 10 100110 1 100000 111111 11011 01001: sf 1, opc 10, N 1, immr 32, imms 63, Rn x27, Rd x9
+291200B5                # 02cc      cbnz    x9, range
+#       CBNZ 1 011010 1 0000000000010010001 01001: sf 1, op 1, imm19 145 (offset 580), Rt x9
+9C0080D2                # 02d0      movz    x28, #4                     // 4 bytes, the lowest first
+#       MOVZ 1 10 100101 00 0000000000000100 11100: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 4, Rd x28
+# 02d4  emit_bytes:                             // the x28 low bytes of x27
+E0031BAA                # 02d4      orr     x0, xzr, x27
+#       ORR (shifted register) 1 01 01010 00 0 11011 000000 11111 00000: sf 1, opc 01, shift lsl, N 0, Rm x27, imm6 0, Rn xzr, Rd x0
+7C000094                # 02d8      bl      emit
+#       BL 1 00101 00000000000000000001111100: op 1 with link, imm26 124 (offset 496)
+7BFF48D3                # 02dc      lsr     x27, x27, #8
+#       UBFM 1 10 100110 1 001000 111111 11011 11011: sf 1, opc 10, N 1, immr 8, imms 63, Rn x27, Rd x27
+9C0700D1                # 02e0      sub     x28, x28, #1
+#       SUB (immediate) 1 1 0 100010 0 000000000001 11100 11100: sf 1, op 1 sub, S 0, sh 0, imm12 1, Rn x28, Rd x28
+9CFFFFB5                # 02e4      cbnz    x28, emit_bytes
+#       CBNZ 1 011010 1 1111111111111111100 11100: sf 1, op 1, imm19 -4 (offset -16), Rt x28
+B5FFFF17                # 02e8      b       loop
+#       B 0 00101 11111111111111111110110101: op 0 without link, imm26 -75 (offset -300)
+# 02ec  skip4:
+D6120091                # 02ec      add     x22, x22, #4
+#       ADD (immediate) 1 0 0 100010 0 000000000100 10110 10110: sf 1, op 0 add, S 0, sh 0, imm12 4, Rn x22, Rd x22
+B3FFFF17                # 02f0      b       loop
+#       B 0 00101 11111111111111111110110011: op 0 without link, imm26 -77 (offset -308)
+
+# 02f4  caret:                                  // ^~name or ^hex
+9F0215EB                # 02f4      cmp     x20, x21
+#       SUBS (shifted register) 1 1 1 01011 00 0 10101 000000 10100 11111: sf 1, op 1, S 1, shift lsl, Rm x21, imm6 0, Rn x20, Rd xzr
+22F6FF54                # 02f8      b.hs    loop
+#       B.cond 0101010 0 1111111111110110001 0 0010: imm19 -79 (offset -316), cond 0010 hs
+80024039                # 02fc      ldrb    w0, [x20]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 10100 00000: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x20, Rt w0
+1FF801F1                # 0300      cmp     x0, #0x7e                   // '~': a branch
+#       SUBS (immediate) 1 1 1 100010 0 000001111110 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 126, Rn x0, Rd xzr
+21070054                # 0304      b.ne    origin
+#       B.cond 0101010 0 0000000000000111001 0 0001: imm19 57 (offset 228), cond 0001 ne
+94060091                # 0308      add     x20, x20, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 10100 10100: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x20, Rd x20
+2AEDFF10                # 030c      adr     x10, kinds                  // the kind '^', the first
+#       ADR 0 00 10000 1111111111101101001 01010: op 0, immlo 00, immhi -151, imm -604 (offset -604), Rd x10
+# 0310  reference:                              // a kind's sign, x10 = the kind
+4E000094                # 0310      bl      name                        // (name and find keep x10)
+#       BL 1 00101 00000000000000000001001110: op 1 with link, imm26 78 (offset 312)
+4D054039                # 0314      ldrb    w13, [x10, #1]              // its mode
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000001 01010 01101: size 00 (1 bytes), V 0, opc 01 load, imm12 1 (offset 1), Rn x10, Rt w13
+FF0600F1                # 0318      cmp     x23, #1                     // pass 1: its 3 bytes, or none
+#       SUBS (immediate) 1 1 1 100010 0 000000000001 10111 11111: sf 1, op 1 sub, S 1, sh 0, imm12 1, Rn x23, Rd xzr
+81000054                # 031c      b.ne    reference_find
+#       B.cond 0101010 0 0000000000000000100 0 0001: imm19 4 (offset 16), cond 0001 ne
+EDF41736                # 0320      tbz     w13, #2, loop
+#       TBZ 0 011011 0 00010 11111110100111 01101: b5 0, op 0, b40 2 (bit 2), imm14 -89 (offset -356), Rt w13
+D60E0091                # 0324      add     x22, x22, #3
+#       ADD (immediate) 1 0 0 100010 0 000000000011 10110 10110: sf 1, op 0 add, S 0, sh 0, imm12 3, Rn x22, Rd x22
+A5FFFF17                # 0328      b       loop
+#       B 0 00101 11111111111111111110100101: op 0 without link, imm26 -91 (offset -364)
+# 032c  reference_find:
+51000094                # 032c      bl      find
+#       BL 1 00101 00000000000000000001010001: op 1 with link, imm26 81 (offset 324)
+800E00B4                # 0330      cbz     x0, unknown
+#       CBZ 1 011010 0 0000000000001110100 00000: sf 1, op 0, imm19 116 (offset 464), Rt x0
+000840F9                # 0334      ldr     x0, [x0, #16]               // its address
+#       LDR (immediate, unsigned offset) 11 111 0 01 01 000000000010 00000 00000: size 11 (8 bytes), V 0, opc 01 load, imm12 2 (offset 16), Rn x0, Rt x0
+0D010037                # 0338      tbnz    w13, #0, reference_fits     // 1: the address itself
+#       TBNZ 0 011011 1 00000 00000000001000 01101: b5 0, op 1, b40 0 (bit 0), imm14 8 (offset 32), Rt w13
+EB0316AA                # 033c      orr     x11, xzr, x22               // the next byte's address
+#       ORR (shifted register) 1 01 01010 00 0 10110 000000 11111 01011: sf 1, opc 01, shift lsl, N 0, Rm x22, imm6 0, Rn xzr, Rd x11
+AD000836                # 0340      tbz     w13, #1, reference_d
+#       TBZ 0 011011 0 00001 00000000000101 01101: b5 0, op 0, b40 1 (bit 1), imm14 5 (offset 20), Rt w13
+00FC4CD3                # 0344      lsr     x0, x0, #12                 // 2: their pages
+#       UBFM 1 10 100110 1 001100 111111 00000 00000: sf 1, opc 10, N 1, immr 12, imms 63, Rn x0, Rd x0
+00CC74D3                # 0348      lsl     x0, x0, #12
+#       UBFM 1 10 100110 1 110100 110011 00000 00000: sf 1, opc 10, N 1, immr 52, imms 51, Rn x0, Rd x0
+6BFD4CD3                # 034c      lsr     x11, x11, #12
+#       UBFM 1 10 100110 1 001100 111111 01011 01011: sf 1, opc 10, N 1, immr 12, imms 63, Rn x11, Rd x11
+6BCD74D3                # 0350      lsl     x11, x11, #12
+#       UBFM 1 10 100110 1 110100 110011 01011 01011: sf 1, opc 10, N 1, immr 52, imms 51, Rn x11, Rd x11
+# 0354  reference_d:
+00000BCB                # 0354      sub     x0, x0, x11                 // d
+#       SUB (shifted register) 1 1 0 01011 00 0 01011 000000 00000 00000: sf 1, op 1, S 0, shift lsl, Rm x11, imm6 0, Rn x0, Rd x0
+# 0358  reference_fits:
+49094039                # 0358      ldrb    w9, [x10, #2]               // fits in that many bits, signed:
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000010 01010 01001: size 00 (1 bytes), V 0, opc 01 load, imm12 2 (offset 2), Rn x10, Rt w9
+0B0880D2                # 035c      movz    x11, #64
+#       MOVZ 1 10 100101 00 0000000001000000 01011: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 64, Rd x11
+6B0109CB                # 0360      sub     x11, x11, x9
+#       SUB (shifted register) 1 1 0 01011 00 0 01001 000000 01011 01011: sf 1, op 1, S 0, shift lsl, Rm x9, imm6 0, Rn x11, Rd x11
+0C20CB9A                # 0364      lslv    x12, x0, x11                // the same, cut to them
+#       LSLV 1 0 0 11010110 01011 001000 00000 01100: sf 1, S 0, Rm x11, opcode 001000, Rn x0, Rd x12
+8C29CB9A                # 0368      asrv    x12, x12, x11
+#       ASRV 1 0 0 11010110 01011 001010 01100 01100: sf 1, S 0, Rm x11, opcode 001010, Rn x12, Rd x12
+9F0100EB                # 036c      cmp     x12, x0
+#       SUBS (shifted register) 1 1 1 01011 00 0 00000 000000 01100 11111: sf 1, op 1, S 1, shift lsl, Rm x0, imm6 0, Rn x12, Rd xzr
+010D0054                # 0370      b.ne    range
+#       B.cond 0101010 0 0000000000001101000 0 0001: imm19 104 (offset 416), cond 0001 ne
+490D4039                # 0374      ldrb    w9, [x10, #3]               // its low bits zero
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000011 01010 01001: size 00 (1 bytes), V 0, opc 01 load, imm12 3 (offset 3), Rn x10, Rt w9
+2B0080D2                # 0378      movz    x11, #1
+#       MOVZ 1 10 100101 00 0000000000000001 01011: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x11
+6B21C99A                # 037c      lslv    x11, x11, x9
+#       LSLV 1 0 0 11010110 01001 001000 01011 01011: sf 1, S 0, Rm x9, opcode 001000, Rn x11, Rd x11
+6B0500D1                # 0380      sub     x11, x11, #1
+#       SUB (immediate) 1 1 0 100010 0 000000000001 01011 01011: sf 1, op 1 sub, S 0, sh 0, imm12 1, Rn x11, Rd x11
+7F0100EA                # 0384      ands    xzr, x11, x0                // tst x11, x0
+#       ANDS (shifted register) 1 11 01010 00 0 00000 000000 01011 11111: sf 1, opc 11, shift lsl, N 0, Rm x0, imm6 0, Rn x11, Rd xzr
+410C0054                # 0388      b.ne    range
+#       B.cond 0101010 0 0000000000001100010 0 0001: imm19 98 (offset 392), cond 0001 ne
+4B114039                # 038c      ldrb    w11, [x10, #4]              // its pieces
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000100 01010 01011: size 00 (1 bytes), V 0, opc 01 load, imm12 4 (offset 4), Rn x10, Rt w11
+4A150091                # 0390      add     x10, x10, #5
+#       ADD (immediate) 1 0 0 100010 0 000000000101 01010 01010: sf 1, op 0 add, S 0, sh 0, imm12 5, Rn x10, Rd x10
+0C0080D2                # 0394      movz    x12, #0                     // the field
+#       MOVZ 1 10 100101 00 0000000000000000 01100: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x12
+# 0398  piece:
+CB0100B4                # 0398      cbz     x11, pieces_done
+#       CBZ 1 011010 0 0000000000000001110 01011: sf 1, op 0, imm19 14 (offset 56), Rt x11
+4E014039                # 039c      ldrb    w14, [x10]                  // from bit
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 01010 01110: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x10, Rt w14
+4F054039                # 03a0      ldrb    w15, [x10, #1]              // bits
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000001 01010 01111: size 00 (1 bytes), V 0, opc 01 load, imm12 1 (offset 1), Rn x10, Rt w15
+43094039                # 03a4      ldrb    w3, [x10, #2]               // to bit
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000010 01010 00011: size 00 (1 bytes), V 0, opc 01 load, imm12 2 (offset 2), Rn x10, Rt w3
+0424CE9A                # 03a8      lsrv    x4, x0, x14
+#       LSRV 1 0 0 11010110 01110 001001 00000 00100: sf 1, S 0, Rm x14, opcode 001001, Rn x0, Rd x4
+250080D2                # 03ac      movz    x5, #1                      // (1 << bits) - 1
+#       MOVZ 1 10 100101 00 0000000000000001 00101: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x5
+A520CF9A                # 03b0      lslv    x5, x5, x15
+#       LSLV 1 0 0 11010110 01111 001000 00101 00101: sf 1, S 0, Rm x15, opcode 001000, Rn x5, Rd x5
+A50400D1                # 03b4      sub     x5, x5, #1
+#       SUB (immediate) 1 1 0 100010 0 000000000001 00101 00101: sf 1, op 1 sub, S 0, sh 0, imm12 1, Rn x5, Rd x5
+8400058A                # 03b8      and     x4, x4, x5
+#       AND (shifted register) 1 00 01010 00 0 00101 000000 00100 00100: sf 1, opc 00, shift lsl, N 0, Rm x5, imm6 0, Rn x4, Rd x4
+8420C39A                # 03bc      lslv    x4, x4, x3
+#       LSLV 1 0 0 11010110 00011 001000 00100 00100: sf 1, S 0, Rm x3, opcode 001000, Rn x4, Rd x4
+8C0104AA                # 03c0      orr     x12, x12, x4
+#       ORR (shifted register) 1 01 01010 00 0 00100 000000 01100 01100: sf 1, opc 01, shift lsl, N 0, Rm x4, imm6 0, Rn x12, Rd x12
+4A0D0091                # 03c4      add     x10, x10, #3
+#       ADD (immediate) 1 0 0 100010 0 000000000011 01010 01010: sf 1, op 0 add, S 0, sh 0, imm12 3, Rn x10, Rd x10
+6B0500D1                # 03c8      sub     x11, x11, #1
+#       SUB (immediate) 1 1 0 100010 0 000000000001 01011 01011: sf 1, op 1 sub, S 0, sh 0, imm12 1, Rn x11, Rd x11
+F3FFFF17                # 03cc      b       piece
+#       B 0 00101 11111111111111111111110011: op 0 without link, imm26 -13 (offset -52)
+# 03d0  pieces_done:
+6D001037                # 03d0      tbnz    w13, #2, reference_bytes
+#       TBNZ 0 011011 1 00010 00000000000011 01101: b5 0, op 1, b40 2 (bit 2), imm14 3 (offset 12), Rt w13
+5A030CCA                # 03d4      eor     x26, x26, x12               // into the next bytes written
+#       EOR (shifted register) 1 10 01010 00 0 01100 000000 11010 11010: sf 1, opc 10, shift lsl, N 0, Rm x12, imm6 0, Rn x26, Rd x26
+79FFFF17                # 03d8      b       loop
+#       B 0 00101 11111111111111111101111001: op 0 without link, imm26 -135 (offset -540)
+# 03dc  reference_bytes:                        // 4: its 3 bytes
+FB030CAA                # 03dc      orr     x27, xzr, x12
+#       ORR (shifted register) 1 01 01010 00 0 01100 000000 11111 11011: sf 1, opc 01, shift lsl, N 0, Rm x12, imm6 0, Rn xzr, Rd x27
+7C0080D2                # 03e0      movz    x28, #3
+#       MOVZ 1 10 100101 00 0000000000000011 11100: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 3, Rd x28
+BCFFFF17                # 03e4      b       emit_bytes
+#       B 0 00101 11111111111111111110111100: op 0 without link, imm26 -68 (offset -272)
+
+# 03e8  origin:                                 // ^hex: the address of the next byte
+160080D2                # 03e8      movz    x22, #0
+#       MOVZ 1 10 100101 00 0000000000000000 10110: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x22
+# 03ec  origin_digit:
+9F0215EB                # 03ec      cmp     x20, x21
+#       SUBS (shifted register) 1 1 1 01011 00 0 10101 000000 10100 11111: sf 1, op 1, S 1, shift lsl, Rm x21, imm6 0, Rn x20, Rd xzr
+62EEFF54                # 03f0      b.hs    loop
+#       B.cond 0101010 0 1111111111101110011 0 0010: imm19 -141 (offset -564), cond 0010 hs
+80024039                # 03f4      ldrb    w0, [x20]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 10100 00000: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x20, Rt w0
+06000094                # 03f8      bl      hexval
+#       BL 1 00101 00000000000000000000000110: op 1 with link, imm26 6 (offset 24)
+1F0000F1                # 03fc      cmp     x0, #0
+#       SUBS (immediate) 1 1 1 100010 0 000000000000 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 0, Rn x0, Rd xzr
+EBEDFF54                # 0400      b.lt    loop                        // its end
+#       B.cond 0101010 0 1111111111101101111 0 1011: imm19 -145 (offset -580), cond 1011 lt
+94060091                # 0404      add     x20, x20, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 10100 10100: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x20, Rd x20
+1610168B                # 0408      add     x22, x0, x22, lsl #4
+#       ADD (shifted register) 1 0 0 01011 00 0 10110 000100 00000 10110: sf 1, op 0, S 0, shift lsl, Rm x22, imm6 4, Rn x0, Rd x22
+F8FFFF17                # 040c      b       origin_digit
+#       B 0 00101 11111111111111111111111000: op 0 without link, imm26 -8 (offset -32)
+
+# 0410  hexval:                                 // x0 = the value of hex digit x0, or -1
+09C000D1                # 0410      sub     x9, x0, #0x30               // '0'-'9' to 0-9
+#       SUB (immediate) 1 1 0 100010 0 000000110000 00000 01001: sf 1, op 1 sub, S 0, sh 0, imm12 48, Rn x0, Rd x9
+3F2900F1                # 0414      cmp     x9, #10
+#       SUBS (immediate) 1 1 1 100010 0 000000001010 01001 11111: sf 1, op 1 sub, S 1, sh 0, imm12 10, Rn x9, Rd xzr
+43010054                # 0418      b.lo    hexval_done
+#       B.cond 0101010 0 0000000000000001010 0 0011: imm19 10 (offset 40), cond 0011 lo
+090401D1                # 041c      sub     x9, x0, #0x41               // 'A'-'F' to 0-5
+#       SUB (immediate) 1 1 0 100010 0 000001000001 00000 01001: sf 1, op 1 sub, S 0, sh 0, imm12 65, Rn x0, Rd x9
+3F1900F1                # 0420      cmp     x9, #6
+#       SUBS (immediate) 1 1 1 100010 0 000000000110 01001 11111: sf 1, op 1 sub, S 1, sh 0, imm12 6, Rn x9, Rd xzr
+C3000054                # 0424      b.lo    hexval_letter
+#       B.cond 0101010 0 0000000000000000110 0 0011: imm19 6 (offset 24), cond 0011 lo
+098401D1                # 0428      sub     x9, x0, #0x61               // 'a'-'f' to 0-5
+#       SUB (immediate) 1 1 0 100010 0 000001100001 00000 01001: sf 1, op 1 sub, S 0, sh 0, imm12 97, Rn x0, Rd x9
+3F1900F1                # 042c      cmp     x9, #6
+#       SUBS (immediate) 1 1 1 100010 0 000000000110 01001 11111: sf 1, op 1 sub, S 1, sh 0, imm12 6, Rn x9, Rd xzr
+63000054                # 0430      b.lo    hexval_letter
+#       B.cond 0101010 0 0000000000000000011 0 0011: imm19 3 (offset 12), cond 0011 lo
+00008092                # 0434      movn    x0, #0                      // none: -1
+#       MOVN 1 00 100101 00 0000000000000000 00000: sf 1, opc 00 movn, hw 0 (lsl 0), imm16 0, Rd x0
+C0035FD6                # 0438      ret
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+# 043c  hexval_letter:
+29290091                # 043c      add     x9, x9, #10                 // 10-15
+#       ADD (immediate) 1 0 0 100010 0 000000001010 01001 01001: sf 1, op 0 add, S 0, sh 0, imm12 10, Rn x9, Rd x9
+# 0440  hexval_done:
+E00309AA                # 0440      orr     x0, xzr, x9
+#       ORR (shifted register) 1 01 01010 00 0 01001 000000 11111 00000: sf 1, opc 01, shift lsl, N 0, Rm x9, imm6 0, Rn xzr, Rd x0
+C0035FD6                # 0444      ret
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+
+# 0448  name:                                   // x1, x2 = the name at x20, x20 after it
+E10314AA                # 0448      orr     x1, xzr, x20
+#       ORR (shifted register) 1 01 01010 00 0 10100 000000 11111 00001: sf 1, opc 01, shift lsl, N 0, Rm x20, imm6 0, Rn xzr, Rd x1
+# 044c  name_byte:
+9F0215EB                # 044c      cmp     x20, x21
+#       SUBS (shifted register) 1 1 1 01011 00 0 10101 000000 10100 11111: sf 1, op 1, S 1, shift lsl, Rm x21, imm6 0, Rn x20, Rd xzr
+C2000054                # 0450      b.hs    name_end
+#       B.cond 0101010 0 0000000000000000110 0 0010: imm19 6 (offset 24), cond 0010 hs
+89024039                # 0454      ldrb    w9, [x20]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 10100 01001: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x20, Rt w9
+3F8100F1                # 0458      cmp     x9, #0x20                   // ends at a space, tab, newline
+#       SUBS (immediate) 1 1 1 100010 0 000000100000 01001 11111: sf 1, op 1 sub, S 1, sh 0, imm12 32, Rn x9, Rd xzr
+69000054                # 045c      b.ls    name_end
+#       B.cond 0101010 0 0000000000000000011 0 1001: imm19 3 (offset 12), cond 1001 ls
+94060091                # 0460      add     x20, x20, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 10100 10100: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x20, Rd x20
+FAFFFF17                # 0464      b       name_byte
+#       B 0 00101 11111111111111111111111010: op 0 without link, imm26 -6 (offset -24)
+# 0468  name_end:
+820201CB                # 0468      sub     x2, x20, x1
+#       SUB (shifted register) 1 1 0 01011 00 0 00001 000000 10100 00010: sf 1, op 1, S 0, shift lsl, Rm x1, imm6 0, Rn x20, Rd x2
+C0035FD6                # 046c      ret
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+
+# 0470  find:                                   // x0 = the label of name x1, x2, or 0
+000EA0D2                # 0470      movz    x0, #0x70, lsl #16          // LABELS
+#       MOVZ 1 10 100101 01 0000000001110000 00000: sf 1, opc 10 movz, hw 1 (lsl 16), imm16 112, Rd x0
+# 0474  find_next:
+1F0019EB                # 0474      cmp     x0, x25
+#       SUBS (shifted register) 1 1 1 01011 00 0 11001 000000 00000 11111: sf 1, op 1, S 1, shift lsl, Rm x25, imm6 0, Rn x0, Rd xzr
+42020054                # 0478      b.hs    not_found
+#       B.cond 0101010 0 0000000000000010010 0 0010: imm19 18 (offset 72), cond 0010 hs
+090440F9                # 047c      ldr     x9, [x0, #8]                // the same length
+#       LDR (immediate, unsigned offset) 11 111 0 01 01 000000000001 00000 01001: size 11 (8 bytes), V 0, opc 01 load, imm12 1 (offset 8), Rn x0, Rt x9
+3F0102EB                # 0480      cmp     x9, x2
+#       SUBS (shifted register) 1 1 1 01011 00 0 00010 000000 01001 11111: sf 1, op 1, S 1, shift lsl, Rm x2, imm6 0, Rn x9, Rd xzr
+A1010054                # 0484      b.ne    find_on
+#       B.cond 0101010 0 0000000000000001101 0 0001: imm19 13 (offset 52), cond 0001 ne
+0B0040F9                # 0488      ldr     x11, [x0]                   // and the same bytes
+#       LDR (immediate, unsigned offset) 11 111 0 01 01 000000000000 00000 01011: size 11 (8 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x0, Rt x11
+EC0301AA                # 048c      orr     x12, xzr, x1
+#       ORR (shifted register) 1 01 01010 00 0 00001 000000 11111 01100: sf 1, opc 01, shift lsl, N 0, Rm x1, imm6 0, Rn xzr, Rd x12
+2E00028B                # 0490      add     x14, x1, x2
+#       ADD (shifted register) 1 0 0 01011 00 0 00010 000000 00001 01110: sf 1, op 0, S 0, shift lsl, Rm x2, imm6 0, Rn x1, Rd x14
+# 0494  find_byte:
+9F010EEB                # 0494      cmp     x12, x14
+#       SUBS (shifted register) 1 1 1 01011 00 0 01110 000000 01100 11111: sf 1, op 1, S 1, shift lsl, Rm x14, imm6 0, Rn x12, Rd xzr
+60010054                # 0498      b.eq    found
+#       B.cond 0101010 0 0000000000000001011 0 0000: imm19 11 (offset 44), cond 0000 eq
+69014039                # 049c      ldrb    w9, [x11]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 01011 01001: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x11, Rt w9
+8F014039                # 04a0      ldrb    w15, [x12]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 01100 01111: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x12, Rt w15
+3F010FEB                # 04a4      cmp     x9, x15
+#       SUBS (shifted register) 1 1 1 01011 00 0 01111 000000 01001 11111: sf 1, op 1, S 1, shift lsl, Rm x15, imm6 0, Rn x9, Rd xzr
+81000054                # 04a8      b.ne    find_on
+#       B.cond 0101010 0 0000000000000000100 0 0001: imm19 4 (offset 16), cond 0001 ne
+6B050091                # 04ac      add     x11, x11, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 01011 01011: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x11, Rd x11
+8C050091                # 04b0      add     x12, x12, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 01100 01100: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x12, Rd x12
+F8FFFF17                # 04b4      b       find_byte
+#       B 0 00101 11111111111111111111111000: op 0 without link, imm26 -8 (offset -32)
+# 04b8  find_on:
+00600091                # 04b8      add     x0, x0, #24
+#       ADD (immediate) 1 0 0 100010 0 000000011000 00000 00000: sf 1, op 0 add, S 0, sh 0, imm12 24, Rn x0, Rd x0
+EEFFFF17                # 04bc      b       find_next
+#       B 0 00101 11111111111111111111101110: op 0 without link, imm26 -18 (offset -72)
+# 04c0  not_found:
+000080D2                # 04c0      movz    x0, #0
+#       MOVZ 1 10 100101 00 0000000000000000 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x0
+# 04c4  found:
+C0035FD6                # 04c4      ret
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+
+# 04c8  emit:                                   // writes x0 XOR x26's low byte in pass 2, counts it
+D6060091                # 04c8      add     x22, x22, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 10110 10110: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x22, Rd x22
+00001ACA                # 04cc      eor     x0, x0, x26
+#       EOR (shifted register) 1 10 01010 00 0 11010 000000 00000 00000: sf 1, opc 10, shift lsl, N 0, Rm x26, imm6 0, Rn x0, Rd x0
+5AFF48D3                # 04d0      lsr     x26, x26, #8
+#       UBFM 1 10 100110 1 001000 111111 11010 11010: sf 1, opc 10, N 1, immr 8, imms 63, Rn x26, Rd x26
+FF0600F1                # 04d4      cmp     x23, #1
+#       SUBS (immediate) 1 1 1 100010 0 000000000001 10111 11111: sf 1, op 1 sub, S 1, sh 0, imm12 1, Rn x23, Rd xzr
+20010054                # 04d8      b.eq    emitted
+#       B.cond 0101010 0 0000000000000001001 0 0000: imm19 9 (offset 36), cond 0000 eq
+E0030039                # 04dc      strb    w0, [sp]                    // from the stack
+#       STRB (immediate, unsigned offset) 00 111 0 01 00 000000000000 11111 00000: size 00 (1 bytes), V 0, opc 00 store, imm12 0 (offset 0), Rn sp, Rt w0
+080880D2                # 04e0      movz    x8, #SYS_write
+#       MOVZ 1 10 100101 00 0000000001000000 01000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 64, Rd x8
+200080D2                # 04e4      movz    x0, #1                      // fd 1, stdout
+#       MOVZ 1 10 100101 00 0000000000000001 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x0
+E1030091                # 04e8      add     x1, sp, #0                  // mov x1, sp
+#       ADD (immediate) 1 0 0 100010 0 000000000000 11111 00001: sf 1, op 0 add, S 0, sh 0, imm12 0, Rn sp, Rd x1
+220080D2                # 04ec      movz    x2, #1                      // 1 byte
+#       MOVZ 1 10 100101 00 0000000000000001 00010: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x2
+010000D4                # 04f0      svc     #0
+#       SVC 11010100 000 0000000000000000 000 01: imm16 0
+1F0400F1                # 04f4      cmp     x0, #1                      // written?
+#       SUBS (immediate) 1 1 1 100010 0 000000000001 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 1, Rn x0, Rd xzr
+C1010054                # 04f8      b.ne    write_failed
+#       B.cond 0101010 0 0000000000000001110 0 0001: imm19 14 (offset 56), cond 0001 ne
+# 04fc  emitted:
+C0035FD6                # 04fc      ret
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+
+# 0500  unknown:
+A3DEFF10                # 0500      adr     x3, msg_unknown
+#       ADR 0 00 10000 1111111111011110101 00011: op 0, immlo 00, immhi -267, imm -1068 (offset -1068), Rd x3
+0D000014                # 0504      b       die
+#       B 0 00101 00000000000000000000001101: op 0 without link, imm26 13 (offset 52)
+# 0508  twice:
+03DFFF50                # 0508      adr     x3, msg_twice
+#       ADR 0 10 10000 1111111111011111000 00011: op 0, immlo 10, immhi -264, imm -1054 (offset -1054), Rd x3
+0B000014                # 050c      b       die
+#       B 0 00101 00000000000000000000001011: op 0 without link, imm26 11 (offset 44)
+# 0510  range:
+A3DFFF50                # 0510      adr     x3, msg_range
+#       ADR 0 10 10000 1111111111011111101 00011: op 0, immlo 10, immhi -259, imm -1034 (offset -1034), Rd x3
+09000014                # 0514      b       die
+#       B 0 00101 00000000000000000000001001: op 0 without link, imm26 9 (offset 36)
+# 0518  too_many:
+03E0FF70                # 0518      adr     x3, msg_many
+#       ADR 0 11 10000 1111111111100000000 00011: op 0, immlo 11, immhi -256, imm -1021 (offset -1021), Rd x3
+06000014                # 051c      b       die_plain
+#       B 0 00101 00000000000000000000000110: op 0 without link, imm26 6 (offset 24)
+# 0520  too_large:
+83E0FF30                # 0520      adr     x3, msg_large
+#       ADR 0 01 10000 1111111111100000100 00011: op 0, immlo 01, immhi -252, imm -1007 (offset -1007), Rd x3
+04000014                # 0524      b       die_plain
+#       B 0 00101 00000000000000000000000100: op 0 without link, imm26 4 (offset 16)
+# 0528  read_failed:
+E3E0FF70                # 0528      adr     x3, msg_read
+#       ADR 0 11 10000 1111111111100000111 00011: op 0, immlo 11, immhi -249, imm -993 (offset -993), Rd x3
+02000014                # 052c      b       die_plain
+#       B 0 00101 00000000000000000000000010: op 0 without link, imm26 2 (offset 8)
+# 0530  write_failed:
+43E1FF30                # 0530      adr     x3, msg_write
+#       ADR 0 01 10000 1111111111100001010 00011: op 0, immlo 01, immhi -246, imm -983 (offset -983), Rd x3
+# 0534  die_plain:
+020080D2                # 0534      movz    x2, #0                      // no name
+#       MOVZ 1 10 100101 00 0000000000000000 00010: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x2
+# 0538  die:                                    // message x3 (to its 0), then name x1, x2
+E40303AA                # 0538      orr     x4, xzr, x3
+#       ORR (shifted register) 1 01 01010 00 0 00011 000000 11111 00100: sf 1, opc 01, shift lsl, N 0, Rm x3, imm6 0, Rn xzr, Rd x4
+# 053c  die_length:
+89004039                # 053c      ldrb    w9, [x4]
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 00100 01001: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn x4, Rt w9
+690000B4                # 0540      cbz     x9, die_write
+#       CBZ 1 011010 0 0000000000000000011 01001: sf 1, op 0, imm19 3 (offset 12), Rt x9
+84040091                # 0544      add     x4, x4, #1
+#       ADD (immediate) 1 0 0 100010 0 000000000001 00100 00100: sf 1, op 0 add, S 0, sh 0, imm12 1, Rn x4, Rd x4
+FDFFFF17                # 0548      b       die_length
+#       B 0 00101 11111111111111111111111101: op 0 without link, imm26 -3 (offset -12)
+# 054c  die_write:
+840003CB                # 054c      sub     x4, x4, x3
+#       SUB (shifted register) 1 1 0 01011 00 0 00011 000000 00100 00100: sf 1, op 1, S 0, shift lsl, Rm x3, imm6 0, Rn x4, Rd x4
+FB0301AA                # 0550      orr     x27, xzr, x1
+#       ORR (shifted register) 1 01 01010 00 0 00001 000000 11111 11011: sf 1, opc 01, shift lsl, N 0, Rm x1, imm6 0, Rn xzr, Rd x27
+FC0302AA                # 0554      orr     x28, xzr, x2
+#       ORR (shifted register) 1 01 01010 00 0 00010 000000 11111 11100: sf 1, opc 01, shift lsl, N 0, Rm x2, imm6 0, Rn xzr, Rd x28
+E10303AA                # 0558      orr     x1, xzr, x3
+#       ORR (shifted register) 1 01 01010 00 0 00011 000000 11111 00001: sf 1, opc 01, shift lsl, N 0, Rm x3, imm6 0, Rn xzr, Rd x1
+E20304AA                # 055c      orr     x2, xzr, x4
+#       ORR (shifted register) 1 01 01010 00 0 00100 000000 11111 00010: sf 1, opc 01, shift lsl, N 0, Rm x4, imm6 0, Rn xzr, Rd x2
+0A000094                # 0560      bl      ewrite
+#       BL 1 00101 00000000000000000000001010: op 1 with link, imm26 10 (offset 40)
+E1031BAA                # 0564      orr     x1, xzr, x27
+#       ORR (shifted register) 1 01 01010 00 0 11011 000000 11111 00001: sf 1, opc 01, shift lsl, N 0, Rm x27, imm6 0, Rn xzr, Rd x1
+E2031CAA                # 0568      orr     x2, xzr, x28
+#       ORR (shifted register) 1 01 01010 00 0 11100 000000 11111 00010: sf 1, opc 01, shift lsl, N 0, Rm x28, imm6 0, Rn xzr, Rd x2
+07000094                # 056c      bl      ewrite
+#       BL 1 00101 00000000000000000000000111: op 1 with link, imm26 7 (offset 28)
+E1DFFF10                # 0570      adr     x1, newline
+#       ADR 0 00 10000 1111111111011111111 00001: op 0, immlo 00, immhi -257, imm -1028 (offset -1028), Rd x1
+220080D2                # 0574      movz    x2, #1
+#       MOVZ 1 10 100101 00 0000000000000001 00010: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x2
+04000094                # 0578      bl      ewrite
+#       BL 1 00101 00000000000000000000000100: op 1 with link, imm26 4 (offset 16)
+200080D2                # 057c      movz    x0, #1                      // status 1
+#       MOVZ 1 10 100101 00 0000000000000001 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x0
+# 0580  exit:
+A80B80D2                # 0580      movz    x8, #SYS_exit
+#       MOVZ 1 10 100101 00 0000000001011101 01000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 93, Rd x8
+010000D4                # 0584      svc     #0
+#       SVC 11010100 000 0000000000000000 000 01: imm16 0
+# 0588  ewrite:                                 // writes x1, x2 to stderr
+080880D2                # 0588      movz    x8, #SYS_write
+#       MOVZ 1 10 100101 00 0000000001000000 01000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 64, Rd x8
+400080D2                # 058c      movz    x0, #2                      // fd 2, stderr
+#       MOVZ 1 10 100101 00 0000000000000010 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 2, Rd x0
+010000D4                # 0590      svc     #0
+#       SVC 11010100 000 0000000000000000 000 01: imm16 0
+C0035FD6                # 0594      ret
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+# 0598  end:

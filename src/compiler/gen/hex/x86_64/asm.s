@@ -1912,11 +1912,9 @@ layout:                                 # every section's file offset and addres
     mov     V_align+32(%rbp), %rcx
     call    alignup
     mov     %rax, V_base+32(%rbp)       # .bss
-    sub     V_base+24(%rbp), %rax
-    add     V_off+24(%rbp), %rax
+    mov     V_off+24(%rbp), %rax        # its file offset, and .shstrtab's: the end
+    add     V_loc+24(%rbp), %rax        # of .data (ld's, though .bss be aligned)
     mov     %rax, V_off+32(%rbp)
-    mov     V_off+24(%rbp), %rax        # .shstrtab after .data
-    add     V_loc+24(%rbp), %rax
     mov     %rax, V_shstr(%rbp)
     add     $shstrtab_len, %rax         # then the section headers
     mov     $8, %ecx
