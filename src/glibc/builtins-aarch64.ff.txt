@@ -19,6 +19,15 @@
       x0
     ret
   comment
+    __ff_fp: the frame pointer of the function that calls it (C's frame in ttpc, which builtins.ff.txt's __builtin_return_address and __builtin_frame_address read), x29.
+  __ff_fp:
+    asm
+    addi
+      0
+      x29
+      x0
+    ret
+  comment
     gcc's __builtin_trap, which it makes brk #1000 on aarch64; __atomic_thread_fence, which it makes dmb ish.
   __builtin_trap:
     asm

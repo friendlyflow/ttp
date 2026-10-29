@@ -17,6 +17,14 @@
       rax
       rax
     ret
+  comment
+    __ff_fp: the frame pointer of the function that calls it (C's frame in ttpc, which builtins.ff.txt's __builtin_return_address and __builtin_frame_address read), rbp.
+  __ff_fp:
+    asm
+    movq
+      rbp
+      rax
+    ret
   __builtin_ia32_rdtsc:
     asm
     rdtsc
@@ -46,6 +54,28 @@
   comment
     gcc's RTM builtins (<rtmintrin.h>: glibc's tst-*-rtm tests), as bytes. __builtin_ia32_xbegin: xbegin with its fallback the next instruction, eax -1 (_XBEGIN_STARTED) where the transaction starts, else the abort's status, which the processor puts there.
     __builtin_ia32_xend: xend. __builtin_ia32_xtest: xtest, 1 inside a transaction (ZF 0), else 0.
+  comment
+    restore_rt: the sa_restorer of x86_64's sigaction (sigaction.c's __restore_rt, a top-level asm statement that c2ff leaves out): rt_sigreturn, mov $15, %rax and syscall, as bytes.
+  restore_rt:
+    asm
+    byte
+      0x48
+    byte
+      0xc7
+    byte
+      0xc0
+    byte
+      0x0f
+    byte
+      0x00
+    byte
+      0x00
+    byte
+      0x00
+    byte
+      0x0f
+    byte
+      0x05
   __builtin_ia32_xbegin:
     asm
     byte
