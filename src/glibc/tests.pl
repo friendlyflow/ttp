@@ -114,8 +114,9 @@ sub unaddr5 { my ($s) = @_; $s =~ s/\b0x[0-9a-f]{5}\b/0x.../gr }
 # (and the program's own name, its argv[0], test.ref or test-prog, as test)
 sub norm { my ($s, $t) = @_; unaddr($s) =~ s/\Q$t\E(?:\.ref|-prog)\b/$t/gr }
 # (and a temporary file's name, mkstemp's or tmpnam's: a path's part whose
-# last 6 letters or digits are the random ones of its XXXXXX, as any other)
-sub tmpname { my ($s) = @_; $s =~ s{(/[^/\s"']*?)[A-Za-z0-9]{6}(?=[/\s"')]|\z)}{$1XXXXXX}gr }
+# last 6 letters or digits are the random ones of its XXXXXX, as any other;
+# before a colon too: tst-freopen64-4's warning)
+sub tmpname { my ($s) = @_; $s =~ s{(/[^/\s"']*?)[A-Za-z0-9]{6}(?=[/\s"'):]|\z)}{$1XXXXXX}gr }
 sub same {
     my ($a, $b, $t) = @_;
     ($a, $b) = (norm($a, $t), norm($b, $t));

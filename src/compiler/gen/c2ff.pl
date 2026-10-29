@@ -2285,6 +2285,7 @@ sub texts {
 # char array of its own, text 1, 2, ..., and the value the address of its
 # first char.
 my $ntext = 0;
+my %text_item;
 # cast: type value; under address / char (or u8) a leaf is a text, so a leaf
 # value goes in a : (printf-parse's (const char *) format)
 # an expression without effects: names, members, constants, and what C
@@ -2308,9 +2309,14 @@ sub string_value {
     my ($n) = @_;
     my $s = bytes($n);
     return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255 || ($s ne '' && !pieces($s));
-    my $name = 'text ' . ++$ntext;
-    my @c = (unpack('C*', $s), 0);
-    push @out, [$cur_unit, node("$name:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
+    # (one item per text and unit: glibc's tests name their variables as
+    # texts, #ret, which x86_64 reserves, 360 times in tst-printf-intn)
+    my $name = $text_item{"$cur_unit\0$s"} //= do {
+        my $nm = 'text ' . ++$ntext;
+        my @c = (unpack('C*', $s), 0);
+        push @out, [$cur_unit, node("$nm:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
+        $nm;
+    };
     node('address', node($name, node('0')));
 }
 # A wide literal's elements (L"", u"", U""): each escape one element, each
