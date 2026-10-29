@@ -1,0 +1,183 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/aarch64/hex0.s as hex0 text, made by gen/mkhex.pl: each line the bytes of
+# one asm line, then its file offset and the line. hex0 reads only the
+# hex digits before each '#'.
+#
+# hex0 for aarch64 Linux: hex pairs in, bytes out. The first link of the
+# bootstrap: everything after it is built from text by programs built from
+# text. Its bytes are hosts/aarch64/hex0.hex0, made from this file once by
+# gen/mkhex.pl (a dev aid); the chain never reads this file.
+#
+#   hex0 < file.hex0 > file
+#
+# Each pair of hex digits (0-9, A-F, a-f) is one byte, the first digit its
+# high half. '#' and ';' start a comment to the end of the line. Every
+# other byte (spaces, newlines, ...) is skipped. At the end of stdin the
+# status is 0 (a lone last digit is dropped); a failed read or write ends
+# with status 1.
+#
+# One flat file, loaded whole at BASE by its one program header: no
+# sections, no linker. Every instruction is 4 bytes, little endian, its
+# fields as the Arm manual draws them. Only the stack is written (its
+# first byte, argc's, is the buffer of a byte). The registers:
+#   x19  the high half of the byte being read, or -1 before its first digit
+#   x9   a digit's value
+
+#     .equ BASE, 0x600000
+#     .equ SYS_read, 63
+#     .equ SYS_write, 64
+#     .equ SYS_exit, 93
+
+# 0000  ehdr:                                   // the ELF header, 64 bytes
+7F454C46                # 0000      .byte 0x7f, 0x45, 0x4c, 0x46        // e_ident: the magic, 0x7f 'E' 'L' 'F'
+02                      # 0004      .byte 2                             // EI_CLASS: ELFCLASS64
+01                      # 0005      .byte 1                             // EI_DATA: ELFDATA2LSB, little endian
+01                      # 0006      .byte 1                             // EI_VERSION: EV_CURRENT
+00                      # 0007      .byte 0                             // EI_OSABI: System V
+0000000000000000        # 0008      .byte 0, 0, 0, 0, 0, 0, 0, 0        // EI_ABIVERSION 0, then padding to 16
+0200                    # 0010      .hword 2                            // e_type: ET_EXEC, an executable
+B700                    # 0012      .hword 0xb7                         // e_machine: EM_AARCH64
+01000000                # 0014      .word 1                             // e_version: EV_CURRENT
+7800600000000000        # 0018      .dword BASE + _start - ehdr         // e_entry: the address of _start
+4000000000000000        # 0020      .dword phdr - ehdr                  // e_phoff: the program header follows
+0000000000000000        # 0028      .dword 0                            // e_shoff: no section headers
+00000000                # 0030      .word 0                             // e_flags: none on aarch64
+4000                    # 0034      .hword 64                           // e_ehsize: this header's size
+3800                    # 0036      .hword 56                           // e_phentsize: a program header's size
+0100                    # 0038      .hword 1                            // e_phnum: one program header
+0000                    # 003a      .hword 0                            // e_shentsize: no section headers
+0000                    # 003c      .hword 0                            // e_shnum: none
+0000                    # 003e      .hword 0                            // e_shstrndx: none
+# 0040  phdr:                                   // the program header, 56 bytes
+01000000                # 0040      .word 1                             // p_type: PT_LOAD
+05000000                # 0044      .word 5                             // p_flags: PF_R | PF_X, read and run
+0000000000000000        # 0048      .dword 0                            // p_offset: from the file's first byte
+0000600000000000        # 0050      .dword BASE                         // p_vaddr: loaded at BASE
+0000600000000000        # 0058      .dword BASE                         // p_paddr: the same
+4401000000000000        # 0060      .dword end - ehdr                   // p_filesz: the whole file
+4401000000000000        # 0068      .dword end - ehdr                   // p_memsz: the same, no bss
+0010000000000000        # 0070      .dword 0x1000                       // p_align: a page
+
+# 0078  _start:
+13008092                # 0078      movn    x19, #0                     // mov x19, #-1: no high half yet
+#       MOVN 1 00 100101 00 0000000000000000 10011: sf 1, opc 00 movn, hw 0 (lsl 0), imm16 0, Rd x19
+# 007c  next:                                   // the next byte of stdin
+1A000094                # 007c      bl      getc                        // x0 = the byte
+#       BL 1 00101 00000000000000000000011010: op 1 with link, imm26 26 (offset 104)
+1F8C00F1                # 0080      cmp     x0, #0x23                   // '#': a comment
+#       SUBS (immediate) 1 1 1 100010 0 000000100011 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 35, Rn x0, Rd xzr
+80020054                # 0084      b.eq    comment
+#       B.cond 0101010 0 0000000000000010100 0 0000: imm19 20 (offset 80), cond 0000 eq
+1FEC00F1                # 0088      cmp     x0, #0x3b                   // ';': a comment
+#       SUBS (immediate) 1 1 1 100010 0 000000111011 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 59, Rn x0, Rd xzr
+40020054                # 008c      b.eq    comment
+#       B.cond 0101010 0 0000000000000010010 0 0000: imm19 18 (offset 72), cond 0000 eq
+09C000D1                # 0090      sub     x9, x0, #0x30               // '0'-'9' to 0-9
+#       SUB (immediate) 1 1 0 100010 0 000000110000 00000 01001: sf 1, op 1 sub, S 0, sh 0, imm12 48, Rn x0, Rd x9
+3F2900F1                # 0094      cmp     x9, #10
+#       SUBS (immediate) 1 1 1 100010 0 000000001010 01001 11111: sf 1, op 1 sub, S 1, sh 0, imm12 10, Rn x9, Rd xzr
+03010054                # 0098      b.lo    digit                       // unsigned: below '0' is large
+#       B.cond 0101010 0 0000000000000001000 0 0011: imm19 8 (offset 32), cond 0011 lo
+090401D1                # 009c      sub     x9, x0, #0x41               // 'A'-'F' to 0-5
+#       SUB (immediate) 1 1 0 100010 0 000001000001 00000 01001: sf 1, op 1 sub, S 0, sh 0, imm12 65, Rn x0, Rd x9
+3F1900F1                # 00a0      cmp     x9, #6
+#       SUBS (immediate) 1 1 1 100010 0 000000000110 01001 11111: sf 1, op 1 sub, S 1, sh 0, imm12 6, Rn x9, Rd xzr
+83000054                # 00a4      b.lo    letter
+#       B.cond 0101010 0 0000000000000000100 0 0011: imm19 4 (offset 16), cond 0011 lo
+098401D1                # 00a8      sub     x9, x0, #0x61               // 'a'-'f' to 0-5
+#       SUB (immediate) 1 1 0 100010 0 000001100001 00000 01001: sf 1, op 1 sub, S 0, sh 0, imm12 97, Rn x0, Rd x9
+3F1900F1                # 00ac      cmp     x9, #6
+#       SUBS (immediate) 1 1 1 100010 0 000000000110 01001 11111: sf 1, op 1 sub, S 1, sh 0, imm12 6, Rn x9, Rd xzr
+62FEFF54                # 00b0      b.hs    next                        // anything else: skipped
+#       B.cond 0101010 0 1111111111111110011 0 0010: imm19 -13 (offset -52), cond 0010 hs
+# 00b4  letter:
+29290091                # 00b4      add     x9, x9, #10                 // 10-15
+#       ADD (immediate) 1 0 0 100010 0 000000001010 01001 01001: sf 1, op 0 add, S 0, sh 0, imm12 10, Rn x9, Rd x9
+# 00b8  digit:                                  // x9 = the digit's value, 0-15
+7F0200F1                # 00b8      cmp     x19, #0                     // the first digit of a pair?
+#       SUBS (immediate) 1 1 1 100010 0 000000000000 10011 11111: sf 1, op 1 sub, S 1, sh 0, imm12 0, Rn x19, Rd xzr
+8B000054                # 00bc      b.lt    high
+#       B.cond 0101010 0 0000000000000000100 0 1011: imm19 4 (offset 16), cond 1011 lt
+2011138B                # 00c0      add     x0, x9, x19, lsl #4         // the second: high half, then this one
+#       ADD (shifted register) 1 0 0 01011 00 0 10011 000100 01001 00000: sf 1, op 0, S 0, shift lsl, Rm x19, imm6 4, Rn x9, Rd x0
+12000094                # 00c4      bl      putc
+#       BL 1 00101 00000000000000000000010010: op 1 with link, imm26 18 (offset 72)
+ECFFFF17                # 00c8      b       _start                      // the next pair
+#       B 0 00101 11111111111111111111101100: op 0 without link, imm26 -20 (offset -80)
+# 00cc  high:
+F30309AA                # 00cc      orr     x19, xzr, x9                // mov x19, x9: keep it for the second
+#       ORR (shifted register) 1 01 01010 00 0 01001 000000 11111 10011: sf 1, opc 01, shift lsl, N 0, Rm x9, imm6 0, Rn xzr, Rd x19
+EBFFFF17                # 00d0      b       next
+#       B 0 00101 11111111111111111111101011: op 0 without link, imm26 -21 (offset -84)
+# 00d4  comment:                                // skip to the end of the line
+04000094                # 00d4      bl      getc
+#       BL 1 00101 00000000000000000000000100: op 1 with link, imm26 4 (offset 16)
+1F2800F1                # 00d8      cmp     x0, #0x0a                   // '\n'
+#       SUBS (immediate) 1 1 1 100010 0 000000001010 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 10, Rn x0, Rd xzr
+C1FFFF54                # 00dc      b.ne    comment
+#       B.cond 0101010 0 1111111111111111110 0 0001: imm19 -2 (offset -8), cond 0001 ne
+E7FFFF17                # 00e0      b       next
+#       B 0 00101 11111111111111111111100111: op 0 without link, imm26 -25 (offset -100)
+
+# 00e4  getc:                                   // x0 = the next byte of stdin
+E80780D2                # 00e4      movz    x8, #SYS_read
+#       MOVZ 1 10 100101 00 0000000000111111 01000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 63, Rd x8
+000080D2                # 00e8      movz    x0, #0                      // fd 0, stdin
+#       MOVZ 1 10 100101 00 0000000000000000 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x0
+E1030091                # 00ec      add     x1, sp, #0                  // mov x1, sp: into the stack
+#       ADD (immediate) 1 0 0 100010 0 000000000000 11111 00001: sf 1, op 0 add, S 0, sh 0, imm12 0, Rn sp, Rd x1
+220080D2                # 00f0      movz    x2, #1                      // 1 byte
+#       MOVZ 1 10 100101 00 0000000000000001 00010: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x2
+010000D4                # 00f4      svc     #0
+#       SVC 11010100 000 0000000000000000 000 01: imm16 0
+1F0000F1                # 00f8      cmp     x0, #0
+#       SUBS (immediate) 1 1 1 100010 0 000000000000 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 0, Rn x0, Rd xzr
+EB010054                # 00fc      b.lt    fail                        // a failed read
+#       B.cond 0101010 0 0000000000000001111 0 1011: imm19 15 (offset 60), cond 1011 lt
+80010054                # 0100      b.eq    done                        // the end of stdin
+#       B.cond 0101010 0 0000000000000001100 0 0000: imm19 12 (offset 48), cond 0000 eq
+E0034039                # 0104      ldrb    w0, [sp]                    // the byte, zero-extended
+#       LDRB (immediate, unsigned offset) 00 111 0 01 01 000000000000 11111 00000: size 00 (1 bytes), V 0, opc 01 load, imm12 0 (offset 0), Rn sp, Rt w0
+C0035FD6                # 0108      ret                                 // to x30
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+
+# 010c  putc:                                   // writes x0's low byte to stdout
+E0030039                # 010c      strb    w0, [sp]
+#       STRB (immediate, unsigned offset) 00 111 0 01 00 000000000000 11111 00000: size 00 (1 bytes), V 0, opc 00 store, imm12 0 (offset 0), Rn sp, Rt w0
+080880D2                # 0110      movz    x8, #SYS_write
+#       MOVZ 1 10 100101 00 0000000001000000 01000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 64, Rd x8
+200080D2                # 0114      movz    x0, #1                      // fd 1, stdout
+#       MOVZ 1 10 100101 00 0000000000000001 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x0
+E1030091                # 0118      add     x1, sp, #0                  // from the stack
+#       ADD (immediate) 1 0 0 100010 0 000000000000 11111 00001: sf 1, op 0 add, S 0, sh 0, imm12 0, Rn sp, Rd x1
+220080D2                # 011c      movz    x2, #1                      // 1 byte
+#       MOVZ 1 10 100101 00 0000000000000001 00010: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x2
+010000D4                # 0120      svc     #0
+#       SVC 11010100 000 0000000000000000 000 01: imm16 0
+1F0400F1                # 0124      cmp     x0, #1                      // written?
+#       SUBS (immediate) 1 1 1 100010 0 000000000001 00000 11111: sf 1, op 1 sub, S 1, sh 0, imm12 1, Rn x0, Rd xzr
+81000054                # 0128      b.ne    fail
+#       B.cond 0101010 0 0000000000000000100 0 0001: imm19 4 (offset 16), cond 0001 ne
+C0035FD6                # 012c      ret
+#       RET 1101011 0010 11111 000000 11110 00000: opc 0010, op2 11111, op3 000000, Rn x30, op4 00000
+
+# 0130  done:
+000080D2                # 0130      movz    x0, #0                      // status 0
+#       MOVZ 1 10 100101 00 0000000000000000 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 0, Rd x0
+02000014                # 0134      b       exit
+#       B 0 00101 00000000000000000000000010: op 0 without link, imm26 2 (offset 8)
+# 0138  fail:
+200080D2                # 0138      movz    x0, #1                      // status 1
+#       MOVZ 1 10 100101 00 0000000000000001 00000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 1, Rd x0
+# 013c  exit:
+A80B80D2                # 013c      movz    x8, #SYS_exit
+#       MOVZ 1 10 100101 00 0000000001011101 01000: sf 1, opc 10 movz, hw 0 (lsl 0), imm16 93, Rd x8
+010000D4                # 0140      svc     #0
+#       SVC 11010100 000 0000000000000000 000 01: imm16 0
+# 0144  end:

@@ -1,0 +1,2246 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# hosts/aarch64/ttpc.s as hex2 text, made by gen/mkhex.pl from GNU as's and ld's output:
+# the whole executable in the order of its bytes. :label defines a label
+# at the address of the next byte; &label is label's address in 4 bytes
+# (abs32, the low half of a .dword). The code's references: ^~label
+# (stage0-posix's B and BL) writes 3 bytes, imm26's low 24 bits, d / 4
+# (d is label minus the instruction's address), the byte after them has
+# imm26's top 2 bits and the opcode; the others XOR their field into
+# the instruction after them, which is written with that field zero:
+# @label imm19 of B.cond, CBZ, CBNZ (d / 4), ~label ADRP's page
+# difference, !label the ADD :lo12: after it (label's low 12 bits);
+# ^address sets the address of the next byte (where the file and the
+# addresses part: the data segment, the labels of the bss). Every other
+# pair of hex digits is a byte; '#' and ';' start a comment to the end of
+# the line. A reference that is not to a label alone (label+8, or with
+# an immediate after it) is written out. Each line is followed by the asm
+# line of hosts/aarch64/ttpc.s it comes from; hex2 reads only what is before the '#'.
+#
+^00400000                               # the first byte of the file is at this address
+#
+# The ELF header
+7F454C46020101000000000000000000        # e_ident: the magic 7f "ELF", ELFCLASS64, little endian, EV_CURRENT, System V, padding
+0200                                    # e_type = 0x2: ET_EXEC, an executable
+B700                                    # e_machine = 0xb7: EM_AARCH64
+01000000                                # e_version = 0x1: EV_CURRENT
+B000400000000000                        # e_entry = 0x4000b0: the address of _start
+4000000000000000                        # e_phoff = 0x40: the program headers follow
+8021000000000000                        # e_shoff = 0x2180: the section headers, at the end
+00000000                                # e_flags = 0x0: none on aarch64
+4000                                    # e_ehsize = 0x40: this header
+3800                                    # e_phentsize = 0x38: a program header
+0200                                    # e_phnum = 0x2: program headers
+4000                                    # e_shentsize = 0x40: a section header
+0600                                    # e_shnum = 0x6: section headers
+0500                                    # e_shstrndx = 0x5: the section of the section names
+#
+# Program header 0
+01000000                                # p_type = 0x1: 1: PT_LOAD
+05000000                                # p_flags = 0x5: 4 R, 2 W, 1 X
+0000000000000000                        # p_offset = 0x0: from this file offset
+0000400000000000                        # p_vaddr = 0x400000: to this address
+0000400000000000                        # p_paddr = 0x400000: the same
+951C000000000000                        # p_filesz = 0x1c95: bytes of the file
+951C000000000000                        # p_memsz = 0x1c95: bytes of memory, the rest zero
+0000010000000000                        # p_align = 0x10000: a page
+#
+# Program header 1
+01000000                                # p_type = 0x1: 1: PT_LOAD
+06000000                                # p_flags = 0x6: 4 R, 2 W, 1 X
+0020000000000000                        # p_offset = 0x2000: from this file offset
+0020410000000000                        # p_vaddr = 0x412000: to this address
+0020410000000000                        # p_paddr = 0x412000: the same
+5801000000000000                        # p_filesz = 0x158: bytes of the file
+7004540000000000                        # p_memsz = 0x540470: bytes of memory, the rest zero
+0000010000000000                        # p_align = 0x10000: a page
+#
+# The section .text, from here its lines of hosts/aarch64/ttpc.s
+# ttpc.s (aarch64) — the trust project compiler, in AArch64 assembly,
+# without libc.
+#
+# FROZEN: this is a port of ../riscv64/ttpc.s, stage0 of the bootstrap
+# (see PLAN.md), from riscv64 to aarch64. It must agree with ttpc.s byte for
+# byte: for every input the same stdout, the same stderr, the same output
+# file and the same exit status. It is a translation, function by function
+# and nearly instruction by instruction, in the same order, with the same
+# labels, constants, messages, memory layout and exec_ops table, so that it
+# can be audited side by side with ttpc.s. It interprets the tree like
+# ttpc.s does: the ISA it assembles for comes from the tree, and exec
+# context runs on vregs through exec_ops, never on the host.
+#
+# One deliberate difference: OUT_SIZE is 1 << 20 (1 MiB) instead of
+# 1 << 16, so that it can write a larger ttpc for this host. An output
+# between 64 KiB and 1 MiB makes ttpc.s die with "output too large", this
+# port writes it.
+#
+# Register map, RISC-V -> AArch64:
+#   s0-s9  x19-x28     s10  x29     s11  x18
+#   a0-a6  x0-x6       a7   x8      (only ever the syscall number)
+#   t0-t6  x9-x15      ra   x30     sp   sp      zero  xzr
+# Without libc x29 (no frame pointer chain) and x18 (no platform use) are
+# plain registers; like s10 and s11 they are saved by the functions that
+# use them. x7, x16 and x17 are unused. Every frame of ttpc.s is already a
+# multiple of 16 bytes, so sp stays 16-byte aligned with the same offsets.
+#
+# Instruction map: ld/sd -> ldr/str, lbu -> ldrb (zero-extends), sb -> strb,
+# li/mv -> mov, la -> the macro la below (adrp + add :lo12:), call -> bl,
+# j -> b, jalr -> blr, jr -> br, ecall -> svc #0 (number in x8, arguments
+# in x0-x5, result in x0). A compare-and-branch is cmp + b.cond: beq/bne
+# -> b.eq/b.ne, blt/bge/bgt and bltz/blez -> b.lt/b.ge/b.gt/b.le (signed),
+# bltu/bgeu/bgtu -> b.lo/b.hs/b.hi (unsigned); beqz/bnez -> cbz/cbnz. remu
+# -> udiv + msub (x mod 0 is x on both). The exec ops: add sub and orr eor
+# mul are 64 bits like RV64 (mul keeps the low 64), lsl lsr asr by a
+# register take the amount mod 64 like sll srl sra.
+#
+# What follows is the comment of ttpc.s:
+#
+# A static Linux program (here aarch64; run it with qemu-aarch64 on another
+# host). It talks to the kernel only through svc: it opens the ff file
+# named by its first argument and loads it into memory as a tree of NODEs.
+#
+#   ttpc <file.ff>          prints the tree, one node per line
+#   ttpc <file.ff> <out>    assembles it into the static executable <out>
+#
+# Assembling: a node whose content ends in ':' is a function, its leading
+# children that are leaves are its parameters. Any other node is a call, its
+# children are the arguments. The root's children are pages. The functions
+# on every page but the last are definitions: instructions, macros,
+# constants. The last page is the program: its functions are placed, they
+# are labels whose children are emitted where they stand (nested ones are
+# local labels, found innermost scope first), and its calls are emitted in
+# order. Pass 1 finds every label's address, pass 2 emits.
+#
+# A function whose body (the children after its parameters) holds only
+# fields, fixed fields (funct3:, ...) and slice calls (imm[11:0] imm), is an
+# encoding: an instruction or a data word of 8 to 64 bits. A call runs in
+# one of three contexts:
+#
+#   code   a call of an encoding is encoded and emitted, a call of any
+#          other function expands its body in code context.
+#   field  encoding: the fields, MSB first. A fixed field is its bits; a
+#          slice call runs in exec context and leaves its value in a0, its
+#          width is in its name.
+#   exec   runs at assemble time on vregs. The ops of exec_ops are built
+#          in, the seed; everything else is defined by the tree.
+#
+# An argument with children is a call, run in exec context: its value is
+# a0. A leaf argument is a decimal or 0x number, a parameter, a register
+# (its number in code context, its vreg in exec context), pc, a label (its
+# address) or a constant (a function without parameters, run in exec
+# context). The builtins: ascii, align, reserve, origin, bss (see
+# code_call) and size (see exec_call).
+#
+# Registers are the functions "x10 a0:", their number is their child "01010".
+# (These are the registers of the target in the tree, not of this host; a0
+# is the vreg VREG_a0.) The output file is exactly what the program emits:
+# its ELF header is ff too (elf_header in macros.ff.txt).
+#
+# ff on disk, one node, depth-first (children inline, before the content):
+#   hash          byte[32]
+#   children_len  u8
+#   children      node × children_len
+#   content_len   u8
+#   content       byte × content_len    // no NUL termination: may be binary
+#
+# NODE in memory (64 bytes, naturally aligned):
+#   0   hash          byte[32]
+#   32  children_len  int8
+#   40  children      NODE**            // -> pointer array in ptrs
+#   48  content_len   int8
+#   56  content       char*             // -> into buf, not copied
+
+#     .equ SYS_openat, 56
+#     .equ SYS_close, 57
+#     .equ SYS_read, 63
+#     .equ SYS_write, 64
+#     .equ SYS_exit, 93
+
+#     .equ AT_FDCWD, -100
+#     .equ O_RDONLY, 0
+#     .equ O_CREAT_WRONLY_TRUNC, 01 | 0100 | 01000
+#     .equ MODE_0755, 0755
+#     .equ STDOUT, 1
+#     .equ STDERR, 2
+
+#     .equ CH_space, 32
+#     .equ CH_minus, 45
+#     .equ CH_zero, 48
+#     .equ CH_colon, 58
+#     .equ CH_lbracket, 91
+#     .equ CH_rbracket, 93
+#     .equ CH_bar, 124
+#     .equ CH_a, 97
+#     .equ CH_x, 120
+
+    # A frame binds the parameters of a call: count, then (param NODE*,
+    # value) pairs.
+#     .equ MAX_PARAMS, 8
+#     .equ FRAME_count, 0
+#     .equ FRAME_params, 8
+#     .equ FRAME_size, 8 + MAX_PARAMS * 16
+
+#     .equ VREG_a0, 10
+#     .equ OUT_SIZE, 1 << 20              // ttpc.s: 1 << 16, see the header
+#     .equ MAX_DEPTH, 64                  // nesting of placed functions
+
+    # A label: a placed function, its address and the address after it.
+#     .equ LABEL_node, 0
+#     .equ LABEL_addr, 8
+#     .equ LABEL_end, 16
+#     .equ LABEL_size, 24
+
+    # An exec op: its name, NUL-padded, and its code.
+#     .equ OP_name, 0
+#     .equ OP_code, 8
+#     .equ OP_size, 16
+
+#     .equ NODE_hash, 0
+#     .equ NODE_children_len, 32
+#     .equ NODE_children, 40
+#     .equ NODE_content_len, 48
+#     .equ NODE_content, 56
+#     .equ NODE_size, 64
+
+#     .equ BUF_SIZE, 1 << 20
+    # Every node takes at least 34 bytes on disk, so a full buf holds fewer
+    # than MAX_NODES nodes: the node and pointer arenas cannot overflow.
+#     .equ MAX_NODES, BUF_SIZE / 32
+
+# la: reg = the address of sym, as RISC-V's la.
+#     .macro la reg, sym
+#     adrp    \reg, \sym
+#     add     \reg, \reg, :lo12:\sym
+#     .endm
+
+#     .section .text
+#     .globl _start
+:_start                                 # _start:
+E90340F9                                #     ldr     x9, [sp, #0]                // argc
+3F0900F1                                #     cmp     x9, #2
+@usage 0B000054                         #     b.lt    usage
+3F0D00F1                                #     cmp     x9, #3
+@usage 0C000054                         #     b.gt    usage
+@_start.1 0B000054                      #     b.lt    1f
+EA0F40F9                                #     ldr     x10, [sp, #24]              // argv[2]
+~out_path 0B000090 !out_path 6B010091   #     la      x11, out_path
+6A0100F9                                #     str     x10, [x11, #0]
+:_start.1 E10B40F9                      # 1:  ldr     x1, [sp, #16]               // argv[1]
+
+600C8092                                #     mov     x0, #AT_FDCWD
+020080D2                                #     mov     x2, #O_RDONLY
+030080D2                                #     mov     x3, #0
+080780D2                                #     mov     x8, #SYS_openat
+010000D4                                #     svc     #0
+1F0000F1                                #     cmp     x0, #0
+@open_failed 0B000054                   #     b.lt    open_failed
+F70300AA                                #     mov     x23, x0                     // fd
+
+    # Read the whole file into buf.
+~buf 13000090 !buf 73020091             #     la      x19, buf
+F40313AA                                #     mov     x20, x19
+0902A0D2                                #     mov     x9, #BUF_SIZE
+7802098B                                #     add     x24, x19, x9                // end of buf
+:read_loop                              # read_loop:
+9F0218EB                                #     cmp     x20, x24
+@too_large 00000054                     #     b.eq    too_large
+E00317AA                                #     mov     x0, x23
+E10314AA                                #     mov     x1, x20
+020314CB                                #     sub     x2, x24, x20
+E80780D2                                #     mov     x8, #SYS_read
+010000D4                                #     svc     #0
+1F0000F1                                #     cmp     x0, #0
+@read_failed 0B000054                   #     b.lt    read_failed
+@read_done 000000B4                     #     cbz     x0, read_done
+9402008B                                #     add     x20, x20, x0
+^~read_loop 17                          #     b       read_loop
+:read_done                              # read_done:
+E00317AA                                #     mov     x0, x23
+280780D2                                #     mov     x8, #SYS_close
+010000D4                                #     svc     #0
+
+~nodes 15000090 !nodes B5020091         #     la      x21, nodes
+~ptrs 16000090 !ptrs D6020091           #     la      x22, ptrs
+^~parse_node 94                         #     bl      parse_node
+7F0214EB                                #     cmp     x19, x20
+@trailing 01000054                      #     b.ne    trailing
+~out_path 09000090 !out_path 29010091   #     la      x9, out_path
+290140F9                                #     ldr     x9, [x9, #0]
+@assemble 090000B5                      #     cbnz    x9, assemble
+010080D2                                #     mov     x1, #0
+^~print_node 94                         #     bl      print_node
+
+000080D2                                #     mov     x0, #0
+^~exit 14                               #     b       exit
+
+# assemble: places the last page of root x0, the program, twice: pass 1
+# finds the address of every label, pass 2 emits with them. Then writes
+# the output file.
+:assemble                               # assemble:
+F90300AA                                #     mov     x25, x0                     // root
+^~collect_syms 94                       #     bl      collect_syms
+29834039                                #     ldrb    w9, [x25, #NODE_children_len]
+@assemble.2 090000B4                    #     cbz     x9, 2f
+2A1740F9                                #     ldr     x10, [x25, #NODE_children]
+29F17DD3                                #     lsl     x9, x9, #3
+4A01098B                                #     add     x10, x10, x9
+5A815FF8                                #     ldr     x26, [x10, #-8]             // the program page
+3B0080D2                                #     mov     x27, #1                     // pass
+:assemble.1 ~pass 09000090 !pass 29010091 # 1:  la      x9, pass
+3B0100F9                                #     str     x27, [x9, #0]
+~cur_pc 09000090 !cur_pc 29010091       #     la      x9, cur_pc
+3F0100F9                                #     str     xzr, [x9, #0]
+~in_bss 09000090 !in_bss 29010091       #     la      x9, in_bss
+3F0100F9                                #     str     xzr, [x9, #0]
+~out_end 09000090 !out_end 29010091     #     la      x9, out_end
+~outbuf 0A000090 !outbuf 4A010091       #     la      x10, outbuf
+2A0100F9                                #     str     x10, [x9, #0]
+~label_next 09000090 !label_next 29010091 #     la      x9, label_next
+~labels 0A000090 !labels 4A010091       #     la      x10, labels
+2A0100F9                                #     str     x10, [x9, #0]
+~scopes 09000090 !scopes 29010091       #     la      x9, scopes                  // the page is the outermost scope
+3A0100F9                                #     str     x26, [x9, #0]
+~scope_depth 09000090 !scope_depth 29010091 #     la      x9, scope_depth
+2A0080D2                                #     mov     x10, #1
+2A0100F9                                #     str     x10, [x9, #0]
+E0031AAA                                #     mov     x0, x26
+^~run_placed 94                         #     bl      run_placed
+7B070091                                #     add     x27, x27, #1
+7F0F00F1                                #     cmp     x27, #3
+@assemble.1 01000054                    #     b.ne    1b
+:assemble.2 ^~write_output 94           # 2:  bl      write_output
+000080D2                                #     mov     x0, #0
+^~exit 14                               #     b       exit
+
+# The errors of loading (in ttpc.s within branch reach, 4 KiB, of _start
+# and parse_node).
+:usage                                  # usage:
+~msg_usage 01000090 !msg_usage 21000091 #     la      x1, msg_usage
+C20380D2                                #     mov     x2, #msg_usage_len
+^~die 14                                #     b       die
+:open_failed                            # open_failed:
+~msg_open 01000090 !msg_open 21000091   #     la      x1, msg_open
+E20280D2                                #     mov     x2, #msg_open_len
+^~die 14                                #     b       die
+:read_failed                            # read_failed:
+~msg_read 01000090 !msg_read 21000091   #     la      x1, msg_read
+420280D2                                #     mov     x2, #msg_read_len
+^~die 14                                #     b       die
+:too_large                              # too_large:
+~msg_large 01000090 !msg_large 21000091 #     la      x1, msg_large
+A20280D2                                #     mov     x2, #msg_large_len
+^~die 14                                #     b       die
+:truncated                              # truncated:
+~msg_truncated 01000090 !msg_truncated 21000091 #     la      x1, msg_truncated
+A20280D2                                #     mov     x2, #msg_truncated_len
+^~die 14                                #     b       die
+:trailing                               # trailing:
+~msg_trailing 01000090 !msg_trailing 21000091 #     la      x1, msg_trailing
+220580D2                                #     mov     x2, #msg_trailing_len
+^~die 14                                #     b       die
+
+# parse_node: reads the node at x19 into a new NODE, recursing on its
+# children, and leaves x19 just past it. Returns the NODE in x0.
+:parse_node                             # parse_node:
+FF8300D1                                #     sub     sp, sp, #32
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // this NODE
+F80B00F9                                #     str     x24, [sp, #16]              // next slot in its children array
+F90F00F9                                #     str     x25, [sp, #24]              // children left to parse
+
+69860091                                #     add     x9, x19, #33                // hash + children_len
+3F0114EB                                #     cmp     x9, x20
+@truncated 08000054                     #     b.hi    truncated
+F70315AA                                #     mov     x23, x21
+B5020191                                #     add     x21, x21, #NODE_size
+
+0A0480D2                                #     mov     x10, #32                    // copy the hash
+EB0317AA                                #     mov     x11, x23
+:parse_node.1 6C024039                  # 1:  ldrb    w12, [x19, #0]
+6C010039                                #     strb    w12, [x11, #NODE_hash]
+73060091                                #     add     x19, x19, #1
+6B050091                                #     add     x11, x11, #1
+4A0500D1                                #     sub     x10, x10, #1
+@parse_node.1 0A0000B5                  #     cbnz    x10, 1b
+
+79024039                                #     ldrb    w25, [x19, #0]
+73060091                                #     add     x19, x19, #1
+F9820039                                #     strb    w25, [x23, #NODE_children_len]
+F80316AA                                #     mov     x24, x22
+F81600F9                                #     str     x24, [x23, #NODE_children]
+29F37DD3                                #     lsl     x9, x25, #3
+D602098B                                #     add     x22, x22, x9
+:parse_node.2 @parse_node.3 190000B4    # 2:  cbz     x25, 3f
+^~parse_node 97                         #     bl      parse_node
+000300F9                                #     str     x0, [x24, #0]
+18230091                                #     add     x24, x24, #8
+390700D1                                #     sub     x25, x25, #1
+^~parse_node.2 17                       #     b       2b
+
+:parse_node.3 7F0214EB                  # 3:  cmp     x19, x20
+@truncated 02000054                     #     b.hs    truncated
+69024039                                #     ldrb    w9, [x19, #0]
+73060091                                #     add     x19, x19, #1
+E9C20039                                #     strb    w9, [x23, #NODE_content_len]
+F31E00F9                                #     str     x19, [x23, #NODE_content]
+7302098B                                #     add     x19, x19, x9
+7F0214EB                                #     cmp     x19, x20
+@truncated 08000054                     #     b.hi    truncated
+
+E00317AA                                #     mov     x0, x23
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FF830091                                #     add     sp, sp, #32
+C0035FD6                                #     ret
+
+# print_node: prints NODE x0 at depth x1 as "<hash[0..4] in hex>  <indent>
+# <content>", then its children one level deeper.
+:print_node                             # print_node:
+FFC300D1                                #     sub     sp, sp, #48
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // this NODE
+F80B00F9                                #     str     x24, [sp, #16]              // depth
+F90F00F9                                #     str     x25, [sp, #24]              // counter
+FA1300F9                                #     str     x26, [sp, #32]              // next child pointer
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+
+~hexbuf 09000090 !hexbuf 29010091       #     la      x9, hexbuf
+~hexdigits 0A000090 !hexdigits 4A010091 #     la      x10, hexdigits
+8B0080D2                                #     mov     x11, #4
+EC0317AA                                #     mov     x12, x23
+:print_node.1 8D014039                  # 1:  ldrb    w13, [x12, #NODE_hash]
+AEFD44D3                                #     lsr     x14, x13, #4
+4E010E8B                                #     add     x14, x10, x14
+CE014039                                #     ldrb    w14, [x14, #0]
+2E010039                                #     strb    w14, [x9, #0]
+AD0D4092                                #     and     x13, x13, #15
+4D010D8B                                #     add     x13, x10, x13
+AD014039                                #     ldrb    w13, [x13, #0]
+2D050039                                #     strb    w13, [x9, #1]
+29090091                                #     add     x9, x9, #2
+8C050091                                #     add     x12, x12, #1
+6B0500D1                                #     sub     x11, x11, #1
+@print_node.1 0B0000B5                  #     cbnz    x11, 1b
+~hexbuf 01000090 !hexbuf 21000091       #     la      x1, hexbuf
+420180D2                                #     mov     x2, #10
+^~write_out 94                          #     bl      write_out
+
+F90318AA                                #     mov     x25, x24
+:print_node.2 @print_node.3 190000B4    # 2:  cbz     x25, 3f
+~indent 01000090 !indent 21000091       #     la      x1, indent
+420080D2                                #     mov     x2, #2
+^~write_out 94                          #     bl      write_out
+390700D1                                #     sub     x25, x25, #1
+^~print_node.2 17                       #     b       2b
+
+:print_node.3 E11E40F9                  # 3:  ldr     x1, [x23, #NODE_content]
+E2C24039                                #     ldrb    w2, [x23, #NODE_content_len]
+^~write_out 94                          #     bl      write_out
+~newline 01000090 !newline 21000091     #     la      x1, newline
+220080D2                                #     mov     x2, #1
+^~write_out 94                          #     bl      write_out
+
+F9824039                                #     ldrb    w25, [x23, #NODE_children_len]
+FA1640F9                                #     ldr     x26, [x23, #NODE_children]
+:print_node.4 @print_node.5 190000B4    # 4:  cbz     x25, 5f
+400340F9                                #     ldr     x0, [x26, #0]
+01070091                                #     add     x1, x24, #1
+^~print_node 97                         #     bl      print_node
+5A230091                                #     add     x26, x26, #8
+390700D1                                #     sub     x25, x25, #1
+^~print_node.4 17                       #     b       4b
+
+:print_node.5 FE0340F9                  # 5:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FFC30091                                #     add     sp, sp, #48
+C0035FD6                                #     ret
+
+# ---------------------------------------------------------------------------
+# Names
+# ---------------------------------------------------------------------------
+
+# streq: x0 = 1 when the x1 bytes at x0 equal the x3 bytes at x2, else 0.
+:streq                                  # streq:
+3F0003EB                                #     cmp     x1, x3
+@streq.2 01000054                       #     b.ne    2f
+:streq.1 @streq.3 010000B4              # 1:  cbz     x1, 3f
+09004039                                #     ldrb    w9, [x0, #0]
+4A004039                                #     ldrb    w10, [x2, #0]
+3F010AEB                                #     cmp     x9, x10
+@streq.2 01000054                       #     b.ne    2f
+00040091                                #     add     x0, x0, #1
+42040091                                #     add     x2, x2, #1
+210400D1                                #     sub     x1, x1, #1
+^~streq.1 17                            #     b       1b
+:streq.2 000080D2                       # 2:  mov     x0, #0
+C0035FD6                                #     ret
+:streq.3 200080D2                       # 3:  mov     x0, #1
+C0035FD6                                #     ret
+
+# is_fn: x0 = 1 when NODE x0 is a function (its content ends in ':'), else 0.
+:is_fn                                  # is_fn:
+09C04039                                #     ldrb    w9, [x0, #NODE_content_len]
+@is_fn.1 090000B4                       #     cbz     x9, 1f
+0A1C40F9                                #     ldr     x10, [x0, #NODE_content]
+4A01098B                                #     add     x10, x10, x9
+4AF15F38                                #     ldrb    w10, [x10, #-1]
+4AE900F1                                #     subs    x10, x10, #CH_colon
+E0179F9A                                #     cset    x0, eq                      // seqz
+C0035FD6                                #     ret
+:is_fn.1 000080D2                       # 1:  mov     x0, #0
+C0035FD6                                #     ret
+
+# param_count: x0 = the number of parameters of function NODE x0: its
+# leading children that are leaves and no function.
+:param_count                            # param_count:
+FF8300D1                                #     sub     sp, sp, #32
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // children left
+F80B00F9                                #     str     x24, [sp, #16]              // next child
+F90F00F9                                #     str     x25, [sp, #24]              // count
+17804039                                #     ldrb    w23, [x0, #NODE_children_len]
+181440F9                                #     ldr     x24, [x0, #NODE_children]
+190080D2                                #     mov     x25, #0
+:param_count.1 @param_count.2 170000B4  # 1:  cbz     x23, 2f
+000340F9                                #     ldr     x0, [x24, #0]
+09804039                                #     ldrb    w9, [x0, #NODE_children_len]
+@param_count.2 090000B5                 #     cbnz    x9, 2f
+^~is_fn 97                              #     bl      is_fn
+@param_count.2 000000B5                 #     cbnz    x0, 2f
+39070091                                #     add     x25, x25, #1
+18230091                                #     add     x24, x24, #8
+F70600D1                                #     sub     x23, x23, #1
+^~param_count.1 17                      #     b       1b
+:param_count.2 E00319AA                 # 2:  mov     x0, x25
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FF830091                                #     add     sp, sp, #32
+C0035FD6                                #     ret
+
+# is_insn: x0 = 1 when function NODE x0 is an encoding (an instruction or
+# a data word), else 0: its body, the children after its parameters, is not
+# empty and holds only fields, fixed fields (functions) and slice calls (a
+# '[' in the name).
+:is_insn                                # is_insn:
+FF8300D1                                #     sub     sp, sp, #32
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // fields left
+F80B00F9                                #     str     x24, [sp, #16]              // next field
+F90F00F9                                #     str     x25, [sp, #24]              // the function
+F90300AA                                #     mov     x25, x0
+^~param_count 97                        #     bl      param_count
+37834039                                #     ldrb    w23, [x25, #NODE_children_len]
+F70200CB                                #     sub     x23, x23, x0
+381740F9                                #     ldr     x24, [x25, #NODE_children]
+00F07DD3                                #     lsl     x0, x0, #3
+1803008B                                #     add     x24, x24, x0
+000080D2                                #     mov     x0, #0
+@is_insn.3 170000B4                     #     cbz     x23, 3f
+:is_insn.1 200080D2                     # 1:  mov     x0, #1
+@is_insn.3 170000B4                     #     cbz     x23, 3f
+000340F9                                #     ldr     x0, [x24, #0]
+^~is_fn 97                              #     bl      is_fn
+@is_insn.2 000000B5                     #     cbnz    x0, 2f
+090340F9                                #     ldr     x9, [x24, #0]
+201D40F9                                #     ldr     x0, [x9, #NODE_content]
+21C14039                                #     ldrb    w1, [x9, #NODE_content_len]
+620B80D2                                #     mov     x2, #CH_lbracket
+^~has_byte 94                           #     bl      has_byte
+@is_insn.3 000000B4                     #     cbz     x0, 3f
+:is_insn.2 18230091                     # 2:  add     x24, x24, #8
+F70600D1                                #     sub     x23, x23, #1
+^~is_insn.1 17                          #     b       1b
+:is_insn.3 FE0340F9                     # 3:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FF830091                                #     add     sp, sp, #32
+C0035FD6                                #     ret
+
+# has_byte: x0 = 1 when byte x2 is among the x1 bytes at x0, else 0.
+:has_byte                               # has_byte:
+:has_byte.1 @has_byte.2 010000B4        # 1:  cbz     x1, 2f
+09004039                                #     ldrb    w9, [x0, #0]
+3F0102EB                                #     cmp     x9, x2
+@has_byte.3 00000054                    #     b.eq    3f
+00040091                                #     add     x0, x0, #1
+210400D1                                #     sub     x1, x1, #1
+^~has_byte.1 17                         #     b       1b
+:has_byte.2 000080D2                    # 2:  mov     x0, #0
+C0035FD6                                #     ret
+:has_byte.3 200080D2                    # 3:  mov     x0, #1
+C0035FD6                                #     ret
+
+# collect_syms: stores every function among the children of the pages of
+# root x0 in syms, but for the last page: the program, it is placed.
+:collect_syms                           # collect_syms:
+FF0301D1                                #     sub     sp, sp, #64
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // pages left
+F80B00F9                                #     str     x24, [sp, #16]              // next page
+F90F00F9                                #     str     x25, [sp, #24]              // next free slot in syms
+FA1300F9                                #     str     x26, [sp, #32]              // children of the page left
+FB1700F9                                #     str     x27, [sp, #40]              // next child
+17804039                                #     ldrb    w23, [x0, #NODE_children_len]
+181440F9                                #     ldr     x24, [x0, #NODE_children]
+~syms 19000090 !syms 39030091           #     la      x25, syms
+@collect_syms.4 170000B4                #     cbz     x23, 4f
+F70600D1                                #     sub     x23, x23, #1                // not the last page: it is placed
+:collect_syms.1 @collect_syms.4 170000B4 # 1:  cbz     x23, 4f
+090340F9                                #     ldr     x9, [x24, #0]
+3A814039                                #     ldrb    w26, [x9, #NODE_children_len]
+3B1540F9                                #     ldr     x27, [x9, #NODE_children]
+:collect_syms.2 @collect_syms.3 1A0000B4 # 2:  cbz     x26, 3f
+600340F9                                #     ldr     x0, [x27, #0]
+^~is_fn 97                              #     bl      is_fn
+@collect_syms.5 000000B4                #     cbz     x0, 5f
+690340F9                                #     ldr     x9, [x27, #0]
+290300F9                                #     str     x9, [x25, #0]
+39230091                                #     add     x25, x25, #8
+:collect_syms.5 7B230091                # 5:  add     x27, x27, #8
+5A0700D1                                #     sub     x26, x26, #1
+^~collect_syms.2 17                     #     b       2b
+:collect_syms.3 18230091                # 3:  add     x24, x24, #8
+F70600D1                                #     sub     x23, x23, #1
+^~collect_syms.1 17                     #     b       1b
+:collect_syms.4 ~syms_end 09000090 !syms_end 29010091 # 4:  la      x9, syms_end
+390100F9                                #     str     x25, [x9, #0]
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FF030191                                #     add     sp, sp, #64
+C0035FD6                                #     ret
+
+# find_fn: x0 = the function named by the x1 bytes at x0 (its content
+# without the ':'), or 0.
+:find_fn                                # find_fn:
+FFC300D1                                #     sub     sp, sp, #48
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // next sym
+F80B00F9                                #     str     x24, [sp, #16]              // end of syms
+F90F00F9                                #     str     x25, [sp, #24]              // name
+FA1300F9                                #     str     x26, [sp, #32]              // name length
+F90300AA                                #     mov     x25, x0
+FA0301AA                                #     mov     x26, x1
+~syms 17000090 !syms F7020091           #     la      x23, syms
+~syms_end 18000090 !syms_end 18030091   #     la      x24, syms_end
+180340F9                                #     ldr     x24, [x24, #0]
+:find_fn.1 000080D2                     # 1:  mov     x0, #0
+FF0218EB                                #     cmp     x23, x24
+@find_fn.2 00000054                     #     b.eq    2f
+E90240F9                                #     ldr     x9, [x23, #0]
+221D40F9                                #     ldr     x2, [x9, #NODE_content]
+23C14039                                #     ldrb    w3, [x9, #NODE_content_len]
+630400D1                                #     sub     x3, x3, #1
+E00319AA                                #     mov     x0, x25
+E1031AAA                                #     mov     x1, x26
+^~streq 97                              #     bl      streq
+F7220091                                #     add     x23, x23, #8
+@find_fn.1 000000B4                     #     cbz     x0, 1b
+E0825FF8                                #     ldr     x0, [x23, #-8]
+:find_fn.2 FE0340F9                     # 2:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FFC30091                                #     add     sp, sp, #48
+C0035FD6                                #     ret
+
+# find_reg: x0 = the number of the register named by the x1 bytes at x0, or
+# -1. A register is a function of two words, "x10 a0:", either one is its
+# name; its number is the bits of its child.
+:find_reg                               # find_reg:
+FF4301D1                                #     sub     sp, sp, #80
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // next sym
+F80B00F9                                #     str     x24, [sp, #16]              // end of syms
+F90F00F9                                #     str     x25, [sp, #24]              // name
+FA1300F9                                #     str     x26, [sp, #32]              // name length
+FB1700F9                                #     str     x27, [sp, #40]              // the sym
+FC1B00F9                                #     str     x28, [sp, #48]              // its content
+FD1F00F9                                #     str     x29, [sp, #56]              // its length without the ':'
+F22300F9                                #     str     x18, [sp, #64]              // length of its first word
+F90300AA                                #     mov     x25, x0
+FA0301AA                                #     mov     x26, x1
+~syms 17000090 !syms F7020091           #     la      x23, syms
+~syms_end 18000090 !syms_end 18030091   #     la      x24, syms_end
+180340F9                                #     ldr     x24, [x24, #0]
+:find_reg.1 FF0218EB                    # 1:  cmp     x23, x24
+@find_reg.5 00000054                    #     b.eq    5f
+FB0240F9                                #     ldr     x27, [x23, #0]
+F7220091                                #     add     x23, x23, #8
+69834039                                #     ldrb    w9, [x27, #NODE_children_len]
+@find_reg.1 090000B4                    #     cbz     x9, 1b
+7C1F40F9                                #     ldr     x28, [x27, #NODE_content]
+7DC34039                                #     ldrb    w29, [x27, #NODE_content_len]
+BD0700D1                                #     sub     x29, x29, #1
+120080D2                                #     mov     x18, #0                     // find the space
+:find_reg.2 5F021DEB                    # 2:  cmp     x18, x29
+@find_reg.1 00000054                    #     b.eq    1b
+8903128B                                #     add     x9, x28, x18
+29014039                                #     ldrb    w9, [x9, #0]
+3F8100F1                                #     cmp     x9, #CH_space
+@find_reg.3 00000054                    #     b.eq    3f
+52060091                                #     add     x18, x18, #1
+^~find_reg.2 17                         #     b       2b
+:find_reg.3 E00319AA                    # 3:  mov     x0, x25
+E1031AAA                                #     mov     x1, x26
+E2031CAA                                #     mov     x2, x28
+E30312AA                                #     mov     x3, x18
+^~streq 97                              #     bl      streq
+@find_reg.4 000000B5                    #     cbnz    x0, 4f
+E00319AA                                #     mov     x0, x25
+E1031AAA                                #     mov     x1, x26
+8203128B                                #     add     x2, x28, x18
+42040091                                #     add     x2, x2, #1
+A30312CB                                #     sub     x3, x29, x18
+630400D1                                #     sub     x3, x3, #1
+^~streq 97                              #     bl      streq
+@find_reg.1 000000B4                    #     cbz     x0, 1b
+:find_reg.4 691740F9                    # 4:  ldr     x9, [x27, #NODE_children]
+290140F9                                #     ldr     x9, [x9, #0]
+201D40F9                                #     ldr     x0, [x9, #NODE_content]
+21C14039                                #     ldrb    w1, [x9, #NODE_content_len]
+^~parse_bits 94                         #     bl      parse_bits
+^~find_reg.6 14                         #     b       6f
+:find_reg.5 00008092                    # 5:  mov     x0, #-1
+:find_reg.6 FE0340F9                    # 6:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FC1B40F9                                #     ldr     x28, [sp, #48]
+FD1F40F9                                #     ldr     x29, [sp, #56]
+F22340F9                                #     ldr     x18, [sp, #64]
+FF430191                                #     add     sp, sp, #80
+C0035FD6                                #     ret
+
+# ---------------------------------------------------------------------------
+# Numbers
+# ---------------------------------------------------------------------------
+
+# parse_bits: x0 = the x1 binary digits at x0 ("0010011") as a number.
+:parse_bits                             # parse_bits:
+090080D2                                #     mov     x9, #0
+:parse_bits.1 @parse_bits.2 010000B4    # 1:  cbz     x1, 2f
+0A004039                                #     ldrb    w10, [x0, #0]
+4AC100D1                                #     sub     x10, x10, #CH_zero
+29F97FD3                                #     lsl     x9, x9, #1
+29010AAA                                #     orr     x9, x9, x10
+00040091                                #     add     x0, x0, #1
+210400D1                                #     sub     x1, x1, #1
+^~parse_bits.1 17                       #     b       1b
+:parse_bits.2 E00309AA                  # 2:  mov     x0, x9
+C0035FD6                                #     ret
+
+# parse_dec: reads the decimal digits from x0 up to at most x1; x0 = their
+# value, x1 = just past them.
+:parse_dec                              # parse_dec:
+090080D2                                #     mov     x9, #0
+4B0180D2                                #     mov     x11, #10
+:parse_dec.1 1F0001EB                   # 1:  cmp     x0, x1
+@parse_dec.2 00000054                   #     b.eq    2f
+0A004039                                #     ldrb    w10, [x0, #0]
+4AC100D1                                #     sub     x10, x10, #CH_zero
+5F010BEB                                #     cmp     x10, x11
+@parse_dec.2 02000054                   #     b.hs    2f
+297D0B9B                                #     mul     x9, x9, x11
+29010A8B                                #     add     x9, x9, x10
+00040091                                #     add     x0, x0, #1
+^~parse_dec.1 17                        #     b       1b
+:parse_dec.2 E10300AA                   # 2:  mov     x1, x0
+E00309AA                                #     mov     x0, x9
+C0035FD6                                #     ret
+
+# parse_hex: reads the hex digits (0-9, a-f) from x0 up to at most x1;
+# x0 = their value, x1 = just past them.
+:parse_hex                              # parse_hex:
+090080D2                                #     mov     x9, #0
+:parse_hex.1 1F0001EB                   # 1:  cmp     x0, x1
+@parse_hex.3 00000054                   #     b.eq    3f
+0A004039                                #     ldrb    w10, [x0, #0]
+4BC100D1                                #     sub     x11, x10, #CH_zero
+4C0180D2                                #     mov     x12, #10
+7F010CEB                                #     cmp     x11, x12
+@parse_hex.2 03000054                   #     b.lo    2f
+4B8501D1                                #     sub     x11, x10, #CH_a
+CC0080D2                                #     mov     x12, #6
+7F010CEB                                #     cmp     x11, x12
+@parse_hex.3 02000054                   #     b.hs    3f
+6B290091                                #     add     x11, x11, #10
+:parse_hex.2 29ED7CD3                   # 2:  lsl     x9, x9, #4
+29010BAA                                #     orr     x9, x9, x11
+00040091                                #     add     x0, x0, #1
+^~parse_hex.1 17                        #     b       1b
+:parse_hex.3 E10300AA                   # 3:  mov     x1, x0
+E00309AA                                #     mov     x0, x9
+C0035FD6                                #     ret
+
+# parse_num: x0 = the x1 bytes at x0 as a number, decimal or 0x hex, with
+# an optional '-', and x1 = 1; or x1 = 0 when they are no number.
+:parse_num                              # parse_num:
+FF8300D1                                #     sub     sp, sp, #32
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // negative?
+F80B00F9                                #     str     x24, [sp, #16]              // first digit
+F90F00F9                                #     str     x25, [sp, #24]              // end
+0100018B                                #     add     x1, x0, x1
+F90301AA                                #     mov     x25, x1
+170080D2                                #     mov     x23, #0
+1F0001EB                                #     cmp     x0, x1
+@parse_num.2 00000054                   #     b.eq    2f
+09004039                                #     ldrb    w9, [x0, #0]
+3FB500F1                                #     cmp     x9, #CH_minus
+@parse_num.1 01000054                   #     b.ne    1f
+370080D2                                #     mov     x23, #1
+00040091                                #     add     x0, x0, #1
+:parse_num.1 F80300AA                   # 1:  mov     x24, x0
+290000CB                                #     sub     x9, x1, x0                  // 0x and a digit at least?
+3F0D00F1                                #     cmp     x9, #3
+@parse_num.5 0B000054                   #     b.lt    5f
+09004039                                #     ldrb    w9, [x0, #0]
+3FC100F1                                #     cmp     x9, #CH_zero
+@parse_num.5 01000054                   #     b.ne    5f
+09044039                                #     ldrb    w9, [x0, #1]
+3FE101F1                                #     cmp     x9, #CH_x
+@parse_num.5 01000054                   #     b.ne    5f
+00080091                                #     add     x0, x0, #2
+180B0091                                #     add     x24, x24, #2
+^~parse_hex 97                          #     bl      parse_hex
+^~parse_num.6 14                        #     b       6f
+:parse_num.5 ^~parse_dec 97             # 5:  bl      parse_dec
+:parse_num.6 3F0018EB                   # 6:  cmp     x1, x24                     // no digits
+@parse_num.2 00000054                   #     b.eq    2f
+3F0019EB                                #     cmp     x1, x25                     // something after them
+@parse_num.2 01000054                   #     b.ne    2f
+@parse_num.3 170000B4                   #     cbz     x23, 3f
+E00300CB                                #     neg     x0, x0
+:parse_num.3 210080D2                   # 3:  mov     x1, #1
+^~parse_num.4 14                        #     b       4f
+:parse_num.2 010080D2                   # 2:  mov     x1, #0
+:parse_num.4 FE0340F9                   # 4:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FF830091                                #     add     sp, sp, #32
+C0035FD6                                #     ret
+
+# slice_width: x0 = the width of the slice named by the x1 bytes at x0: the
+# sum of hi-lo+1 over the segments of "imm[20|10:1|11|19:12]".
+:slice_width                            # slice_width:
+FF0301D1                                #     sub     sp, sp, #64
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // cursor
+F80B00F9                                #     str     x24, [sp, #16]              // end
+F90F00F9                                #     str     x25, [sp, #24]              // name
+FA1300F9                                #     str     x26, [sp, #32]              // name length
+FB1700F9                                #     str     x27, [sp, #40]              // width
+F90300AA                                #     mov     x25, x0
+FA0301AA                                #     mov     x26, x1
+F70300AA                                #     mov     x23, x0
+1800018B                                #     add     x24, x0, x1
+1B0080D2                                #     mov     x27, #0
+:slice_width.1 FF0218EB                 # 1:  cmp     x23, x24                    // skip to just past the '['
+@slice_width.9 00000054                 #     b.eq    9f
+E9024039                                #     ldrb    w9, [x23, #0]
+F7060091                                #     add     x23, x23, #1
+3F6D01F1                                #     cmp     x9, #CH_lbracket
+@slice_width.1 01000054                 #     b.ne    1b
+:slice_width.2 E00317AA                 # 2:  mov     x0, x23                     // a segment: hi or hi:lo
+E10318AA                                #     mov     x1, x24
+^~parse_dec 97                          #     bl      parse_dec
+3F0017EB                                #     cmp     x1, x23
+@slice_width.9 00000054                 #     b.eq    9f
+F70301AA                                #     mov     x23, x1
+7B070091                                #     add     x27, x27, #1
+FF0218EB                                #     cmp     x23, x24
+@slice_width.9 00000054                 #     b.eq    9f
+E9024039                                #     ldrb    w9, [x23, #0]
+3FE900F1                                #     cmp     x9, #CH_colon
+@slice_width.3 01000054                 #     b.ne    3f
+E01B00F9                                #     str     x0, [sp, #48]               // hi
+F7060091                                #     add     x23, x23, #1
+E00317AA                                #     mov     x0, x23
+E10318AA                                #     mov     x1, x24
+^~parse_dec 97                          #     bl      parse_dec
+3F0017EB                                #     cmp     x1, x23
+@slice_width.9 00000054                 #     b.eq    9f
+F70301AA                                #     mov     x23, x1
+E91B40F9                                #     ldr     x9, [sp, #48]
+290100CB                                #     sub     x9, x9, x0
+7B03098B                                #     add     x27, x27, x9
+FF0218EB                                #     cmp     x23, x24
+@slice_width.9 00000054                 #     b.eq    9f
+E9024039                                #     ldrb    w9, [x23, #0]
+:slice_width.3 F7060091                 # 3:  add     x23, x23, #1
+3FF101F1                                #     cmp     x9, #CH_bar
+@slice_width.2 00000054                 #     b.eq    2b
+3F7501F1                                #     cmp     x9, #CH_rbracket
+@slice_width.9 01000054                 #     b.ne    9f
+FF0218EB                                #     cmp     x23, x24
+@slice_width.9 01000054                 #     b.ne    9f
+E0031BAA                                #     mov     x0, x27
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FF030191                                #     add     sp, sp, #64
+C0035FD6                                #     ret
+:slice_width.9 ~msg_slice 01000090 !msg_slice 21000091 # 9:  la      x1, msg_slice
+220280D2                                #     mov     x2, #msg_slice_len
+E30319AA                                #     mov     x3, x25
+E4031AAA                                #     mov     x4, x26
+^~die_name 14                           #     b       die_name
+
+# ---------------------------------------------------------------------------
+# Calls
+# ---------------------------------------------------------------------------
+
+# frame_lookup: looks up the parameter named by the x2 bytes at x1 in frame
+# x0 (0: none). x0 = 1 and x1 = its value when found, else x0 = 0.
+:frame_lookup                           # frame_lookup:
+FFC300D1                                #     sub     sp, sp, #48
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // pairs left
+F80B00F9                                #     str     x24, [sp, #16]              // next pair
+F90F00F9                                #     str     x25, [sp, #24]              // name
+FA1300F9                                #     str     x26, [sp, #32]              // name length
+@frame_lookup.2 000000B4                #     cbz     x0, 2f
+F90301AA                                #     mov     x25, x1
+FA0302AA                                #     mov     x26, x2
+170040F9                                #     ldr     x23, [x0, #FRAME_count]
+18200091                                #     add     x24, x0, #FRAME_params
+:frame_lookup.1 @frame_lookup.2 170000B4 # 1:  cbz     x23, 2f
+090340F9                                #     ldr     x9, [x24, #0]
+221D40F9                                #     ldr     x2, [x9, #NODE_content]
+23C14039                                #     ldrb    w3, [x9, #NODE_content_len]
+E00319AA                                #     mov     x0, x25
+E1031AAA                                #     mov     x1, x26
+^~streq 97                              #     bl      streq
+@frame_lookup.3 000000B5                #     cbnz    x0, 3f
+18430091                                #     add     x24, x24, #16
+F70600D1                                #     sub     x23, x23, #1
+^~frame_lookup.1 17                     #     b       1b
+:frame_lookup.2 000080D2                # 2:  mov     x0, #0
+^~frame_lookup.4 14                     #     b       4f
+:frame_lookup.3 010740F9                # 3:  ldr     x1, [x24, #8]
+:frame_lookup.4 FE0340F9                # 4:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FFC30091                                #     add     sp, sp, #48
+C0035FD6                                #     ret
+
+# eval_arg: x0 = the value of argument NODE x1 in frame x0, in context x2
+# (0 code, 1 exec). An argument with children is a call that runs in exec
+# context, its value is what it leaves in a0. A leaf is, in this order: a
+# decimal or 0x number, a parameter, a register (its number in code
+# context, its vreg in exec context), pc (the address being assembled), a
+# label (its address) or a constant (a function without parameters, run in
+# exec context).
+:eval_arg                               # eval_arg:
+FF0301D1                                #     sub     sp, sp, #64
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // frame
+F80B00F9                                #     str     x24, [sp, #16]              // the argument
+F90F00F9                                #     str     x25, [sp, #24]              // context
+FA1300F9                                #     str     x26, [sp, #32]              // its name
+FB1700F9                                #     str     x27, [sp, #40]              // name length
+FC1B00F9                                #     str     x28, [sp, #48]              // a function of that name
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+F90302AA                                #     mov     x25, x2
+09834039                                #     ldrb    w9, [x24, #NODE_children_len]
+@eval_arg.1 090000B4                    #     cbz     x9, 1f
+E00318AA                                #     mov     x0, x24                     // a call
+E10317AA                                #     mov     x1, x23
+^~exec_call 94                          #     bl      exec_call
+^~eval_arg.7 14                         #     b       7f
+:eval_arg.1 1A1F40F9                    # 1:  ldr     x26, [x24, #NODE_content]
+1BC34039                                #     ldrb    w27, [x24, #NODE_content_len]
+E0031AAA                                #     mov     x0, x26
+E1031BAA                                #     mov     x1, x27
+^~parse_num 97                          #     bl      parse_num
+@eval_arg.9 010000B5                    #     cbnz    x1, 9f
+E00317AA                                #     mov     x0, x23
+E1031AAA                                #     mov     x1, x26
+E2031BAA                                #     mov     x2, x27
+^~frame_lookup 97                       #     bl      frame_lookup
+@eval_arg.2 000000B4                    #     cbz     x0, 2f
+E00301AA                                #     mov     x0, x1
+^~eval_arg.9 14                         #     b       9f
+:eval_arg.2 E0031AAA                    # 2:  mov     x0, x26
+E1031BAA                                #     mov     x1, x27
+^~find_reg 97                           #     bl      find_reg
+1F0000F1                                #     cmp     x0, #0
+@eval_arg.3 0B000054                    #     b.lt    3f
+@eval_arg.9 190000B4                    #     cbz     x25, 9f
+~vregs 09000090 !vregs 29010091         #     la      x9, vregs
+00F07DD3                                #     lsl     x0, x0, #3
+2901008B                                #     add     x9, x9, x0
+200140F9                                #     ldr     x0, [x9, #0]
+^~eval_arg.9 14                         #     b       9f
+:eval_arg.3 E0031AAA                    # 3:  mov     x0, x26
+E1031BAA                                #     mov     x1, x27
+~str_pc 02000090 !str_pc 42000091       #     la      x2, str_pc
+430080D2                                #     mov     x3, #2
+^~streq 97                              #     bl      streq
+@eval_arg.4 000000B4                    #     cbz     x0, 4f
+~cur_pc 09000090 !cur_pc 29010091       #     la      x9, cur_pc
+200140F9                                #     ldr     x0, [x9, #0]
+^~eval_arg.9 14                         #     b       9f
+:eval_arg.4 E0031AAA                    # 4:  mov     x0, x26
+E1031BAA                                #     mov     x1, x27
+^~find_label 94                         #     bl      find_label
+@eval_arg.5 000000B4                    #     cbz     x0, 5f
+^~label_addr 94                         #     bl      label_addr
+^~eval_arg.9 14                         #     b       9f
+:eval_arg.5 E0031AAA                    # 5:  mov     x0, x26
+E1031BAA                                #     mov     x1, x27
+^~find_fn 97                            #     bl      find_fn
+@eval_arg.8 000000B4                    #     cbz     x0, 8f
+FC0300AA                                #     mov     x28, x0
+^~is_insn 97                            #     bl      is_insn
+@eval_arg.8 000000B5                    #     cbnz    x0, 8f
+E0031CAA                                #     mov     x0, x28
+^~param_count 97                        #     bl      param_count
+@eval_arg.8 000000B5                    #     cbnz    x0, 8f
+E00318AA                                #     mov     x0, x24                     // a constant
+E10317AA                                #     mov     x1, x23
+^~exec_call 94                          #     bl      exec_call
+:eval_arg.7 ~vregs 09000090 !vregs 29010091 # 7:  la      x9, vregs
+202940F9                                #     ldr     x0, [x9, #VREG_a0*8]
+:eval_arg.9 FE0340F9                    # 9:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FC1B40F9                                #     ldr     x28, [sp, #48]
+FF030191                                #     add     sp, sp, #64
+C0035FD6                                #     ret
+:eval_arg.8 ~msg_name 01000090 !msg_name 21000091 # 8:  la      x1, msg_name
+820280D2                                #     mov     x2, #msg_name_len
+E3031AAA                                #     mov     x3, x26
+E4031BAA                                #     mov     x4, x27
+^~die_name 14                           #     b       die_name
+
+# bind: fills frame x4 for call x1 of function x0: each parameter with the
+# value of its argument, evaluated in frame x2 and context x3.
+:bind                                   # bind:
+FF0301D1                                #     sub     sp, sp, #64
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // next parameter
+F80B00F9                                #     str     x24, [sp, #16]              // next argument
+F90F00F9                                #     str     x25, [sp, #24]              // caller's frame
+FA1300F9                                #     str     x26, [sp, #32]              // context
+FB1700F9                                #     str     x27, [sp, #40]              // next pair in the new frame
+FC1B00F9                                #     str     x28, [sp, #48]              // parameters left
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+F90302AA                                #     mov     x25, x2
+FA0303AA                                #     mov     x26, x3
+FB0304AA                                #     mov     x27, x4
+^~param_count 97                        #     bl      param_count
+FC0300AA                                #     mov     x28, x0
+09834039                                #     ldrb    w9, [x24, #NODE_children_len]
+~msg_args 01000090 !msg_args 21000091   #     la      x1, msg_args
+220480D2                                #     mov     x2, #msg_args_len
+3F011CEB                                #     cmp     x9, x28
+@bind.3 01000054                        #     b.ne    3f
+090180D2                                #     mov     x9, #MAX_PARAMS
+~msg_params 01000090 !msg_params 21000091 #     la      x1, msg_params
+620380D2                                #     mov     x2, #msg_params_len
+9F0309EB                                #     cmp     x28, x9
+@bind.3 08000054                        #     b.hi    3f
+7C0300F9                                #     str     x28, [x27, #FRAME_count]
+7B230091                                #     add     x27, x27, #FRAME_params
+F71640F9                                #     ldr     x23, [x23, #NODE_children]
+181740F9                                #     ldr     x24, [x24, #NODE_children]
+:bind.1 @bind.2 1C0000B4                # 1:  cbz     x28, 2f
+E90240F9                                #     ldr     x9, [x23, #0]
+690300F9                                #     str     x9, [x27, #0]
+E00319AA                                #     mov     x0, x25
+010340F9                                #     ldr     x1, [x24, #0]
+E2031AAA                                #     mov     x2, x26
+^~eval_arg 97                           #     bl      eval_arg
+600700F9                                #     str     x0, [x27, #8]
+F7220091                                #     add     x23, x23, #8
+18230091                                #     add     x24, x24, #8
+7B430091                                #     add     x27, x27, #16
+9C0700D1                                #     sub     x28, x28, #1
+^~bind.1 17                             #     b       1b
+:bind.2 FE0340F9                        # 2:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FC1B40F9                                #     ldr     x28, [sp, #48]
+FF030191                                #     add     sp, sp, #64
+C0035FD6                                #     ret
+:bind.3 031F40F9                        # 3:  ldr     x3, [x24, #NODE_content]
+04C34039                                #     ldrb    w4, [x24, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+
+# run_body: calls x2 (code_call or exec_call) with frame x1 on each child
+# of NODE x0 from child x3 on, skipping the functions (definitions).
+:run_body                               # run_body:
+FFC300D1                                #     sub     sp, sp, #48
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // children left
+F80B00F9                                #     str     x24, [sp, #16]              // next child
+F90F00F9                                #     str     x25, [sp, #24]              // frame
+FA1300F9                                #     str     x26, [sp, #32]              // handler
+17804039                                #     ldrb    w23, [x0, #NODE_children_len]
+F70203CB                                #     sub     x23, x23, x3
+181440F9                                #     ldr     x24, [x0, #NODE_children]
+69F07DD3                                #     lsl     x9, x3, #3
+1803098B                                #     add     x24, x24, x9
+F90301AA                                #     mov     x25, x1
+FA0302AA                                #     mov     x26, x2
+:run_body.1 @run_body.3 170000B4        # 1:  cbz     x23, 3f
+000340F9                                #     ldr     x0, [x24, #0]
+^~is_fn 97                              #     bl      is_fn
+@run_body.2 000000B5                    #     cbnz    x0, 2f
+000340F9                                #     ldr     x0, [x24, #0]
+E10319AA                                #     mov     x1, x25
+40033FD6                                #     blr     x26
+:run_body.2 18230091                    # 2:  add     x24, x24, #8
+F70600D1                                #     sub     x23, x23, #1
+^~run_body.1 17                         #     b       1b
+:run_body.3 FE0340F9                    # 3:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FFC30091                                #     add     sp, sp, #48
+C0035FD6                                #     ret
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+
+# run_placed: runs the children of NODE x0, the program page or a placed
+# function, in order: a function is placed, a call runs in code context.
+:run_placed                             # run_placed:
+FF8300D1                                #     sub     sp, sp, #32
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // children left
+F80B00F9                                #     str     x24, [sp, #16]              // next child
+17804039                                #     ldrb    w23, [x0, #NODE_children_len]
+181440F9                                #     ldr     x24, [x0, #NODE_children]
+:run_placed.1 @run_placed.4 170000B4    # 1:  cbz     x23, 4f
+000340F9                                #     ldr     x0, [x24, #0]
+^~is_fn 97                              #     bl      is_fn
+@run_placed.2 000000B4                  #     cbz     x0, 2f
+000340F9                                #     ldr     x0, [x24, #0]
+^~place 94                              #     bl      place
+^~run_placed.3 14                       #     b       3f
+:run_placed.2 000340F9                  # 2:  ldr     x0, [x24, #0]
+010080D2                                #     mov     x1, #0                      // no frame: placed code has no parameters
+^~code_call 94                          #     bl      code_call
+:run_placed.3 18230091                  # 3:  add     x24, x24, #8
+F70600D1                                #     sub     x23, x23, #1
+^~run_placed.1 17                       #     b       1b
+:run_placed.4 FE0340F9                  # 4:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+FF830091                                #     add     sp, sp, #32
+C0035FD6                                #     ret
+
+# place: places function x0 at cur_pc. Pass 1 adds it to labels, pass 2
+# checks that it is still there; then its children run in its scope, and
+# its end is recorded.
+:place                                  # place:
+FF8300D1                                #     sub     sp, sp, #32
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // the function
+F80B00F9                                #     str     x24, [sp, #16]              // its LABEL
+F70300AA                                #     mov     x23, x0
+~scope_depth 09000090 !scope_depth 29010091 #     la      x9, scope_depth             // push its scope
+2A0140F9                                #     ldr     x10, [x9, #0]
+0B0880D2                                #     mov     x11, #MAX_DEPTH
+5F010BEB                                #     cmp     x10, x11
+@place.3 00000054                       #     b.eq    3f
+~scopes 0B000090 !scopes 6B010091       #     la      x11, scopes
+4CF17DD3                                #     lsl     x12, x10, #3
+6B010C8B                                #     add     x11, x11, x12
+770100F9                                #     str     x23, [x11, #0]
+4A050091                                #     add     x10, x10, #1
+2A0100F9                                #     str     x10, [x9, #0]
+~cur_pc 0D000090 !cur_pc AD010091       #     la      x13, cur_pc
+AD0140F9                                #     ldr     x13, [x13, #0]
+~pass 09000090 !pass 29010091           #     la      x9, pass
+290140F9                                #     ldr     x9, [x9, #0]
+2A0080D2                                #     mov     x10, #1
+3F010AEB                                #     cmp     x9, x10
+@place.1 01000054                       #     b.ne    1f
+~labels_end 09000090 !labels_end 29010091 #     la      x9, labels_end              // pass 1: a new label
+380140F9                                #     ldr     x24, [x9, #0]
+0A630091                                #     add     x10, x24, #LABEL_size
+2A0100F9                                #     str     x10, [x9, #0]
+170300F9                                #     str     x23, [x24, #LABEL_node]
+0D0700F9                                #     str     x13, [x24, #LABEL_addr]
+^~place.2 14                            #     b       2f
+:place.1 ~label_next 09000090 !label_next 29010091 # 1:  la      x9, label_next              // pass 2: the same, at the same place
+380140F9                                #     ldr     x24, [x9, #0]
+0A630091                                #     add     x10, x24, #LABEL_size
+2A0100F9                                #     str     x10, [x9, #0]
+0A0340F9                                #     ldr     x10, [x24, #LABEL_node]
+5F0117EB                                #     cmp     x10, x23
+@place.4 01000054                       #     b.ne    4f
+0A0740F9                                #     ldr     x10, [x24, #LABEL_addr]
+5F010DEB                                #     cmp     x10, x13
+@place.4 01000054                       #     b.ne    4f
+:place.2 E00317AA                       # 2:  mov     x0, x23
+^~run_placed 97                         #     bl      run_placed
+~cur_pc 09000090 !cur_pc 29010091       #     la      x9, cur_pc
+290140F9                                #     ldr     x9, [x9, #0]
+090B00F9                                #     str     x9, [x24, #LABEL_end]
+~scope_depth 09000090 !scope_depth 29010091 #     la      x9, scope_depth
+2A0140F9                                #     ldr     x10, [x9, #0]
+4A0500D1                                #     sub     x10, x10, #1
+2A0100F9                                #     str     x10, [x9, #0]
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+FF830091                                #     add     sp, sp, #32
+C0035FD6                                #     ret
+:place.3 ~msg_depth 01000090 !msg_depth 21000091 # 3:  la      x1, msg_depth
+E20280D2                                #     mov     x2, #msg_depth_len
+^~place.5 14                            #     b       5f
+:place.4 ~msg_moved 01000090 !msg_moved 21000091 # 4:  la      x1, msg_moved
+C20480D2                                #     mov     x2, #msg_moved_len
+:place.5 E31E40F9                       # 5:  ldr     x3, [x23, #NODE_content]
+E4C24039                                #     ldrb    w4, [x23, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+
+# find_label: x0 = the placed function named by the x1 bytes at x0, or 0:
+# among the functions in the innermost scope first, then outward to the
+# program page.
+:find_label                             # find_label:
+FFC300D1                                #     sub     sp, sp, #48
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // name
+F80B00F9                                #     str     x24, [sp, #16]              // name length
+F90F00F9                                #     str     x25, [sp, #24]              // just past the scope being searched
+FA1300F9                                #     str     x26, [sp, #32]              // its children left
+FB1700F9                                #     str     x27, [sp, #40]              // next child
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+~scope_depth 09000090 !scope_depth 29010091 #     la      x9, scope_depth
+290140F9                                #     ldr     x9, [x9, #0]
+29F17DD3                                #     lsl     x9, x9, #3
+~scopes 19000090 !scopes 39030091       #     la      x25, scopes
+3903098B                                #     add     x25, x25, x9
+:find_label.1 ~scopes 09000090 !scopes 29010091 # 1:  la      x9, scopes
+3F0309EB                                #     cmp     x25, x9
+@find_label.4 00000054                  #     b.eq    4f
+392300D1                                #     sub     x25, x25, #8
+290340F9                                #     ldr     x9, [x25, #0]
+3A814039                                #     ldrb    w26, [x9, #NODE_children_len]
+3B1540F9                                #     ldr     x27, [x9, #NODE_children]
+:find_label.2 @find_label.1 1A0000B4    # 2:  cbz     x26, 1b
+600340F9                                #     ldr     x0, [x27, #0]
+^~is_fn 97                              #     bl      is_fn
+@find_label.3 000000B4                  #     cbz     x0, 3f
+690340F9                                #     ldr     x9, [x27, #0]
+221D40F9                                #     ldr     x2, [x9, #NODE_content]
+23C14039                                #     ldrb    w3, [x9, #NODE_content_len]
+630400D1                                #     sub     x3, x3, #1
+E00317AA                                #     mov     x0, x23
+E10318AA                                #     mov     x1, x24
+^~streq 97                              #     bl      streq
+@find_label.3 000000B4                  #     cbz     x0, 3f
+600340F9                                #     ldr     x0, [x27, #0]
+^~find_label.5 14                       #     b       5f
+:find_label.3 7B230091                  # 3:  add     x27, x27, #8
+5A0700D1                                #     sub     x26, x26, #1
+^~find_label.2 17                       #     b       2b
+:find_label.4 000080D2                  # 4:  mov     x0, #0
+:find_label.5 FE0340F9                  # 5:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FFC30091                                #     add     sp, sp, #48
+C0035FD6                                #     ret
+
+# label_entry: x0 = the LABEL of placed function x0, or 0 when pass 1 has
+# not met it yet.
+:label_entry                            # label_entry:
+~labels 09000090 !labels 29010091       #     la      x9, labels
+~labels_end 0A000090 !labels_end 4A010091 #     la      x10, labels_end
+4A0140F9                                #     ldr     x10, [x10, #0]
+:label_entry.1 3F010AEB                 # 1:  cmp     x9, x10
+@label_entry.2 00000054                 #     b.eq    2f
+2B0140F9                                #     ldr     x11, [x9, #LABEL_node]
+7F0100EB                                #     cmp     x11, x0
+@label_entry.3 00000054                 #     b.eq    3f
+29610091                                #     add     x9, x9, #LABEL_size
+^~label_entry.1 17                      #     b       1b
+:label_entry.2 000080D2                 # 2:  mov     x0, #0
+C0035FD6                                #     ret
+:label_entry.3 E00309AA                 # 3:  mov     x0, x9
+C0035FD6                                #     ret
+
+# label_addr: x0 = the address of placed function x0 (0 when pass 1 has
+# not met it yet).
+:label_addr                             # label_addr:
+FF4300D1                                #     sub     sp, sp, #16
+FE0300F9                                #     str     x30, [sp, #0]
+^~label_entry 97                        #     bl      label_entry
+@label_addr.1 000000B4                  #     cbz     x0, 1f
+000440F9                                #     ldr     x0, [x0, #LABEL_addr]
+:label_addr.1 FE0340F9                  # 1:  ldr     x30, [sp, #0]
+FF430091                                #     add     sp, sp, #16
+C0035FD6                                #     ret
+
+# lookup_call: x0 = the function that call x0 calls; dies when unknown.
+:lookup_call                            # lookup_call:
+FF4300D1                                #     sub     sp, sp, #16
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // the call
+F70300AA                                #     mov     x23, x0
+E01E40F9                                #     ldr     x0, [x23, #NODE_content]
+E1C24039                                #     ldrb    w1, [x23, #NODE_content_len]
+^~find_fn 97                            #     bl      find_fn
+@lookup_call.1 000000B4                 #     cbz     x0, 1f
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+FF430091                                #     add     sp, sp, #16
+C0035FD6                                #     ret
+:lookup_call.1 ~msg_function 01000090 !msg_function 21000091 # 1:  la      x1, msg_function
+020380D2                                #     mov     x2, #msg_function_len
+E31E40F9                                #     ldr     x3, [x23, #NODE_content]
+E4C24039                                #     ldrb    w4, [x23, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+
+#     .equ CALL_frame, 32                 // the new frame on the stack
+#     .equ CALL_stack, (CALL_frame + FRAME_size + 15) & ~15
+
+# code_call: runs call x0 in code context, in frame x1: an instruction is
+# encoded and emitted, any other function expands its body. The builtins:
+#   ascii <bytes>   emits the content of its argument as it is
+#   align n         pads with zeros up to a multiple of n
+#   reserve n       n zero bytes
+#   origin n        the address of what follows
+#   bss             from here on align and reserve only move the address
+:code_call                              # code_call:
+FFC302D1                                #     sub     sp, sp, #CALL_stack
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // the call
+F80B00F9                                #     str     x24, [sp, #16]              // caller's frame
+F90F00F9                                #     str     x25, [sp, #24]              // the function
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+~str_ascii 01000090 !str_ascii 21000091 #     la      x1, str_ascii
+A20080D2                                #     mov     x2, #5
+^~is_named 94                           #     bl      is_named
+@code_call.3 000000B5                   #     cbnz    x0, 3f
+E00317AA                                #     mov     x0, x23
+~str_align 01000090 !str_align 21000091 #     la      x1, str_align
+A20080D2                                #     mov     x2, #5
+^~is_named 94                           #     bl      is_named
+@code_call.4 000000B5                   #     cbnz    x0, 4f
+E00317AA                                #     mov     x0, x23
+~str_reserve 01000090 !str_reserve 21000091 #     la      x1, str_reserve
+E20080D2                                #     mov     x2, #7
+^~is_named 94                           #     bl      is_named
+@code_call.5 000000B5                   #     cbnz    x0, 5f
+E00317AA                                #     mov     x0, x23
+~str_origin 01000090 !str_origin 21000091 #     la      x1, str_origin
+C20080D2                                #     mov     x2, #6
+^~is_named 94                           #     bl      is_named
+@code_call.6 000000B5                   #     cbnz    x0, 6f
+E00317AA                                #     mov     x0, x23
+~str_bss 01000090 !str_bss 21000091     #     la      x1, str_bss
+620080D2                                #     mov     x2, #3
+^~is_named 94                           #     bl      is_named
+@code_call.7 000000B5                   #     cbnz    x0, 7f
+E00317AA                                #     mov     x0, x23
+^~lookup_call 97                        #     bl      lookup_call
+F90300AA                                #     mov     x25, x0
+E10317AA                                #     mov     x1, x23
+E20318AA                                #     mov     x2, x24
+030080D2                                #     mov     x3, #0
+E4830091                                #     add     x4, sp, #CALL_frame
+^~bind 97                               #     bl      bind
+E00319AA                                #     mov     x0, x25
+^~is_insn 97                            #     bl      is_insn
+@code_call.1 000000B4                   #     cbz     x0, 1f
+E00319AA                                #     mov     x0, x25
+E1830091                                #     add     x1, sp, #CALL_frame
+^~encode 94                             #     bl      encode
+E20317AA                                #     mov     x2, x23
+^~emit 94                               #     bl      emit
+^~code_call.2 14                        #     b       2f
+:code_call.1 E00319AA                   # 1:  mov     x0, x25
+^~param_count 97                        #     bl      param_count
+E30300AA                                #     mov     x3, x0
+E00319AA                                #     mov     x0, x25
+E1830091                                #     add     x1, sp, #CALL_frame
+~code_call 02000090 !code_call 42000091 #     la      x2, code_call
+^~run_body 97                           #     bl      run_body
+:code_call.2 FE0340F9                   # 2:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FFC30291                                #     add     sp, sp, #CALL_stack
+C0035FD6                                #     ret
+:code_call.3 E9824039                   # 3:  ldrb    w9, [x23, #NODE_children_len]   // ascii
+2A0080D2                                #     mov     x10, #1
+3F010AEB                                #     cmp     x9, x10
+@wrong_args 01000054                    #     b.ne    wrong_args
+E91640F9                                #     ldr     x9, [x23, #NODE_children]
+290140F9                                #     ldr     x9, [x9, #0]
+201D40F9                                #     ldr     x0, [x9, #NODE_content]
+21C14039                                #     ldrb    w1, [x9, #NODE_content_len]
+^~emit_raw 94                           #     bl      emit_raw
+^~code_call.2 17                        #     b       2b
+:code_call.4 E00317AA                   # 4:  mov     x0, x23                     // align
+E10318AA                                #     mov     x1, x24
+^~one_arg 94                            #     bl      one_arg
+~cur_pc 09000090 !cur_pc 29010091       #     la      x9, cur_pc
+290140F9                                #     ldr     x9, [x9, #0]
+2A09C09A                                #     udiv    x10, x9, x0                 // remu x10, x9, x0
+4AA5009B                                #     msub    x10, x10, x0, x9
+@code_call.2 0A0000B4                   #     cbz     x10, 2b
+00000ACB                                #     sub     x0, x0, x10
+^~skip 94                               #     bl      skip
+^~code_call.2 17                        #     b       2b
+:code_call.5 E00317AA                   # 5:  mov     x0, x23                     // reserve
+E10318AA                                #     mov     x1, x24
+^~one_arg 94                            #     bl      one_arg
+^~skip 94                               #     bl      skip
+^~code_call.2 17                        #     b       2b
+:code_call.6 E00317AA                   # 6:  mov     x0, x23                     // origin
+E10318AA                                #     mov     x1, x24
+^~one_arg 94                            #     bl      one_arg
+~cur_pc 09000090 !cur_pc 29010091       #     la      x9, cur_pc
+200100F9                                #     str     x0, [x9, #0]
+^~code_call.2 17                        #     b       2b
+:code_call.7 E9824039                   # 7:  ldrb    w9, [x23, #NODE_children_len]   // bss
+@wrong_args 090000B5                    #     cbnz    x9, wrong_args
+~in_bss 09000090 !in_bss 29010091       #     la      x9, in_bss
+2A0080D2                                #     mov     x10, #1
+2A0100F9                                #     str     x10, [x9, #0]
+^~code_call.2 17                        #     b       2b
+
+# wrong_args: dies about call x23 having the wrong number of arguments.
+:wrong_args                             # wrong_args:
+~msg_args 01000090 !msg_args 21000091   #     la      x1, msg_args
+220480D2                                #     mov     x2, #msg_args_len
+E31E40F9                                #     ldr     x3, [x23, #NODE_content]
+E4C24039                                #     ldrb    w4, [x23, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+
+# one_arg: x0 = the value of the one argument of builtin call x0, in frame
+# x1 and code context.
+:one_arg                                # one_arg:
+FF4300D1                                #     sub     sp, sp, #16
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // the call
+F70300AA                                #     mov     x23, x0
+E9824039                                #     ldrb    w9, [x23, #NODE_children_len]
+2A0080D2                                #     mov     x10, #1
+3F010AEB                                #     cmp     x9, x10
+@wrong_args 01000054                    #     b.ne    wrong_args
+E00301AA                                #     mov     x0, x1
+E11640F9                                #     ldr     x1, [x23, #NODE_children]
+210040F9                                #     ldr     x1, [x1, #0]
+020080D2                                #     mov     x2, #0
+^~eval_arg 97                           #     bl      eval_arg
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+FF430091                                #     add     sp, sp, #16
+C0035FD6                                #     ret
+
+# is_named: x0 = 1 when the content of NODE x0 is the x2 bytes at x1.
+:is_named                               # is_named:
+E30302AA                                #     mov     x3, x2
+E20301AA                                #     mov     x2, x1
+01C04039                                #     ldrb    w1, [x0, #NODE_content_len]
+001C40F9                                #     ldr     x0, [x0, #NODE_content]
+^~streq 17                              #     b       streq
+
+# exec_call: runs call x0 in exec context, in frame x1: an instruction is
+# executed on vregs, any other function runs its body. The builtin
+# size <label> leaves the size of the label in a0.
+:exec_call                              # exec_call:
+FFC302D1                                #     sub     sp, sp, #CALL_stack
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // the call
+F80B00F9                                #     str     x24, [sp, #16]              // caller's frame
+F90F00F9                                #     str     x25, [sp, #24]              // the function
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+~str_size 01000090 !str_size 21000091   #     la      x1, str_size
+820080D2                                #     mov     x2, #4
+^~is_named 97                           #     bl      is_named
+@exec_call.3 000000B5                   #     cbnz    x0, 3f
+E00317AA                                #     mov     x0, x23
+^~lookup_call 97                        #     bl      lookup_call
+F90300AA                                #     mov     x25, x0
+^~is_insn 97                            #     bl      is_insn
+@exec_call.1 000000B4                   #     cbz     x0, 1f
+E00319AA                                #     mov     x0, x25
+E10317AA                                #     mov     x1, x23
+E20318AA                                #     mov     x2, x24
+^~execute 94                            #     bl      execute
+^~exec_call.2 14                        #     b       2f
+:exec_call.1 E00319AA                   # 1:  mov     x0, x25
+E10317AA                                #     mov     x1, x23
+E20318AA                                #     mov     x2, x24
+230080D2                                #     mov     x3, #1
+E4830091                                #     add     x4, sp, #CALL_frame
+^~bind 97                               #     bl      bind
+E00319AA                                #     mov     x0, x25
+^~param_count 97                        #     bl      param_count
+E30300AA                                #     mov     x3, x0
+E00319AA                                #     mov     x0, x25
+E1830091                                #     add     x1, sp, #CALL_frame
+~exec_call 02000090 !exec_call 42000091 #     la      x2, exec_call
+^~run_body 97                           #     bl      run_body
+:exec_call.2 FE0340F9                   # 2:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FFC30291                                #     add     sp, sp, #CALL_stack
+C0035FD6                                #     ret
+:exec_call.3 E9824039                   # 3:  ldrb    w9, [x23, #NODE_children_len]   // size
+2A0080D2                                #     mov     x10, #1
+3F010AEB                                #     cmp     x9, x10
+@wrong_args 01000054                    #     b.ne    wrong_args
+E91640F9                                #     ldr     x9, [x23, #NODE_children]
+390140F9                                #     ldr     x25, [x9, #0]               // the label
+201F40F9                                #     ldr     x0, [x25, #NODE_content]
+21C34039                                #     ldrb    w1, [x25, #NODE_content_len]
+^~find_label 97                         #     bl      find_label
+@exec_call.5 000000B4                   #     cbz     x0, 5f
+^~label_entry 97                        #     bl      label_entry
+090080D2                                #     mov     x9, #0                      // not met yet in pass 1
+@exec_call.4 000000B4                   #     cbz     x0, 4f
+090840F9                                #     ldr     x9, [x0, #LABEL_end]
+0A0440F9                                #     ldr     x10, [x0, #LABEL_addr]
+29010ACB                                #     sub     x9, x9, x10
+:exec_call.4 ~vregs 0A000090 !vregs 4A010091 # 4:  la      x10, vregs
+492900F9                                #     str     x9, [x10, #VREG_a0*8]
+^~exec_call.2 17                        #     b       2b
+:exec_call.5 ~msg_name 01000090 !msg_name 21000091 # 5:  la      x1, msg_name
+820280D2                                #     mov     x2, #msg_name_len
+231F40F9                                #     ldr     x3, [x25, #NODE_content]
+24C34039                                #     ldrb    w4, [x25, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+
+# execute: executes call x1 of instruction x0 in frame x2, on vregs: the
+# parameter rd names the destination register, the other two give the
+# values v0 and v1 in parameter order, and rd = v1 op v0, op found by name
+# in exec_ops (the seed).
+:execute                                # execute:
+FF8301D1                                #     sub     sp, sp, #96
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // the call
+F80B00F9                                #     str     x24, [sp, #16]              // frame
+F90F00F9                                #     str     x25, [sp, #24]              // next parameter
+FA1300F9                                #     str     x26, [sp, #32]              // next argument
+FB1700F9                                #     str     x27, [sp, #40]              // parameters left
+FC1B00F9                                #     str     x28, [sp, #48]              // destination register
+FD1F00F9                                #     str     x29, [sp, #56]              // values so far
+    # [sp, #64], [sp, #72]: v0, v1
+F70301AA                                #     mov     x23, x1
+F80302AA                                #     mov     x24, x2
+F90300AA                                #     mov     x25, x0
+^~param_count 97                        #     bl      param_count
+FB0300AA                                #     mov     x27, x0
+E9824039                                #     ldrb    w9, [x23, #NODE_children_len]
+3F011BEB                                #     cmp     x9, x27
+@execute.8 01000054                     #     b.ne    8f
+391740F9                                #     ldr     x25, [x25, #NODE_children]
+FA1640F9                                #     ldr     x26, [x23, #NODE_children]
+1C0080D2                                #     mov     x28, #0
+1D0080D2                                #     mov     x29, #0
+:execute.1 @execute.3 1B0000B4          # 1:  cbz     x27, 3f
+290340F9                                #     ldr     x9, [x25, #0]
+201D40F9                                #     ldr     x0, [x9, #NODE_content]
+21C14039                                #     ldrb    w1, [x9, #NODE_content_len]
+~str_rd 02000090 !str_rd 42000091       #     la      x2, str_rd
+430080D2                                #     mov     x3, #2
+^~streq 97                              #     bl      streq
+@execute.2 000000B4                     #     cbz     x0, 2f
+490340F9                                #     ldr     x9, [x26, #0]               // rd: a register name
+201D40F9                                #     ldr     x0, [x9, #NODE_content]
+21C14039                                #     ldrb    w1, [x9, #NODE_content_len]
+^~find_reg 97                           #     bl      find_reg
+1F0000F1                                #     cmp     x0, #0
+@execute.7 0B000054                     #     b.lt    7f
+FC0300AA                                #     mov     x28, x0
+^~execute.6 14                          #     b       6f
+:execute.2 490080D2                     # 2:  mov     x9, #2
+BF0309EB                                #     cmp     x29, x9
+@execute.9 00000054                     #     b.eq    9f                          // more than two values: no seed op
+E00318AA                                #     mov     x0, x24
+410340F9                                #     ldr     x1, [x26, #0]
+220080D2                                #     mov     x2, #1
+^~eval_arg 97                           #     bl      eval_arg
+A9F37DD3                                #     lsl     x9, x29, #3
+E963298B                                #     add     x9, sp, x9
+202100F9                                #     str     x0, [x9, #64]
+BD070091                                #     add     x29, x29, #1
+:execute.6 39230091                     # 6:  add     x25, x25, #8
+5A230091                                #     add     x26, x26, #8
+7B0700D1                                #     sub     x27, x27, #1
+^~execute.1 17                          #     b       1b
+:execute.3 490080D2                     # 3:  mov     x9, #2
+BF0309EB                                #     cmp     x29, x9
+@execute.9 01000054                     #     b.ne    9f
+F91E40F9                                #     ldr     x25, [x23, #NODE_content]   // find the op by name
+FAC24039                                #     ldrb    w26, [x23, #NODE_content_len]
+090180D2                                #     mov     x9, #8
+5F0309EB                                #     cmp     x26, x9
+@execute.9 08000054                     #     b.hi    9f
+~exec_ops 1B000090 !exec_ops 7B030091   #     la      x27, exec_ops
+:execute.10 ~exec_ops_end 09000090 !exec_ops_end 29010091 # 10: la      x9, exec_ops_end
+7F0309EB                                #     cmp     x27, x9
+@execute.9 00000054                     #     b.eq    9f
+E00319AA                                #     mov     x0, x25
+E1031AAA                                #     mov     x1, x26
+E2031BAA                                #     mov     x2, x27
+E3031AAA                                #     mov     x3, x26
+^~streq 97                              #     bl      streq
+@execute.11 000000B4                    #     cbz     x0, 11f
+090180D2                                #     mov     x9, #8                      // and the op's name ends there
+5F0309EB                                #     cmp     x26, x9
+@execute.12 00000054                    #     b.eq    12f
+69031A8B                                #     add     x9, x27, x26
+29014039                                #     ldrb    w9, [x9, #0]
+@execute.12 090000B4                    #     cbz     x9, 12f
+:execute.11 7B430091                    # 11: add     x27, x27, #OP_size
+^~execute.10 17                         #     b       10b
+:execute.12 E92340F9                    # 12: ldr     x9, [sp, #64]
+EA2740F9                                #     ldr     x10, [sp, #72]
+6C0740F9                                #     ldr     x12, [x27, #OP_code]
+80011FD6                                #     br      x12
+:execute.7 ~msg_register 01000090 !msg_register 21000091 # 7:  la      x1, msg_register
+C20280D2                                #     mov     x2, #msg_register_len
+490340F9                                #     ldr     x9, [x26, #0]
+231D40F9                                #     ldr     x3, [x9, #NODE_content]
+24C14039                                #     ldrb    w4, [x9, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+:execute.8 ^~wrong_args 17              # 8:  b       wrong_args
+:execute.9 ~msg_execute 01000090 !msg_execute 21000091 # 9:  la      x1, msg_execute
+C20280D2                                #     mov     x2, #msg_execute_len
+E31E40F9                                #     ldr     x3, [x23, #NODE_content]
+E4C24039                                #     ldrb    w4, [x23, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+
+# The ops of exec_ops: x11 = x10 op x9 (t2 = t1 op t0), then exec_store,
+# still in the frame of execute. All 64 bits, as RV64: mul keeps the low
+# 64 bits, the shifts take their amount mod 64.
+:op_add                                 # op_add:
+4B01098B                                #     add     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_sub                                 # op_sub:
+4B0109CB                                #     sub     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_and                                 # op_and:
+4B01098A                                #     and     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_or                                  # op_or:
+4B0109AA                                #     orr     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_xor                                 # op_xor:
+4B0109CA                                #     eor     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_sll                                 # op_sll:
+4B21C99A                                #     lsl     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_srl                                 # op_srl:
+4B25C99A                                #     lsr     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_sra                                 # op_sra:
+4B29C99A                                #     asr     x11, x10, x9
+^~exec_store 14                         #     b       exec_store
+:op_mul                                 # op_mul:
+4B7D099B                                #     mul     x11, x10, x9
+# exec_store: stores x11 in the destination vreg x28 and returns from
+# execute.
+:exec_store                             # exec_store:
+@exec_store.1 1C0000B4                  #     cbz     x28, 1f                     // x0 stays 0
+~vregs 09000090 !vregs 29010091         #     la      x9, vregs
+8AF37DD3                                #     lsl     x10, x28, #3
+29010A8B                                #     add     x9, x9, x10
+2B0100F9                                #     str     x11, [x9, #0]
+:exec_store.1 FE0340F9                  # 1:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FC1B40F9                                #     ldr     x28, [sp, #48]
+FD1F40F9                                #     ldr     x29, [sp, #56]
+FF830191                                #     add     sp, sp, #96
+C0035FD6                                #     ret
+
+# ---------------------------------------------------------------------------
+# Encoding and output
+# ---------------------------------------------------------------------------
+
+# encode: encodes instruction x0, its parameters bound in frame x1: x0 =
+# the word, x1 = its width in bits (8, 16, 32 or 64). The fields come MSB
+# first: word = word << width | value.
+:encode                                 # encode:
+FF4301D1                                #     sub     sp, sp, #80
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // the instruction
+F80B00F9                                #     str     x24, [sp, #16]              // frame
+F90F00F9                                #     str     x25, [sp, #24]              // fields left
+FA1300F9                                #     str     x26, [sp, #32]              // next field
+FB1700F9                                #     str     x27, [sp, #40]              // word
+FC1B00F9                                #     str     x28, [sp, #48]              // width so far
+FD1F00F9                                #     str     x29, [sp, #56]              // width of this field
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+^~param_count 97                        #     bl      param_count
+F9824039                                #     ldrb    w25, [x23, #NODE_children_len]
+390300CB                                #     sub     x25, x25, x0
+FA1640F9                                #     ldr     x26, [x23, #NODE_children]
+00F07DD3                                #     lsl     x0, x0, #3
+5A03008B                                #     add     x26, x26, x0
+1B0080D2                                #     mov     x27, #0
+1C0080D2                                #     mov     x28, #0
+:encode.1 @encode.4 190000B4            # 1:  cbz     x25, 4f
+400340F9                                #     ldr     x0, [x26, #0]
+^~is_fn 97                              #     bl      is_fn
+490340F9                                #     ldr     x9, [x26, #0]
+@encode.2 000000B4                      #     cbz     x0, 2f
+2A814039                                #     ldrb    w10, [x9, #NODE_children_len]   // a fixed field: its child is its bits
+@encode.8 0A0000B4                      #     cbz     x10, 8f
+2A1540F9                                #     ldr     x10, [x9, #NODE_children]
+4A0140F9                                #     ldr     x10, [x10, #0]
+401D40F9                                #     ldr     x0, [x10, #NODE_content]
+41C14039                                #     ldrb    w1, [x10, #NODE_content_len]
+FD0301AA                                #     mov     x29, x1
+^~parse_bits 97                         #     bl      parse_bits
+^~encode.3 14                           #     b       3f
+:encode.2 E00309AA                      # 2:  mov     x0, x9                      // a slice call: run it, value in a0
+E10318AA                                #     mov     x1, x24
+^~exec_call 97                          #     bl      exec_call
+490340F9                                #     ldr     x9, [x26, #0]
+201D40F9                                #     ldr     x0, [x9, #NODE_content]
+21C14039                                #     ldrb    w1, [x9, #NODE_content_len]
+^~slice_width 97                        #     bl      slice_width
+FD0300AA                                #     mov     x29, x0
+~vregs 09000090 !vregs 29010091         #     la      x9, vregs
+202940F9                                #     ldr     x0, [x9, #VREG_a0*8]
+:encode.3 090880D2                      # 3:  mov     x9, #64
+BF0309EB                                #     cmp     x29, x9
+@encode.10 00000054                     #     b.eq    10f                         // a 64-bit field is the whole word
+290080D2                                #     mov     x9, #1
+2921DD9A                                #     lsl     x9, x9, x29
+290500D1                                #     sub     x9, x9, #1
+0000098A                                #     and     x0, x0, x9
+7B23DD9A                                #     lsl     x27, x27, x29
+:encode.10 7B0300AA                     # 10: orr     x27, x27, x0
+9C031D8B                                #     add     x28, x28, x29
+5A230091                                #     add     x26, x26, #8
+390700D1                                #     sub     x25, x25, #1
+^~encode.1 17                           #     b       1b
+:encode.4 090180D2                      # 4:  mov     x9, #8
+9F0309EB                                #     cmp     x28, x9
+@encode.5 00000054                      #     b.eq    5f
+090280D2                                #     mov     x9, #16
+9F0309EB                                #     cmp     x28, x9
+@encode.5 00000054                      #     b.eq    5f
+090480D2                                #     mov     x9, #32
+9F0309EB                                #     cmp     x28, x9
+@encode.5 00000054                      #     b.eq    5f
+090880D2                                #     mov     x9, #64
+9F0309EB                                #     cmp     x28, x9
+@encode.9 01000054                      #     b.ne    9f
+:encode.5 E0031BAA                      # 5:  mov     x0, x27
+E1031CAA                                #     mov     x1, x28
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FA1340F9                                #     ldr     x26, [sp, #32]
+FB1740F9                                #     ldr     x27, [sp, #40]
+FC1B40F9                                #     ldr     x28, [sp, #48]
+FD1F40F9                                #     ldr     x29, [sp, #56]
+FF430191                                #     add     sp, sp, #80
+C0035FD6                                #     ret
+:encode.8 ~msg_field 01000090 !msg_field 21000091 # 8:  la      x1, msg_field
+020480D2                                #     mov     x2, #msg_field_len
+231D40F9                                #     ldr     x3, [x9, #NODE_content]
+24C14039                                #     ldrb    w4, [x9, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+:encode.9 ~msg_width 01000090 !msg_width 21000091 # 9:  la      x1, msg_width
+220580D2                                #     mov     x2, #msg_width_len
+E31E40F9                                #     ldr     x3, [x23, #NODE_content]
+E4C24039                                #     ldrb    w4, [x23, #NODE_content_len]
+^~die_name 14                           #     b       die_name
+
+# emit: emits the x1-bit word x0, little endian, and in pass 2 prints it
+# as "<hex>  <name of call x2>".
+:emit                                   # emit:
+FFC300D1                                #     sub     sp, sp, #48
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // word
+F80B00F9                                #     str     x24, [sp, #16]              // width
+F90F00F9                                #     str     x25, [sp, #24]              // the call
+    # [sp, #32]: the word in memory
+F70300AA                                #     mov     x23, x0
+F80301AA                                #     mov     x24, x1
+F90302AA                                #     mov     x25, x2
+F71300F9                                #     str     x23, [sp, #32]
+E0830091                                #     add     x0, sp, #32
+01FF43D3                                #     lsr     x1, x24, #3
+^~emit_raw 94                           #     bl      emit_raw
+~pass 09000090 !pass 29010091           #     la      x9, pass
+290140F9                                #     ldr     x9, [x9, #0]
+4A0080D2                                #     mov     x10, #2
+3F010AEB                                #     cmp     x9, x10
+@emit.5 01000054                        #     b.ne    5f
+~linebuf 09000090 !linebuf 29010091     #     la      x9, linebuf
+~hexdigits 0A000090 !hexdigits 4A010091 #     la      x10, hexdigits
+0BFF42D3                                #     lsr     x11, x24, #2                // hex digits
+0C1300D1                                #     sub     x12, x24, #4                // shift of the next one
+:emit.3 @emit.4 0B0000B4                # 3:  cbz     x11, 4f
+ED26CC9A                                #     lsr     x13, x23, x12
+AD0D4092                                #     and     x13, x13, #15
+4D010D8B                                #     add     x13, x10, x13
+AD014039                                #     ldrb    w13, [x13, #0]
+2D010039                                #     strb    w13, [x9, #0]
+29050091                                #     add     x9, x9, #1
+8C1100D1                                #     sub     x12, x12, #4
+6B0500D1                                #     sub     x11, x11, #1
+^~emit.3 17                             #     b       3b
+:emit.4 0D0480D2                        # 4:  mov     x13, #CH_space
+2D010039                                #     strb    w13, [x9, #0]
+2D050039                                #     strb    w13, [x9, #1]
+29090091                                #     add     x9, x9, #2
+~linebuf 01000090 !linebuf 21000091     #     la      x1, linebuf
+220101CB                                #     sub     x2, x9, x1
+^~write_out 94                          #     bl      write_out
+211F40F9                                #     ldr     x1, [x25, #NODE_content]
+22C34039                                #     ldrb    w2, [x25, #NODE_content_len]
+^~write_out 94                          #     bl      write_out
+~newline 01000090 !newline 21000091     #     la      x1, newline
+220080D2                                #     mov     x2, #1
+^~write_out 94                          #     bl      write_out
+:emit.5 FE0340F9                        # 5:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+F80B40F9                                #     ldr     x24, [sp, #16]
+F90F40F9                                #     ldr     x25, [sp, #24]
+FFC30091                                #     add     sp, sp, #48
+C0035FD6                                #     ret
+
+# emit_raw: appends the x1 bytes at x0 to outbuf and moves cur_pc past
+# them.
+:emit_raw                               # emit_raw:
+~in_bss 09000090 !in_bss 29010091       #     la      x9, in_bss
+290140F9                                #     ldr     x9, [x9, #0]
+@emitted_in_bss 090000B5                #     cbnz    x9, emitted_in_bss
+~out_end 0F000090 !out_end EF010091     #     la      x15, out_end
+E90140F9                                #     ldr     x9, [x15, #0]
+~outbuf 0A000090 !outbuf 4A010091       #     la      x10, outbuf
+0B02A0D2                                #     mov     x11, #OUT_SIZE
+4A010B8B                                #     add     x10, x10, x11
+2C01018B                                #     add     x12, x9, x1
+9F010AEB                                #     cmp     x12, x10
+@out_full 08000054                      #     b.hi    out_full
+~cur_pc 0D000090 !cur_pc AD010091       #     la      x13, cur_pc
+AE0140F9                                #     ldr     x14, [x13, #0]
+CE01018B                                #     add     x14, x14, x1
+AE0100F9                                #     str     x14, [x13, #0]
+:emit_raw.1 @emit_raw.2 010000B4        # 1:  cbz     x1, 2f
+0B004039                                #     ldrb    w11, [x0, #0]
+2B010039                                #     strb    w11, [x9, #0]
+00040091                                #     add     x0, x0, #1
+29050091                                #     add     x9, x9, #1
+210400D1                                #     sub     x1, x1, #1
+^~emit_raw.1 17                         #     b       1b
+:emit_raw.2 E90100F9                    # 2:  str     x9, [x15, #0]
+C0035FD6                                #     ret
+
+# skip: moves cur_pc x0 bytes on: by emitting zero bytes, or after bss
+# only the address.
+:skip                                   # skip:
+FF4300D1                                #     sub     sp, sp, #16
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // bytes left
+F70300AA                                #     mov     x23, x0
+~in_bss 09000090 !in_bss 29010091       #     la      x9, in_bss
+290140F9                                #     ldr     x9, [x9, #0]
+@skip.1 090000B4                        #     cbz     x9, 1f
+~cur_pc 09000090 !cur_pc 29010091       #     la      x9, cur_pc
+2A0140F9                                #     ldr     x10, [x9, #0]
+4A01178B                                #     add     x10, x10, x23
+2A0100F9                                #     str     x10, [x9, #0]
+^~skip.2 14                             #     b       2f
+:skip.1 @skip.2 170000B4                # 1:  cbz     x23, 2f
+~zero_byte 00000090 !zero_byte 00000091 #     la      x0, zero_byte
+210080D2                                #     mov     x1, #1
+^~emit_raw 97                           #     bl      emit_raw
+F70600D1                                #     sub     x23, x23, #1
+^~skip.1 17                             #     b       1b
+:skip.2 FE0340F9                        # 2:  ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+FF430091                                #     add     sp, sp, #16
+C0035FD6                                #     ret
+
+# write_output: writes outbuf, everything emitted, to the file out_path.
+:write_output                           # write_output:
+FF4300D1                                #     sub     sp, sp, #16
+FE0300F9                                #     str     x30, [sp, #0]
+F70700F9                                #     str     x23, [sp, #8]               // fd
+600C8092                                #     mov     x0, #AT_FDCWD
+~out_path 01000090 !out_path 21000091   #     la      x1, out_path
+210040F9                                #     ldr     x1, [x1, #0]
+224880D2                                #     mov     x2, #O_CREAT_WRONLY_TRUNC
+A33D80D2                                #     mov     x3, #MODE_0755
+080780D2                                #     mov     x8, #SYS_openat
+010000D4                                #     svc     #0
+1F0000F1                                #     cmp     x0, #0
+@create_failed 0B000054                 #     b.lt    create_failed
+F70300AA                                #     mov     x23, x0
+~outbuf 01000090 !outbuf 21000091       #     la      x1, outbuf
+~out_end 09000090 !out_end 29010091     #     la      x9, out_end
+220140F9                                #     ldr     x2, [x9, #0]
+420001CB                                #     sub     x2, x2, x1
+^~write_all 94                          #     bl      write_all
+E00317AA                                #     mov     x0, x23
+280780D2                                #     mov     x8, #SYS_close
+010000D4                                #     svc     #0
+FE0340F9                                #     ldr     x30, [sp, #0]
+F70740F9                                #     ldr     x23, [sp, #8]
+FF430091                                #     add     sp, sp, #16
+C0035FD6                                #     ret
+
+# write_all: writes the x2 bytes at x1 to fd x0, however many writes it
+# takes.
+:write_all                              # write_all:
+E90300AA                                #     mov     x9, x0
+:write_all.1 @write_all.2 020000B4      # 1:  cbz     x2, 2f
+E00309AA                                #     mov     x0, x9
+080880D2                                #     mov     x8, #SYS_write
+010000D4                                #     svc     #0
+1F0000F1                                #     cmp     x0, #0
+@write_failed 0D000054                  #     b.le    write_failed
+2100008B                                #     add     x1, x1, x0
+420000CB                                #     sub     x2, x2, x0
+^~write_all.1 17                        #     b       1b
+:write_all.2 C0035FD6                   # 2:  ret
+
+# write_out: writes x2 bytes at x1 to stdout.
+:write_out                              # write_out:
+200080D2                                #     mov     x0, #STDOUT
+080880D2                                #     mov     x8, #SYS_write
+010000D4                                #     svc     #0
+C0035FD6                                #     ret
+
+:create_failed                          # create_failed:
+~msg_create 01000090 !msg_create 21000091 #     la      x1, msg_create
+020480D2                                #     mov     x2, #msg_create_len
+^~die 14                                #     b       die
+:write_failed                           # write_failed:
+~msg_write 01000090 !msg_write 21000091 #     la      x1, msg_write
+620280D2                                #     mov     x2, #msg_write_len
+^~die 14                                #     b       die
+:out_full                               # out_full:
+~msg_full 01000090 !msg_full 21000091   #     la      x1, msg_full
+E20280D2                                #     mov     x2, #msg_full_len
+^~die 14                                #     b       die
+:emitted_in_bss                         # emitted_in_bss:
+~msg_bss 01000090 !msg_bss 21000091     #     la      x1, msg_bss
+020380D2                                #     mov     x2, #msg_bss_len
+^~die 14                                #     b       die
+
+# die_name: writes the x2-byte message at x1 and the x4-byte name at x3 to
+# stderr, then a newline, and exits with status 1.
+:die_name                               # die_name:
+F70303AA                                #     mov     x23, x3
+F80304AA                                #     mov     x24, x4
+400080D2                                #     mov     x0, #STDERR
+080880D2                                #     mov     x8, #SYS_write
+010000D4                                #     svc     #0
+400080D2                                #     mov     x0, #STDERR
+E10317AA                                #     mov     x1, x23
+E20318AA                                #     mov     x2, x24
+080880D2                                #     mov     x8, #SYS_write
+010000D4                                #     svc     #0
+~newline 01000090 !newline 21000091     #     la      x1, newline
+220080D2                                #     mov     x2, #1
+
+# die: writes the x2-byte message at x1 to stderr and exits with status 1.
+:die                                    # die:
+400080D2                                #     mov     x0, #STDERR
+080880D2                                #     mov     x8, #SYS_write
+010000D4                                #     svc     #0
+200080D2                                #     mov     x0, #1
+:exit                                   # exit:
+A80B80D2                                #     mov     x8, #SYS_exit
+010000D4                                #     svc     #0
+#
+# The section .rodata, from here its lines of hosts/aarch64/ttpc.s
+#     .section .rodata
+:msg_usage 75736167653A2074747063203C66696C # msg_usage:      .ascii "usage: ttpc <file.ff> [<out>]\n"
+652E66663E205B3C6F75743E5D0A
+#     .equ msg_usage_len, . - msg_usage
+:msg_open 747470633A2063616E6E6F74206F7065 # msg_open:       .ascii "ttpc: cannot open file\n"
+6E2066696C650A
+#     .equ msg_open_len, . - msg_open
+:msg_read 747470633A2072656164206661696C65 # msg_read:       .ascii "ttpc: read failed\n"
+640A
+#     .equ msg_read_len, . - msg_read
+:msg_large 747470633A2066696C6520746F6F206C # msg_large:      .ascii "ttpc: file too large\n"
+617267650A
+#     .equ msg_large_len, . - msg_large
+:msg_truncated 747470633A207472756E636174656420 # msg_truncated:  .ascii "ttpc: truncated node\n"
+6E6F64650A
+#     .equ msg_truncated_len, . - msg_truncated
+:msg_trailing 747470633A20747261696C696E672062 # msg_trailing:   .ascii "ttpc: trailing bytes after the root node\n"
+79746573206166746572207468652072
+6F6F74206E6F64650A
+#     .equ msg_trailing_len, . - msg_trailing
+:msg_create 747470633A2063616E6E6F7420637265 # msg_create:     .ascii "ttpc: cannot create output file\n"
+617465206F75747075742066696C650A
+#     .equ msg_create_len, . - msg_create
+:msg_write 747470633A207772697465206661696C # msg_write:      .ascii "ttpc: write failed\n"
+65640A
+#     .equ msg_write_len, . - msg_write
+:msg_full 747470633A206F757470757420746F6F # msg_full:       .ascii "ttpc: output too large\n"
+206C617267650A
+#     .equ msg_full_len, . - msg_full
+# Followed by the name they are about:
+:msg_function 747470633A20756E6B6E6F776E206675 # msg_function:   .ascii "ttpc: unknown function: "
+6E6374696F6E3A20
+#     .equ msg_function_len, . - msg_function
+:msg_name 747470633A20756E6B6E6F776E206E61 # msg_name:       .ascii "ttpc: unknown name: "
+6D653A20
+#     .equ msg_name_len, . - msg_name
+:msg_args 747470633A2077726F6E67206E756D62 # msg_args:       .ascii "ttpc: wrong number of arguments: "
+6572206F6620617267756D656E74733A
+20
+#     .equ msg_args_len, . - msg_args
+:msg_params 747470633A20746F6F206D616E792070 # msg_params:     .ascii "ttpc: too many parameters: "
+6172616D65746572733A20
+#     .equ msg_params_len, . - msg_params
+:msg_register 747470633A206E6F7420612072656769 # msg_register:   .ascii "ttpc: not a register: "
+737465723A20
+#     .equ msg_register_len, . - msg_register
+:msg_execute 747470633A2063616E6E6F7420657865 # msg_execute:    .ascii "ttpc: cannot execute: "
+637574653A20
+#     .equ msg_execute_len, . - msg_execute
+:msg_field 747470633A206669786564206669656C # msg_field:      .ascii "ttpc: fixed field without bits: "
+6420776974686F757420626974733A20
+#     .equ msg_field_len, . - msg_field
+:msg_slice 747470633A2062616420736C6963653A # msg_slice:      .ascii "ttpc: bad slice: "
+20
+#     .equ msg_slice_len, . - msg_slice
+:msg_width 747470633A207769647468206973206E # msg_width:      .ascii "ttpc: width is not 8, 16, 32 or 64 bits: "
+6F7420382C2031362C203332206F7220
+363420626974733A20
+#     .equ msg_width_len, . - msg_width
+:msg_moved 747470633A206C6162656C206D6F7665 # msg_moved:      .ascii "ttpc: label moved between the passes: "
+64206265747765656E20746865207061
+737365733A20
+#     .equ msg_moved_len, . - msg_moved
+:msg_depth 747470633A206E657374656420746F6F # msg_depth:      .ascii "ttpc: nested too deep: "
+20646565703A20
+#     .equ msg_depth_len, . - msg_depth
+:msg_bss 747470633A20656D6974746564206166 # msg_bss:        .ascii "ttpc: emitted after bss\n"
+746572206273730A
+#     .equ msg_bss_len, . - msg_bss
+:hexdigits 30313233343536373839616263646566 # hexdigits:      .ascii "0123456789abcdef"
+:indent 2020                            # indent:         .ascii "  "
+:newline 0A                             # newline:        .ascii "\n"
+:str_rd 7264                            # str_rd:         .ascii "rd"
+:str_pc 7063                            # str_pc:         .ascii "pc"
+:str_size 73697A65                      # str_size:       .ascii "size"
+:str_ascii 6173636969                   # str_ascii:      .ascii "ascii"
+:str_align 616C69676E                   # str_align:      .ascii "align"
+:str_reserve 72657365727665             # str_reserve:    .ascii "reserve"
+:str_origin 6F726967696E                # str_origin:     .ascii "origin"
+:str_bss 627373                         # str_bss:        .ascii "bss"
+:zero_byte 00                           # zero_byte:      .byte 0
+
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 # padding to .data's file offset
+^00412000                               # .data is at this address (another segment)
+#
+# The section .data, from here its lines of hosts/aarch64/ttpc.s
+#     .section .data
+:hexbuf 30303030303030302020            # hexbuf:         .ascii "00000000  "         // hash prefix of a printed line
+000000000000                            #     .balign 8
+:out_path 0000000000000000              # out_path:       .dword 0                    // argv[2], 0 when only printing
+:out_end &outbuf 00000000               # out_end:        .dword outbuf               // next free byte in outbuf
+:syms_end &syms 00000000                # syms_end:       .dword syms                 // next free slot in syms
+:labels_end &labels 00000000            # labels_end:     .dword labels               // next free LABEL (pass 1)
+:label_next &labels 00000000            # label_next:     .dword labels               // next LABEL to check (pass 2)
+:pass 0000000000000000                  # pass:           .dword 0                    // 1 or 2
+:cur_pc 0000000000000000                # cur_pc:         .dword 0                    // address of the next byte
+:in_bss 0000000000000000                # in_bss:         .dword 0                    // 1 after the builtin bss
+:scope_depth 0000000000000000           # scope_depth:    .dword 0                    // placed functions in scopes
+
+# The exec seed: the instructions that exec context runs itself, rd = v1 op
+# v0, with v0 and v1 the other operands in parameter order (rs2 rs1, or imm
+# rs1, or shamt rs1).
+:exec_ops                               # exec_ops:
+6164640000000000                        #     .ascii "add\0\0\0\0\0"
+&op_add 00000000                        #     .dword op_add
+6164646900000000                        #     .ascii "addi\0\0\0\0"
+&op_add 00000000                        #     .dword op_add
+7375620000000000                        #     .ascii "sub\0\0\0\0\0"
+&op_sub 00000000                        #     .dword op_sub
+616E640000000000                        #     .ascii "and\0\0\0\0\0"
+&op_and 00000000                        #     .dword op_and
+616E646900000000                        #     .ascii "andi\0\0\0\0"
+&op_and 00000000                        #     .dword op_and
+6F72000000000000                        #     .ascii "or\0\0\0\0\0\0"
+&op_or 00000000                         #     .dword op_or
+6F72690000000000                        #     .ascii "ori\0\0\0\0\0"
+&op_or 00000000                         #     .dword op_or
+786F720000000000                        #     .ascii "xor\0\0\0\0\0"
+&op_xor 00000000                        #     .dword op_xor
+786F726900000000                        #     .ascii "xori\0\0\0\0"
+&op_xor 00000000                        #     .dword op_xor
+736C6C0000000000                        #     .ascii "sll\0\0\0\0\0"
+&op_sll 00000000                        #     .dword op_sll
+736C6C6900000000                        #     .ascii "slli\0\0\0\0"
+&op_sll 00000000                        #     .dword op_sll
+73726C0000000000                        #     .ascii "srl\0\0\0\0\0"
+&op_srl 00000000                        #     .dword op_srl
+73726C6900000000                        #     .ascii "srli\0\0\0\0"
+&op_srl 00000000                        #     .dword op_srl
+7372610000000000                        #     .ascii "sra\0\0\0\0\0"
+&op_sra 00000000                        #     .dword op_sra
+7372616900000000                        #     .ascii "srai\0\0\0\0"
+&op_sra 00000000                        #     .dword op_sra
+6D756C0000000000                        #     .ascii "mul\0\0\0\0\0"
+&op_mul 00000000                        #     .dword op_mul
+:exec_ops_end                           # exec_ops_end:
+
+#
+# The section .bss: no bytes in the file, only its labels
+#     .section .bss
+#     .balign 8
+^00412158 :nodes                        # nodes:          .skip MAX_NODES * NODE_size
+^00612158 :ptrs                         # ptrs:           .skip MAX_NODES * 8
+^00652158 :syms                         # syms:           .skip MAX_NODES * 8         // the function NODEs, see collect_syms
+^00692158 :labels                       # labels:         .skip MAX_NODES * LABEL_size
+^00752158 :scopes                       # scopes:         .skip MAX_DEPTH * 8         // the placed functions around pc
+^00752358 :vregs                        # vregs:          .skip 32 * 8                // the registers of exec context
+^00752458 :linebuf                      # linebuf:        .skip 24                    // hex of an emitted word
+^00752470 :outbuf                       # outbuf:         .skip OUT_SIZE
+^00852470 :buf                          # buf:            .skip BUF_SIZE
+
+# Registers that live across the whole program:
+#   x19 (s0)  parse cursor in buf
+#   x20 (s1)  end of the loaded bytes
+#   x21 (s2)  next free NODE in nodes
+#   x22 (s3)  next free slot in ptrs
+
+#
+# The section .shstrtab: the names of the sections
+00                                      # ""
+2E736873747274616200                    # ".shstrtab"
+2E7465787400                            # ".text"
+2E726F6461746100                        # ".rodata"
+2E6461746100                            # ".data"
+2E62737300                              # ".bss"
+00000000                                # padding to the section headers
+#
+# Section header 0
+00000000                                # sh_name = 0x0: its name at this offset of .shstrtab
+00000000                                # sh_type = 0x0: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0000000000000000                        # sh_flags = 0x0: 1 W, 2 A, 4 X
+0000000000000000                        # sh_addr = 0x0: its address
+0000000000000000                        # sh_offset = 0x0: its file offset
+0000000000000000                        # sh_size = 0x0: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0000000000000000                        # sh_addralign = 0x0
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 1: .text
+0B000000                                # sh_name = 0xb: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0600000000000000                        # sh_flags = 0x6: 1 W, 2 A, 4 X
+B000400000000000                        # sh_addr = 0x4000b0: its address
+B000000000000000                        # sh_offset = 0xb0: its file offset
+8819000000000000                        # sh_size = 0x1988: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0400000000000000                        # sh_addralign = 0x4
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 2: .rodata
+11000000                                # sh_name = 0x11: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0200000000000000                        # sh_flags = 0x2: 1 W, 2 A, 4 X
+381A400000000000                        # sh_addr = 0x401a38: its address
+381A000000000000                        # sh_offset = 0x1a38: its file offset
+5D02000000000000                        # sh_size = 0x25d: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0100000000000000                        # sh_addralign = 0x1
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 3: .data
+19000000                                # sh_name = 0x19: its name at this offset of .shstrtab
+01000000                                # sh_type = 0x1: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0300000000000000                        # sh_flags = 0x3: 1 W, 2 A, 4 X
+0020410000000000                        # sh_addr = 0x412000: its address
+0020000000000000                        # sh_offset = 0x2000: its file offset
+5801000000000000                        # sh_size = 0x158: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0800000000000000                        # sh_addralign = 0x8
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 4: .bss
+1F000000                                # sh_name = 0x1f: its name at this offset of .shstrtab
+08000000                                # sh_type = 0x8: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0300000000000000                        # sh_flags = 0x3: 1 W, 2 A, 4 X
+5821410000000000                        # sh_addr = 0x412158: its address
+5821000000000000                        # sh_offset = 0x2158: its file offset
+1803540000000000                        # sh_size = 0x540318: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0800000000000000                        # sh_addralign = 0x8
+0000000000000000                        # sh_entsize = 0x0
+#
+# Section header 5: .shstrtab
+01000000                                # sh_name = 0x1: its name at this offset of .shstrtab
+03000000                                # sh_type = 0x3: 1 PROGBITS, 3 STRTAB, 8 NOBITS
+0000000000000000                        # sh_flags = 0x0: 1 W, 2 A, 4 X
+0000000000000000                        # sh_addr = 0x0: its address
+5821000000000000                        # sh_offset = 0x2158: its file offset
+2400000000000000                        # sh_size = 0x24: its size
+00000000                                # sh_link = 0x0
+00000000                                # sh_info = 0x0
+0100000000000000                        # sh_addralign = 0x1
+0000000000000000                        # sh_entsize = 0x0
