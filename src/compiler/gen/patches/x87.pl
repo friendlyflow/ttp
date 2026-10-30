@@ -83,8 +83,9 @@ LQ:
 # a64sfargs: their kinds (26: a float128 in an xmm register)
 once(\$t, "double\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\n  str_index:\n",
     "double\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\n    ascii\n      " . esc("float128" . "\0" x 8 . "__trunctfxf2" . "\0" x 4) . "\n  str_index:\n", 'cc_sfnames');
+# (56 bytes, as 48 were: the code after it stays 4-aligned, as aarch64's must)
 once(\$t, "\\x05\\x00\\x05\\x00\\x00\\x00\n      a64n_x8:\n",
-    "\\x05\\x00\\x05\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x05\\x00\\x00\\x00\\x00\\x00\n      a64n_x8:\n", 'a64sfargs');
+    "\\x05\\x00\\x05\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x05\\x00\\x00\\x00\n      a64n_x8:\n", 'a64sfargs');
 
 # ---- wgate: a function naming float128, or with a Q literal, gets the
 # temporaries too
