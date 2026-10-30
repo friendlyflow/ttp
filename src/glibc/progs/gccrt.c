@@ -57,8 +57,9 @@ int __gcc_bcmp (const unsigned char *, const unsigned char *, unsigned long);
 static int n;
 
 static void w (unsigned long x) { printf ("%d %016lx\n", n++, x); }
-/* (an unsigned int as itself: riscv64's ABI passes and returns it
-   sign-extended, and ttpc widens a returned one as it came) */
+/* (an unsigned int as itself: this file declares __bswapsi2 unsigned, where
+   libgcc's is SItype, an int; gcc takes a call's type from the caller's
+   declaration, ttpc from the function's definition) */
 static void w32 (unsigned int x) { printf ("%d %08x\n", n++, x); }
 static void f (float x) { union { float f; unsigned int u; } v; v.f = x; w (v.u); }
 static void d (double x) { union { double d; unsigned long u; } v; v.d = x; w (v.u); }
