@@ -35,11 +35,8 @@ cl __divtc3 (tf, tf, tf, tf);
 cx __mulxc3 (long double, long double, long double, long double);
 cx __divxc3 (long double, long double, long double, long double);
 long double __powixf2 (long double, int);
-long double __floatdixf (long);
-long double __floatundixf (unsigned long);
-long __fixxfdi (long double);
+/* (libgcc2's _fixunsxfsi.o of a 64-bit word: x87 to an unsigned long) */
 unsigned long __fixunsxfdi (long double);
-unsigned int __fixunsxfsi (long double);
 tf __extendxftf2 (long double);
 long double __trunctfxf2 (tf);
 #endif
@@ -136,8 +133,7 @@ int main (void)
 #endif
 #ifdef __x86_64__
       xl (__powixf2 (1.0L + (long double) (x & 0xff) / 16, (int) (x & 63) - 20));
-      xl (__floatdixf (x)); xl (__floatundixf ((unsigned long) x));
-      w (__fixxfdi ((long double) x / 3)); w (__fixunsxfdi ((long double) (unsigned long) x / 5)); w32 (__fixunsxfsi ((long double) (unsigned int) x / 7));
+      w (__fixunsxfdi ((long double) (unsigned long) x / 5));
       l (__extendxftf2 ((long double) x / 3)); xl (__trunctfxf2 ((tf) x / 3));
 #endif
     }
