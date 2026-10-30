@@ -15,7 +15,8 @@
 #       the line of a step's log that says why it failed
 #   perl tests.pl run <dir> <test> <input> <slot command> -- <qemu> <cpu>...
 #       runs dir/test.ref (gcc's) and dir/test-prog (ttpc's) on each cpu
-#       (qemu -cpu), in dir/test.run, stdin from <input>, and prints the
+#       (qemu -cpu; natively where <qemu> is native, its cpu native), in
+#       dir/test.run, stdin from <input>, and prints the
 #       result: "equal: ..." where every run exits with the same status
 #       and prints the same (stdout and stderr), else "differ: ..."
 #       (an address printed, 0x and 6 hex digits or more, compares as any
@@ -113,8 +114,9 @@ sub unaddr5 { my ($s) = @_; $s =~ s/\b0x[0-9a-f]{5}\b/0x.../gr }
 # (and the program's own name, its argv[0], test.ref or test-prog, as test)
 sub norm { my ($s, $t) = @_; unaddr($s) =~ s/\Q$t\E(?:\.ref|-prog)\b/$t/gr }
 # (and a temporary file's name, mkstemp's or tmpnam's: a path's part whose
-# last 6 letters or digits are the random ones of its XXXXXX, as any other)
-sub tmpname { my ($s) = @_; $s =~ s{(/[^/\s"']*?)[A-Za-z0-9]{6}(?=[/\s"')]|\z)}{$1XXXXXX}gr }
+# last 6 letters or digits are the random ones of its XXXXXX, as any other;
+# before a colon too: tst-freopen64-4's warning)
+sub tmpname { my ($s) = @_; $s =~ s{(/[^/\s"']*?)[A-Za-z0-9]{6}(?=[/\s"'):]|\z)}{$1XXXXXX}gr }
 sub same {
     my ($a, $b, $t) = @_;
     ($a, $b) = (norm($a, $t), norm($b, $t));
@@ -157,7 +159,8 @@ if ($cmd eq 'run') {
                 open STDERR, '>', "$out.err" or die;
                 $ENV{TMPDIR} = Cwd::abs_path('.');
                 $ENV{TIMEOUTFACTOR} = 10;
-                exec @slot, $qemu, '-cpu', $cpu, $bin or die "tests: cannot run $qemu: $!\n";
+                # (natively where the machine is the target: no qemu, one run each)
+                exec @slot, $qemu eq "native" ? ($bin) : ($qemu, "-cpu", $cpu, $bin) or die "tests: cannot run $qemu: $!\n";
             }
             waitpid $pid, 0;
             my $s = $? & 127 ? 128 + ($? & 127) : $? >> 8;

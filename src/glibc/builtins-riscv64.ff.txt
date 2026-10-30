@@ -14,6 +14,14 @@
         * pointer
       tp
   comment
+    __ff_fp: the frame pointer of the function that calls it (C's frame in ttpc, which builtins.ff.txt's __builtin_return_address and __builtin_frame_address read), s0.
+  __ff_fp:
+    asm
+    mv
+      s0
+      a0
+    ret
+  comment
     gcc's __builtin_trap, which it makes ebreak on riscv64; __atomic_thread_fence, which it makes fence rw, rw.
   __builtin_trap:
     asm

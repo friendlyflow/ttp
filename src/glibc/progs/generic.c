@@ -207,6 +207,31 @@ text_ptr (unsigned char **pp)
   return p[0] + q[1] + *r;
 }
 
+/* dlopen's RETURN_ADDRESS and ____longjmp_chk's check of a frame:
+   __builtin_return_address (0) is in the caller's code, after its start;
+   __builtin_frame_address (0) is next to the function's locals (ttpc's
+   frame pointer, through builtins-<target>.ff.txt's __ff_fp) */
+static void * __attribute__ ((noinline))
+back_to (void)
+{
+  return __builtin_return_address (0);
+}
+
+static int __attribute__ ((noinline))
+ret_addr_bad (void)
+{
+  char *r = back_to ();
+  return !(r > (char *) ret_addr_bad && r < (char *) ret_addr_bad + 4096);
+}
+
+static int __attribute__ ((noinline))
+frame_bad (void)
+{
+  volatile int x = 1;
+  char *fr = __builtin_frame_address (0);
+  return !((char *) &x < fr + 64 && (char *) &x > fr - 4096) + (x != 1);
+}
+
 #define LMAX 9223372036854775807L
 #define LMIN (-LMAX - 1)
 
@@ -230,6 +255,7 @@ main (void)
   f += many_sum () != 8 * 36;
   f += specials_bad ();
   f += ldfold_bad ();
+  f += ret_addr_bad () + frame_bad ();
   f += dmin != 0x1p-1022 || fthird != 0x1.555556p-2f || dsub != 0x1p-1074;
   {
     unsigned char b[2] = { 30, 7 }, *bp = b;
