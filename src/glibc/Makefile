@@ -53,6 +53,15 @@ CTARGET_arm := armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16
 CTARGET := $(or $(CTARGET_$(GTARGET)),$(GTARGET)-linux-gnu)
 BUILD ?= $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
+# The shared reference is built by glibc-ref alone and then only read: any
+# other goal in it needs a BUILD of its own, so no check writes there (a
+# libgcc-ref without BUILD= once left an ff/ folder in it)
+REFROOT := $(HOME)/.cache/ttp/glibc-gcc16
+ifneq ($(filter $(REFROOT) $(REFROOT)/%,$(abspath $(BUILD))),)
+ifneq ($(filter-out glibc-ref build-gcroots,$(or $(MAKECMDGOALS),all)),)
+$(error BUILD is the shared reference $(BUILD): only glibc-ref builds there; give the rest a folder of its own, BUILD=...)
+endif
+endif
 # a make that calls itself without end stops here (MAKELEVEL counts the
 # makes above this one; glibc's own, deeper, never read this file)
 ifneq ($(filter-out 0 1 2 3 4 5 6 7 8,$(or $(MAKELEVEL),0)),)
