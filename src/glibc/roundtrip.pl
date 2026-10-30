@@ -40,6 +40,7 @@ my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JS
 
 our $target = '';
 if (@ARGV >= 2 && $ARGV[0] eq '--target') { (undef, $target) = splice @ARGV, 0, 2 }
+FFold::x87() if $target eq 'x86_64';
 my ($namesfile, $backjson, @unitjson) = @ARGV;
 die "usage: roundtrip.pl [--target t] names.txt back.json [unit.json ...]\n" unless defined $backjson;
 
@@ -262,6 +263,8 @@ sub E {
     # (a long double literal, binary128: clang's decimal of it, every digit)
     # (a long double literal, binary128: its exact hex, of clang's decimal
     # of it; a float's its value as a float)
+    # (x86_64's long double the x87's 64 bits; its _Float128 binary128's)
+    return '(fltl ' . FFold::ldround($n->{value}, 64, -16445, 16383) . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble' && $target eq 'x86_64' && FFold::ftype($n) eq 'long double';
     return '(fltl ' . FFold::ldround($n->{value}, 113, -16494, 16383) . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble' && $target ne 'arm';
     return '(fltl ' . $n->{value} . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble';
     if ($k eq 'FloatingLiteral' && FFold::ftype($n) eq 'float' && (my $v = FFold::fold($n))) { return fconst($v, 'float') }

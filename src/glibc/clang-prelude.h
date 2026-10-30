@@ -4,9 +4,9 @@
 #define _Float32 float
 #define _Float64 double
 #ifdef __x86_64__
-/* x86_64: gcc's _Float128 is a type of its own beside long double (glibc's
-   _Generic lists both); __float128 is clang's, as long double is binary128
-   here too (-mlong-double-128); a macro, so that _Complex _Float128 reads */
+/* x86_64: gcc's _Float128 is a type of its own beside long double, the
+   x87's (glibc's _Generic lists both); __float128 is clang's (c2ff's
+   float128); a macro, so that _Complex _Float128 reads */
 #define _Float128 __float128
 #else
 #define _Float128 long double
