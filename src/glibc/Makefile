@@ -123,13 +123,16 @@ C2FF_CLANG ?= $(error C2FF_CLANG is not set: run this in `nix develop`)
 # ttpc: on an x86_64 machine its own build for x86_64 (make bootstraps makes
 # it), which runs natively (stdlib-prog: 1.6 s, against 6.1 s for riscv64's
 # under qemu); elsewhere riscv64's under qemu. Both make the same bytes.
-# The checks run in parallel: make -j.
+# The checks run in parallel: make -j. Each compile's second pass runs on
+# TTPCJ processes (ttpc -j, the bytes of one; TTPCJ=1 turns it off), all
+# in the slot of that compile.
+TTPCJ ?= 4
 ifeq ($(shell uname -m),x86_64)
 TTPC ?= ../../build/compiler/x86_64/stage2
-TTPC_RUN = $(TTPC) --target $(GTARGET)
+TTPC_RUN = $(TTPC) -j$(TTPCJ) --target $(GTARGET)
 else
 TTPC ?= ../../build/compiler/boot/stage2
-TTPC_RUN = qemu-riscv64 $(TTPC) --target $(GTARGET)
+TTPC_RUN = qemu-riscv64 $(TTPC) -j$(TTPCJ) --target $(GTARGET)
 endif
 # (and on x86_64 the forms GNU as picks, for glibc's asm: x86_64gnu.ff)
 SHARED := ../compiler/shared.ff $(if $(filter x86_64,$(GTARGET)),../compiler/x86_64gnu.ff)
