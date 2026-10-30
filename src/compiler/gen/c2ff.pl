@@ -93,6 +93,8 @@ my %scalar = (
     'struct __va_list' => 'va_list',
     # C's complex types: the shared page's (real / z and imag / z its parts)
     '_Complex float' => 'complex float', '_Complex double' => 'complex double', '_Complex long double' => 'complex long double',
+    # (x86_64's complex __float128, libgcc's TC there: complex long double too)
+    '_Complex __float128' => 'complex long double', '__float128 _Complex' => 'complex long double',
     'float _Complex' => 'complex float', 'double _Complex' => 'complex double', 'long double _Complex' => 'complex long double',
 );
 
@@ -199,6 +201,10 @@ sub ctype {
     return ('fs', ctype($1)) if $t =~ /^__seg_fs\s+(.*)$/;
     return ('fs', ctype("$1 $2")) if $t =~ /^(.*?)\s*\b__seg_fs\b\s*(.*)$/;
     return $scalar{$t} if exists $scalar{$t};
+    # (x86_64's x87 long double, gcc's XF and XC, which libgcc's C has there
+    # (-mlong-double-80): ../../libgcc/clangfix.pl's records __x87ld and
+    # __x87lc; ttpc has no type of it yet, so what uses one is left out)
+    die "c2ff: x87's 80-bit long double (gcc's XF on x86_64): ttpc has no such type yet\n" if $t =~ /^(?:struct )?__x87l[dc]$/;
     # (__int128, x86_64's, which ttpc has no integer of: its 16 bytes as two
     # u64, for the layout of the audit interface's La_x86_64_regs and
     # La_x86_64_retval, which no code of a static program reads; arithmetic
@@ -1146,7 +1152,8 @@ my %sfop = ('+' => 'add', '-' => 'sub', '*' => 'mul', '/' => 'div');
 my %sfcmp = ('==' => 'eq', '!=' => 'ne', '<' => 'lt', '>' => 'gt', '<=' => 'le', '>=' => 'ge');
 # its floating type, from clang's spelling (ctype is not asked: it brings in
 # the types it is shown)
-sub tword { my ($n) = @_; return '' unless $n && $n->{type}; (my $q = qt($n)) =~ s/\b(const|volatile)\s+//g; $q =~ /^(float|double|long double)$/ ? $q : '' }
+# (__float128, x86_64's binary128 where long double is x87's: libgcc's TF, a long double here)
+sub tword { my ($n) = @_; return '' unless $n && $n->{type}; (my $q = qt($n)) =~ s/\b(const|volatile)\s+//g; $q = 'long double' if $q eq '__float128'; $q =~ /^(float|double|long double)$/ ? $q : '' }
 sub isld { tword($_[0]) eq 'long double' }
 # the ff words of an operand's type, after C's conversions (ctype)
 sub tword_int { my ($n) = @_; join ' ', ctype(qt($n)) }
@@ -1158,7 +1165,7 @@ sub softfp {
     if ($k eq 'BinaryOperator' || $k eq 'CompoundAssignOperator') {
         my $op = $n->{opcode};
         my $ld = isld((kids($n))[0]) || isld((kids($n))[1]);
-        if ($k eq 'CompoundAssignOperator') { $op =~ s/=$//; $ld ||= ($n->{computeResultType}{qualType} // '') eq 'long double' }
+        if ($k eq 'CompoundAssignOperator') { $op =~ s/=$//; $ld ||= ($n->{computeResultType}{qualType} // '') =~ /^(?:long double|__float128)$/ }
         want("__$sfop{$op}tf3") if $ld && $sfop{$op};
         want("__$sfcmp{$op}tf2") if $ld && $sfcmp{$op};
     } elsif ($k eq 'UnaryOperator' && $n->{opcode} eq '-' && isld($n)) {
@@ -1270,6 +1277,7 @@ sub asm_ins {
 }
 # An asm statement's text from the .i: its template (\t a space, \n a ;),
 # the constraints of its outputs and inputs, and its operands (clang's).
+sub size_class { my %s = (u64 => 8, long => 8, i64 => 8, u32 => 4, int => 4, i32 => 4); $s{ $_[0] } }
 sub asm_parts {
     my ($n) = @_;
     my $b = $n->{range}{begin}{offset} // $n->{range}{begin}{expansionLoc}{offset};
@@ -1293,6 +1301,16 @@ sub asm_parts {
     my @ic = ($ins // '') =~ /"([^"]*)"/g;
     my @ops = kids($n);
     @ops == @oc + @ic or stop('an asm statement whose operands are not its text\'s', $n);
+    # (an output cast to an integer of its own size, gcc's lvalue there:
+    # x86_64's longlong.h and sfp-machine.h, "=r" ((UDItype) (q)): the
+    # variable itself)
+    for my $i (0 .. $#oc) {
+        my $o = $ops[$i];
+        next unless $o->{kind} eq 'CStyleCastExpr';
+        my $in = strip((kids($o))[0]);
+        my ($to, $from) = (tword_int($o), tword_int($in));
+        $ops[$i] = $in if $to eq $from || ("$to $from" =~ /^(\S+) (\S+)$/ && size_class($1) && size_class($1) eq size_class($2));
+    }
     ($template, \@oc, \@ic, \@ops);
 }
 sub asm_stmt {
@@ -1432,6 +1450,9 @@ sub asm_ins_other {
         return node('vmrs', node($a[0])) if $op eq 'vmrs' && @a == 2 && $a[0] =~ /^r\d+$/ && $a[1] eq 'fpscr';
         return node('vmsr', node($a[1])) if $op eq 'vmsr' && @a == 2 && $a[0] eq 'fpscr' && $a[1] =~ /^r\d+$/;
     } elsif ($target eq 'x86_64') {
+        # an instruction as its bytes (libgcc's cpuinfo.h: xgetbv as .byte
+        # 0x0f, 0x01, 0xd0, for an old assembler)
+        return map { node('byte', node($_)) } @a if $op eq '.byte' && @a && !grep { !/^(?:0x[0-9a-f]+|\d+)$/i } @a;
         # instructions without operands (ABORT_INSTRUCTION's hlt, the spin
         # loops' pause, cpuid with its fixed registers)
         return node($op) if !@a && $op =~ /^(?:fwait|hlt|pause|nop|cpuid|xgetbv|rdtsc|mfence|lfence|sfence|fnclex|fpatan|syscall)$/;
@@ -1460,6 +1481,9 @@ sub asm_ins_other {
             return node($o, map { node(s/^%//r) } @a) if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)[lq]$/;
         }
         return node($op, node($1)) if $op =~ /^(?:div|mul)q$/ && @a == 1 && $a[0] =~ /^%(\w+)$/;
+        # the ALU's operations of two registers (libgcc's soft-fp: add and
+        # adc, sub and sbb of two-word fractions), GNU's operands in order
+        return node($op, map { node(s/^%//r) } @a) if $op =~ /^(?:add|adc|sub|sbb|and|or|xor)[lq]$/ && @a == 2 && !grep { !/^%\w+$/ } @a;
         # FMA on xmm registers (libm's fma and fmaf): FMA3's 213 form and
         # FMA4's, both VEX3 (x86_64gnu.ff)
         if ((($op =~ /^vfmadd213s[sd]$/ && @a == 3) || ($op =~ /^vfmadds[sd]$/ && @a == 4)) && !grep { !/^%xmm\d+$/ } @a) {
@@ -1487,7 +1511,7 @@ sub asm_stmt_other {
         $asm_size = $t =~ /^(long|u64|i64|address)$/ ? 'q' : $t =~ /^(int|u32|i32)$/ ? 'l' : undef;
     }
     # each operand: what it is, and the register it wants (x86's a, d ...)
-    my (@want, $ret, @code, @after, %text);
+    my (@want, $ret, @code, @after, %text, $second);
     # (x86_64's x operands of a float or a double in a template that has
     # instructions, libm's fma: each in an xmm register of its own, xmm0
     # up, loaded from its address and an output stored there after; an
@@ -1497,7 +1521,11 @@ sub asm_stmt_other {
         my $out = $i < @$oc;
         my $c = $out ? $oc->[$i] : $ic->[$i - @$oc];
         (my $k = $c) =~ s/[=+&]//g;
-        $k = 'r' if ($k eq 'rm' || $k eq 'g') && $target eq 'x86_64';
+        # (x86_64: % marks an operand commutative with the next, which says
+        # nothing here; an input that may be a register, memory or an
+        # immediate is in a register: libgcc's sfp-machine.h, "rme")
+        $k =~ s/%//g if $target eq 'x86_64';
+        $k = 'r' if ($k eq 'rm' || $k eq 'g' || $k eq 'rme' || $k eq 're' || $k eq 'rmi' || $k eq 'ri') && $target eq 'x86_64';
         if ($target eq 'x86_64' && $template =~ /\S/ && ($k =~ /^xm?$/ || ($k =~ /^\d$/ && !$out && $xreg{$k}))) {
             stop("the asm constraint $c", $n) if $c =~ /\+/;
             my $t = tword($ops->[$i]);
@@ -1514,6 +1542,14 @@ sub asm_stmt_other {
             $text{$i} = $fixed{$k};
         } elsif ($out && ($k eq 'r' || ($k eq 'x' && $target eq 'x86_64'))) {
             # the register output: the function's value (+: it goes in first, as an argument)
+            # (x86_64: a second one in r11, stored through its address after,
+            # as an output in a fixed register: libgcc's soft-fp, add and
+            # adc of two words)
+            if (defined $ret && $target eq 'x86_64' && $c !~ /\+/ && !$second++) {
+                push @want, [$i, 'address'];
+                $text{$i} = 'r11';
+                next;
+            }
             stop('an asm statement with two register outputs', $n) if defined $ret;
             $ret = $i;
             $text{$i} = $retreg{$target};
@@ -1547,7 +1583,7 @@ sub asm_stmt_other {
     for my $w (@want) { next if defined $w->[3]; $w->[3] = 100 + $fpn++ }
     stop('an asm statement with too many operands', $n) if grep { $_->[3] > $#$regs && $_->[3] < 100 } @want or $fpn > 8;
     my @arg;
-    my @scratch = qw(r10 r11);
+    my @scratch = $second ? qw(r10) : qw(r10 r11);
     for my $w (sort { $a->[3] <=> $b->[3] } @want) {
         my ($i, $how, $r, $j) = @$w;
         my $a = $j < 100 ? $regs->[$j] : undef;
@@ -1904,6 +1940,9 @@ sub expr {
         # and the other way: a libm function gcc always expands, as its
         # builtin (s_scalbn's copysign, which libc.a has no function of)
         $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
+        # (x86_64's builtins of __float128, a long double here: libgcc's
+        # _multc3 and _divtc3, its TC)
+        $name = "$1l" if $name =~ /^(__builtin_(?:fabs|copysign|huge_val|inf|nan|nans))f128$/ && $target eq 'x86_64';
         # gcc's alloca: ttpc's, C on the shared page, which the function gives
         # back when it returns
         return node('alloca', map { arg($_) } @args) if $name eq '__builtin_alloca';
@@ -1950,7 +1989,9 @@ sub expr {
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         # (riscv64's for libgcc's unwinder, unwind-dw2.c: its frame and registers)
-        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target eq 'riscv64';
+        # (and x86_64's: its shadow stack's too, which libgcc's unwinder reads, and the cache's)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target =~ /^(?:riscv64|x86_64)$/;
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(?:ia32_rdsspq|ia32_incsspq|__clear_cache)$/ && $target eq 'x86_64';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
@@ -2990,9 +3031,11 @@ sub next_name {
 # (--keep-going: a definition c2ff cannot translate yet is left out, said
 # on stderr with why, and the rest goes on: all of glibc while a few of
 # its objects wait)
+my %left_out;              # (their ff names: an alias of one is left out too)
 sub leave_out {
     my ($name) = @_;
     die $@ unless $keep_going;
+    $left_out{ ffname($name) } = 1;
     (my $why = $@) =~ s/\n+$//;
     warn "c2ff: left out: $name: $why\n";
 }
@@ -3048,6 +3091,16 @@ while (defined(my $name = next_name())) {
     # ld does): the section's globals come with them
     if ($name =~ /^__(?:start|stop)_(\w+)$/ && $section{$1}) { want($_) for @{ $section{$1} }; next }
     warn "c2ff: no definition of $name, left out\n";
+}
+# (an alias of what was left out is left out too: libgcc's __nehf2, of
+# __eqhf2, a function of _Float16)
+{
+    my @a;
+    while (@a = grep { @{ $_->[1]{children} } == 2 && $_->[1]{children}[0]{content} eq 'alias' && $left_out{ $_->[1]{children}[1]{content} } } @out) {
+        my %drop = map { $_ => 1 } @a;
+        for (@a) { (my $n = $_->[1]{content}) =~ s/:$//; $left_out{$n} = 1; warn "c2ff: left out: $n: an alias of $_->[1]{children}[1]{content}, left out\n" }
+        @out = grep { !$drop{$_} } @out;
+    }
 }
 
 # An enum constant whose name a function or global of the tree has too (a

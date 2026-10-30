@@ -425,3 +425,122 @@
         x
         y
         z
+  comment
+    gcc's builtins of libgcc's unwinder (unwind-dw2.c), for ttpc's frames on x86_64. A C function's rbp holds its caller's rbp at rbp and its return address at rbp + 8, its CFA is rbp + 16 (ttpc -g's .eh_frame:
+    DW_CFA_def_cfa rbp, 16), and of the callee-saved registers it keeps only rbp (ttpc's C uses no other: rbx, r12 ... r15 are as its caller left them, what the unwinder takes of a register no frame saved).
+    __builtin_dwarf_cfa: the CFA of the function that calls it, its rbp + 16 (an asm function has no frame of its own: rbp is the caller's).
+  __builtin_dwarf_cfa:
+    asm
+    movq
+      rbp
+      rax
+    addq.i
+      16
+      rax
+    ret
+  comment
+    __builtin_unwind_init: gcc saves every callee-saved register in the frame of the function that calls it, for uw_init_context_1 to find; a ttpc frame changes none but rbp, which it saves always: nothing to do.
+  __builtin_unwind_init:
+    void
+  comment
+    __builtin_dwarf_sp_column, __builtin_eh_return_data_regno: DWARF's numbers of rsp (7) and of the registers a landing pad takes the exception in (rax and rdx, 0 and 1), as gcc has them on x86_64; __builtin_frob_return_addr: the address itself.
+  __builtin_dwarf_sp_column:
+    int
+    return
+      7
+  __builtin_eh_return_data_regno:
+    int
+    n:
+      int
+    return
+      n
+      ==
+      0
+      ?
+      0
+      :
+      n
+      ==
+      1
+      ?
+      1
+      :
+      -
+      1
+  __builtin_frob_return_addr:
+    void
+    * pointer
+    a:
+      void
+      * pointer
+    return
+      a
+  comment
+    __builtin_init_dwarf_reg_size_table: the bytes of each DWARF register as the unwinder saves it, as gcc fills the table on x86_64: rax ... r15 and the return address (0 ... 16) 8 bytes, the rest 0.
+  __builtin_init_dwarf_reg_size_table:
+    void
+    t:
+      u8
+      * pointer
+    i:
+      int
+    for
+      i
+      =
+      0
+      i
+      <=
+      16
+      i
+      ++
+      t
+        i
+      =
+      8
+  comment
+    __builtin_eh_return: gcc's epilogue of a function that installs a context (_Unwind_RaiseException, _Unwind_ForcedUnwind, _Unwind_Resume ...): it restores the target frame's registers and jumps to its landing pad. Only a frame with a personality
+    routine has one, and ttpc writes none (no LSDA): no unwind of ttpc's frames comes here, and glibc's cancellation longjmps out of its stop function. A gcc frame's landing pad (C++'s, lane A-cxx) takes the exception in rax and rdx and its
+    callee-saved registers from the frames between, which ttpc's frame does not keep yet: until then it stops here, as int3.
+  __builtin_eh_return:
+    asm
+    int3
+  comment
+    The shadow stack's builtins (CET, which gcc builds libgcc's unwinder for: -fcf-protection -mshstk, its _Unwind_Frames_Extra): a ttpc program runs without a shadow stack (its ELF has no GNU property of SHSTK, so Linux enables none), where rdssp leaves
+    its register as it was: __builtin_ia32_rdsspq x (clang's form, x the value it keeps: clangfix.pl writes gcc's of none as one of 0) is x, and the unwinder never calls __builtin_ia32_incsspq (a shadow stack pointer of 0). __builtin___clear_cache:
+    nothing, as gcc has it on x86_64 (its instruction cache is coherent).
+  __builtin_ia32_rdsspq:
+    u64
+    x:
+      u64
+    return
+      x
+  __builtin_ia32_incsspq:
+    void
+    n:
+      u64
+  __builtin___clear_cache:
+    void
+    b:
+      void
+      * pointer
+    e:
+      void
+      * pointer
+  comment
+    gcc's __builtin_return_address level: where the function that calls it returns to (level 0, all glibc and libgcc's unwinder ask: dlopen's RETURN_ADDRESS, uw_init_context), from ttpc's frame on x86_64, which holds the caller's rbp at rbp and its
+    return address at rbp + 8; an asm function has no frame of its own: rbp is the caller's.
+  __builtin_return_address:
+    asm
+    movq.m
+      8
+      rbp
+      rax
+    ret
+  comment
+    gcc's __builtin_frame_address level: the frame of the function that calls it (level 0, all glibc asks: ____longjmp_chk's check that a longjmp goes up the stack), its rbp in ttpc's frame on x86_64.
+  __builtin_frame_address:
+    asm
+    movq
+      rbp
+      rax
+    ret

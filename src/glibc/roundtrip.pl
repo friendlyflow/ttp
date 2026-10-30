@@ -83,6 +83,8 @@ sub tstr {
     $s =~ s/\b(?:long int)\b/long/g;
     $s =~ s/\b(?:short int)\b/short/g;
     $s =~ s/\bunsigned\b(?! (?:char|short|int|long))/unsigned int/g;
+    # (x86_64's __float128, libgcc's TF: a long double in ff, its complex too)
+    $s =~ s/\b__float128\b/long double/g if $target eq 'x86_64';
     return tstr($tdef{$s}) if exists $tdef{$s};
     return tstr($typeof{$s}) if exists $typeof{$s};
     # (typeof (name): the type of what the unit declares by that name)
@@ -145,6 +147,8 @@ sub name_of {
     # (a call of copysign or fabs: of its builtin, as c2ff writes it)
     $n = "__builtin_$n" if $n =~ /^(?:copysign|fabs)[fl]?$/ && $d->{kind} eq 'FunctionDecl';
     $n = '__builtin_va_start' if $n eq '__builtin_c23_va_start';
+    # (x86_64's builtins of __float128: their long double ones, as c2ff writes them)
+    $n = "$1l" if $n =~ /^(__builtin_(?:fabs|copysign|huge_val|inf|nan|nans))f128$/ && $target eq 'x86_64';
     # (a unit's asm ("memset = __memset_generic"): its calls of memset are
     # of __memset_generic, as c2ff writes them)
     $n = $asmalias{$n} if $d->{kind} eq 'FunctionDecl' && exists $asmalias{$n};
@@ -163,8 +167,8 @@ sub special_float {
     return unless $n && ($n->{kind} // '') eq 'CallExpr';
     my $d = (strip((kids($n))[0]) // {})->{referencedDecl} or return;
     my $name = $d->{name} // '';
-    return 'inf' if $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/;
-    return 'nan' if $name =~ /^__builtin_nan[fl]?$/;
+    return 'inf' if $name =~ /^__builtin_(?:huge_val|inf)(?:[fl]|f128)?$/;
+    return 'nan' if $name =~ /^__builtin_nan(?:[fl]|f128)?$/;
     return;
 }
 # a value of FFold's as E has the literal of its type

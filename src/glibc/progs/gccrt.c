@@ -46,8 +46,12 @@ long double __floatunsitf (unsigned int);
 int __fixtfsi (long double);
 unsigned int __fixunstfsi (long double);
 int __unordtf2 (long double, long double);
+#ifdef __riscv
+/* (soft-fp's division of float and double: riscv64's libgcc has them, x86_64
+   divides in SSE) */
 double __divdf3 (double, double);
 float __divsf3 (float, float);
+#endif
 int __gcc_bcmp (const unsigned char *, const unsigned char *, unsigned long);
 
 static int n;
@@ -96,7 +100,9 @@ int main (void)
       l (__floatsitf ((int) x)); l (__floatunsitf ((unsigned int) x));
       w (__fixtfsi ((long double) (int) x / 3)); w32 (__fixunstfsi ((long double) (unsigned int) x / 5));
       w (__fixunsdfdi ((double) (unsigned long) x)); w (__fixunssfdi ((float) (unsigned int) x));
+#ifdef __riscv
       d (__divdf3 ((double) x, 7.0)); f (__divsf3 ((float) x, -3.0f));
+#endif
     }
   for (i = 0; i < N; i++)
     w (__unordtf2 (dv[i], dv[(i + 7) % N]));
