@@ -127,6 +127,23 @@ static void a64 (void)
   check (p_g_vard () == 55 + 180, "a64: gcc calls ttpc: variadic doubles past v7, ttpc's va_list to gcc");
 }
 #endif
+#ifdef __x86_64__
+ld1 cb_ld1 (long double a) { ld1 r = { a + 1 }; return r; }
+cld cb_cld (long double re, long double im) { cld z; __real__ z = re; __imag__ z = im; return z; }
+static void x87 (void)
+{
+  ld1 (*p_r_ld1) (long double) = r_ld1;
+  cld (*p_r_cld) (long double, long double) = r_cld;
+  long double (*p_g_ld1) (void) = g_ld1;
+  long double (*p_g_cld) (void) = g_cld;
+  ld1 r = p_r_ld1 (1.5L);
+  check (r.x == 3.0L, "x87: a struct of one long double as a result, in st0");
+  cld z = p_r_cld (4.0L, 5.0L);
+  check (__real__ z == 4.0L && __imag__ z == 5.0L, "x87: a complex long double as a result, in st0 and st1");
+  check (p_g_ld1 () == 6.0L, "x87: gcc calls ttpc: a struct of one long double as a result");
+  check (p_g_cld () == 23.0L, "x87: gcc calls ttpc: a complex long double as a result");
+}
+#endif
 #if defined __x86_64__ || defined __riscv
 long cb_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g)
 { return a.l + 2 * b.l + 3 * c.l + 4 * d.l + 5 * e.l + 6 * f.l + 7 * g.l + (long) (2 * (a.d + b.d + c.d + d.d + e.d + f.d + g.d)); }
@@ -294,6 +311,9 @@ int main (void)
   check (p_g_r_hd2 () == 9.5, "gcc calls ttpc: a double aggregate result");
 #if defined __aarch64__ || defined __x86_64__ || defined __riscv
   a64 ();
+#endif
+#ifdef __x86_64__
+  x87 ();
 #endif
 #if defined __x86_64__ || defined __riscv
   x64 ();

@@ -2740,7 +2740,7 @@ c:
   comment
     A result by the SysV ABI: cc_x64_resf, cc_x64_resd: V = the bits of the float, the double in xmm0. cc_x64_room: r11 = FP + X, the room of a result that comes in registers;
     cc_x64_rstx r k, cc_x64_rstxl r k: the 8 bytes, the 4 bytes of register r (rax, rdx) stored at r11 + k; cc_x64_rsts r k, cc_x64_rstsl r k: of xmm r;
-    cc_x64_rstq: xmm0's 16 bytes at r11 (a float128), cc_x64_rstt: st0 stored at r11 as a long double (popped); cc_x64_resv: V = r11, the result's address.
+    cc_x64_rstq: xmm0's 16 bytes at r11 (a float128), cc_x64_rstt: st0 stored at r11 as a long double (popped), cc_x64_rstt2: st0 and st1 at r11 and r11 + 16 (a complex long double); cc_x64_resv: V = r11, the result's address.
   cc_x64_resf:
     movd.fromx
       xmm0
@@ -2793,6 +2793,13 @@ c:
     fstpt.m
       0
       r11
+  cc_x64_rstt2:
+    fstpt.m
+      0
+      r11
+    fstpt.m
+      16
+      r11
   cc_x64_resv:
     movq
       r11
@@ -2802,7 +2809,8 @@ c:
     cc_x64_pushrdi, cc_x64_pushr11: rdi (the address of a result in memory), r11 (a variadic function's count of arguments) pushed.
     cc_x64_save: the registers of the arguments kept below SP, as a variadic function's register save area: rdi rsi rdx rcx r8 r9 at 0..40, xmm0..xmm7 at 48..160 (176 bytes, 22 slots).
     cc_x64_pf r, cc_x64_pd r: V = the bits of the float, the double in xmm r. cc_x64_vh k, cc_x64_vhl k: the 8 bytes, the 4 bytes at FP + L stored at V + k, an eightbyte of a struct parameter.
-    cc_x64_retf, cc_x64_retd: xmm0 = the float, the double whose bits are V. cc_x64_retq: xmm0 = the float128 at V. cc_x64_rett: st0 = the long double at V. cc_x64_retb: r11 = V, the address of a struct result;
+    cc_x64_retf, cc_x64_retd: xmm0 = the float, the double whose bits are V. cc_x64_retq: xmm0 = the float128 at V. cc_x64_rett: st0 = the long double at V, cc_x64_rett2: st0 and st1 = the complex long double's parts at V.
+    cc_x64_retb: r11 = V, the address of a struct result;
     cc_x64_retx r k, cc_x64_retxl r k: register r (rax, rdx) = the 8 bytes, the 4 bytes at r11 + k; cc_x64_rets r k, cc_x64_retsl r k: xmm r.
   cc_x64_entry:
     pushq
@@ -2921,6 +2929,13 @@ c:
       rax
       xmm0
   cc_x64_rett:
+    fldt.m
+      0
+      rax
+  cc_x64_rett2:
+    fldt.m
+      16
+      rax
     fldt.m
       0
       rax
