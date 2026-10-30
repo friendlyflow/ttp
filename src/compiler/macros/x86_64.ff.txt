@@ -1733,6 +1733,492 @@ c:
       rax
       r10
   comment
+    long double is the x87's 80-bit extended format (gcc's), in 16 bytes: the 8 bytes of the significand (its integer bit explicit), then the sign and the exponent in 2 bytes, 6 bytes of padding;
+    a value of it is in memory, V its address, as arm's double is (the cc_*_dm primitives' names say so: a floating type in memory).
+    cc_fadd_dm ... cc_fdiv_dm: the left one at L, the right one at V, into the temporary at FP + X, V its address; cc_feq_dm ... cc_fge_dm: V = 0 or 1 (unordered: only != holds); cc_fneg_dm: V's negation (its sign flipped) into FP + X.
+    cc_cvt_dm_l, cc_cvt_dm_lu, cc_cvt_dm_s, cc_cvt_dm_d: the long, u64, float, double V into FP + X, exact (64 bits of significand);
+    cc_cvt_l_dm, cc_cvt_lu_dm, cc_cvt_s_dm, cc_cvt_d_dm: V = the long (towards 0, C's), u64, float, double of the long double at V (the x87's rounding, to nearest).
+    cc_cvt_q_dm: the binary128 (float128) of the long double at V into FP + X, exact (its bits: the same exponent, the significand without its integer bit). The x87's stack is empty after each of them, as the SysV ABI has it at a call.
+  cc_fadd_dm:
+    fldt.m
+      0
+      r10
+    fldt.m
+      0
+      rax
+    faddp.st1
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_fsub_dm:
+    fldt.m
+      0
+      r10
+    fldt.m
+      0
+      rax
+    fsubp.st1
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_fmul_dm:
+    fldt.m
+      0
+      r10
+    fldt.m
+      0
+      rax
+    fmulp.st1
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_fdiv_dm:
+    fldt.m
+      0
+      r10
+    fldt.m
+      0
+      rax
+    fdivp.st1
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_feq_dm:
+    fldt.m
+      0
+      rax
+    fldt.m
+      0
+      r10
+    fucomip.st1
+    fstp.st0
+    sete
+      al
+    setnp
+      r11b
+    andb
+      r11b
+      al
+    movzbl
+      al
+      eax
+  cc_fne_dm:
+    fldt.m
+      0
+      rax
+    fldt.m
+      0
+      r10
+    fucomip.st1
+    fstp.st0
+    setne
+      al
+    setp
+      r11b
+    orb
+      r11b
+      al
+    movzbl
+      al
+      eax
+  cc_flt_dm:
+    fldt.m
+      0
+      r10
+    fldt.m
+      0
+      rax
+    fucomip.st1
+    fstp.st0
+    seta
+      al
+    movzbl
+      al
+      eax
+  cc_fgt_dm:
+    fldt.m
+      0
+      rax
+    fldt.m
+      0
+      r10
+    fucomip.st1
+    fstp.st0
+    seta
+      al
+    movzbl
+      al
+      eax
+  cc_fle_dm:
+    fldt.m
+      0
+      r10
+    fldt.m
+      0
+      rax
+    fucomip.st1
+    fstp.st0
+    setae
+      al
+    movzbl
+      al
+      eax
+  cc_fge_dm:
+    fldt.m
+      0
+      rax
+    fldt.m
+      0
+      r10
+    fucomip.st1
+    fstp.st0
+    setae
+      al
+    movzbl
+      al
+      eax
+  cc_fneg_dm:
+    pushq
+      r10
+    addq
+      rbp
+      r11
+    movq.m
+      0
+      rax
+      r10
+    movq.mr
+      r10
+      0
+      r11
+    movq.m
+      8
+      rax
+      r10
+    btcq.i
+      15
+      r10
+    movq.mr
+      r10
+      8
+      r11
+    movq
+      r11
+      rax
+    popq
+      r10
+  cc_cvt_dm_l:
+    pushq
+      rax
+    fildll.m
+      0
+      rsp
+    popq
+      rax
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_cvt_dm_lu:
+    pushq
+      r10
+    pushq
+      rax
+    fildll.m
+      0
+      rsp
+    sarq.i
+      63
+      rax
+    movq
+      rax
+      r10
+    andq.i
+      16447
+      r10
+    pushq
+      r10
+    shlq.i
+      63
+      rax
+    pushq
+      rax
+    fldt.m
+      0
+      rsp
+    faddp.st1
+    addq.i
+      24
+      rsp
+    popq
+      r10
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_cvt_l_dm:
+    fldt.m
+      0
+      rax
+    pushq
+      r10
+    pushq
+      rax
+    pushq
+      rax
+    fnstcw.m
+      8
+      rsp
+    movzwq.m
+      8
+      rsp
+      r10
+    orq.i
+      3072
+      r10
+    movw.mr
+      r10w
+      12
+      rsp
+    fldcw.m
+      12
+      rsp
+    fistpll.m
+      0
+      rsp
+    fldcw.m
+      8
+      rsp
+    popq
+      rax
+    popq
+      r10
+    popq
+      r10
+  cc_cvt_lu_dm:
+    pushq
+      r10
+    movq.i
+      16446
+      r10
+    pushq
+      r10
+    movq.i
+      1
+      r10
+    shlq.i
+      63
+      r10
+    pushq
+      r10
+    fldt.m
+      0
+      rax
+    fldt.m
+      0
+      rsp
+    fucomip.st1
+    setbe
+      al
+    movzbl
+      al
+      eax
+    movq.i
+      0
+      r10
+    subq
+      rax
+      r10
+    andq.mr
+      r10
+      0
+      rsp
+    andq.mr
+      r10
+      8
+      rsp
+    fldt.m
+      0
+      rsp
+    fsubp.st1
+    fnstcw.m
+      8
+      rsp
+    movzwq.m
+      8
+      rsp
+      r10
+    orq.i
+      3072
+      r10
+    movw.mr
+      r10w
+      12
+      rsp
+    fldcw.m
+      12
+      rsp
+    fistpll.m
+      0
+      rsp
+    fldcw.m
+      8
+      rsp
+    movq.m
+      0
+      rsp
+      r10
+    shlq.i
+      63
+      rax
+    xorq
+      r10
+      rax
+    addq.i
+      16
+      rsp
+    popq
+      r10
+  cc_cvt_dm_s:
+    pushq
+      rax
+    flds.m
+      0
+      rsp
+    popq
+      rax
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_cvt_s_dm:
+    fldt.m
+      0
+      rax
+    pushq
+      rax
+    fstps.m
+      0
+      rsp
+    popq
+      rax
+    movl
+      eax
+      eax
+  cc_cvt_dm_d:
+    pushq
+      rax
+    fldl.m
+      0
+      rsp
+    popq
+      rax
+    addq
+      rbp
+      r11
+    fstpt.m
+      0
+      r11
+    movq
+      r11
+      rax
+  cc_cvt_d_dm:
+    fldt.m
+      0
+      rax
+    pushq
+      rax
+    fstpl.m
+      0
+      rsp
+    popq
+      rax
+  cc_cvt_q_dm:
+    pushq
+      r10
+    addq
+      rbp
+      r11
+    movq.m
+      0
+      rax
+      r10
+    movzwq.m
+      8
+      rax
+      rax
+    shlq.i
+      1
+      r10
+    shlq.i
+      48
+      rax
+    pushq
+      r10
+    shrq.i
+      16
+      r10
+    orq
+      r10
+      rax
+    movq.mr
+      rax
+      8
+      r11
+    popq
+      r10
+    shlq.i
+      48
+      r10
+    movq.mr
+      r10
+      0
+      r11
+    movq
+      r11
+      rax
+    popq
+      r10
+  comment
     cc_vor, cc_vxor, cc_vand, cc_veq<b w d>, cc_vne<b w d>: | ^ & == != of two vectors (16 bytes) element by element, the left one at L, the right one at V, into the temporary at FP + X; V its address.
     == gives each element all ones where they are equal, else 0 (pcmpeq), != the other way.
   cc_vor:
@@ -2090,10 +2576,10 @@ c:
       rax
   comment
     cc_abi: the ABI calls go by, 3: the SysV ABI of x86_64 as Linux has it (gen/patches/abix64.pl):
-    rdi rsi rdx rcx r8 r9 and xmm0..xmm7 (a float, a double, a long double: binary128, all 16 bytes), then the stack in 8-byte slots (16-aligned for 16), rsp 16-aligned at a call.
+    rdi rsi rdx rcx r8 r9 and xmm0..xmm7 (a float, a double, a float128: binary128, 16 bytes; a long double, the x87's, goes on the stack), then the stack in 8-byte slots (16-aligned for 16), rsp 16-aligned at a call.
     A struct of 16 bytes or less goes in its eightbytes' registers (an eightbyte of floats or doubles only in an xmm register, any other in a general one),
     a larger one by its bytes on the stack, a result in memory through rdi (rax its address again). A variadic call gives al the count of the xmm registers it uses.
-    The caller (V, L, X free): cc_x64_lds r s, cc_x64_ldd r s: xmm r = the float, the double at SP + s. cc_x64_ldq r s: xmm r = the long double at the address at SP + s.
+    The caller (V, L, X free): cc_x64_lds r s, cc_x64_ldd r s: xmm r = the float, the double at SP + s. cc_x64_ldq r s: xmm r = the float128 at the address at SP + s.
     cc_x64_ldxw i s k, cc_x64_ldxl i s k: argument register i = the 8 bytes, the 4 bytes at k in the struct whose address is at SP + s; cc_x64_ldsw r s k, cc_x64_ldsl r s k: xmm r the same.
     cc_x64_stk s d: [SP + d] = [SP + s], an argument on the stack. cc_x64_stkw s d k: [SP + d] = the word at k in the struct whose address is at SP + s.
     cc_x64_rdi: rdi = FP + L, the room of a result in memory. cc_x64_al n: al (eax) = n. cc_x64_callp off: a call to the address at SP + off.
@@ -2253,7 +2739,8 @@ c:
       r11
   comment
     A result by the SysV ABI: cc_x64_resf, cc_x64_resd: V = the bits of the float, the double in xmm0. cc_x64_room: r11 = FP + X, the room of a result that comes in registers;
-    cc_x64_rstx r k, cc_x64_rstxl r k: the 8 bytes, the 4 bytes of register r (rax, rdx) stored at r11 + k; cc_x64_rsts r k, cc_x64_rstsl r k: of xmm r; cc_x64_rstq: xmm0's 16 bytes at r11; cc_x64_resv: V = r11, the result's address.
+    cc_x64_rstx r k, cc_x64_rstxl r k: the 8 bytes, the 4 bytes of register r (rax, rdx) stored at r11 + k; cc_x64_rsts r k, cc_x64_rstsl r k: of xmm r;
+    cc_x64_rstq: xmm0's 16 bytes at r11 (a float128), cc_x64_rstt: st0 stored at r11 as a long double (popped); cc_x64_resv: V = r11, the result's address.
   cc_x64_resf:
     movd.fromx
       xmm0
@@ -2302,6 +2789,10 @@ c:
       xmm0
       0
       r11
+  cc_x64_rstt:
+    fstpt.m
+      0
+      r11
   cc_x64_resv:
     movq
       r11
@@ -2311,7 +2802,7 @@ c:
     cc_x64_pushrdi, cc_x64_pushr11: rdi (the address of a result in memory), r11 (a variadic function's count of arguments) pushed.
     cc_x64_save: the registers of the arguments kept below SP, as a variadic function's register save area: rdi rsi rdx rcx r8 r9 at 0..40, xmm0..xmm7 at 48..160 (176 bytes, 22 slots).
     cc_x64_pf r, cc_x64_pd r: V = the bits of the float, the double in xmm r. cc_x64_vh k, cc_x64_vhl k: the 8 bytes, the 4 bytes at FP + L stored at V + k, an eightbyte of a struct parameter.
-    cc_x64_retf, cc_x64_retd: xmm0 = the float, the double whose bits are V. cc_x64_retq: xmm0 = the long double at V. cc_x64_retb: r11 = V, the address of a struct result;
+    cc_x64_retf, cc_x64_retd: xmm0 = the float, the double whose bits are V. cc_x64_retq: xmm0 = the float128 at V. cc_x64_rett: st0 = the long double at V. cc_x64_retb: r11 = V, the address of a struct result;
     cc_x64_retx r k, cc_x64_retxl r k: register r (rax, rdx) = the 8 bytes, the 4 bytes at r11 + k; cc_x64_rets r k, cc_x64_retsl r k: xmm r.
   cc_x64_entry:
     pushq
@@ -2429,6 +2920,10 @@ c:
       0
       rax
       xmm0
+  cc_x64_rett:
+    fldt.m
+      0
+      rax
   cc_x64_retb:
     movq
       rax

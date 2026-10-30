@@ -20,7 +20,12 @@
 #                                    infinity's exponent] (float, double,
 #                                    long double as binary128)
 #   ftype($n)                        the node's floating type, or ''
-#   ldinside($n)                     a long double in the node or under it
+#                                    (clang's __float128 is float128)
+#   ldinside($n)                     a long double (or float128) in the
+#                                    node or under it
+#   x87()                            long double as x86_64 has it, the
+#                                    x87's 64 bits (float128 binary128,
+#                                    with Q)
 #
 # A host tool (core Perl only).
 package FFold;
@@ -35,14 +40,13 @@ sub ftype {
     my ($n) = @_;
     return '' unless $n && $n->{type};
     (my $q = $n->{type}{desugaredQualType} // $n->{type}{qualType} // '') =~ s/\b(const|volatile)\s+//g;
-    $q =~ /^(float|double|long double)$/ ? $q : '';
+    $q =~ /^(float|double|long double)$/ ? $q : $q eq '__float128' ? 'float128' : '';
 }
-sub ldinside { my ($n) = @_; return 1 if ftype($n) eq 'long double'; grep { ldinside($_) } kids($n) }
-sub fty {
-    my %t = (float => [24, -149, 127, 'f', '128f'], double => [53, -1074, 1023, '', '1024'],
-        'long double' => [113, -16494, 16383, 'L', '16384L']);
-    $t{ $_[0] // '' };
-}
+sub ldinside { my ($n) = @_; return 1 if ftype($n) =~ /^(long double|float128)$/; grep { ldinside($_) } kids($n) }
+my %fty = (float => [24, -149, 127, 'f', '128f'], double => [53, -1074, 1023, '', '1024'],
+    'long double' => [113, -16494, 16383, 'L', '16384L'], float128 => [113, -16494, 16383, 'Q', '16384Q']);
+sub fty { $fty{ $_[0] // '' } }
+sub x87 { $fty{'long double'} = [64, -16445, 16383, 'L', '16384L'] }
 
 # clang's decimal: n / d, or undef
 sub dec {

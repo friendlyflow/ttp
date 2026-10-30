@@ -46,10 +46,16 @@ long long cb_vsum (int n, va_list ap)
   for (int i = 0; i < n; i++) { s += va_arg (aq, int); s += 3 * va_arg (aq, double); }
   va_end (aq); return s; }
 long long cb_vard (int n, ...) { va_list ap; va_start (ap, n); long long r = f_vsum (n, ap); va_end (ap); return r; }
-/* a long double by its bytes: ttpc's program has no soft-fp to compare */
+/* a long double by its bytes: ttpc's program has no soft-fp to compare
+   (x86_64's, the x87's, is 10 of its 16 bytes) */
 static int ldeq (long double a, long double b)
 { unsigned char *p = (unsigned char *) &a, *q = (unsigned char *) &b;
-  for (int i = 0; i < 16; i++) if (p[i] != q[i]) return 0;
+#ifdef __x86_64__
+  int n = 10;
+#else
+  int n = 16;
+#endif
+  for (int i = 0; i < n; i++) if (p[i] != q[i]) return 0;
   return 1; }
 static void a64 (void)
 {
