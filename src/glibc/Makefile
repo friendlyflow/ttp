@@ -747,6 +747,20 @@ $(foreach m,$(MILESTONES),$(eval $(call licenses,$(m))))
 glibc-licenses: licenses $(MILESTONES:%=%-licenses)
 .PHONY: licenses glibc-licenses
 
+# ---- the C parser in ff (T3a) -----------------------------------------------
+# ../compiler/tools/cparse and cprint (their library tools/c.ff), checked by
+# ../compiler/gen/cparsecheck.sh: every unit of this build (I) and each
+# milestone program's .i parsed into its ff tree, the tree written back as C
+# and compiled by gcc as the .i is: the same code, unit by unit. The tools
+# are this machine's build of the compiler's (make compiler-check makes them).
+CPTOOLS ?= ../../build/compiler/tools/$(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
+CPRUN := $(if $(filter x86_64,$(shell uname -m)),,qemu-riscv64)
+cparse-check:
+	@echo "cparse-check: $(words $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))) units of $(BUILD)"
+	@$(RUN) -t 3600 sh ../compiler/gen/cparsecheck.sh -r "$(CPRUN)" $(CPTOOLS)/cparse $(CPTOOLS)/cprint $(GLIBC_CC) $(BUILD)/cparse \
+	    $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))
+.PHONY: cparse-check
+
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
 # in for all of glibc (a path from an expression, a call through a comma's
