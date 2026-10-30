@@ -1445,6 +1445,12 @@ sub asm_ins_other {
         # barrier's option (dmb ish)
         return node($op, node($1 =~ /^0x/i ? hex $1 : $1)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
         return node($op) if $op =~ /^(?:nop|yield|wfe|wfi|sev|sevl|isb|clrex)$/ && !@a;
+        # a cache's line cleaned by address (libgcc's __aarch64_sync_cache_range:
+        # dc cvau, ic ivau)
+        return node(lc("$op.$a[0]"), node($a[1])) if $op =~ /^(?:dc|ic)$/ && @a == 2 && $a[0] =~ /^(?:cvau|ivau)$/i && $a[1] =~ /^x\d+$/;
+        # an instruction as its word (libgcc's aarch64_vg: .inst of cntd x0,
+        # for an old assembler)
+        return node('word', node($1 =~ /^0x/i ? hex $1 : $1)) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
         # a hint by its number: ttpc names the ones it has (hint 40 is chkfeat)
         my %hint = (0 => 'nop', 1 => 'yield', 25 => 'paciasp', 29 => 'autiasp', 32 => 'bti', 34 => 'bti.c', 36 => 'bti.j', 38 => 'bti.jc', 40 => 'chkfeat');
         return node($hint{$1}) if $op eq 'hint' && @a == 1 && $a[0] =~ /^#?(\d+)$/ && $hint{$1};
@@ -1742,6 +1748,16 @@ sub asm_x87 {
 sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
+    # (the address or the size of a 128-bit integer is no value of one: its
+    # layout, two u64, is right; libgcc's aarch64_fallback_frame_state,
+    # &ctx->vregs[i] and sizeof (ctx->vregs[0]) of the signal frame)
+    if ((($k eq 'UnaryOperator' && $n->{opcode} eq '&') || $k eq 'UnaryExprOrTypeTraitExpr') && !$n->{i128_addr}) {
+        local $n->{i128_addr} = 1;
+        my $was = $saw_i128;
+        my @r = expr($n);
+        $saw_i128 = $was;
+        return @r;
+    }
     softfp($n);
     if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
         && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
@@ -2085,8 +2101,11 @@ sub expr {
         # and those of one target (builtins-<target>.ff.txt)
         # (riscv64's for libgcc's unwinder, unwind-dw2.c: its frame and registers)
         # (and x86_64's: its shadow stack's too, which libgcc's unwinder reads, and the cache's)
-        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target =~ /^(?:riscv64|x86_64)$/;
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target =~ /^(?:riscv64|x86_64|aarch64)$/;
+        # (aarch64's pointer authentication and guarded control stack, its unwinder's)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_aarch64_(?:autia1716|autib1716|chkfeat|gcspr|gcspopm)$/ && $target eq 'aarch64';
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(?:ia32_rdsspq|ia32_incsspq|__clear_cache)$/ && $target eq 'x86_64';
+        return node($name, map { arg($_) } @args) if $name eq '__builtin___clear_cache' && $target eq 'aarch64';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause|xbegin|xend|xtest)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';

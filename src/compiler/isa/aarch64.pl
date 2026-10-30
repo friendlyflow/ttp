@@ -215,13 +215,18 @@ def("eret",  "insn=11010110100111110000001111100000");
 # the hints of branch protection, pointer authentication and GCS, each by
 # its name (GNU writes the plain ones as hint #n)
 for (["bti", "0100", "000"], ["bti.c", "0100", "010"], ["bti.j", "0100", "100"], ["bti.jc", "0100", "110"],
-     ["paciasp", "0011", "001"], ["autiasp", "0011", "101"], ["chkfeat", "0101", "000"]) {
+     ["paciasp", "0011", "001"], ["autiasp", "0011", "101"], ["chkfeat", "0101", "000"],
+     # (x17 authenticated with x16's salt, key A or B: libgcc's unwinder)
+     ["autia1716", "0001", "100"], ["autib1716", "0001", "110"]) {
     def($_->[0], "op=11010101000000110010", "crm=$_->[1]", "op2=$_->[2]", "rt=11111");
 }
 # sys and sysl by the names of what they do: the data cache zeroing by
 # block (dc zva, and with MTE dc gva gzva), the guarded control stack
 for (["dc.zva", "0", "0100", "001"], ["dc.gva", "0", "0100", "011"], ["dc.gzva", "0", "0100", "100"],
-     ["gcsss1", "0", "0111", "010"], ["gcsss2", "1", "0111", "011"], ["gcspopm", "1", "0111", "001"]) {
+     ["gcsss1", "0", "0111", "010"], ["gcsss2", "1", "0111", "011"], ["gcspopm", "1", "0111", "001"],
+     # (the data and instruction caches cleaned to the point of unification
+     # by address: libgcc's __aarch64_sync_cache_range)
+     ["dc.cvau", "0", "1011", "001"], ["ic.ivau", "0", "0101", "001"]) {
     def($_->[0], "op=1101010100", "l=$_->[1]", "x=01", "op1=011", "crn=0111", "crm=$_->[2]", "op2=$_->[3]", "rt");
 }
 
@@ -315,6 +320,8 @@ for my $o (["", "0", "0"], ["a", "1", "0"], ["l", "0", "1"], ["al", "1", "1"]) {
         my ($s, $size) = @$_;
         def("cas$os$s", "size=$size", "x=001000", "o2=1", "l=$l", "o1=1", "rs", "o0=$o0", "rt2=11111", "rn", "rt");
     }
+    # (and of a pair of doublewords, rs and rt even: lse.S's 16-byte cas)
+    def("casp$os", "size=01", "x=001000", "o2=0", "l=$l", "o1=1", "rs", "o0=$o0", "rt2=11111", "rn", "rt");
 }
 
 # ---------------------------------------------------------------------------
@@ -456,6 +463,8 @@ def("cmpne.b", "x=00100100", "size=00", "x=0", "zm", "x=101", "pg", "zn", "ne=1"
 def("cmphi.b", "x=00100100", "size=00", "x=0", "zm", "x=000", "pg", "zn", "ne=1", "pd");
 def("ptrue.b", "x=00100101", "size=00", "x=011", "x=00", "s=0", "x=111000", "pattern", "x=0", "pd");
 def("cntb", "x=00000100", "size=00", "x=10", "uimm[3:0]", "x=111000", "pattern", "rd");
+# (cntd: the doublewords of a vector, SME's vector length in libgcc's __arm_get_current_vg)
+def("cntd", "x=00000100", "size=11", "x=10", "uimm[3:0]", "x=111000", "pattern", "rd");
 def("dup.b", "x=00000101", "size=00", "x=1", "x=00000", "x=001110", "rn", "zd");
 
 # SME: what glibc's __arm_za_disable does (its saved ZA, then smstop).
@@ -464,6 +473,8 @@ $isa->group("sme");
 
 def("addsvl", "x=00000100", "x=001", "rn", "x=01011", "imm[5:0]", "rd");
 def("str.za", "x=1110000100100000", "x=0", "rv", "x=000", "rn", "x=0", "uimm[3:0]");
+# (ldr.za: the other way, libgcc's __arm_tpidr2_restore)
+def("ldr.za", "x=1110000100000000", "x=0", "rv", "x=000", "rn", "x=0", "uimm[3:0]");
 def("smstop",    "insn=11010101000000110100011001111111");
 def("smstop.za", "insn=11010101000000110100010001111111");
 

@@ -79,9 +79,17 @@ static void w (unsigned long x) { printf ("%d %016lx\n", n++, x); }
    libgcc's is SItype, an int; gcc takes a call's type from the caller's
    declaration, ttpc from the function's definition) */
 static void w32 (unsigned int x) { printf ("%d %08x\n", n++, x); }
-static void f (float x) { union { float f; unsigned int u; } v; v.f = x; w (v.u); }
-static void d (double x) { union { double d; unsigned long u; } v; v.d = x; w (v.u); }
-static void l (tf x) { union { tf d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1]); }
+/* (a NaN's sign on aarch64 as 0: gcc's libgcc there computes a * b + c as
+   one fmadd, fmsub ... (C's FP_CONTRACT, gcc's -ffp-contract=fast), whose
+   NaN takes another sign than two operations', ttpc's) */
+#ifdef __aarch64__
+#define NANSIGN(x, s) ((x) != (x) ? (s) : 0)
+#else
+#define NANSIGN(x, s) 0
+#endif
+static void f (float x) { union { float f; unsigned int u; } v; v.f = x; w (v.u & ~NANSIGN (x, 0x80000000u)); }
+static void d (double x) { union { double d; unsigned long u; } v; v.d = x; w (v.u & ~NANSIGN (x, 0x8000000000000000ul)); }
+static void l (tf x) { union { tf d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & ~NANSIGN (x, 0x8000000000000000ul)); }
 #ifdef __x86_64__
 /* (the x87's 80 bits: the 6 bytes above them are padding) */
 static void xl (long double x) { union { long double d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & 0xffff); }

@@ -77,7 +77,8 @@ sub fail { die "s2ff: $where: @_\n" }
 # ---- --locals: the numeric labels named ------------------------------------
 # GNU as keeps no numeric label in the symbol table, even with -L: each gets
 # a name of its own, .L<n>__<k> for the k-th definition of n:, and 1f, 1b
-# the one after, the one before. (Only outside a .macro: a label in a
+# the one after, the one before, in an instruction or a macro's arguments
+# (lse.S's JUMP_IF_NOT_LSE 8f). (Only outside a .macro: a label in a
 # macro's body would be defined by each expansion.)
 if ($locals) {
     open my $s, '<', $src or die "s2ff: cannot open $src: $!\n";
@@ -95,7 +96,7 @@ if ($locals) {
             my $rest = $_;
             while ($rest =~ s/^(\s*)(\d+):/$1/) { my $n = $2; $count{$n}++; $out .= ".L${n}__$count{$n}:" }
             $rest =~ s/(?<![.\w])(\d+)([fb])\b/".L$1__" . (($count{$1} \/\/ 0) + ($2 eq 'f' ? 1 : 0))/ge
-                if $rest =~ /^\s*[a-z]/ && $rest !~ /^\s*\./;
+                if $rest =~ /^\s*[A-Za-z_]/ && $rest !~ /^\s*\./;
             $_ = $out . $rest;
         }
         print join ';', @st;
@@ -192,7 +193,9 @@ sub readdump {
         # the symbol table: value, flags, section, size, name
         if ($symbols && /^([0-9a-f]{16}) (.{7}) (\S+)\t[0-9a-f]+ (.+)$/) {
             my ($v, $flags, $sec, $name) = (hex $1, $2, $3, $4);
-            $name =~ s/^\.(hidden|protected|internal) //;
+            # (st_other's visibility, or its value where it has more bits:
+            # 0x82, variant_pcs and hidden, libgcc's SME functions)
+            $name =~ s/^(?:\.(?:hidden|protected|internal)|0x[0-9a-f]+) //;
             next if $name =~ /^\$[xd]/ || $flags =~ /d/ || $sec eq '*ABS*';
             $sect{$name} = $sec;
             next if $sec eq '*UND*';
