@@ -794,6 +794,10 @@ for my $t (["fld", 0xd9, 0xc0, "<rs>"], ["fst", 0xdd, 0xd0, "<rs>"], ["fstp", 0x
            ["fcomi", 0xdb, 0xf0, "<rs>, %st"], ["fcomip", 0xdf, 0xf0, "<rs>, %st"], ["fucomi", 0xdb, 0xe8, "<rs>, %st"], ["fucomip", 0xdf, 0xe8, "<rs>, %st"],
            ["fadd", 0xd8, 0xc0, "<rs>, %st"], ["fmul", 0xd8, 0xc8, "<rs>, %st"], ["fsub", 0xd8, 0xe0, "<rs>, %st"], ["fsubr", 0xd8, 0xe8, "<rs>, %st"],
            ["fdiv", 0xd8, 0xf0, "<rs>, %st"], ["fdivr", 0xd8, 0xf8, "<rs>, %st"],
+           # the conditional moves to st0 (gcc's long double code)
+           ["fcmovb", 0xda, 0xc0, "<rs>, %st"], ["fcmove", 0xda, 0xc8, "<rs>, %st"], ["fcmovbe", 0xda, 0xd0, "<rs>, %st"],
+           ["fcmovu", 0xda, 0xd8, "<rs>, %st"], ["fcmovnb", 0xdb, 0xc0, "<rs>, %st"], ["fcmovne", 0xdb, 0xc8, "<rs>, %st"],
+           ["fcmovnbe", 0xdb, 0xd0, "<rs>, %st"], ["fcmovnu", 0xdb, 0xd8, "<rs>, %st"],
            # (AT&T's sub and subr, div and divr to st(i) are the other opcode's)
            ["fadd.tost", 0xdc, 0xc0, "%st, <rs>"], ["fmul.tost", 0xdc, 0xc8, "%st, <rs>"], ["fsub.tost", 0xdc, 0xe0, "%st, <rs>"],
            ["fsubr.tost", 0xdc, 0xe8, "%st, <rs>"], ["fdiv.tost", 0xdc, 0xf0, "%st, <rs>"], ["fdivr.tost", 0xdc, 0xf8, "%st, <rs>"],
@@ -829,6 +833,9 @@ for my $t (["xsave64", 0x0f, 0xae, 4], ["xrstor64", 0x0f, 0xae, 5], ["xsavec64",
     my $digit = pop @op;
     legacy(nm => $nm, s => "q", op => \@op, kind => "M", digit => $digit, regonly => 0);
 }
+# a push and a pop of memory (gcc's long double arguments: pushq 8(%rsp))
+legacy(nm => "pushq", s => "l", op => [0xff], kind => "M", digit => 6, regonly => 0);
+legacy(nm => "popq", s => "l", op => [0x8f], kind => "M", digit => 0, regonly => 0);
 for my $t (["movbel", "l", 0xf0, 0xf1], ["movbeq", "q", 0xf0, 0xf1]) {
     my ($nm, $s, $ld, $st) = @$t;
     legacy(nm => $nm, s => $s, op => [0x0f, 0x38, $ld], kind => "RM", regonly => 0, gnu => "movbe");

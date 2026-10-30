@@ -16,7 +16,12 @@ static void mix (unsigned long x) { h = (h ^ x) * 1099511628211UL; }
 
 static void fbits (float x) { union { float f; unsigned int w; } u; u.f = x; mix (u.w); }
 static void dbits (double x) { union { double d; unsigned long w; } u; u.d = x; mix (u.w); }
+#ifdef __x86_64__
+/* (the x87's 80 bits: after the sign and exponent 6 bytes of padding no store writes) */
+static void lbits (long double x) { union { long double d; unsigned long w[2]; } u; u.d = x; mix (u.w[0]); mix (u.w[1] & 0xffff); }
+#else
 static void lbits (long double x) { union { long double d; unsigned long w[2]; } u; u.d = x; mix (u.w[0]); mix (u.w[1]); }
+#endif
 
 static volatile float fv[8];
 static volatile double dv[8];

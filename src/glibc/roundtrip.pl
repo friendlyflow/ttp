@@ -40,6 +40,7 @@ my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JS
 
 our $target = '';
 if (@ARGV >= 2 && $ARGV[0] eq '--target') { (undef, $target) = splice @ARGV, 0, 2 }
+FFold::x87() if $target eq 'x86_64';
 my ($namesfile, $backjson, @unitjson) = @ARGV;
 die "usage: roundtrip.pl [--target t] names.txt back.json [unit.json ...]\n" unless defined $backjson;
 
@@ -83,8 +84,6 @@ sub tstr {
     $s =~ s/\b(?:long int)\b/long/g;
     $s =~ s/\b(?:short int)\b/short/g;
     $s =~ s/\bunsigned\b(?! (?:char|short|int|long))/unsigned int/g;
-    # (x86_64's __float128, libgcc's TF: a long double in ff, its complex too)
-    $s =~ s/\b__float128\b/long double/g if $target eq 'x86_64';
     return tstr($tdef{$s}) if exists $tdef{$s};
     return tstr($typeof{$s}) if exists $typeof{$s};
     # (typeof (name): the type of what the unit declares by that name)
@@ -147,8 +146,6 @@ sub name_of {
     # (a call of copysign or fabs: of its builtin, as c2ff writes it)
     $n = "__builtin_$n" if $n =~ /^(?:copysign|fabs)[fl]?$/ && $d->{kind} eq 'FunctionDecl';
     $n = '__builtin_va_start' if $n eq '__builtin_c23_va_start';
-    # (x86_64's builtins of __float128: their long double ones, as c2ff writes them)
-    $n = "$1l" if $n =~ /^(__builtin_(?:fabs|copysign|huge_val|inf|nan|nans))f128$/ && $target eq 'x86_64';
     # (a unit's asm ("memset = __memset_generic"): its calls of memset are
     # of __memset_generic, as c2ff writes them)
     $n = $asmalias{$n} if $d->{kind} eq 'FunctionDecl' && exists $asmalias{$n};
@@ -266,6 +263,8 @@ sub E {
     # (a long double literal, binary128: clang's decimal of it, every digit)
     # (a long double literal, binary128: its exact hex, of clang's decimal
     # of it; a float's its value as a float)
+    # (x86_64's long double the x87's 64 bits; its _Float128 binary128's)
+    return '(fltl ' . FFold::ldround($n->{value}, 64, -16445, 16383) . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble' && $target eq 'x86_64' && FFold::ftype($n) eq 'long double';
     return '(fltl ' . FFold::ldround($n->{value}, 113, -16494, 16383) . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble' && $target ne 'arm';
     return '(fltl ' . $n->{value} . ')' if $k eq 'FloatingLiteral' && tcls($n) eq 'ldouble';
     if ($k eq 'FloatingLiteral' && FFold::ftype($n) eq 'float' && (my $v = FFold::fold($n))) { return fconst($v, 'float') }

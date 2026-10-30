@@ -5,14 +5,11 @@
 # riscv64 (__libgcc_cmp_return__, __libgcc_shift_count__: DI), and HF and
 # HC, which clang makes __fp16, no parameter type there: _Float16 and its
 # complex, as gcc has them; BF, which clang has no mode of: __bf16.
-# x86_64 (--target x86_64): gcc builds libgcc with -mlong-double-80, but
-# c2ff's long double there is binary128 (src/glibc's PROGFLAGS): x87's
-# 80-bit long double and the modes XF and XC as __x87ld and __x87lc
-# (x87.h, clang's -include), records that c2ff leaves out what uses, with
-# why, until ttpc has x87's long double; the suffix F128 of a _Float128
-# literal as Q, which clang has; %v in an asm template (v under AVX,
-# nothing here: c2ff drops it too) as spaces; gcc's rdssp builtins of no
-# argument as clang's of one, the value it keeps where no shadow stack is.
+# x86_64 (--target x86_64): the suffix F128 of a _Float128 literal as Q,
+# which clang has; %v in an asm template (v under AVX, nothing here: c2ff
+# drops it too) as spaces; gcc's rdssp builtins of no argument as clang's of
+# one, the value it keeps where no shadow stack is. (Its long double is
+# x87's, as gcc builds libgcc there and as ttpc has it.)
 #
 #   perl clangfix.pl [--target T] x.i > x.clang.i
 #
@@ -28,9 +25,6 @@ while (<>) {
     s/(float (\w+) __attribute__ \(\(mode \(BF\)\)\))/pad($1, "__bf16 $2")/ge;
     s/(_Complex float (\w+) __attribute__ \(\(mode \(HC\)\)\))/pad($1, "_Complex _Float16 $2")/ge;
     if ($target eq 'x86_64') {
-        s/\blong double\b/__x87ld    /g;
-        s/(float (\w+) __attribute__ \(\(mode \(XF\)\)\))/pad($1, "__x87ld $2")/ge;
-        s/(_Complex float (\w+) __attribute__ \(\(mode \(XC\)\)\))/pad($1, "__x87lc $2")/ge;
         s/([0-9]\.?)[fF]128\b/$1Q   /g;
         s/%v/  /g if /__asm__/;
         s/__builtin_ia32_rdssp([dq]) \(\)/__builtin_ia32_rdssp$1(0)/g;

@@ -190,6 +190,14 @@ ldfold_bad (void)
 {
   if (sizeof (long double) != 16)
     return 0;
+#ifdef __x86_64__
+  /* (the x87's: the significand, its integer bit set, then the sign and
+     exponent; 1 + 0x1p-112 rounds to 1 there) */
+  return (ldhi (&ldnan) != 0xffff || ldlo (&ldnan) != 0xc000000000000000ULL)
+         + (ldhi (&ldinf) != 0x7fff || ldlo (&ldinf) != 0x8000000000000000ULL)
+         + (ldhi (&ldsum) != 0x3fff) + (ldlo (&ldsum) != 0x8000000000000000ULL) + (ldhi (&ldmz) != 0x8000)
+         + (ldhi (&ldpz) != 0) + (dfold != 0);
+#endif
   return (ldhi (&ldnan) != 0xffff800000000000ULL) + (ldhi (&ldinf) != 0x7fff000000000000ULL)
          + (ldhi (&ldsum) != 0x3fff000000000000ULL) + (ldlo (&ldsum) != 1) + (ldhi (&ldmz) != 0x8000000000000000ULL)
          + (ldhi (&ldpz) != 0) + (dfold != 0);

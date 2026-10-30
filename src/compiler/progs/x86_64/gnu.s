@@ -16697,18 +16697,26 @@ g83:
     fsubr %st(4), %st
     fdiv %st(5), %st
     fdivr %st(6), %st
-    fadd %st, %st(7)
-    fmul %st, %st(1)
-    fsub %st, %st(2)
-    fsubr %st, %st(3)
-    fdiv %st, %st(4)
-    fdivr %st, %st(5)
-    faddp %st, %st(6)
-    fmulp %st, %st(7)
-    fsubp %st, %st(1)
-    fsubrp %st, %st(2)
-    fdivp %st, %st(3)
-    fdivrp %st, %st(4)
+    fcmovb %st(7), %st
+    fcmove %st(1), %st
+    fcmovbe %st(2), %st
+    fcmovu %st(3), %st
+    fcmovnb %st(4), %st
+    fcmovne %st(5), %st
+    fcmovnbe %st(6), %st
+    fcmovnu %st(7), %st
+    fadd %st, %st(1)
+    fmul %st, %st(2)
+    fsub %st, %st(3)
+    fsubr %st, %st(4)
+    fdiv %st, %st(5)
+    fdivr %st, %st(6)
+    faddp %st, %st(7)
+    fmulp %st, %st(1)
+    fsubp %st, %st(2)
+    fsubrp %st, %st(3)
+    fdivp %st, %st(4)
+    fdivrp %st, %st(5)
     fld1
     fldz
     fldl2e
@@ -16885,6 +16893,7 @@ g83:
     prefetcht0 0(%r14)
     prefetcht0 -1(%r11)
     prefetcht0 128(%r13)
+g84:
     prefetcht0 0(%r12)
     prefetcht0 64(%r12)
     prefetcht0 -129(%r12)
@@ -16893,7 +16902,6 @@ g83:
     prefetcht0 -2147483648(%r12,%rbp,1)
     prefetcht0 0(%rsi)
     prefetcht0 -128(%rcx)
-g84:
     prefetcht0 2147483647(%rdx)
     prefetcht0 0(%rsp)
     prefetcht0 127(%rsp)
@@ -17018,72 +17026,113 @@ g84:
     fxrstor64 -129(%r9,%r15,1)
     fxrstor64 gnu_fwd(%rip)
     fxrstor64 -2147483648
+    pushq 0(%r10)
+    pushq 127(%r13)
+    pushq 2147483647(%r14)
+    pushq 0(%r12)
+    pushq -1(%r12)
+    pushq 4660(%r12)
+    pushq 0(%r10,%rsi,2)
+    pushq 64(%r15,%rcx,4)
+    pushq 128(%r8,%r9,8)
+    pushq 0(%rbx)
+    pushq 8(%rbx)
+    pushq -129(%rbp)
+    pushq 0(%rsp)
+    pushq -128(%rsp)
+    pushq -2147483648(%rsp)
+    pushq 0(%rsp,%rsi,1)
+    pushq 127(%rsi,%rdi,2)
+    pushq 2147483647(%rdi,%rax,4)
+    pushq gnu_back(%rip)
+    pushq 4660
+    popq 0(%r11)
+    popq -1(%r15)
+    popq 128(%r8)
+    popq 0(%r12)
+    popq 64(%r12)
+    popq -129(%r12)
+    popq 0(%r11,%rbp,8)
+    popq 8(%r9,%r12,1)
+    popq -2147483648(%r12,%rax,2)
+    popq 0(%rsi)
+    popq -128(%rsi)
+    popq 2147483647(%rdi)
+    popq 0(%rsp)
+    popq 127(%rsp)
+    popq 4660(%rsp)
+    popq 0(%rsi,%rcx,4)
+    popq -1(%rax,%rdx,8)
+    popq 128(%rcx,%rbx,1)
+    popq gnu_fwd(%rip)
+    popq -129
     movbe 0(%rcx), %r9d
-    movbe 127(%r15), %r10d
-    movbe 2147483647(%rcx), %r11d
+    movbe 64(%r15), %r10d
+    movbe -2147483648(%rcx), %r11d
     movbe 0(%r12), %r14d
-    movbe -1(%rsp), %r8d
-    movbe 4660(%r12), %r12d
-    movbe 0(%r9,%rsi,2), %r13d
-    movbe 64(%rsp,%rcx,4), %r15d
-    movbe 128(%r13,%r9,8), %r9d
+    movbe 8(%rsp), %r8d
+    movbe 2147483647(%r12), %r12d
+    movbe 0(%r9,%r15,2), %r13d
+    movbe -128(%rsp,%rsi,4), %r15d
+    movbe 4660(%r13,%rcx,8), %r9d
     movbe gnu_back(%rip), %r10d
-    movbe -129, %r11d
-    movbe 0(%rbx), %ebx
-    movbe 8(%rbx), %esi
-    movbe -2147483648(%rbp), %edi
+    movbe 128, %r11d
+    movbe 0(%rdi), %ebx
+    movbe 127(%rcx), %esi
+    movbe -129(%rdx), %edi
     movbe 0(%rsp), %ebp
-    movbe -128(%rsp), %esp
-    movbe 2147483647(%rsp), %ecx
-    movbe 0(%rsp,%rsi,1), %edx
-    movbe 127(%rsi,%rdi,2), %ebx
-    movbe 4660(%rdi,%rax,4), %esi
+    movbe -1(%rsp), %esp
+    movbe -2147483648(%rsp), %ecx
+    movbe 0(%rdi,%rbp,1), %edx
+    movbe 64(%rdx,%rsi,2), %ebx
+    movbe 2147483647(%rbx,%rdi,4), %esi
     movbe gnu_fwd(%rip), %edi
-    movbe 128, %ebp
+    movbe 4660, %ebp
     movbe %r14d, 0(%r8)
-    movbe %r8d, -1(%r8)
-    movbe %r12d, -129(%rbp)
+    movbe %r8d, 8(%r8)
+    movbe %r12d, 128(%rbp)
     movbe %r13d, 0(%rsp)
-    movbe %r15d, 64(%r12)
-    movbe %r9d, -2147483648(%rsp)
-    movbe %r10d, 0(%rsp,%rbp,8)
-    movbe %r11d, 8(%rbp,%r12,1)
-    movbe %r14d, 2147483647(%r12,%rax,2)
+    movbe %r15d, -128(%r12)
+    movbe %r9d, -129(%rsp)
+g85:
+    movbe %r10d, 0(%rsp,%r9,8)
+    movbe %r11d, 127(%rbp,%rbp,1)
+    movbe %r14d, -2147483648(%r12,%r12,2)
     movbe %r8d, gnu_back(%rip)
-    movbe %r12d, 4660
-    movbe %esp, 0(%rsi)
-    movbe %ecx, -128(%rsi)
-    movbe %edx, 128(%rdi)
+    movbe %r12d, 2147483647
+    movbe %esp, 0(%rcx)
+    movbe %ecx, -1(%rbx)
+    movbe %edx, 4660(%rbp)
     movbe %ebx, 0(%rsp)
-    movbe %esi, 127(%rsp)
-    movbe %edi, -129(%rsp)
-    movbe %ebp, 0(%rsi,%rcx,4)
-    movbe %esp, -1(%rax,%rdx,8)
-    movbe %ecx, -2147483648(%rcx,%rbx,1)
+    movbe %esi, 64(%rsp)
+    movbe %edi, 128(%rsp)
+    movbe %ebp, 0(%rax,%rax,4)
+    movbe %esp, 8(%rsp,%rcx,8)
+    movbe %ecx, -129(%rbp,%rdx,1)
     movbe %edx, gnu_fwd(%rip)
-    movbe %ebx, 2147483647
+    movbe %ebx, -2147483648
     movbe 0(%rdx), %r13
-    movbe 64(%r13), %r15
-    movbe 4660(%rdx), %r9
+    movbe -128(%r13), %r15
+    movbe 2147483647(%rdx), %r9
     movbe 0(%r12), %r10
-    movbe 8(%rsp), %r11
-    movbe 128(%r12), %r14
-    movbe 0(%r14,%r15,2), %r8
-    movbe -128(%rdi,%rsi,4), %r12
-    movbe -129(%r15,%rcx,8), %r13
+    movbe 127(%rsp), %r11
+    movbe 4660(%r12), %r14
+    movbe 0(%r14,%rax,2), %r8
+    movbe -1(%rdi,%r15,4), %r12
+    movbe 128(%r15,%rsi,8), %r13
     movbe gnu_back(%rip), %r15
-    movbe -2147483648, %r9
+    movbe -129, %r9
     movbe %r10, 0(%r9)
-    movbe %r11, 127(%r9)
-    movbe %r14, 2147483647(%rbx)
+    movbe %r11, 64(%r9)
+    movbe %r14, -2147483648(%rbx)
     movbe %r8, 0(%rsp)
-    movbe %r12, -1(%r12)
-    movbe %r13, 4660(%rsp)
-    movbe %r15, 0(%rsi,%r9,1)
-    movbe %r9, 64(%rax,%rbp,2)
-    movbe %r10, 128(%r9,%r12,4)
+    movbe %r12, 8(%r12)
+    movbe %r13, 2147483647(%rsp)
+    movbe %r15, 0(%rsi,%rcx,1)
+    movbe %r9, -128(%rax,%r9,2)
+    movbe %r10, 4660(%r9,%rbp,4)
     movbe %r11, gnu_fwd(%rip)
-    movbe %r14, -129
+    movbe %r14, 128
     xtest
     xgetbv
     rdpkru
@@ -17094,6 +17143,5 @@ g84:
     .byte 0x3e
     .byte 0x66
     .byte 0x67
-g85:
     .byte 0x3e
 gnu_fwd:

@@ -5,7 +5,7 @@
    It comes with no warranty. See the file LICENSE for the full text.  */
 
 /* long double, through glibc's soft-fp (the same functions gcc takes from
-   libgcc): + - * /, the comparisons, negation, and the conversions to and
+   libgcc; on x86_64 the x87's, gcc's and ttpc's own instructions): + - * /, the comparisons, negation, and the conversions to and
    from the integers, float and double. The exit status is a hash of the
    bits of every result, so gcc + libc.a and ttpc + glibc in ff agree only
    when every bit does. */
@@ -19,7 +19,13 @@ static void bits (long double x)
   union { long double d; unsigned long w[2]; } u;
   u.d = x;
   mix (u.w[0]);
+#ifdef __x86_64__
+  /* (the x87's 80 bits: the sign and exponent, the 6 bytes after them
+     padding no store writes) */
+  mix (u.w[1] & 0xffff);
+#else
   mix (u.w[1]);
+#endif
 }
 
 static void dbits (double x)

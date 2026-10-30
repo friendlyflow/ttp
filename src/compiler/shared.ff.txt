@@ -444,8 +444,12 @@ comment
 double:
   value
 comment
-  long double value: C, a 16-byte floating point number (IEEE quad, as on riscv64).
+  long double value: C, a 16-byte floating point number: IEEE quad (binary128) on riscv64 and aarch64, the x87's 80-bit extended format in 16 bytes on x86_64 (gcc's), double on arm.
 long double:
+  value
+comment
+  float128 value: C, binary128 (C's _Float128, GNU C's __float128): x86_64's, beside its long double; long double on riscv64 and aarch64. Its literal is the exact hex float with Q after it.
+float128:
   value
 comment
   complex float value: C, a complex number of two float parts, 8 bytes: its real part, then its imaginary part; real / z and imag / z are its parts.
