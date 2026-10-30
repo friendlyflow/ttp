@@ -14,7 +14,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
-use Header qw(header_of header_text leading_header real_path GENERATED NOHEADER NOHEADER_GCC);
+use Header qw(header_of header_text leading_header real_path GENERATED NOHEADER NOHEADER_GCC nolicense_lines);
 
 die "usage: headers.pl out.c names.txt\n" unless @ARGV == 2;
 my ($cfile, $names) = @ARGV;
@@ -39,7 +39,8 @@ for my $f (sort keys %got) {
         $why = "it has a header, ff says none" if defined leading_header(slurp(real_path($f)));
     } else {
         my $want = leading_header(slurp(real_path($f)));
-        $why = !defined $want ? "it has no header" : $want ne $text ? "its header is not what ff2c wrote" : undef;
+        # (a file of gcc's whose header names no license: its copyright, then the line saying so)
+        $why = !defined $want ? "it has no header" : $want ne $text && $text ne header_text(nolicense_lines($want)) ? "its header is not what ff2c wrote" : undef;
     }
     next unless $why;
     print "headers: $f: $why\n";

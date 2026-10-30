@@ -14,14 +14,32 @@
 
 typedef _Complex float cf;
 typedef _Complex double cd;
+/* binary128, gcc's TF: long double on riscv64, __float128 on x86_64, whose
+   long double is the x87's (XF, its own functions below) */
+#ifdef __x86_64__
+typedef __float128 tf;
+typedef _Complex long double cx;
+#else
+typedef long double tf;
 typedef _Complex long double cl;
+#endif
 
 cf __mulsc3 (float, float, float, float);
 cf __divsc3 (float, float, float, float);
 cd __muldc3 (double, double, double, double);
 cd __divdc3 (double, double, double, double);
-cl __multc3 (long double, long double, long double, long double);
-cl __divtc3 (long double, long double, long double, long double);
+#ifndef __x86_64__
+cl __multc3 (tf, tf, tf, tf);
+cl __divtc3 (tf, tf, tf, tf);
+#else
+cx __mulxc3 (long double, long double, long double, long double);
+cx __divxc3 (long double, long double, long double, long double);
+long double __powixf2 (long double, int);
+/* (libgcc2's _fixunsxfsi.o of a 64-bit word: x87 to an unsigned long) */
+unsigned long __fixunsxfdi (long double);
+tf __extendxftf2 (long double);
+long double __trunctfxf2 (tf);
+#endif
 int __popcountdi2 (long);
 int __clzdi2 (unsigned long);
 int __ctzdi2 (unsigned long);
@@ -38,27 +56,36 @@ long __subvdi3 (long, long);
 int __mulvsi3 (int, int);
 double __powidf2 (double, int);
 float __powisf2 (float, int);
-long double __powitf2 (long double, int);
+tf __powitf2 (tf, int);
 unsigned long __fixunsdfdi (double);
 unsigned long __fixunssfdi (float);
-long double __floatsitf (int);
-long double __floatunsitf (unsigned int);
-int __fixtfsi (long double);
-unsigned int __fixunstfsi (long double);
-int __unordtf2 (long double, long double);
+tf __floatsitf (int);
+tf __floatunsitf (unsigned int);
+int __fixtfsi (tf);
+unsigned int __fixunstfsi (tf);
+int __unordtf2 (tf, tf);
+#ifdef __riscv
+/* (soft-fp's division of float and double: riscv64's libgcc has them, x86_64
+   divides in SSE) */
 double __divdf3 (double, double);
 float __divsf3 (float, float);
+#endif
 int __gcc_bcmp (const unsigned char *, const unsigned char *, unsigned long);
 
 static int n;
 
 static void w (unsigned long x) { printf ("%d %016lx\n", n++, x); }
-/* (an unsigned int as itself: riscv64's ABI passes and returns it
-   sign-extended, and ttpc widens a returned one as it came) */
+/* (an unsigned int as itself: this file declares __bswapsi2 unsigned, where
+   libgcc's is SItype, an int; gcc takes a call's type from the caller's
+   declaration, ttpc from the function's definition) */
 static void w32 (unsigned int x) { printf ("%d %08x\n", n++, x); }
 static void f (float x) { union { float f; unsigned int u; } v; v.f = x; w (v.u); }
 static void d (double x) { union { double d; unsigned long u; } v; v.d = x; w (v.u); }
-static void l (long double x) { union { long double d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1]); }
+static void l (tf x) { union { tf d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1]); }
+#ifdef __x86_64__
+/* (the x87's 80 bits: the 6 bytes above them are padding) */
+static void xl (long double x) { union { long double d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & 0xffff); }
+#endif
 
 static double dv[] = { 0.0, -0.0, 1.0, -2.5, 3.0e300, 1.0e-310, __builtin_inf (), -__builtin_inf (), __builtin_nan ("") };
 #define N (sizeof dv / sizeof dv[0])
@@ -74,8 +101,13 @@ int main (void)
         d (__real__ z); d (__imag__ z); d (__real__ q); d (__imag__ q);
         cf zf = __mulsc3 (a, b, c, e), qf = __divsc3 (a, b, c, e);
         f (__real__ zf); f (__imag__ zf); f (__real__ qf); f (__imag__ qf);
+#ifndef __x86_64__
         cl zl = __multc3 (a, b, c, e), ql = __divtc3 (a, b, c, e);
         l (__real__ zl); l (__imag__ zl); l (__real__ ql); l (__imag__ ql);
+#else
+        cx zx = __mulxc3 (a, b, c, e), qx = __divxc3 (a, b, c, e);
+        xl (__real__ zx); xl (__imag__ zx); xl (__real__ qx); xl (__imag__ qx);
+#endif
       }
   static long iv[] = { 0, 1, -1, 2, 0x7f, 0x80, 0x12345678, -0x7fffffffL, 0x0102030405060708L, 0x7fffffffffffffffL, (long) 0x8000000000000000UL };
   for (i = 0; i < sizeof iv / sizeof iv[0]; i++)
@@ -92,11 +124,18 @@ int main (void)
       w (__addvsi3 ((int) x >> 2, 12345)); w (__addvdi3 (x >> 2, -77)); w (__subvdi3 (x >> 2, 99)); w (__mulvsi3 ((int) x >> 17, 3));
       d (__powidf2 (1.0 + (double) (x & 0xff) / 64, (int) (x & 31) - 8));
       f (__powisf2 (1.0f + (float) (x & 0xff) / 32, (int) (x & 15) - 4));
-      l (__powitf2 (1.0L + (long double) (x & 0xff) / 16, (int) (x & 63) - 20));
+      l (__powitf2 ((tf) 1 + (tf) (x & 0xff) / 16, (int) (x & 63) - 20));
       l (__floatsitf ((int) x)); l (__floatunsitf ((unsigned int) x));
-      w (__fixtfsi ((long double) (int) x / 3)); w32 (__fixunstfsi ((long double) (unsigned int) x / 5));
+      w (__fixtfsi ((tf) (int) x / 3)); w32 (__fixunstfsi ((tf) (unsigned int) x / 5));
       w (__fixunsdfdi ((double) (unsigned long) x)); w (__fixunssfdi ((float) (unsigned int) x));
+#ifdef __riscv
       d (__divdf3 ((double) x, 7.0)); f (__divsf3 ((float) x, -3.0f));
+#endif
+#ifdef __x86_64__
+      xl (__powixf2 (1.0L + (long double) (x & 0xff) / 16, (int) (x & 63) - 20));
+      w (__fixunsxfdi ((long double) (unsigned long) x / 5));
+      l (__extendxftf2 ((long double) x / 3)); xl (__trunctfxf2 ((tf) x / 3));
+#endif
     }
   for (i = 0; i < N; i++)
     w (__unordtf2 (dv[i], dv[(i + 7) % N]));

@@ -835,8 +835,19 @@ sub rodata_set {
     fail "$x: $y+$roset{$x}[1] inside a word of it" if $off < 0;
     $rodata{$x} = [@$b[$i .. $#$b]];
 }
+# a function's name that is a word of ff (glibc's syscall): with a ' after
+# it, as c2ff names it in C (c2ff.pl's ffname)
+my %kw = map { $_ => 1 } qw(syscall if else while for return break continue comment switch case default goto
+    array struct union enum function sizeof alignof alias ifunc asm items cast weak section constructor destructor);
+sub kwname { $kw{ $_[0] } ? "$_[0]'" : $_[0] }
+my $skipnote;
 sub walk_stmt {
     my ($st, $file, $line) = @_;
+    # (CET's .note.gnu.property, which gcc's cet.h puts in libgcc's asm: the
+    # object's IBT and SHSTK marks, which a ttpc program's ELF does not
+    # carry; its statements up to .popsection are skipped)
+    if ($st =~ /^\.pushsection\s+"?\.note\.gnu\.property"?/) { $skipnote = 1; return }
+    if ($skipnote) { $skipnote = 0 if $st eq '.popsection'; return }
     # sections: code (.text, .text.x) or another
     $weak{$1} = 1 if $st =~ /^\.weak\s+([.\w]+)$/;
     if ($st =~ /^\.(text|data|bss)$/) { push @sections, [$other, $code]; section(".$1"); return }
@@ -848,6 +859,14 @@ sub walk_stmt {
         code_to($c) unless defined $other;
         return;
     }
+    # (an exception table, .gcc_except_table, and a note, .note.*: unwind
+    # data of the asm's own .cfi_ directives, which s2ff leaves out (ttpc's
+    # .eh_frame has its C frames alone), and the object's marks: morestack.S's
+    # LSDA of __morestack's cleanup and its word of the personality, DW.ref.,
+    # its .note.GNU-split-stack; and its .init_array.00000's word of
+    # __stack_split_initialize, which only a program of gcc's -fsplit-stack
+    # needs: ttpc makes none, and a constructor in the tree would run in each)
+    return if defined $other && $other =~ /^\.(?:gcc_except_table|note\.|data\.DW\.ref\.|init_array\.)/;
     if (defined $other) {
         # (an alignment before a label of read-only data: kept in its run)
         if ($other =~ /^\.?rodata/ && $st =~ /^\.(p2align|align|balign)\s+([^,]+)/) {
@@ -925,7 +944,7 @@ sub walk_stmt {
     }
     # labels at the front of the statement
     while ($st =~ s/^([.\w\$]+):\s*//) {
-        my $name = $1;
+        my $name = kwname($1);
         $name = ".L$name " . ++$numeric{$name} if $name =~ /^\d+$/;
         if ($name =~ /^\.L/) {
             fail "a label outside a function: $name" unless $fn;
@@ -976,6 +995,9 @@ sub walk_stmt {
     for (@ops) {
         if (/^(\*?)([.\w]+)\@GOTPCREL\(%rip\)$/i) { $got{$2} = 1; $_ = "$1.Lgot\x01$2(%rip)" }
         elsif (/^([.\w]+)\@GOTTPOFF\(%rip\)$/i) { $tls{$1} = 1; $_ = ".Ltls\x01$1(%rip)" }
+        # (a call or jump through the PLT, sym@PLT: in a static program the
+        # function itself, as ld resolves it; libgcc's morestack.S)
+        elsif ($op =~ /^(?:call|jmp)q?$/ && /^([.\w]+)\@PLT$/i) { $_ = $1 }
         elsif (/\@/) { fail "a relocation with no ff form: $_" }
         $ro{$1} = 1 if /^([.\w]+)(?:[-+]\d+)?\(%rip\)$/ || /^\$(\.L\w+)$/;
     }

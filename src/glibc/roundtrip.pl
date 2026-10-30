@@ -164,8 +164,8 @@ sub special_float {
     return unless $n && ($n->{kind} // '') eq 'CallExpr';
     my $d = (strip((kids($n))[0]) // {})->{referencedDecl} or return;
     my $name = $d->{name} // '';
-    return 'inf' if $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/;
-    return 'nan' if $name =~ /^__builtin_nan[fl]?$/;
+    return 'inf' if $name =~ /^__builtin_(?:huge_val|inf)(?:[fl]|f128)?$/;
+    return 'nan' if $name =~ /^__builtin_nan(?:[fl]|f128)?$/;
     return;
 }
 # a value of FFold's as E has the literal of its type

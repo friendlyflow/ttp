@@ -18,10 +18,18 @@
 # (GLIBC_CC, LIBGCC_HEADERS and the target's binutils).
 set -e
 b=$1 top=$2 triple=$3 jobs=${4:-4}
+# (nixpkgs' name of the target; x86_64's gcc is the host's own, native: its
+# libgcc was configured without --with-cross-host, and its binutils have no
+# prefix)
 case $triple in
 riscv64-unknown-linux-gnu) cross=riscv64;;
+aarch64-unknown-linux-gnu) cross=aarch64-multiplatform;;
+x86_64-unknown-linux-gnu) cross=gnu64;;
+armv7l-unknown-linux-gnueabihf) cross=armv7l-hf-multiplatform;;
 *) echo "mkref: no libgcc for $triple yet"; exit 1;;
 esac
+x=$triple- crosshost=--with-cross-host=x86_64-unknown-linux-gnu
+command -v ${x}ar > /dev/null || x= crosshost=
 drv="--inputs-from $top nixpkgs#pkgsCross.$cross.buildPackages.gcc16.cc"
 : "${GLIBC_CC:?run this in nix develop}" "${LIBGCC_HEADERS:?run this in nix develop}"
 mkdir -p "$b"
@@ -42,11 +50,10 @@ nix develop $drv -c sh -c "../gcc-$v/configure --prefix=$b/prefix $flags > ../co
     || { tail -20 ../configure.log ../configure-gcc.log ../build-tools.log ../gcc-headers.log 2> /dev/null; exit 1; }
 mkdir -p "$triple/libgcc"
 cd "$triple/libgcc"
-x=$triple-
 CC="$GLIBC_CC -isystem $LIBGCC_HEADERS" CFLAGS='-g -O2' AR=${x}ar NM=${x}nm RANLIB=${x}ranlib STRIP=${x}strip AS=${x}as LD=${x}ld \
     OBJDUMP=${x}objdump LIPO=: CONFIG_SITE=no-such-file sh "../../../gcc-$v/libgcc/configure" --srcdir="../../../gcc-$v/libgcc" \
     --cache-file=./config.cache --prefix="$b/prefix" --disable-multilib --enable-threads=posix --enable-languages=c,c++,lto \
-    --enable-__cxa_atexit --enable-default-pie --with-cross-host=x86_64-unknown-linux-gnu --with-target-subdir="$triple" \
+    --enable-__cxa_atexit --enable-default-pie $crosshost --with-target-subdir="$triple" \
     --build=x86_64-unknown-linux-gnu --host="$triple" --target="$triple" --disable-option-checking > configure.log 2>&1 \
     || { tail -20 configure.log; exit 1; }
 make -j"$jobs" libgcc.a libgcc_eh.a > build.log 2>&1 || { grep -m5 -i error build.log; exit 1; }
