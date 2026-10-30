@@ -28,6 +28,14 @@ BUILD ?= ../../build/compiler
 
 BIN := $(BUILD)/ttpc
 
+# ttpc -j N: every compile by a ttpc that has -j (stage1 and stage2, each
+# host's, and what they build) runs its second pass on TTPCJ processes;
+# the bytes are those of one. TTPCJ=1 turns it off. Never for the frozen
+# links (stage0, ttpc1, ttpc2, ttpc3), which have no -j. Each process runs
+# in the slot of its command (8G, ttp.slice 18G for all): 4 with 3 slots.
+TTPCJ ?= 4
+J := -j$(TTPCJ)
+
 # The ff sources, edited in sicompass. ttpc is a program of only its own,
 # ttpc.ff, with its constants in ttpc.defs.ff, on the shared page
 # (shared.ff, from tools/mkff.ff: make refresh): ttpc --target riscv64 shared.ff ttpc.defs.ff
@@ -202,7 +210,7 @@ $(BOOT)/stage1: $(TTPC_SRC:%=$(NL)/%) $(BOOT)/ttpc3
 	$(QEMU) $(BOOT)/ttpc3 --target riscv64 $(TTPC_SRC:%=$(NL)/%) $@ > $@.lst
 
 $(BOOT)/stage2: $(TTPC_SRC) $(BOOT)/stage1
-	$(QEMU) $(BOOT)/stage1 --target riscv64 $(TTPC_SRC) $@ > $@.lst
+	$(QEMU) $(BOOT)/stage1 $(J) --target riscv64 $(TTPC_SRC) $@ > $@.lst
 
 bootstrap: $(BOOT)/ttpc1.self $(BOOT)/ttpc2.self $(BOOT)/ttpc3.self $(BOOT)/stage2 $(PROGS:%=$(P)/%.elf)
 	cmp $(BOOT)/ttpc1 $(BOOT)/ttpc1.self
@@ -227,7 +235,7 @@ bootstrap: $(BOOT)/ttpc1.self $(BOOT)/ttpc2.self $(BOOT)/ttpc3.self $(BOOT)/stag
 # rest of it. A C program is only its program: the shared pages come from
 # shared.ff.
 $(P)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)
-	$(QEMU) $(BOOT)/stage2 $(TTPCFLAGS) $(SHARED) $< $@ > $(P)/$*.lst
+	$(QEMU) $(BOOT)/stage2 $(J) $(TTPCFLAGS) $(SHARED) $< $@ > $(P)/$*.lst
 
 # The vector instructions (RVV 1.0), which ttpc.s predates: stage2
 # assembles progs/riscv64/rvv.ff, a program-only tree that mkrvv.pl writes
@@ -235,7 +243,7 @@ $(P)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)
 # must be byte-identical after the ELF header (as far as the twin goes: the
 # frame's program headers follow the program).
 $(P)/rvv.velf: progs/riscv64/rvv.ff $(SHARED) $(BOOT)/stage2 | $(P)
-	$(QEMU) $(BOOT)/stage2 $(SHARED) $< $@ > $(P)/rvv.lst
+	$(QEMU) $(BOOT)/stage2 $(J) $(SHARED) $< $@ > $(P)/rvv.lst
 
 rvv: $(P)/rvv.velf $(P)/rvv.twin.bin
 	tail -c +121 $(P)/rvv.velf | head -c $$(wc -c < $(P)/rvv.twin.bin) | cmp - $(P)/rvv.twin.bin
@@ -280,23 +288,23 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx "asm and C at compile time" $(P)/ctmix.lst
 	! grep -aq compiling $(P)/cnow.celf
 	! grep -aq other $(P)/cct.celf
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cnowfail.ff $(P)/cnowfail.celf 2> $(P)/cnowfail.err
 	grep -q "compile time: no" $(P)/cnowfail.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/creserved.ff $(P)/creserved.celf 2> $(P)/creserved.err
 	grep -q "a reserved word: \* pointer" $(P)/creserved.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
 	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cvecx64.ff $(P)/cvecx64.celf 2> $(P)/cvecx64.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cvecx64.ff $(P)/cvecx64.celf 2> $(P)/cvecx64.err
 	grep -q "vector, of the SysV ABI of x86_64, on another target: vector$$" $(P)/cvecx64.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cuntyped.ff $(P)/cuntyped.celf 2> $(P)/cuntyped.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cuntyped.ff $(P)/cuntyped.celf 2> $(P)/cuntyped.err
 	grep -q "needs a type: n$$" $(P)/cuntyped.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/citems.ff $(P)/citems.celf 2> $(P)/citems.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/citems.ff $(P)/citems.celf 2> $(P)/citems.err
 	grep -q "several items need array: n$$" $(P)/citems.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cchartext.ff $(P)/cchartext.celf 2> $(P)/cchartext.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cchartext.ff $(P)/cchartext.celf 2> $(P)/cchartext.err
 	grep -q "text needs char \* pointer: oops$$" $(P)/cchartext.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/ctypeout.ff $(P)/ctypeout.celf 2> $(P)/ctypeout.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/ctypeout.ff $(P)/ctypeout.celf 2> $(P)/ctypeout.err
 	grep -q "type goes only in compile time: type$$" $(P)/ctypeout.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cbelow.ff $(P)/cbelow.celf 2> $(P)/cbelow.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cbelow.ff $(P)/cbelow.celf 2> $(P)/cbelow.err
 	grep -q "used before it is declared: x$$" $(P)/cbelow.err
 	@echo "ctime: compile time runs and stays out of the program"
 
@@ -318,26 +326,26 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 gsame = n=$$(readelf -SW $(2) | sed -n 's/.* \.debug_abbrev  *PROGBITS  *[0-9a-f]* \([0-9a-f]*\) .*/\1/p'); test -n "$$n" && cmp -i 64 -n $$((0x$$n - 64)) $(1) $(2) && readelf -SW $(1) | grep -q ' \.debug_line '
 cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 	rm -f progs/cexit
-	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cws.ff > cws.lst
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(J) $(CURDIR)/progs/cws.ff > cws.lst
 	mv progs/cexit $(P)/cws-cexit
 	cmp $(P)/cws-riscv64 $(P)/chello.celf
 	cmp $(P)/cws-x86_64 $(P)/x86_64/chello.celf
 	cmp $(P)/cws-cexit $(P)/cexit.celf
-	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
-	$(QEMU) $(BOOT)/stage2 -g $(SHARED) progs/chello.ff $(P)/chello.g > $(P)/chello.g.lst
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(J) $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	$(QEMU) $(BOOT)/stage2 $(J) -g $(SHARED) progs/chello.ff $(P)/chello.g > $(P)/chello.g.lst
 	cmp $(P)/cwsdebug $(P)/chello.celf
 	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
 	rm $(P)/cwsdebug $(P)/cwsdebug-g
-	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -g $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(J) -g $(CURDIR)/progs/cwsdebug.ff > cwsdebug.lst
 	$(call gsame,$(P)/cwsdebug,$(P)/chello.g)
 	$(call gsame,$(P)/cwsdebug-g,$(P)/chello.g)
-	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
-	$(QEMU) $(BOOT)/stage2 -O $(SHARED) progs/cfib.ff $(P)/cfib.O > $(P)/cfib.O.lst
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(J) $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
+	$(QEMU) $(BOOT)/stage2 $(J) -O $(SHARED) progs/cfib.ff $(P)/cfib.O > $(P)/cfib.O.lst
 	! cmp -s $(P)/cfib.O $(P)/cfib.celf
 	cmp $(P)/cwsopt $(P)/cfib.celf
 	cmp $(P)/cwsopt-O $(P)/cfib.O
 	rm $(P)/cwsopt $(P)/cwsopt-O
-	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -O $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
+	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(J) -O $(CURDIR)/progs/cwsopt.ff > cwsopt.lst
 	cmp $(P)/cwsopt $(P)/cfib.O
 	cmp $(P)/cwsopt-O $(P)/cfib.O
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 $(CURDIR)/progs/cwsjobs.ff > cwsjobs.lst
@@ -347,15 +355,15 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 	cd $(P) && $(QEMU) $(abspath $(BOOT))/stage2 -j3 $(CURDIR)/progs/cwsjobs.ff > cwsjobs.lst
 	cmp $(P)/cwsjobs $(P)/cfib.celf
 	cmp $(P)/cwsjobs-j $(P)/cfib.celf
-	$(QEMU) $(BOOT)/stage2 progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
+	$(QEMU) $(BOOT)/stage2 $(J) progs/cinclude.ff $(P)/cinclude.celf > $(P)/cinclude.lst
 	cmp $(P)/cinclude.celf $(P)/chello.celf
 	$(QEMU) $(BOOT)/stage2 --print progs/chello.ff > $(P)/chello.print
 	$(QEMU) $(BIN) progs/chello.ff | cmp - $(P)/chello.print
-	! $(QEMU) $(BOOT)/stage2 progs/cwsnofile.ff 2> $(P)/cwsnofile.err
+	! $(QEMU) $(BOOT)/stage2 $(J) progs/cwsnofile.ff 2> $(P)/cwsnofile.err
 	grep -q "a workspace needs a file" $(P)/cwsnofile.err
-	! $(QEMU) $(BOOT)/stage2 $(SHARED) progs/cwsplace.ff $(P)/cwsplace.celf 2> $(P)/cwsplace.err
+	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cwsplace.ff $(P)/cwsplace.celf 2> $(P)/cwsplace.err
 	grep -q "cannot compile: set target" $(P)/cwsplace.err
-	! $(QEMU) $(BOOT)/stage2 progs/cincludelate.ff $(P)/cincludelate.celf 2> $(P)/cincludelate.err
+	! $(QEMU) $(BOOT)/stage2 $(J) progs/cincludelate.ff $(P)/cincludelate.celf 2> $(P)/cincludelate.err
 	grep -q "include goes first" $(P)/cincludelate.err
 	@echo "cws: a build file runs its workspaces, include reads a tree"
 
@@ -399,7 +407,7 @@ $(P)/$(1):
 	mkdir -p $$@
 
 $(P)/$(1)/%.elf: progs/$(1)/%.ff $(SHARED) $(BOOT)/stage2 | $(P)/$(1)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
 
 $(P)/$(1)/%.twin.bin: progs/$(1)/%.s $(TLDS_$(1)) | $(P)/$(1)
 	$(CROSS_$(1))as $(TASFLAGS_$(1)) $$< -o $(P)/$(1)/$$*.twin.o
@@ -407,7 +415,7 @@ $(P)/$(1)/%.twin.bin: progs/$(1)/%.s $(TLDS_$(1)) | $(P)/$(1)
 	$(CROSS_$(1))objcopy -O binary $(P)/$(1)/$$*.twin $$@
 
 $(P)/$(1)/%.celf: progs/%.ff $(SHARED) $(BOOT)/stage2 | $(P)/$(1)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(TTPCFLAGS) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TTPCFLAGS) $(SHARED) $$< $$@ > $(P)/$(1)/$$*.lst
 
 check-$(1): $(PROGS:%=$(P)/$(1)/%.elf) $(PROGS:%=$(P)/$(1)/%.twin.bin)
 	@for p in $(PROGS); do \
@@ -454,7 +462,7 @@ ctest-j: $(CPROGS:%=$(P)/%.celf) $(foreach t,$(TARGETS),$(patsubst %,$(P)/$(t)/%
 # the forms GNU as picks for glibc's asm (isa/x86_64gnu.pl): every one in
 # progs/x86_64/gnu.ff (mkgnu.pl), byte for byte its GNU twin gnu.s
 $(P)/x86_64/gnu.elf: progs/x86_64/gnu.ff $(SHARED) $(X86GNU) $(BOOT)/stage2 | $(P)/x86_64
-	$(QEMU) $(BOOT)/stage2 --target x86_64 $(SHARED) $(X86GNU) $< $@ > $(P)/x86_64/gnu.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target x86_64 $(SHARED) $(X86GNU) $< $@ > $(P)/x86_64/gnu.lst
 x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
 	tail -c +$$(($(THDR_x86_64) + 1)) $(P)/x86_64/gnu.elf | cmp - $(P)/x86_64/gnu.twin.bin
 	@echo "x86gnu: ttpc and GNU as agree on every form of isa/x86_64gnu.pl (gnu.s)"
@@ -468,7 +476,7 @@ x86gnu: $(P)/x86_64/gnu.elf $(P)/x86_64/gnu.twin.bin
 # (lp64d, abirv.pl).
 ABI_TARGETS := arm aarch64 x86_64 riscv64
 abi: $(BOOT)/stage2 $(SHARED)
-	@for t in $(ABI_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/abi/run.sh $$t $(P)/abi-$$t > $(P)/abi-$$t.log 2>&1 || { cat $(P)/abi-$$t.log; exit 1; }; tail -n 1 $(P)/abi-$$t.log; done
+	@for t in $(ABI_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2 $(J)" sh progs/abi/run.sh $$t $(P)/abi-$$t > $(P)/abi-$$t.log 2>&1 || { cat $(P)/abi-$$t.log; exit 1; }; tail -n 1 $(P)/abi-$$t.log; done
 
 # -g (gen/patches/debug.pl, ehframe.pl): the section headers, symbols and
 # frames of progs/cdebug.ff (and ctls, csection, cdatasep), as readelf,
@@ -477,7 +485,7 @@ abi: $(BOOT)/stage2 $(SHARED)
 # every target: gdb natively on x86_64, under qemu -g on the others.
 DEBUG_TARGETS := riscv64 x86_64 aarch64 arm
 debug: $(BOOT)/stage2 $(SHARED)
-	@for t in $(DEBUG_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2" sh progs/debug/run.sh $$t $(P)/debug-$$t > $(P)/debug-$$t.log 2>&1 || { cat $(P)/debug-$$t.log; exit 1; }; tail -n 1 $(P)/debug-$$t.log; done
+	@for t in $(DEBUG_TARGETS); do TTPC="$(QEMU) $(BOOT)/stage2 $(J)" sh progs/debug/run.sh $$t $(P)/debug-$$t > $(P)/debug-$$t.log 2>&1 || { cat $(P)/debug-$$t.log; exit 1; }; tail -n 1 $(P)/debug-$$t.log; done
 
 # -O (gen/patches/opt.pl, the peephole): every C program of ctest and
 # ctest-<target>, built with -O into progs-O, against the same .expect
@@ -488,7 +496,7 @@ check-O:
 .PHONY: check-O
 
 targets: $(TARGETS:%=check-%) $(TARGETS:%=ctest-%) x86gnu
-	! $(QEMU) $(BOOT)/stage2 --target mips $(SHARED) progs/cexit.ff $(P)/mips.celf 2> $(P)/mips.err
+	! $(QEMU) $(BOOT)/stage2 $(J) --target mips $(SHARED) progs/cexit.ff $(P)/mips.celf 2> $(P)/mips.err
 	grep -q "compile time: mips is not a target" $(P)/mips.err
 	@echo "targets: $(TARGETS) and riscv64"
 
@@ -626,10 +634,10 @@ $(BUILD)/$(1)/stage1: $(BUILD)/$(1)/ttpc3 $(BUILD)/$(1)/ttpc.ff $(BUILD)/$(1)/nl
 	$(RUN_$(1)) $$< --target $(1) $(BUILD)/$(1)/nl/$(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/stage2: $(BUILD)/$(1)/stage1
-	$(RUN_$(1)) $$< --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+	$(RUN_$(1)) $$< $(J) --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 $(BUILD)/$(1)/cross: $(BOOT)/stage2 $(BUILD)/$(1)/ttpc.ff
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(SHARED) $(BUILD)/$(1)/ttpc.defs.ff $(BUILD)/$(1)/ttpc.ff $$@ > $$@.lst
 
 # The seed against ttpc.s: the same output, listing, errors and status.
 seed-$(1): $(BUILD)/$(1)/seed $(BIN) $(SEED_FF) | $(BUILD)/$(1)
@@ -669,7 +677,7 @@ chello-$(1): $(BUILD)/$(1)/stage2
 	@set -e; d=$(BUILD)/$(1)/c; mkdir -p $$$$d; \
 	for p in $(filter-out $(CSKIP_$(1)),$(CPORTABLE)); do \
 	    e=progs/$$$$p.$(1).expect; test -f $$$$e || e=progs/$$$$p.expect; \
-	    $(RUN_$(1)) $(BUILD)/$(1)/stage2 --target $(1) $(SHARED) progs/$$$$p.ff $$$$d/$$$$p > $$$$d/$$$$p.lst; \
+	    $(RUN_$(1)) $(BUILD)/$(1)/stage2 $(J) --target $(1) $(SHARED) progs/$$$$p.ff $$$$d/$$$$p > $$$$d/$$$$p.lst; \
 	    tail -n +2 $$$$e > $$$$d/$$$$p.want; \
 	    s=0; $(RUN_$(1)) $$$$d/$$$$p > $$$$d/$$$$p.out || s=$$$$?; \
 	    want=$$$$(head -n 1 $$$$e | cut -d" " -f2); \
@@ -679,7 +687,7 @@ chello-$(1): $(BUILD)/$(1)/stage2
 	done; \
 	grep -qx compiling $$$$d/cnow.lst; ! grep -aq compiling $$$$d/cnow
 	$(if $(CAN_RISCV),@set -e; d=$(BUILD)/$(1)/c; for p in casm casm2 casmfail; do \
-	    $(RUN_$(1)) $(BUILD)/$(1)/stage2 --target riscv64 $(SHARED) progs/$$$$p.ff $$$$d/$$$$p.riscv64 > $$$$d/$$$$p.riscv64.lst; \
+	    $(RUN_$(1)) $(BUILD)/$(1)/stage2 $(J) --target riscv64 $(SHARED) progs/$$$$p.ff $$$$d/$$$$p.riscv64 > $$$$d/$$$$p.riscv64.lst; \
 	    s=0; $(QEMU) $$$$d/$$$$p.riscv64 || s=$$$$?; \
 	    want=$$$$(head -n 1 progs/$$$$p.expect | cut -d" " -f2); \
 	    test $$$$s -eq $$$$want || { echo "chello-$(1): $$$$p for riscv64: exit status $$$$s instead of $$$$want"; exit 1; }; \
@@ -844,12 +852,12 @@ SHAVFILES := abc empty m448 m896 million $(foreach n,0 1 55 56 63 64 65 119 120 
 define tooltarget
 $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/mkff: tools/mkff.ff $(TOOLLIB) $(MKFFLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
 tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
