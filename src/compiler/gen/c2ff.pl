@@ -879,6 +879,10 @@ sub pass_hash {
     my $d = Digest::SHA->new(256);
     # (a sub of one line, or up to its closing brace)
     for my $s (@pass_subs) { $text =~ /^(sub \Q$s\E\b[^\n]*\}\n|sub \Q$s\E\b.*?^\}\n)/ms or die "c2ff: no sub $s\n"; $d->add($1) }
+    # (and how clang read the .i where the build says, C2FF_ASTKEY: x86_64's
+    # flags and CLANGFIX, which change its types and literals; a pass made
+    # another way is no pass of it)
+    $d->add("ast: $ENV{C2FF_ASTKEY}") if ($ENV{C2FF_ASTKEY} // '') ne '';
     $d->hexdigest;
 }
 # (the .i's size and time, then its hash: an .i made again, the same,

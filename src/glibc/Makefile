@@ -492,6 +492,10 @@ CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mod
 	-e 's/\([0-9]\.\?\)[fF]128\b/\1Q   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
 	-e 's/_Float32x:/_Bool    :/g' -e 's/_Float64x:/unsigned :/g'
 CLANGFIX := $(CLANGFIX_$(GTARGET))
+# (a unit's c2ff pass keeps clang's AST of its .i: one made with other
+# flags or another CLANGFIX, x86_64's binary128 long double of before, is
+# none of now; c2ff hashes this into its passes' key, where it is set)
+export C2FF_ASTKEY := $(strip $(PROGFLAGS) $(CLANGFIX))
 # (x86_64's units of gcc's SSE4.2 intrinsics, <nmmintrin.h>: clang reads
 # them with -msse4.2, gcc's inline functions they do not reach left out of
 # its copy, clangvec.pl)
