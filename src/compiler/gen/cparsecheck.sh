@@ -3,8 +3,9 @@
 # tools/cprint, their library tools/c.ff): each unit, a .i that gcc
 # preprocessed, parsed by cparse into its ff tree, the tree written back as
 # C by cprint (each operator's operation in parentheses), and the .i and that
-# C compiled by gcc alike (CFLAGS): the same bytes in every section, the
-# same relocations and the same symbols, or the tree was wrong. With -w
+# C compiled by gcc alike (CFLAGS; -std=gnu23 for a unit that gnu11 does not
+# take, libgcc's): the same bytes in every section, the same relocations
+# and the same symbols, or the tree was wrong. With -w
 # REF, the tree and the C must also be REF's bytes (another target's build
 # of the tools: they agree).
 #
@@ -29,7 +30,10 @@ if test "${1:-}" = --one; then
     if test -n "$ref"; then
         cmp -s "$d/$b.ff" "$ref/$b.ff" && cmp -s "$d/$b.c" "$ref/$b.c" || { echo "REF $u: not $ref's tree or C"; exit 0; }
     fi
-    $cc $CFLAGS "$u" -o "$d/$b.a.o" 2> /dev/null || { echo "SKIP $u"; rm -f "$d/$b.a.o"; exit 0; }
+    # (a unit of C23, libgcc's: gnu23 if gnu11 does not take it)
+    $cc $CFLAGS "$u" -o "$d/$b.a.o" 2> /dev/null || {
+        CFLAGS=$(printf '%s' "$CFLAGS" | sed 's/-std=gnu11/-std=gnu23/')
+        $cc $CFLAGS "$u" -o "$d/$b.a.o" 2> /dev/null; } || { echo "SKIP $u"; rm -f "$d/$b.a.o"; exit 0; }
     $cc $CFLAGS "$d/$b.c" -o "$d/$b.b.o" 2> "$d/$b.gcc" || { echo "GCC $u: $(grep -m1 error "$d/$b.gcc" | head -c 300)"; exit 0; }
     dump() {
         for s in $(readelf -SW "$1" | sed -n 's/^ *\[ *[0-9]*\] \([^ ]*\) .*/\1/p' | grep -v '^\.rela\|^\.comment$\|^\.symtab$\|^\.strtab$\|^\.shstrtab$'); do
