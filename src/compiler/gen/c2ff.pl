@@ -1310,7 +1310,7 @@ sub asm_parts {
         if ($c eq ':' && $depth == 0) { push @parts, ''; next }
         $parts[-1] .= $c;
     }
-    my ($tmpl, $outs, $ins) = @parts;
+    my ($tmpl, $outs, $ins, $clob) = @parts;
     my $template = join '', $tmpl =~ /"((?:[^"\\]|\\.)*)"/g;
     $template =~ s/\\t/ /g;
     $template =~ s/\\n/;/g;
@@ -1318,7 +1318,7 @@ sub asm_parts {
     my @ic = ($ins // '') =~ /"([^"]*)"/g;
     my @ops = kids($n);
     @ops == @oc + @ic or stop('an asm statement whose operands are not its text\'s', $n);
-    ($template, \@oc, \@ic, \@ops);
+    ($template, \@oc, \@ic, \@ops, $clob // '');
 }
 sub asm_stmt {
     my ($n) = @_;
@@ -1509,13 +1509,15 @@ sub asm_ins_other {
 sub asm_stmt_other {
     my ($n) = @_;
     my $regs = $argregs{$target} or stop("an asm statement on $target", $n);
-    my ($template, $oc, $ic, $ops) = asm_parts($n);
+    my ($template, $oc, $ic, $ops, $clob) = asm_parts($n);
     # an empty template whose outputs are all read and written (+r: the
     # optimization barriers of dl-new-hash.h) changes nothing: no code
     return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc;
     # and one with inputs alone (math_force_eval's "" : : "f" (x) of a long
     # double on x86_64, "x" of a float), of values with no effects: none
     return () if $target eq 'x86_64' && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops;
+    # (x86_64's x87 operands, libm's long double: asm_x87)
+    return asm_x87($n, $template, $oc, $ic, $ops, $clob) if $target eq 'x86_64' && grep { /^[=&]*t$/ } @$oc;
     # (rbx too: the C layer keeps nothing in it across a call)
     my %fixed = $target eq 'x86_64' ? (a => 'rax', b => 'rbx', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
     local $asm_size;
@@ -1653,6 +1655,59 @@ sub asm_stmt_other {
     my @args = map { my ($i, $how) = @$_; $i eq 'zero' ? node(0) : $how eq 'address' ? node('address', atom($ops->[$i])) : atom($ops->[$i]) } @arg;
     my $call = @args ? node($name, @args) : node($name);
     return defined $ret ? (item(expr($ops->[$ret])), node('='), $call) : $call;
+}
+
+# x86_64's x87 asm statements (libm's long double: an "=t" output, the x87's
+# st0, its input "0" there, an input "u" in st1; math_opt_barrier's of a
+# float or double too): an empty template is the output set to the input;
+# one with instructions an asm function of the operands' addresses: the "u"
+# input loaded first (fld), then the st0 one, the template, the output
+# stored and popped (fstp), and st1 popped where the template leaves it
+# (no "st(1)" clobber: fscale's); each operand a variable (its address)
+sub asm_x87 {
+    my ($n, $template, $oc, $ic, $ops, $clob) = @_;
+    @$oc == 1 && $oc->[0] =~ /^=&?t$/ or stop("the asm constraints @$oc of the x87", $n);
+    my ($t0, $u);
+    for my $j (0 .. $#$ic) {
+        my $c = $ic->[$j];
+        if ($c =~ /^[0t]$/ && !defined $t0) { $t0 = 1 + $j } elsif ($c eq 'u' && !defined $u) { $u = 1 + $j }
+        else { stop("the asm constraint $c of the x87", $n) }
+    }
+    my $sz = sub {
+        my ($o) = @_;
+        my $w = tword($ops->[$o]);
+        $w eq 'long double' ? 't' : $w eq 'double' ? 'l' : $w eq 'float' ? 's' : stop("an x87 asm operand of a $w", $n);
+    };
+    if ($template !~ /\S/) {
+        defined $t0 && !defined $u or stop('an empty x87 asm statement but of "0"', $n);
+        my @in = atom($ops->[$t0]);
+        @in = cast_node([ctype(qt($ops->[0]))], @in) if tword($ops->[0]) ne tword($ops->[$t0]);
+        return (item(expr($ops->[0])), node('='), @in);
+    }
+    for my $o (0 .. $#$ops) {
+        my $e = strip($ops->[$o]);
+        ($e->{kind} // '') =~ /^(DeclRefExpr|MemberExpr|ArraySubscriptExpr)$/ || (($e->{kind} // '') eq 'UnaryOperator' && $e->{opcode} eq '*')
+            or stop('an x87 asm operand that is no variable', $n);
+    }
+    my $regs = $argregs{$target};
+    my @order = ((defined $u ? ($u) : ()), (defined $t0 ? ($t0) : ()), 0);
+    my @code;
+    for my $k (0 .. $#order - 1) { push @code, node('fld' . $sz->($order[$k]) . '.m', node(0), node($regs->[$k])) }
+    (my $t = $template) =~ s/%%/%/g;
+    for my $l (grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t) {
+        my ($op, @a) = split /[\s,]+/, $l;
+        if ($op =~ /^(?:fpatan|frndint|f2xm1|fscale|fyl2x|fyl2xp1|fxtract|fld1|fldz|fchs|fabs|fsqrt|fprem|fprem1)$/ && !@a) { push @code, node($op) }
+        elsif ($op eq 'fstp' && @a == 1 && $a[0] =~ /^%st(?:\((\d)\))?$/) { push @code, ($1 // 0) == 0 ? node('fstp.st0') : node('fstp', node("st$1")) }
+        else { stop("the x87 asm instruction $l", $n) }
+    }
+    push @code, node('fstp' . $sz->(0) . '.m', node(0), node($regs->[$#order]));
+    push @code, node('fstp.st0') if defined $u && $clob !~ /"st\(1\)"/;
+    (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
+    $name .= '_' . join('', map { s/[^A-Za-z0-9]//gr } @$oc) . '_' . join('', map { s/[^A-Za-z0-9]//gr } @$ic) . '_' . join('', map { $sz->($_) } @order);
+    $name = asm_once($name, "$template : @$oc : @$ic : " . join('', map { $sz->($_) } @order), $n);
+    push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\" of the x87")), @code, node('ret'))]
+        unless $asmfn{$name}++;
+    node($name, map { node('address', atom($ops->[$_])) } @order);
 }
 
 sub expr {
