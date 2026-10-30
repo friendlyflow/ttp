@@ -308,6 +308,8 @@
     t:
       u8
       * pointer
+    comment
+      i is a local: a local first in a body with only its type would be one more parameter, which no call passes
     i:
       int
     for

@@ -273,6 +273,8 @@ ff, the language ttpc compiles
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
       a field or element that is a struct, union or array takes a : holding its items, as C's inner braces; what has no item is zero, in a local too
       an empty : is a zero struct, union or array, as C's {}
+      an empty node (no content, no children: fftext writes it \\e, an indented line of only spaces reads as one) is an empty part wherever an empty : is one
+        an item of a global's or a local's list (a zero, a zero struct, union or array), for's parts, an empty statement; where a leaf is text (after cast / char / * pointer) it is the text "" still
       example
         pts:
           array
@@ -432,11 +434,11 @@ ff, the language ttpc compiles
           return
             n
     statements
-      a declaration, an expression (an assignment, a call), a lambda, or one of these
+      a declaration, an expression (an assignment, a call), a lambda, or one of these; an empty : or an empty node is an empty statement
       if condition body, then optionally else body or else if condition body, which chains
       while condition body; break leaves a while, for, do while or switch; continue goes to the next round of a while, for or do while
       the condition is the leading run of nodes the operators join, the rest is the body
-      for first condition step body: three items, then the body; first runs once, its declaration seen in the loop only; an empty : is an empty part, an empty condition never ends the loop
+      for first condition step body: three items, then the body; first runs once, its declaration seen in the loop only; an empty : or an empty node is an empty part (for / \\e / \\e / \\e / body is C's for (;;)), an empty condition never ends the loop
       example
         for
           i:

@@ -188,6 +188,8 @@
       vector
         char
         16
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
     r:
       vector
         char
@@ -448,6 +450,8 @@
     double
     x:
       double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
     r:
       double
     __ff_sqrtsd
@@ -477,6 +481,8 @@
     float
     x:
       float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
     r:
       float
     __ff_sqrtss

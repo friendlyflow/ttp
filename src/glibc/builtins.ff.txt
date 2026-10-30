@@ -2613,6 +2613,8 @@ builtins:
       * pointer
     order:
       int
+    comment
+      i is a local: a local first in a body with only its type would be one more parameter, which no call passes
     i:
       u64
     if
@@ -2728,6 +2730,8 @@ builtins:
       * pointer
     order:
       int
+    comment
+      i is a local: a local first in a body with only its type would be one more parameter, which no call passes
     i:
       u64
     if
