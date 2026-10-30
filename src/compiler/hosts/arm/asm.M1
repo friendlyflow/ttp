@@ -1,0 +1,3046 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software: you can redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software Foundation,
+# version 3 of the License. It comes with no warranty. See the file LICENSE
+# for the full text.
+#
+# gen/hex/arm/asm.s as M1 text, made by gen/mkhex.pl, as stage0-posix's armv7l
+# M1 writes ARM: first a DEFINE for each instruction it uses, its 4 bytes
+# (little endian), named as objdump writes it (its first space '_', no
+# other spaces, no '#'), and for the references to labels: JUMP_ALWAYS
+# CALL_ALWAYS JUMP_EQUAL JUMP_NE ... the top byte of B, BL, B<cond> (cond
+# and the opcode) after hex2's ^~label (imm24, its 3 low bytes), movw_rN
+# after !label and movt_rN after ~label (la's pair, the immediate zero:
+# hex2 XORs in label's low and high 16 bits). Then each asm line: :label
+# for its labels, then its instructions. Data is hex or a "string" (its
+# bytes, then 00). It starts at BASE (^00010000). M1 reads only what is
+# before each '#'; M1's hex2 text is made by hex2.
+#
+DEFINE CALL_ALWAYS EB                   # BL: cond 1110 al, 101, L 1, after ^~label's 3 bytes (imm24)
+DEFINE CALL_NE 1B                       # BL: cond 0001 ne, 101, L 1, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_ALWAYS EA                   # B: cond 1110 al, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_CC 3A                       # B: cond 0011 cc, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_CS 2A                       # B: cond 0010 cs, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_EQUAL 0A                    # B: cond 0000 eq, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_GE AA                       # B: cond 1010 ge, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_HI 8A                       # B: cond 1000 hi, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_LE DA                       # B: cond 1101 le, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_LS 9A                       # B: cond 1001 ls, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_LT BA                       # B: cond 1011 lt, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE JUMP_NE 1A                       # B: cond 0001 ne, 101, L 0, after ^~label's 3 bytes (imm24)
+DEFINE adc_r2,r2,r2 0220A2E0
+DEFINE add_fp,fp,r0 00B08BE0
+DEFINE add_ip,ip,1 01C08CE2
+DEFINE add_ip,ip,12 0CC08CE2
+DEFINE add_ip,r1,r2 02C081E0
+DEFINE add_ip,r9,20480 05CA89E2
+DEFINE add_ip,r9,r0,lsl2 00C189E0
+DEFINE add_ip,r9,r1,lsl2 01C189E0
+DEFINE add_ip,r9,r3,lsl2 03C189E0
+DEFINE add_r0,ip,r0,lsl1 80008CE0
+DEFINE add_r0,r0,1 010080E2
+DEFINE add_r0,r0,20 140080E2
+DEFINE add_r0,r0,24117248 170680E2
+DEFINE add_r0,r0,2424832 250880E2
+DEFINE add_r0,r0,280 460F80E2
+DEFINE add_r0,r0,8 080080E2
+DEFINE add_r0,r0,ip 0C0080E0
+DEFINE add_r0,r0,r0,lsl1 800080E0
+DEFINE add_r0,r0,r0,lsl2 000180E0
+DEFINE add_r0,r0,r1 010080E0
+DEFINE add_r0,r0,r2 020080E0
+DEFINE add_r0,r0,r4 040080E0
+DEFINE add_r0,r0,r5,lsl3 850180E0
+DEFINE add_r0,r1,r0,lsl3 800181E0
+DEFINE add_r0,r1,r2 020081E0
+DEFINE add_r0,r3,52 340083E2
+DEFINE add_r0,r4,12 0C0084E2
+DEFINE add_r0,r9,12288 030A89E2
+DEFINE add_r0,r9,20480 050A89E2
+DEFINE add_r0,r9,9216 090B89E2
+DEFINE add_r0,r9,r1,lsl2 010189E0
+DEFINE add_r1,r0,65536 011880E2
+DEFINE add_r1,r1,1 011081E2
+DEFINE add_r1,r1,r0 001081E0
+DEFINE add_r1,r1,r2 021081E0
+DEFINE add_r1,r9,400 191E89E2
+DEFINE add_r1,r9,812 CB1F89E2
+DEFINE add_r1,r9,8192 021A89E2
+DEFINE add_r1,r9,r1,lsl2 011189E0
+DEFINE add_r2,r2,1 012082E2
+DEFINE add_r2,r2,2 022082E2
+DEFINE add_r2,r2,ip 0C2082E0
+DEFINE add_r2,r2,r0 002082E0
+DEFINE add_r2,r2,r1 012082E0
+DEFINE add_r2,r9,800 322E89E2
+DEFINE add_r2,r9,812 CB2F89E2
+DEFINE add_r2,r9,r1,lsl2 012189E0
+DEFINE add_r3,r0,20 143080E2
+DEFINE add_r3,r1,1 013081E2
+DEFINE add_r3,r1,r2 023081E0
+DEFINE add_r3,r2,r2,lsl2 023182E0
+DEFINE add_r3,r3,1 013083E2
+DEFINE add_r3,r3,2 023083E2
+DEFINE add_r3,r3,24117248 173683E2
+DEFINE add_r3,r3,29 1D3083E2
+DEFINE add_r3,r3,48 303083E2
+DEFINE add_r3,r3,ip 0C3083E0
+DEFINE add_r3,r3,r1 013083E0
+DEFINE add_r3,r3,r2 023083E0
+DEFINE add_r3,r9,r0,lsl2 003189E0
+DEFINE add_r4,r0,65536 014880E2
+DEFINE add_r4,r4,40 284084E2
+DEFINE add_r4,r4,64 404084E2
+DEFINE add_r4,r9,8192 024A89E2
+DEFINE add_r5,r5,1 015085E2
+DEFINE add_r5,r5,20 145085E2
+DEFINE add_r5,r9,16384 015989E2
+DEFINE add_r6,r0,1 016080E2
+DEFINE add_r6,r4,4096 016A84E2
+DEFINE add_r6,r6,r5 056086E0
+DEFINE add_r7,r4,12 0C7084E2
+DEFINE add_r7,r7,1 017087E2
+DEFINE add_r7,r7,8 087087E2
+DEFINE add_r8,r8,8 088088E2
+DEFINE add_r8,r9,12288 038A89E2
+DEFINE add_sl,r9,16384 01A989E2
+DEFINE add_sl,sl,1 01A08AE2
+DEFINE addeq_sl,sl,1 01A08A02
+DEFINE addne_r1,r1,1 01108112
+DEFINE addne_r2,r2,1 01208212
+DEFINE addne_sl,sl,1 01A08A12
+DEFINE and_ip,ip,15 0FC00CE2
+DEFINE and_ip,ip,r3 03C00CE0
+DEFINE and_r0,r0,15 0F0000E2
+DEFINE and_r0,r2,61440 0F0A02E2
+DEFINE and_r1,r0,240 F01000E2
+DEFINE and_r1,r0,61440 0F1A00E2
+DEFINE and_r1,r4,96 601004E2
+DEFINE and_r1,r5,15 0F1005E2
+DEFINE and_r5,ip,3 03500CE2
+DEFINE and_r6,r5,15 0F6005E2
+DEFINE andeq_r0,r4,r0 00000400
+DEFINE asr_r0,r0,2 4001A0E1
+DEFINE asreq_r0,r4,r0 5400A001
+DEFINE bic_r0,r0,-16777216 FF04C0E3
+DEFINE bic_r0,r0,61440 0F0AC0E3
+DEFINE bic_r0,r0,r1 0100C0E1
+DEFINE bic_r0,r2,61440 0F0AC2E3
+DEFINE bic_r4,r4,15728640 0F46C4E3
+DEFINE bic_r4,r4,31457280 1E46C4E3
+DEFINE bx_lr 1EFF2FE1
+DEFINE bx_r0 10FF2FE1
+DEFINE bx_r1 11FF2FE1
+DEFINE bxcc_lr 1EFF2F31
+DEFINE bxcs_lr 1EFF2F21
+DEFINE bxeq_lr 1EFF2F01
+DEFINE bxhi_lr 1EFF2F81
+DEFINE bxne_lr 1EFF2F11
+DEFINE clz_r0,r6 160F6FE1
+DEFINE cmp_ip,0 00005CE3
+DEFINE cmp_ip,10 0A005CE3
+DEFINE cmp_ip,102 66005CE3
+DEFINE cmp_ip,120 78005CE3
+DEFINE cmp_ip,123 7B005CE3
+DEFINE cmp_ip,124 7C005CE3
+DEFINE cmp_ip,125 7D005CE3
+DEFINE cmp_ip,126 7E005CE3
+DEFINE cmp_ip,26 1A005CE3
+DEFINE cmp_ip,32 20005CE3
+DEFINE cmp_ip,33 21005CE3
+DEFINE cmp_ip,34 22005CE3
+DEFINE cmp_ip,35 23005CE3
+DEFINE cmp_ip,4 04005CE3
+DEFINE cmp_ip,40 28005CE3
+DEFINE cmp_ip,41 29005CE3
+DEFINE cmp_ip,42 2A005CE3
+DEFINE cmp_ip,43 2B005CE3
+DEFINE cmp_ip,44 2C005CE3
+DEFINE cmp_ip,45 2D005CE3
+DEFINE cmp_ip,48 30005CE3
+DEFINE cmp_ip,58 3A005CE3
+DEFINE cmp_ip,60 3C005CE3
+DEFINE cmp_ip,64 40005CE3
+DEFINE cmp_ip,91 5B005CE3
+DEFINE cmp_ip,93 5D005CE3
+DEFINE cmp_ip,r2 02005CE1
+DEFINE cmp_r0,0 000050E3
+DEFINE cmp_r0,10 0A0050E3
+DEFINE cmp_r0,100 640050E3
+DEFINE cmp_r0,110 6E0050E3
+DEFINE cmp_r0,116 740050E3
+DEFINE cmp_r0,16777216 010450E3
+DEFINE cmp_r0,256 010C50E3
+DEFINE cmp_r0,32 200050E3
+DEFINE cmp_r0,34 220050E3
+DEFINE cmp_r0,4096 010A50E3
+DEFINE cmp_r0,46 2E0050E3
+DEFINE cmp_r0,58 3A0050E3
+DEFINE cmp_r0,65536 010850E3
+DEFINE cmp_r0,92 5C0050E3
+DEFINE cmp_r0,r1 010050E1
+DEFINE cmp_r0,r1,asr8 410450E1
+DEFINE cmp_r0,r2 020050E1
+DEFINE cmp_r0,r3 030050E1
+DEFINE cmp_r0,r6 060050E1
+DEFINE cmp_r0,r7 070050E1
+DEFINE cmp_r1,0 000051E3
+DEFINE cmp_r1,1 010051E3
+DEFINE cmp_r1,256 010C51E3
+DEFINE cmp_r1,32 200051E3
+DEFINE cmp_r1,4 040051E3
+DEFINE cmp_r1,4096 010A51E3
+DEFINE cmp_r1,5 050051E3
+DEFINE cmp_r1,8 080051E3
+DEFINE cmp_r1,r0 000051E1
+DEFINE cmp_r1,r2 020051E1
+DEFINE cmp_r1,r5 050051E1
+DEFINE cmp_r2,0 000052E3
+DEFINE cmp_r2,1 010052E3
+DEFINE cmp_r2,2 020052E3
+DEFINE cmp_r2,65536 010852E3
+DEFINE cmp_r2,8 080052E3
+DEFINE cmp_r2,fp 0B0052E1
+DEFINE cmp_r2,r0 000052E1
+DEFINE cmp_r2,r1 010052E1
+DEFINE cmp_r3,0 000053E3
+DEFINE cmp_r3,26 1A0053E3
+DEFINE cmp_r3,32 200053E3
+DEFINE cmp_r3,4 040053E3
+DEFINE cmp_r3,40894464 270653E3
+DEFINE cmp_r3,98 620053E3
+DEFINE cmp_r3,ip 0C0053E1
+DEFINE cmp_r3,r0 000053E1
+DEFINE cmp_r3,r2 020053E1
+DEFINE cmp_r4,0 000054E3
+DEFINE cmp_r4,lr 0E0054E1
+DEFINE cmp_r4,r0 000054E1
+DEFINE cmp_r4,r5 050054E1
+DEFINE cmp_r5,0 000055E3
+DEFINE cmp_r5,10 0A0055E3
+DEFINE cmp_r5,4 040055E3
+DEFINE cmp_r5,ip 0C0055E1
+DEFINE cmp_r5,r0 000055E1
+DEFINE cmp_r5,r4 040055E1
+DEFINE cmp_r5,r6 060055E1
+DEFINE cmp_r6,0 000056E3
+DEFINE cmp_r6,10 0A0056E3
+DEFINE cmp_r6,124 7C0056E3
+DEFINE cmp_r6,37 250056E3
+DEFINE cmp_r6,38 260056E3
+DEFINE cmp_r6,42 2A0056E3
+DEFINE cmp_r6,60 3C0056E3
+DEFINE cmp_r6,62 3E0056E3
+DEFINE cmp_r6,92 5C0056E3
+DEFINE cmp_r6,94 5E0056E3
+DEFINE cmp_r6,r0 000056E1
+DEFINE cmp_r7,r0 000057E1
+DEFINE cmp_sl,fp 0B005AE1
+DEFINE cmpeq_r2,r3 03005201
+DEFINE cmpeq_r3,r1 01005301
+DEFINE cmpeq_r3,r2 02005301
+DEFINE cmpeq_r7,r3 03005701
+DEFINE cmpne_ip,10 0A005C13
+DEFINE cmpne_ip,37 25005C13
+DEFINE cmpne_ip,38 26005C13
+DEFINE cmpne_ip,47 2F005C13
+DEFINE cmpne_ip,62 3E005C13
+DEFINE cmpne_ip,64 40005C13
+DEFINE cmpne_ip,9 09005C13
+DEFINE cmpne_ip,94 5E005C13
+DEFINE cmpne_r0,95 5F005013
+DEFINE cmpne_r1,64 40005113
+DEFINE cmpne_r3,102 66005313
+DEFINE eor_r2,r1,r0 002021E0
+DEFINE eor_r4,r0,r1 014020E0
+DEFINE eor_r8,r3,r0 008023E0
+DEFINE eoreq_r0,r4,r0 00002400
+DEFINE ldr_ip,[ip,100] 64C09CE5
+DEFINE ldr_ip,[ip,80] 50C09CE5
+DEFINE ldr_ip,[r9,24] 18C099E5
+DEFINE ldr_ip,[r9,28] 1CC099E5
+DEFINE ldr_ip,[r9,4] 04C099E5
+DEFINE ldr_ip,[r9] 00C099E5
+DEFINE ldr_lr,[r9,140] 8CE099E5
+DEFINE ldr_r0,[ip,40] 28009CE5
+DEFINE ldr_r0,[r0,40] 280090E5
+DEFINE ldr_r0,[r0] 000090E5
+DEFINE ldr_r0,[r2,100] 640092E5
+DEFINE ldr_r0,[r2,40] 280092E5
+DEFINE ldr_r0,[r2,60] 3C0092E5
+DEFINE ldr_r0,[r2,80] 500092E5
+DEFINE ldr_r0,[r4,52] 340094E5
+DEFINE ldr_r0,[r5,8] 080095E5
+DEFINE ldr_r0,[r7,4] 040097E5
+DEFINE ldr_r0,[r7] 000097E5
+DEFINE ldr_r0,[r8] 000098E5
+DEFINE ldr_r0,[r9,120] 780099E5
+DEFINE ldr_r0,[r9,124] 7C0099E5
+DEFINE ldr_r0,[r9,128] 800099E5
+DEFINE ldr_r0,[r9,12] 0C0099E5
+DEFINE ldr_r0,[r9,140] 8C0099E5
+DEFINE ldr_r0,[r9,20] 140099E5
+DEFINE ldr_r0,[r9,4] 040099E5
+DEFINE ldr_r0,[r9,8] 080099E5
+DEFINE ldr_r1,[ip,400] 90119CE5
+DEFINE ldr_r1,[ip,8] 08109CE5
+DEFINE ldr_r1,[ip] 00109CE5
+DEFINE ldr_r1,[ip],4 04109CE4
+DEFINE ldr_r1,[r0,12] 0C1090E5
+DEFINE ldr_r1,[r0,16] 101090E5
+DEFINE ldr_r1,[r0,4] 041090E5
+DEFINE ldr_r1,[r1,4] 041091E5
+DEFINE ldr_r1,[r1,80] 501091E5
+DEFINE ldr_r1,[r2,40] 281092E5
+DEFINE ldr_r1,[r2,60] 3C1092E5
+DEFINE ldr_r1,[r8,4] 041098E5
+DEFINE ldr_r1,[r9,112] 701099E5
+DEFINE ldr_r1,[r9,128] 801099E5
+DEFINE ldr_r1,[r9,136] 881099E5
+DEFINE ldr_r1,[r9,24] 181099E5
+DEFINE ldr_r1,[r9,32] 201099E5
+DEFINE ldr_r1,[r9,52] 341099E5
+DEFINE ldr_r1,[r9,72] 481099E5
+DEFINE ldr_r1,[r9,76] 4C1099E5
+DEFINE ldr_r1,[r9,8] 081099E5
+DEFINE ldr_r1,[r9,92] 5C1099E5
+DEFINE ldr_r1,[r9,96] 601099E5
+DEFINE ldr_r2,[ip,12] 0C209CE5
+DEFINE ldr_r2,[ip,4] 04209CE5
+DEFINE ldr_r2,[ip],4 04209CE4
+DEFINE ldr_r2,[r0,8] 082090E5
+DEFINE ldr_r2,[r1,40] 282091E5
+DEFINE ldr_r2,[r1,60] 3C2091E5
+DEFINE ldr_r2,[r1] 002091E5
+DEFINE ldr_r2,[r4,48] 302094E5
+DEFINE ldr_r2,[r9,136] 882099E5
+DEFINE ldr_r2,[r9,52] 342099E5
+DEFINE ldr_r2,[r9,56] 382099E5
+DEFINE ldr_r2,[r9,92] 5C2099E5
+DEFINE ldr_r3,[ip,400] 90319CE5
+DEFINE ldr_r3,[ip,40] 28309CE5
+DEFINE ldr_r3,[r0,16] 103090E5
+DEFINE ldr_r3,[r0,4] 043090E5
+DEFINE ldr_r3,[r0,8] 083090E5
+DEFINE ldr_r3,[r0] 003090E5
+DEFINE ldr_r3,[r3,40] 283093E5
+DEFINE ldr_r3,[r6],4 043096E4
+DEFINE ldr_r3,[r9,132] 843099E5
+DEFINE ldr_r3,[r9,4] 043099E5
+DEFINE ldr_r3,[r9,8] 083099E5
+DEFINE ldr_r3,[r9] 003099E5
+DEFINE ldr_r3,[sp,8] 08309DE5
+DEFINE ldr_r4,[r5,12] 0C4095E5
+DEFINE ldr_r4,[r9,16] 104099E5
+DEFINE ldr_r4,[sp,12] 0C409DE5
+DEFINE ldr_r5,[r5,16] 105095E5
+DEFINE ldr_r5,[r9,16] 105099E5
+DEFINE ldr_r6,[r4,8] 086094E5
+DEFINE ldr_r6,[r4] 006094E5
+DEFINE ldr_r6,[r5] 006095E5
+DEFINE ldr_r6,[r9,20] 146099E5
+DEFINE ldr_r7,[r4,4] 047094E5
+DEFINE ldr_r7,[r5,4] 047095E5
+DEFINE ldrb_ip,[ip,-1] 01C05CE5
+DEFINE ldrb_ip,[ip,r3] 03C0DCE7
+DEFINE ldrb_ip,[r0],1 01C0D0E4
+DEFINE ldrb_ip,[r1,1] 01C0D1E5
+DEFINE ldrb_ip,[r1,r3] 03C0D1E7
+DEFINE ldrb_ip,[r1] 00C0D1E5
+DEFINE ldrb_ip,[r1],1 01C0D1E4
+DEFINE ldrb_ip,[r2,-1] 01C052E5
+DEFINE ldrb_ip,[r2] 00C0D2E5
+DEFINE ldrb_ip,[sl] 00C0DAE5
+DEFINE ldrb_ip,[sl],1 01C0DAE4
+DEFINE ldrb_lr,[r1,ip] 0CE0D1E7
+DEFINE ldrb_r0,[r0,-1] 010050E5
+DEFINE ldrb_r0,[r1] 0000D1E5
+DEFINE ldrb_r0,[sl] 0000DAE5
+DEFINE ldrb_r1,[sl] 0010DAE5
+DEFINE ldrb_r3,[r0,-2] 023050E5
+DEFINE ldrb_r3,[r3,-1] 013053E5
+DEFINE ldrb_r3,[sl,1] 0130DAE5
+DEFINE ldrb_r4,[r0,ip] 0C40D0E7
+DEFINE ldrb_r4,[r1,ip] 0C40D1E7
+DEFINE ldrb_r4,[r3,ip] 0C40D3E7
+DEFINE ldrb_r5,[r1,ip] 0C50D1E7
+DEFINE ldrb_r6,[r3],1 0160D3E4
+DEFINE lsl_r0,r0,16 0008A0E1
+DEFINE lsl_r0,r0,2 0001A0E1
+DEFINE lsl_r1,r0,8 0014A0E1
+DEFINE lsl_r1,r1,2 0111A0E1
+DEFINE lsl_r5,r5,3 8551A0E1
+DEFINE lsl_r6,r6,12 0666A0E1
+DEFINE lsl_r8,r8,28 088EA0E1
+DEFINE lsleq_r0,r4,r0 1400A001
+DEFINE lsls_r0,r0,1 8000B0E1
+DEFINE lsls_r2,r2,8 0224B0E1
+DEFINE lsls_r8,r8,16 0888B0E1
+DEFINE lsr_r0,r0,16 2008A0E1
+DEFINE lsr_r0,r0,r6 3006A0E1
+DEFINE lsr_r0,r1,24 210CA0E1
+DEFINE lsr_r2,r2,3 A221A0E1
+DEFINE lsr_r2,r2,8 2224A0E1
+DEFINE lsr_r5,r5,4 2552A0E1
+DEFINE lsr_r6,r6,12 2666A0E1
+DEFINE lsr_r8,r3,16 2388A0E1
+DEFINE mla_r0,r3,r0,r1 931020E0
+DEFINE mla_r0,r4,r0,r5 945020E0
+DEFINE mov_fp,7340032 07B6A0E3
+DEFINE mov_fp,r5 05B0A0E1
+DEFINE mov_ip,0 00C0A0E3
+DEFINE mov_ip,1 01C0A0E3
+DEFINE mov_ip,r0 00C0A0E1
+DEFINE mov_r0,0 0000A0E3
+DEFINE mov_r0,1 0100A0E3
+DEFINE mov_r0,1114112 1108A0E3
+DEFINE mov_r0,116 7400A0E3
+DEFINE mov_r0,2 0200A0E3
+DEFINE mov_r0,24117248 1706A0E3
+DEFINE mov_r0,3 0300A0E3
+DEFINE mov_r0,4 0400A0E3
+DEFINE mov_r0,ip 0C00A0E1
+DEFINE mov_r0,r1 0100A0E1
+DEFINE mov_r0,r2 0200A0E1
+DEFINE mov_r0,r4 0400A0E1
+DEFINE mov_r0,r6 0600A0E1
+DEFINE mov_r1,0 0010A0E3
+DEFINE mov_r1,1 0110A0E3
+DEFINE mov_r1,2 0210A0E3
+DEFINE mov_r1,24117248 1716A0E3
+DEFINE mov_r1,4 0410A0E3
+DEFINE mov_r1,fp 0B10A0E1
+DEFINE mov_r1,r0 0010A0E1
+DEFINE mov_r1,r2 0210A0E1
+DEFINE mov_r1,r3 0310A0E1
+DEFINE mov_r1,r4 0410A0E1
+DEFINE mov_r1,r5 0510A0E1
+DEFINE mov_r1,sl 0A10A0E1
+DEFINE mov_r2,0 0020A0E3
+DEFINE mov_r2,116 7420A0E3
+DEFINE mov_r2,2 0220A0E3
+DEFINE mov_r2,24117248 1726A0E3
+DEFINE mov_r2,280 462FA0E3
+DEFINE mov_r2,6 0620A0E3
+DEFINE mov_r2,81 5120A0E3
+DEFINE mov_r2,r0 0020A0E1
+DEFINE mov_r2,r1 0120A0E1
+DEFINE mov_r2,r5 0520A0E1
+DEFINE mov_r2,sl 0A20A0E1
+DEFINE mov_r3,0 0030A0E3
+DEFINE mov_r3,1 0130A0E3
+DEFINE mov_r3,2 0230A0E3
+DEFINE mov_r3,2424832 2538A0E3
+DEFINE mov_r3,32 2030A0E3
+DEFINE mov_r3,4096 013AA0E3
+DEFINE mov_r3,sl 0A30A0E1
+DEFINE mov_r4,0 0040A0E3
+DEFINE mov_r4,1 0140A0E3
+DEFINE mov_r4,10 0A40A0E3
+DEFINE mov_r4,16 1040A0E3
+DEFINE mov_r4,2 0240A0E3
+DEFINE mov_r4,4 0440A0E3
+DEFINE mov_r4,8 0840A0E3
+DEFINE mov_r4,r0 0040A0E1
+DEFINE mov_r4,r1 0140A0E1
+DEFINE mov_r5,0 0050A0E3
+DEFINE mov_r5,ip 0C50A0E1
+DEFINE mov_r5,r1 0150A0E1
+DEFINE mov_r5,r2 0250A0E1
+DEFINE mov_r6,0 0060A0E3
+DEFINE mov_r6,16 1060A0E3
+DEFINE mov_r6,ip 0C60A0E1
+DEFINE mov_r6,r0 0060A0E1
+DEFINE mov_r6,r3 0360A0E1
+DEFINE mov_r6,sl 0A60A0E1
+DEFINE mov_r7,1 0170A0E3
+DEFINE mov_r7,3 0370A0E3
+DEFINE mov_r7,4 0470A0E3
+DEFINE mov_r7,r0 0070A0E1
+DEFINE mov_r8,-536870912 0E82A0E3
+DEFINE mov_r9,1048576 0196A0E3
+DEFINE mov_sl,7340032 07A6A0E3
+DEFINE mov_sl,r3 03A0A0E1
+DEFINE movcs_r0,0 0000A023
+DEFINE movcs_r3,0 0030A023
+DEFINE movcs_r3,1 0130A023
+DEFINE moveq_r0,10 0A00A003
+DEFINE moveq_r0,9 0900A003
+DEFINE moveq_r0,r1 0100A001
+DEFINE moveq_r1,r5 0510A001
+DEFINE moveq_r5,0 0050A003
+DEFINE moveq_r6,0 0060A003
+DEFINE movne_r0,0 0000A013
+DEFINE movne_r0,r7 0700A011
+DEFINE movne_r3,0 0030A013
+DEFINE movs_r0,r2 0200B0E1
+DEFINE movt_ip,52428 CCCC4CE3
+DEFINE movt_r0 000040E3                 # MOVT: cond 0011 0100 imm4 Rd imm12, the immediate zero (~label)
+DEFINE movt_r1 001040E3                 # MOVT: cond 0011 0100 imm4 Rd imm12, the immediate zero (~label)
+DEFINE movt_r12 00C040E3                # MOVT: cond 0011 0100 imm4 Rd imm12, the immediate zero (~label)
+DEFINE movt_r2 002040E3                 # MOVT: cond 0011 0100 imm4 Rd imm12, the immediate zero (~label)
+DEFINE movt_r5 005040E3                 # MOVT: cond 0011 0100 imm4 Rd imm12, the immediate zero (~label)
+DEFINE movt_r6 006040E3                 # MOVT: cond 0011 0100 imm4 Rd imm12, the immediate zero (~label)
+DEFINE movw_ip,52429 CDCC0CE3
+DEFINE movw_r0 000000E3                 # MOVW: cond 0011 0000 imm4 Rd imm12, the immediate zero (!label)
+DEFINE movw_r1 001000E3                 # MOVW: cond 0011 0000 imm4 Rd imm12, the immediate zero (!label)
+DEFINE movw_r12 00C000E3                # MOVW: cond 0011 0000 imm4 Rd imm12, the immediate zero (!label)
+DEFINE movw_r2 002000E3                 # MOVW: cond 0011 0000 imm4 Rd imm12, the immediate zero (!label)
+DEFINE movw_r5 005000E3                 # MOVW: cond 0011 0000 imm4 Rd imm12, the immediate zero (!label)
+DEFINE movw_r6 006000E3                 # MOVW: cond 0011 0000 imm4 Rd imm12, the immediate zero (!label)
+DEFINE muleq_r0,r4,r0 94000000
+DEFINE mvn_r0,0 0000E0E3
+DEFINE mvn_r0,r0 0000E0E1
+DEFINE mvn_r3,0 0030E0E3
+DEFINE mvnne_r0,r2 0200E011
+DEFINE orr_ip,ip,32 20C08CE3
+DEFINE orr_ip,r0,32 20C080E3
+DEFINE orr_r0,r1,r3,lsl7 830381E1
+DEFINE orr_r0,r3,r0,lsl8 000483E1
+DEFINE orr_r4,r4,16 104084E3
+DEFINE orr_r4,r4,16777216 014484E3
+DEFINE orr_r4,r4,33554432 024484E3
+DEFINE orr_r4,r4,58720256 0E4584E3
+DEFINE orr_r4,r4,ip,lsl21 8C4A84E1
+DEFINE orr_r4,r4,r0 004084E1
+DEFINE orr_r4,r4,r0,lsl12 004684E1
+DEFINE orr_r4,r4,r0,lsl16 004884E1
+DEFINE orr_r4,r4,r0,lsl4 004284E1
+DEFINE orr_r4,r4,r0,lsl7 804384E1
+DEFINE orr_r4,r4,r0,lsl8 004484E1
+DEFINE orr_r4,r4,r0,lslr1 104184E1
+DEFINE orr_r4,r4,r1,lsl4 014284E1
+DEFINE orr_r4,r4,r1,lsl5 814284E1
+DEFINE orr_r4,r4,r5 054084E1
+DEFINE orr_r4,r4,r8 084084E1
+DEFINE orr_r4,r5,r8 084085E1
+DEFINE orr_r5,ip,32 20508CE3
+DEFINE orr_r6,r6,r1,lslr7 116786E1
+DEFINE orrcc_r0,r0,r4,lslr5 14058031
+DEFINE orrcs_r0,r0,1 01008023
+DEFINE orrcs_r3,r3,r4,lslr5 14358321
+DEFINE orreq_r0,r4,r0 00008401
+DEFINE orreq_r4,r4,2097152 02468403
+DEFINE orreq_r4,r4,8388608 02458403
+DEFINE orrge_r4,r4,8388608 024584A3
+DEFINE orrne_r4,r4,25165824 06458413
+DEFINE orrne_r4,r4,r6 06408411
+DEFINE orrs_r5,r5,r1 015095E1
+DEFINE pop_{pc} 04F09DE4
+DEFINE pop_{r0,r1,r2,r4,sl,fp} 170CBDE8
+DEFINE pop_{r4,pc} 1080BDE8
+DEFINE pop_{r4,r5,r6,pc} 7080BDE8
+DEFINE pop_{r4,r5} 3000BDE8
+DEFINE popcs_{r4,r5,r6,pc} 7080BD28
+DEFINE popeq_{r4,r5,r6,pc} 7080BD08
+DEFINE popne_{pc} 04F09D14
+DEFINE popne_{r4,r5,r6,pc} 7080BD18
+DEFINE push_{lr} 04E02DE5
+DEFINE push_{r0,r1,r2,r4,sl,fp} 170C2DE9
+DEFINE push_{r4,lr} 10402DE9
+DEFINE push_{r4,r5,r6,lr} 70402DE9
+DEFINE push_{r4,r5} 30002DE9
+DEFINE ror_r1,r0,r1 7011A0E1
+DEFINE rsb_ip,r2,0 00C062E2
+DEFINE rsb_r0,r0,0 000060E2
+DEFINE rsb_r0,r0,31 1F0060E2
+DEFINE rsb_r1,r3,32 201063E2
+DEFINE rsblt_r0,r0,0 000060B2
+DEFINE rsblt_r1,r1,0 001061B2
+DEFINE rsbne_r0,r2,0 00006212
+DEFINE str_lr,[r9,140] 8CE089E5
+DEFINE str_r0,[ip,4] 04008CE5
+DEFINE str_r0,[r1],4 040081E4
+DEFINE str_r0,[r2,100] 640082E5
+DEFINE str_r0,[r4,12] 0C0084E5
+DEFINE str_r0,[r4,16] 100084E5
+DEFINE str_r0,[r4,20] 140084E5
+DEFINE str_r0,[r4,32] 200084E5
+DEFINE str_r0,[r4,56] 380084E5
+DEFINE str_r0,[r4,96] 600084E5
+DEFINE str_r0,[r4] 000084E5
+DEFINE str_r0,[r9,128] 800089E5
+DEFINE str_r0,[r9,12] 0C0089E5
+DEFINE str_r0,[r9,132] 840089E5
+DEFINE str_r0,[r9,136] 880089E5
+DEFINE str_r0,[r9,140] 8C0089E5
+DEFINE str_r0,[r9,20] 140089E5
+DEFINE str_r0,[r9,24] 180089E5
+DEFINE str_r0,[r9,28] 1C0089E5
+DEFINE str_r0,[r9,40] 280089E5
+DEFINE str_r0,[r9,44] 2C0089E5
+DEFINE str_r0,[r9,48] 300089E5
+DEFINE str_r0,[r9,4] 040089E5
+DEFINE str_r0,[r9,52] 340089E5
+DEFINE str_r0,[r9,56] 380089E5
+DEFINE str_r0,[r9,64] 400089E5
+DEFINE str_r0,[r9,68] 440089E5
+DEFINE str_r0,[r9,72] 480089E5
+DEFINE str_r0,[r9,76] 4C0089E5
+DEFINE str_r0,[r9,8] 080089E5
+DEFINE str_r0,[r9,92] 5C0089E5
+DEFINE str_r0,[r9,96] 600089E5
+DEFINE str_r0,[r9] 000089E5
+DEFINE str_r1,[r0,100] 641080E5
+DEFINE str_r1,[r0,104] 681080E5
+DEFINE str_r1,[r0,32] 201080E5
+DEFINE str_r1,[r0,68] 441080E5
+DEFINE str_r1,[r0,72] 481080E5
+DEFINE str_r1,[r0,88] 581080E5
+DEFINE str_r1,[r0,92] 5C1080E5
+DEFINE str_r1,[r0,96] 601080E5
+DEFINE str_r1,[r0] 001080E5
+DEFINE str_r1,[r2,80] 501082E5
+DEFINE str_r1,[r9,16] 101089E5
+DEFINE str_r1,[r9,32] 201089E5
+DEFINE str_r2,[r0,24] 182080E5
+DEFINE str_r2,[r0,4] 042080E5
+DEFINE str_r2,[r1,40] 282081E5
+DEFINE str_r3,[ip,400] 90318CE5
+DEFINE str_r3,[ip,40] 28308CE5
+DEFINE str_r3,[ip,8] 08308CE5
+DEFINE str_r3,[ip] 00308CE5
+DEFINE str_r3,[r0,16] 103080E5
+DEFINE str_r3,[r4,4] 043084E5
+DEFINE str_r3,[r9,112] 703089E5
+DEFINE str_r3,[r9,116] 743089E5
+DEFINE str_r3,[r9,120] 783089E5
+DEFINE str_r3,[r9,124] 7C3089E5
+DEFINE str_r3,[r9,20] 143089E5
+DEFINE str_r3,[sp,8] 08308DE5
+DEFINE str_r4,[r0,12] 0C4080E5
+DEFINE str_r4,[r9,16] 104089E5
+DEFINE str_r5,[r4,8] 085084E5
+DEFINE str_r6,[r0,8] 086080E5
+DEFINE str_r6,[r4,52] 346084E5
+DEFINE str_sl,[r4,48] 30A084E5
+DEFINE str_sl,[r9,32] 20A089E5
+DEFINE strb_ip,[r0],1 01C0C0E4
+DEFINE strb_ip,[r5],1 01C0C5E4
+DEFINE strb_r0,[r3] 0000C3E5
+DEFINE strb_r3,[r1,-1]! 013061E5
+DEFINE strb_r6,[r5],1 0160C5E4
+DEFINE strcc_r0,[r1,60] 3C008135
+DEFINE streq_ip,[r0,16] 10C08005
+DEFINE strne_r3,[r9,24] 18308915
+DEFINE sub_ip,ip,48 30C04CE2
+DEFINE sub_ip,ip,97 61C04CE2
+DEFINE sub_ip,r0,48 30C040E2
+DEFINE sub_r0,r0,48 300040E2
+DEFINE sub_r0,r0,8 080040E2
+DEFINE sub_r0,r4,r0 000044E0
+DEFINE sub_r0,r6,1 010046E2
+DEFINE sub_r0,r6,r0 000046E0
+DEFINE sub_r1,r0,48 301040E2
+DEFINE sub_r1,r1,1 011041E2
+DEFINE sub_r1,r1,48 301041E2
+DEFINE sub_r1,r1,r2 021041E0
+DEFINE sub_r2,r2,1 012042E2
+DEFINE sub_r2,r2,2 022042E2
+DEFINE sub_r2,r2,r1 012042E0
+DEFINE sub_r2,sl,r1 01204AE0
+DEFINE sub_r3,r0,1 013040E2
+DEFINE sub_r3,r0,ip 0C3040E0
+DEFINE sub_r3,r0,r3,lsl1 833040E0
+DEFINE sub_r3,r0,r6 063040E0
+DEFINE sub_r3,r3,1 013043E2
+DEFINE sub_r5,ip,48 30504CE2
+DEFINE sub_r5,r5,87 575045E2
+DEFINE sub_r6,r6,1 016046E2
+DEFINE subcs_r2,r2,r1 01204220
+DEFINE subeq_r2,r2,1 01204202
+DEFINE subne_r3,r3,1 01304312
+DEFINE subs_r1,r1,1 011051E2
+DEFINE subs_r2,r2,1 012052E2
+DEFINE subs_r2,r2,fp 0B2052E0
+DEFINE subs_r2,r3,r1 012053E0
+DEFINE subs_r3,r3,1 013053E2
+DEFINE subs_r6,r6,1 016056E2
+DEFINE svc_0x00000000 000000EF
+DEFINE tst_ip,16 10001CE3
+DEFINE tst_ip,32 20001CE3
+DEFINE tst_ip,48 30001CE3
+DEFINE tst_r0,-16777216 FF0410E3
+DEFINE tst_r0,3 030010E3
+DEFINE tst_r0,r3 030010E1
+DEFINE tst_r0,r6 060010E1
+DEFINE ubfx_r3,r4,20,5 543AE4E7
+DEFINE ubfx_r3,r4,21,4 D43AE3E7
+DEFINE ubfx_r5,r4,0,12 5450EBE7
+DEFINE umull_r3,r2,r0,ip 903C82E0
+#
+^00010000                               # the first byte is at BASE, where it runs
+# asm for arm Linux (EABI): the assembler of the seed. The fourth link of
+# the bootstrap, built by M1 and hex2 from hosts/arm/asm.M1 (made from this
+# file once by gen/mkhex.pl, a dev aid; the chain never reads this file).
+# It assembles hosts/arm/ttpc.s, the readable seed, into the seed: the
+# bytes binutils' as -march=armv7-a and ld -static -s -T hosts/arm/ttpc.ld
+# make of it, with no binutils. Its generic part (lines, symbols,
+# expressions, directives, macros, the output) follows
+# gen/hex/aarch64/asm.s routine by routine, in 32 bits; its instructions
+# are ARM's own (ARM state, ARMv7-A).
+#
+#   asm < ttpc.s > ttpc
+#
+# The asm it reads: arm GNU syntax (unified) as ttpc.s uses it.
+#   lines      labels (name: and the local n: of 0-99, as 1b and 1f), then
+#              a directive, an instruction or a macro's name; '@' starts a
+#              comment to the end of the line
+#   directives .equ name, expr  .word .hword .byte expr, ...  .ascii
+#              .asciz "text", ...  (escapes \n \t \ooo, \x as x)  .skip n
+#              .balign n (not in .text)  .section name (.text .rodata
+#              .data .bss)  .text .data .bss  .globl name  .syntax .arch
+#              .arm (read as the Makefile's as -march=armv7-a)  .macro name
+#              param, ... (its lines up to .endm; \param in them is the
+#              call's argument)
+#   exprs      numbers (decimal, 0x hex, 0 octal), names, '.' (here), and
+#              as gas: unary - ~, then * / % << >>, then | & ^, then + -,
+#              and ( ); a label's address plus or minus a number, or two
+#              labels of a section minus each other
+#   operands   registers (r0-r15, sp lr pc ip fp), #expr, #:lower16:expr
+#              #:upper16:expr, a shifted register (rm, lsl|lsr|asr|ror #n
+#              or rs), [rn], [rn, #expr] (! written back), [rn], #expr,
+#              [rn, rm{, shift #n}], {register list, r4-r11}, the label of a
+#              branch
+#   mnemonics  and eor sub rsb add adc sbc rsc orr bic (s), mov mvn (s),
+#              tst teq cmp cmn, lsl lsr asr ror, movw movt, mul mla umull,
+#              ldr ldrb str strb, ldrd strd, push pop, b bl bx blx svc;
+#              each with a condition after it (eq ne cs hs cc lo mi pl vs
+#              vc hi ls ge lt gt le al)
+# An immediate is gas's: 8 bits rotated by the fewest even bits, else the
+# other instruction of the pair (add sub, cmp cmn negated; mov mvn, and
+# bic, adc sbc inverted), else for mov of 0-0xffff movw. push and pop of
+# one register are gas's str and ldr. Every instruction is 4 bytes, so the
+# passes need no relaxing (and there is no literal pool). The output is
+# the file ld makes with ttpc.ld: the ELF header, two program headers
+# (the code: the headers, .text, .rodata; the data: .data, .bss, on the
+# next page at the same offset in it), the sections, .ARM.attributes (as
+# gas writes it for armv7-a), .shstrtab and seven section headers. Each
+# of .text .rodata .data .bss must have bytes.
+#
+# The input is read whole, then in two passes. Pass 1 sizes: every label
+# gets its section and place (an instruction is 4 bytes, its operands
+# unread); layout then gives every section its place. Pass 2 encodes and
+# writes the sections into the output, which is then written whole. On
+# an error it says so on stderr with the line (asm: line N: what: the
+# line) and ends with status 1; else with 0.
+#
+# One flat file, loaded at BASE by its first program header, read and
+# run; the second maps the memory it writes, VARS to the end of OUTBUF.
+# The registers:
+#   r9   VARS, the variables          r10  the next byte of the input
+#   r11  the end of the input
+#   r4   the instruction being built (its base bits and condition, from
+#        mnemonics), r5 its other bits, r6-r8 scratch of the instructions
+#   r7   the system call's number (where one is made)
+# The routines take and give r0-r3 and use r12 (each says which, and what
+# else it keeps on the stack); those that call another keep lr on the
+# stack. The expressions keep r4-r8 (their left sides on the stack). A
+# symbol is 20 bytes (S_*), a local label's definition 12 (L_*), a macro
+# 64 (MAC_*). A definition (D) is a symbol's S_value or a local label's
+# L_value: its value, kind (0 a number, 1-4 the section) and pass (0 not
+# defined) at 0, 4, 8.
+
+#     .syntax unified
+#     .arch armv7-a
+#     .arm
+#     .equ BASE, 0x10000
+#     .equ VARS, 0x100000                 @ the variables, 64 KiB
+#     .equ MACROS, VARS + 0x2000          @ 16 macros
+#     .equ MAC_max, 16
+#     .equ ARGS, VARS + 0x3000            @ a macro call's arguments
+#     .equ EXPBUF, VARS + 0x4000          @ a macro's line, expanded
+#     .equ EXPBUF_END, VARS + 0x5000
+#     .equ SYMS, VARS + 0x10000           @ 65536 symbols
+#     .equ SYM_size, 20
+#     .equ SYMS_END, SYMS + 0x10000 * SYM_size
+#     .equ LOCAL_max, 4096                @ definitions of each local label
+#     .equ LOCALS, SYMS_END               @ 100 local labels
+#     .equ LOCALS_END, LOCALS + 100 * LOCAL_max * 12
+#     .equ INPUT, LOCALS_END              @ 16 MiB of input
+#     .equ INPUT_END, INPUT + 0x1000000
+#     .equ OUTBUF, INPUT_END              @ 16 MiB of output
+#     .equ OUTBUF_END, OUTBUF + 0x1000000
+#     .equ ADDR, 0x10000                  @ where ld places the output (ttpc.ld)
+#     .equ HDRS, 52 + 2 * 32              @ the ELF header and program headers
+#     .equ ATTR_len, 29                   @ .ARM.attributes' bytes
+#     .equ SHSTRTAB_len, 52               @ the section names' bytes (.shstrtab)
+#     .equ SHDRS, 7 * 40                  @ the section headers
+#     .equ SYS_read, 3
+#     .equ SYS_write, 4
+#     .equ SYS_exit, 1
+
+    # a symbol: its name in the input, then its definition
+#     .equ S_name, 0
+#     .equ S_len, 4
+#     .equ S_value, 8
+#     .equ S_kind, 12
+#     .equ S_pass, 16
+    # a definition of a local label
+#     .equ L_value, 0
+#     .equ L_kind, 4
+#     .equ L_pass, 8
+    # a macro: its name (8 bytes), its parameters' count, then each
+    # parameter's name and length, its lines' first byte and their end
+#     .equ MAC_name, 0
+#     .equ MAC_n, 8
+#     .equ MAC_params, 12
+#     .equ MAC_body, 48
+#     .equ MAC_end, 52
+#     .equ MAC_size, 64
+
+    # the variables, at r9
+#     .equ V_pass, 0                      @ the pass, 1 or 2
+#     .equ V_emit, 4                      @ 1 in pass 2, which writes
+#     .equ V_sec, 8                       @ the section: 1 .text 2 .rodata 3 .data 4 .bss
+#     .equ V_line, 12                     @ the line's number
+#     .equ V_nmac, 16                     @ the next free macro
+#     .equ V_nsym, 20                     @ the next free symbol
+#     .equ V_exact, 24                    @ 0 once an expression used a name not defined before it
+#     .equ V_known, 28                    @ 0 once it used a name not defined at all
+#     .equ V_lstart, 32                   @ the line's first byte
+#     .equ V_loc, 40                      @ section s's location counter at V_loc + 4 * s
+#     .equ V_align, 60                    @ its alignment
+#     .equ V_base, 80                     @ its address (0 for s = 0, a number)
+#     .equ V_off, 100                     @ its file offset
+#     .equ V_attr, 120                    @ the file offset of .ARM.attributes
+#     .equ V_shstr, 124                   @ of .shstrtab
+#     .equ V_shoff, 128                   @ of the section headers
+#     .equ V_fend, 132                    @ the file's size
+#     .equ V_tend, 136                    @ the end of .rodata in the file: of the code segment
+#     .equ V_sret, 140                    @ statement's return address
+#     .equ COUNTS, 400                    @ local label n's definitions so far at COUNTS + 4 * n
+#     .equ NUMBUF, 800                    @ a decimal number, 12
+
+# la: reg = the address of sym, as ttpc.s's
+#     .macro la reg, sym
+#     movw    \reg, #:lower16:\sym
+#     movt    \reg, #:upper16:\sym
+#     .endm
+
+:ehdr                                   # ehdr:                                   @ the ELF header, 52 bytes
+7F454C46                                #     .byte 0x7f, 0x45, 0x4c, 0x46        @ e_ident: the magic, 0x7f 'E' 'L' 'F'
+01                                      #     .byte 1                             @ EI_CLASS: ELFCLASS32
+01                                      #     .byte 1                             @ EI_DATA: ELFDATA2LSB, little endian
+01                                      #     .byte 1                             @ EI_VERSION: EV_CURRENT
+00                                      #     .byte 0                             @ EI_OSABI: System V
+0000000000000000                        #     .byte 0, 0, 0, 0, 0, 0, 0, 0        @ EI_ABIVERSION 0, then padding to 16
+0200                                    #     .hword 2                            @ e_type: ET_EXEC, an executable
+2800                                    #     .hword 40                           @ e_machine: EM_ARM
+01000000                                #     .word 1                             @ e_version: EV_CURRENT
+74000100                                #     .word BASE + _start - ehdr          @ e_entry: the address of _start
+34000000                                #     .word phdr - ehdr                   @ e_phoff: the program headers follow
+00000000                                #     .word 0                             @ e_shoff: no section headers
+00020005                                #     .word 0x05000200                    @ e_flags: EABI version 5, soft float
+3400                                    #     .hword 52                           @ e_ehsize: this header's size
+2000                                    #     .hword 32                           @ e_phentsize: a program header's size
+0200                                    #     .hword 2                            @ e_phnum: two program headers
+0000                                    #     .hword 0                            @ e_shentsize: no section headers
+0000                                    #     .hword 0                            @ e_shnum: none
+0000                                    #     .hword 0                            @ e_shstrndx: none
+:phdr                                   # phdr:                                   @ the program: 32 bytes
+01000000                                #     .word 1                             @ p_type: PT_LOAD
+00000000                                #     .word 0                             @ p_offset: from the file's first byte
+00000100                                #     .word BASE                          @ p_vaddr: loaded at BASE
+00000100                                #     .word BASE                          @ p_paddr: the same
+52230000                                #     .word end - ehdr                    @ p_filesz: the whole file
+52230000                                #     .word end - ehdr                    @ p_memsz: the same
+05000000                                #     .word 5                             @ p_flags: PF_R | PF_X, read and run
+00100000                                #     .word 0x1000                        @ p_align: a page
+                                        # its memory: 32 bytes
+01000000                                #     .word 1                             @ p_type: PT_LOAD
+00000000                                #     .word 0                             @ p_offset: none of the file
+00001000                                #     .word VARS                          @ p_vaddr: the variables, ..., the output
+00001000                                #     .word VARS                          @ p_paddr: the same
+00000000                                #     .word 0                             @ p_filesz: none, all zero
+00006002                                #     .word OUTBUF_END - VARS             @ p_memsz: to the end of the output
+06000000                                #     .word 6                             @ p_flags: PF_R | PF_W, read and write
+00100000                                #     .word 0x1000                        @ p_align: a page
+
+:_start                                 # _start:                                 @ read all of stdin into INPUT
+mov_r9,1048576                          #     mov     r9, #VARS
+mov_fp,7340032                          #     mov     r11, #INPUT                 @ the end of what is read
+:read                                   # read:
+mov_r2,24117248                         #     mov     r2, #INPUT_END              @ a 0 stays after the input
+sub_r2,r2,1                             #     sub     r2, r2, #1
+subs_r2,r2,fp                           #     subs    r2, r2, r11                 @ the room left
+^~too_large JUMP_EQUAL                  #     beq     too_large
+mov_r7,3                                #     mov     r7, #SYS_read
+mov_r0,0                                #     mov     r0, #0                      @ fd 0, stdin
+mov_r1,fp                               #     mov     r1, r11                     @ after what is read
+svc_0x00000000                          #     svc     #0
+cmp_r0,0                                #     cmp     r0, #0
+^~read_failed JUMP_LT                   #     blt     read_failed
+^~read_all JUMP_EQUAL                   #     beq     read_all                    @ the end of stdin
+add_fp,fp,r0                            #     add     r11, r11, r0
+^~read JUMP_ALWAYS                      #     b       read
+:read_all                               # read_all:
+mov_r0,1114112                          #     mov     r0, #SYMS                   @ no symbols yet
+str_r0,[r9,20]                          #     str     r0, [r9, #V_nsym]
+mov_r0,4                                #     mov     r0, #4                      @ .text aligned to 4 (gas's, for ARM code)
+str_r0,[r9,64]                          #     str     r0, [r9, #V_align+4]
+mov_r0,1                                #     mov     r0, #1                      @ the others to 1, until .balign
+str_r0,[r9,68]                          #     str     r0, [r9, #V_align+8]
+str_r0,[r9,72]                          #     str     r0, [r9, #V_align+12]
+str_r0,[r9,76]                          #     str     r0, [r9, #V_align+16]
+str_r0,[r9]                             #     str     r0, [r9, #V_pass]           @ pass 1: sizes and labels
+^~pass CALL_ALWAYS                      #     bl      pass
+^~layout CALL_ALWAYS                    #     bl      layout
+mov_r0,2                                #     mov     r0, #2                      @ pass 2 writes
+str_r0,[r9]                             #     str     r0, [r9, #V_pass]
+mov_r0,1                                #     mov     r0, #1
+str_r0,[r9,4]                           #     str     r0, [r9, #V_emit]
+^~pass CALL_ALWAYS                      #     bl      pass
+^~headers CALL_ALWAYS                   #     bl      headers
+mov_r1,24117248                         #     mov     r1, #OUTBUF                 @ write the output
+ldr_r3,[r9,132]                         #     ldr     r3, [r9, #V_fend]
+add_r3,r3,r1                            #     add     r3, r3, r1                  @ its end
+:write                                  # write:
+subs_r2,r3,r1                           #     subs    r2, r3, r1                  @ what is left
+^~done JUMP_EQUAL                       #     beq     done
+mov_r7,4                                #     mov     r7, #SYS_write
+mov_r0,1                                #     mov     r0, #1                      @ fd 1, stdout
+svc_0x00000000                          #     svc     #0
+cmp_r0,0                                #     cmp     r0, #0
+^~write_failed JUMP_LE                  #     ble     write_failed
+add_r1,r1,r0                            #     add     r1, r1, r0
+^~write JUMP_ALWAYS                     #     b       write
+:done                                   # done:
+mov_r0,0                                #     mov     r0, #0                      @ status 0
+^~exit JUMP_ALWAYS                      #     b       exit
+
+# A pass over the input, line by line.
+:pass                                   # pass:
+push_{r4,lr}                            #     push    {r4, lr}
+mov_r0,0                                #     mov     r0, #0                      @ every section from 0
+str_r0,[r9,40]                          #     str     r0, [r9, #V_loc]
+str_r0,[r9,44]                          #     str     r0, [r9, #V_loc+4]
+str_r0,[r9,48]                          #     str     r0, [r9, #V_loc+8]
+str_r0,[r9,52]                          #     str     r0, [r9, #V_loc+12]
+str_r0,[r9,56]                          #     str     r0, [r9, #V_loc+16]
+add_r1,r9,8192                          #     add     r1, r9, #MACROS - VARS      @ no macros yet
+str_r1,[r9,16]                          #     str     r1, [r9, #V_nmac]
+add_r1,r9,400                           #     add     r1, r9, #COUNTS             @ no local labels yet
+add_r2,r9,800                           #     add     r2, r9, #COUNTS + 400
+:pass_count                             # pass_count:
+str_r0,[r1],4                           #     str     r0, [r1], #4
+cmp_r1,r2                               #     cmp     r1, r2
+^~pass_count JUMP_NE                    #     bne     pass_count
+mov_r0,1                                #     mov     r0, #1                      @ in .text
+str_r0,[r9,8]                           #     str     r0, [r9, #V_sec]
+str_r0,[r9,12]                          #     str     r0, [r9, #V_line]
+mov_sl,7340032                          #     mov     r10, #INPUT
+:pass_line                              # pass_line:
+cmp_sl,fp                               #     cmp     r10, r11
+^~pass_end JUMP_CS                      #     bhs     pass_end
+str_sl,[r9,32]                          #     str     r10, [r9, #V_lstart]
+^~statement CALL_ALWAYS                 #     bl      statement
+ldr_r0,[r9,12]                          #     ldr     r0, [r9, #V_line]
+add_r0,r0,1                             #     add     r0, r0, #1
+str_r0,[r9,12]                          #     str     r0, [r9, #V_line]
+^~pass_line JUMP_ALWAYS                 #     b       pass_line
+:pass_end                               # pass_end:
+pop_{r4,pc}                             #     pop     {r4, pc}
+
+# One line, to after its newline: labels, then a directive or an
+# instruction (each ends with end_line, which returns from statement).
+:statement                              # statement:
+str_lr,[r9,140]                         #     str     lr, [r9, #V_sret]
+:statement_next                         # statement_next:
+^~blanks CALL_ALWAYS                    #     bl      blanks
+mov_r0,ip                               #     mov     r0, r12
+^~is_ident CALL_ALWAYS                  #     bl      is_ident
+cmp_r0,0                                #     cmp     r0, #0
+^~end_line JUMP_EQUAL                   #     beq     end_line                    @ no name: only a comment may follow
+^~word CALL_ALWAYS                      #     bl      word                        @ r1, r2
+ldrb_r0,[sl]                            #     ldrb    r0, [r10]
+cmp_r0,58                               #     cmp     r0, #0x3a                   @ ':': a label
+^~label JUMP_EQUAL                      #     beq     label
+ldrb_r0,[r1]                            #     ldrb    r0, [r1]
+cmp_r0,46                               #     cmp     r0, #0x2e                   @ '.': a directive
+^~directive JUMP_EQUAL                  #     beq     directive
+^~insn JUMP_ALWAYS                      #     b       insn
+:label                                  # label:
+add_sl,sl,1                             #     add     r10, r10, #1
+^~define_label CALL_ALWAYS              #     bl      define_label
+^~statement_next JUMP_ALWAYS            #     b       statement_next
+
+:end_line                               # end_line:                               @ nothing but a comment until the newline, then after it
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_sl,fp                               #     cmp     r10, r11
+^~end_line_done JUMP_CS                 #     bhs     end_line_done
+cmp_ip,64                               #     cmp     r12, #0x40                  @ '@': a comment
+^~end_comment JUMP_EQUAL                #     beq     end_comment
+cmp_ip,10                               #     cmp     r12, #0x0a                  @ '\n'
+^~junk JUMP_NE                          #     bne     junk
+add_sl,sl,1                             #     add     r10, r10, #1
+:end_line_done                          # end_line_done:
+ldr_lr,[r9,140]                         #     ldr     lr, [r9, #V_sret]
+bx_lr                                   #     bx      lr
+:end_comment                            # end_comment:
+add_sl,sl,1                             #     add     r10, r10, #1
+cmp_sl,fp                               #     cmp     r10, r11
+^~end_line_done JUMP_CS                 #     bhs     end_line_done
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,10                               #     cmp     r12, #0x0a
+^~end_comment JUMP_NE                   #     bne     end_comment
+add_sl,sl,1                             #     add     r10, r10, #1
+^~end_line_done JUMP_ALWAYS             #     b       end_line_done
+
+:blanks                                 # blanks:                                 @ skips spaces and tabs; r12 = the byte after them
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,32                               #     cmp     r12, #0x20                  @ ' '
+cmpne_ip,9                              #     cmpne   r12, #0x09                  @ '\t'
+bxne_lr                                 #     bxne    lr
+add_sl,sl,1                             #     add     r10, r10, #1
+^~blanks JUMP_ALWAYS                    #     b       blanks
+
+:is_ident                               # is_ident:                               @ r0 = 1 if byte r0 is a letter, a digit, '_' or '.', else 0 (uses r12)
+cmp_r0,46                               #     cmp     r0, #0x2e                   @ '.'
+cmpne_r0,95                             #     cmpne   r0, #0x5f                   @ '_'
+^~ident_yes JUMP_EQUAL                  #     beq     ident_yes
+sub_ip,r0,48                            #     sub     r12, r0, #0x30              @ '0'-'9'
+cmp_ip,10                               #     cmp     r12, #10
+^~ident_yes JUMP_CC                     #     blo     ident_yes
+orr_ip,r0,32                            #     orr     r12, r0, #0x20              @ 'A'-'Z' as 'a'-'z'
+sub_ip,ip,97                            #     sub     r12, r12, #0x61
+cmp_ip,26                               #     cmp     r12, #26
+^~ident_yes JUMP_CC                     #     blo     ident_yes
+mov_r0,0                                #     mov     r0, #0
+bx_lr                                   #     bx      lr
+:ident_yes                              # ident_yes:
+mov_r0,1                                #     mov     r0, #1
+bx_lr                                   #     bx      lr
+
+:word                                   # word:                                   @ r1, r2 = the name at r10, which moves after it (uses r0, r12)
+push_{lr}                               #     push    {lr}
+mov_r1,sl                               #     mov     r1, r10
+:word_byte                              # word_byte:
+ldrb_r0,[sl]                            #     ldrb    r0, [r10]
+^~is_ident CALL_ALWAYS                  #     bl      is_ident
+cmp_r0,0                                #     cmp     r0, #0
+addne_sl,sl,1                           #     addne   r10, r10, #1
+^~word_byte JUMP_NE                     #     bne     word_byte
+sub_r2,sl,r1                            #     sub     r2, r10, r1
+pop_{pc}                                #     pop     {pc}
+
+:pack                                   # pack:                                   @ r0, r3 = name r1, r2 as 8 bytes (the first lowest), -1 if longer (uses r12)
+mvn_r0,0                                #     mvn     r0, #0
+mvn_r3,0                                #     mvn     r3, #0
+cmp_r2,8                                #     cmp     r2, #8
+bxhi_lr                                 #     bxhi    lr
+push_{r4,r5}                            #     push    {r4, r5}
+mov_r0,0                                #     mov     r0, #0
+mov_r3,0                                #     mov     r3, #0
+mov_ip,0                                #     mov     r12, #0
+:pack_byte                              # pack_byte:
+cmp_ip,r2                               #     cmp     r12, r2
+^~pack_done JUMP_EQUAL                  #     beq     pack_done
+ldrb_r4,[r1,ip]                         #     ldrb    r4, [r1, r12]
+and_r5,ip,3                             #     and     r5, r12, #3                 @ its place in its word
+lsl_r5,r5,3                             #     lsl     r5, r5, #3
+cmp_ip,4                                #     cmp     r12, #4
+orrcc_r0,r0,r4,lslr5                    #     orrlo   r0, r0, r4, lsl r5
+orrcs_r3,r3,r4,lslr5                    #     orrhs   r3, r3, r4, lsl r5
+add_ip,ip,1                             #     add     r12, r12, #1
+^~pack_byte JUMP_ALWAYS                 #     b       pack_byte
+:pack_done                              # pack_done:
+pop_{r4,r5}                             #     pop     {r4, r5}
+bx_lr                                   #     bx      lr
+
+# The symbols.
+
+:define_label                           # define_label:                           @ name r1, r2: here
+push_{lr}                               #     push    {lr}
+^~digits CALL_ALWAYS                    #     bl      digits                      @ n: a local label
+cmp_r3,0                                #     cmp     r3, #0
+^~define_label_local JUMP_EQUAL         #     beq     define_label_local
+^~here_def CALL_ALWAYS                  #     bl      here_def                    @ r0, r3
+mov_ip,1                                #     mov     r12, #1                     @ defined twice in a pass: an error
+^~define CALL_ALWAYS                    #     bl      define
+pop_{pc}                                #     pop     {pc}
+:define_label_local                     # define_label_local:
+^~local_def CALL_ALWAYS                 #     bl      local_def
+pop_{pc}                                #     pop     {pc}
+
+:here_def                               # here_def:                               @ r3 = here's value, r0 its kind
+ldr_r0,[r9,8]                           #     ldr     r0, [r9, #V_sec]
+add_r3,r9,r0,lsl2                       #     add     r3, r9, r0, lsl #2
+ldr_r3,[r3,40]                          #     ldr     r3, [r3, #V_loc]            @ the section's location
+bx_lr                                   #     bx      lr
+
+:define                                 # define:                                 @ r0 = symbol r1, r2, defined as r3 of kind r0 (r12 = 1: an error if defined in this pass; uses r3, r12)
+push_{r4,r5,r6,lr}                      #     push    {r4, r5, r6, lr}
+mov_r4,r0                               #     mov     r4, r0
+mov_r5,ip                               #     mov     r5, r12
+mov_r6,r3                               #     mov     r6, r3
+^~find_sym CALL_ALWAYS                  #     bl      find_sym
+cmp_r0,0                                #     cmp     r0, #0
+^~define_found JUMP_NE                  #     bne     define_found
+^~sym_new CALL_ALWAYS                   #     bl      sym_new
+^~define_set JUMP_ALWAYS                #     b       define_set
+:define_found                           # define_found:
+cmp_r5,0                                #     cmp     r5, #0
+^~define_set JUMP_EQUAL                 #     beq     define_set
+ldr_r3,[r0,16]                          #     ldr     r3, [r0, #S_pass]
+ldr_ip,[r9]                             #     ldr     r12, [r9, #V_pass]
+cmp_r3,ip                               #     cmp     r3, r12
+^~twice JUMP_EQUAL                      #     beq     twice
+:define_set                             # define_set:
+str_r6,[r0,8]                           #     str     r6, [r0, #S_value]
+str_r4,[r0,12]                          #     str     r4, [r0, #S_kind]
+ldr_r3,[r9]                             #     ldr     r3, [r9, #V_pass]
+str_r3,[r0,16]                          #     str     r3, [r0, #S_pass]
+pop_{r4,r5,r6,pc}                       #     pop     {r4, r5, r6, pc}
+
+:sym_new                                # sym_new:                                @ r0 = a new symbol r1, r2, not yet defined (uses r3)
+ldr_r0,[r9,20]                          #     ldr     r0, [r9, #V_nsym]
+mov_r3,2424832                          #     mov     r3, #SYMS_END
+cmp_r0,r3                               #     cmp     r0, r3
+^~too_many_symbols JUMP_CS              #     bhs     too_many_symbols
+add_r3,r0,20                            #     add     r3, r0, #SYM_size
+str_r3,[r9,20]                          #     str     r3, [r9, #V_nsym]
+str_r1,[r0]                             #     str     r1, [r0, #S_name]
+str_r2,[r0,4]                           #     str     r2, [r0, #S_len]
+bx_lr                                   #     bx      lr
+
+:find_sym                               # find_sym:                               @ r0 = symbol r1, r2, or 0 (uses r3, r12)
+push_{r4,r5,r6,lr}                      #     push    {r4, r5, r6, lr}
+mov_r0,1114112                          #     mov     r0, #SYMS
+ldr_r6,[r9,20]                          #     ldr     r6, [r9, #V_nsym]
+:find_sym_next                          # find_sym_next:
+cmp_r0,r6                               #     cmp     r0, r6
+movcs_r0,0                              #     movhs   r0, #0
+popcs_{r4,r5,r6,pc}                     #     pophs   {r4, r5, r6, pc}
+ldr_r3,[r0,4]                           #     ldr     r3, [r0, #S_len]            @ the same length
+cmp_r3,r2                               #     cmp     r3, r2
+^~find_sym_on JUMP_NE                   #     bne     find_sym_on
+ldr_r3,[r0]                             #     ldr     r3, [r0, #S_name]           @ and the same bytes
+mov_ip,0                                #     mov     r12, #0
+:find_sym_byte                          # find_sym_byte:
+cmp_ip,r2                               #     cmp     r12, r2
+popeq_{r4,r5,r6,pc}                     #     popeq   {r4, r5, r6, pc}
+ldrb_r4,[r3,ip]                         #     ldrb    r4, [r3, r12]
+ldrb_r5,[r1,ip]                         #     ldrb    r5, [r1, r12]
+cmp_r4,r5                               #     cmp     r4, r5
+^~find_sym_on JUMP_NE                   #     bne     find_sym_on
+add_ip,ip,1                             #     add     r12, r12, #1
+^~find_sym_byte JUMP_ALWAYS             #     b       find_sym_byte
+:find_sym_on                            # find_sym_on:
+add_r0,r0,20                            #     add     r0, r0, #SYM_size
+^~find_sym_next JUMP_ALWAYS             #     b       find_sym_next
+
+:local_def                              # local_def:                              @ local label r0: here (uses r1, r3, r12)
+push_{lr}                               #     push    {lr}
+cmp_r0,100                              #     cmp     r0, #100
+^~bad_local JUMP_CS                     #     bhs     bad_local
+add_ip,r9,r0,lsl2                       #     add     r12, r9, r0, lsl #2         @ its definitions so far: this one's number
+ldr_r1,[ip,400]                         #     ldr     r1, [r12, #COUNTS]
+add_r3,r1,1                             #     add     r3, r1, #1
+str_r3,[ip,400]                         #     str     r3, [r12, #COUNTS]
+^~local_entry CALL_ALWAYS               #     bl      local_entry
+mov_ip,r0                               #     mov     r12, r0
+^~here_def CALL_ALWAYS                  #     bl      here_def
+str_r3,[ip]                             #     str     r3, [r12, #L_value]
+str_r0,[ip,4]                           #     str     r0, [r12, #L_kind]
+ldr_r3,[r9]                             #     ldr     r3, [r9, #V_pass]
+str_r3,[ip,8]                           #     str     r3, [r12, #L_pass]
+pop_{pc}                                #     pop     {pc}
+
+:local_entry                            # local_entry:                            @ r0 = definition r1 of local label r0 (uses r3)
+cmp_r0,100                              #     cmp     r0, #100
+^~bad_local JUMP_CS                     #     bhs     bad_local
+cmp_r1,4096                             #     cmp     r1, #LOCAL_max              @ (-1 too: below 0)
+^~bad_local JUMP_CS                     #     bhs     bad_local
+mov_r3,4096                             #     mov     r3, #LOCAL_max
+mla_r0,r3,r0,r1                         #     mla     r0, r3, r0, r1
+add_r0,r0,r0,lsl1                       #     add     r0, r0, r0, lsl #1          @ 12 bytes each
+lsl_r0,r0,2                             #     lsl     r0, r0, #2
+add_r0,r0,2424832                       #     add     r0, r0, #LOCALS
+bx_lr                                   #     bx      lr
+
+:local_ref                              # local_ref:                              @ r0 = the definition nf or nb of local label r0, by the last byte of r1, r2 (uses r1, r3, r12)
+cmp_r0,100                              #     cmp     r0, #100
+^~bad_local JUMP_CS                     #     bhs     bad_local
+add_ip,r9,r0,lsl2                       #     add     r12, r9, r0, lsl #2         @ nf: the next definition of n
+ldr_r3,[ip,400]                         #     ldr     r3, [r12, #COUNTS]
+add_ip,r1,r2                            #     add     r12, r1, r2
+ldrb_ip,[ip,-1]                         #     ldrb    r12, [r12, #-1]
+cmp_ip,102                              #     cmp     r12, #0x66                  @ 'f'
+subne_r3,r3,1                           #     subne   r3, r3, #1                  @ nb: the last one
+mov_r1,r3                               #     mov     r1, r3
+^~local_entry JUMP_ALWAYS               #     b       local_entry
+
+:digits                                 # digits:                                 @ r0 = name r1, r2 when it is decimal digits only, r3 = 0; else r3 = 1 (uses r12)
+mov_r0,0                                #     mov     r0, #0
+mov_r3,0                                #     mov     r3, #0
+:digits_next                            # digits_next:
+cmp_r3,r2                               #     cmp     r3, r2
+movcs_r3,0                              #     movhs   r3, #0
+bxcs_lr                                 #     bxhs    lr
+ldrb_ip,[r1,r3]                         #     ldrb    r12, [r1, r3]
+sub_ip,ip,48                            #     sub     r12, r12, #0x30             @ '0'-'9'
+cmp_ip,10                               #     cmp     r12, #10
+movcs_r3,1                              #     movhs   r3, #1
+bxcs_lr                                 #     bxhs    lr
+add_r0,r0,r0,lsl2                       #     add     r0, r0, r0, lsl #2          @ times 10, plus the digit
+add_r0,ip,r0,lsl1                       #     add     r0, r12, r0, lsl #1
+add_r3,r3,1                             #     add     r3, r3, #1
+^~digits_next JUMP_ALWAYS               #     b       digits_next
+
+:here                                   # here:                                   @ r0 = the address of the next byte, r1 its section (uses r12)
+ldr_r1,[r9,8]                           #     ldr     r1, [r9, #V_sec]
+add_ip,r9,r1,lsl2                       #     add     r12, r9, r1, lsl #2
+ldr_r0,[ip,40]                          #     ldr     r0, [r12, #V_loc]
+ldr_ip,[ip,80]                          #     ldr     r12, [r12, #V_base]
+add_r0,r0,ip                            #     add     r0, r0, r12
+bx_lr                                   #     bx      lr
+
+# Expressions: r0 the value (with its section's address in pass 2), r1
+# the kind; V_exact and V_known cleared as it says. Each level keeps its
+# left side in r4, r5 and its operator in r6, which it keeps on the
+# stack (uses r2, r3, r12).
+
+:eval                                   # eval:                                   @ the expression at r10
+mov_r0,1                                #     mov     r0, #1
+str_r0,[r9,24]                          #     str     r0, [r9, #V_exact]
+str_r0,[r9,28]                          #     str     r0, [r9, #V_known]
+^~expr JUMP_ALWAYS                      #     b       expr
+
+:eval_number                            # eval_number:                            @ r0 = the expression at r10: a number known here
+push_{lr}                               #     push    {lr}
+^~eval CALL_ALWAYS                      #     bl      eval
+cmp_r1,0                                #     cmp     r1, #0
+^~not_number JUMP_NE                    #     bne     not_number
+ldr_r1,[r9,24]                          #     ldr     r1, [r9, #V_exact]
+cmp_r1,0                                #     cmp     r1, #0
+^~not_number JUMP_EQUAL                 #     beq     not_number
+pop_{pc}                                #     pop     {pc}
+
+:expr                                   # expr:                                   @ + -
+push_{r4,r5,r6,lr}                      #     push    {r4, r5, r6, lr}
+^~expr_or CALL_ALWAYS                   #     bl      expr_or
+:expr_more                              # expr_more:
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,43                               #     cmp     r12, #0x2b                  @ '+'
+^~expr_add JUMP_EQUAL                   #     beq     expr_add
+cmp_ip,45                               #     cmp     r12, #0x2d                  @ '-'
+^~expr_sub JUMP_EQUAL                   #     beq     expr_sub
+pop_{r4,r5,r6,pc}                       #     pop     {r4, r5, r6, pc}
+:expr_add                               # expr_add:
+add_sl,sl,1                             #     add     r10, r10, #1
+mov_r4,r0                               #     mov     r4, r0                      @ the left one's value
+mov_r5,r1                               #     mov     r5, r1                      @ its kind
+^~expr_or CALL_ALWAYS                   #     bl      expr_or
+add_r0,r0,r4                            #     add     r0, r0, r4
+cmp_r5,0                                #     cmp     r5, #0
+^~expr_more JUMP_EQUAL                  #     beq     expr_more                   @ a number + x: x's kind
+cmp_r1,0                                #     cmp     r1, #0
+^~expr_kinds JUMP_NE                    #     bne     expr_kinds                  @ a label + a number: the label's
+mov_r1,r5                               #     mov     r1, r5
+^~expr_more JUMP_ALWAYS                 #     b       expr_more
+:expr_sub                               # expr_sub:
+add_sl,sl,1                             #     add     r10, r10, #1
+mov_r4,r0                               #     mov     r4, r0
+mov_r5,r1                               #     mov     r5, r1
+^~expr_or CALL_ALWAYS                   #     bl      expr_or
+sub_r0,r4,r0                            #     sub     r0, r4, r0
+cmp_r1,0                                #     cmp     r1, #0                      @ x - a number: x's kind
+moveq_r1,r5                             #     moveq   r1, r5
+^~expr_more JUMP_EQUAL                  #     beq     expr_more
+cmp_r1,r5                               #     cmp     r1, r5                      @ two labels of a section: a number
+^~expr_kinds JUMP_NE                    #     bne     expr_kinds
+mov_r1,0                                #     mov     r1, #0
+^~expr_more JUMP_ALWAYS                 #     b       expr_more
+:expr_kinds                             # expr_kinds:
+^~kinds CALL_ALWAYS                     #     bl      kinds
+^~expr_more JUMP_ALWAYS                 #     b       expr_more
+
+:kinds                                  # kinds:                                  @ an operation on labels it cannot do: fine while names are unknown (uses r12)
+mov_r1,0                                #     mov     r1, #0
+ldr_ip,[r9,28]                          #     ldr     r12, [r9, #V_known]
+cmp_ip,0                                #     cmp     r12, #0
+bxeq_lr                                 #     bxeq    lr
+!msg_kinds movw_r0 ~msg_kinds movt_r0   #     la      r0, msg_kinds
+^~fail JUMP_ALWAYS                      #     b       fail
+
+:expr_or                                # expr_or:                                @ | & ^
+push_{r4,r5,r6,lr}                      #     push    {r4, r5, r6, lr}
+^~expr_mul CALL_ALWAYS                  #     bl      expr_mul
+:expr_or_more                           # expr_or_more:
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,124                              #     cmp     r12, #0x7c                  @ '|'
+cmpne_ip,38                             #     cmpne   r12, #0x26                  @ '&'
+cmpne_ip,94                             #     cmpne   r12, #0x5e                  @ '^'
+popne_{r4,r5,r6,pc}                     #     popne   {r4, r5, r6, pc}
+add_sl,sl,1                             #     add     r10, r10, #1
+mov_r6,ip                               #     mov     r6, r12                     @ the operator
+mov_r4,r0                               #     mov     r4, r0
+mov_r5,r1                               #     mov     r5, r1
+^~expr_mul CALL_ALWAYS                  #     bl      expr_mul
+orrs_r5,r5,r1                           #     orrs    r5, r5, r1                  @ numbers only
+^~kinds CALL_NE                         #     blne    kinds
+mov_r1,0                                #     mov     r1, #0
+cmp_r6,124                              #     cmp     r6, #0x7c                   @ '|'
+orreq_r0,r4,r0                          #     orreq   r0, r4, r0
+cmp_r6,38                               #     cmp     r6, #0x26                   @ '&'
+andeq_r0,r4,r0                          #     andeq   r0, r4, r0
+cmp_r6,94                               #     cmp     r6, #0x5e                   @ '^'
+eoreq_r0,r4,r0                          #     eoreq   r0, r4, r0
+^~expr_or_more JUMP_ALWAYS              #     b       expr_or_more
+
+:expr_mul                               # expr_mul:                               @ * / % << >>
+push_{r4,r5,r6,lr}                      #     push    {r4, r5, r6, lr}
+^~expr_unary CALL_ALWAYS                #     bl      expr_unary
+:expr_mul_more                          # expr_mul_more:
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,42                               #     cmp     r12, #0x2a                  @ '*'
+cmpne_ip,47                             #     cmpne   r12, #0x2f                  @ '/'
+cmpne_ip,37                             #     cmpne   r12, #0x25                  @ '%'
+^~expr_mul_op JUMP_EQUAL                #     beq     expr_mul_op
+cmp_ip,60                               #     cmp     r12, #0x3c                  @ '<' of '<<'
+cmpne_ip,62                             #     cmpne   r12, #0x3e                  @ '>' of '>>'
+popne_{r4,r5,r6,pc}                     #     popne   {r4, r5, r6, pc}
+ldrb_r3,[sl,1]                          #     ldrb    r3, [r10, #1]               @ doubled
+cmp_r3,ip                               #     cmp     r3, r12
+popne_{r4,r5,r6,pc}                     #     popne   {r4, r5, r6, pc}
+add_sl,sl,1                             #     add     r10, r10, #1
+:expr_mul_op                            # expr_mul_op:
+add_sl,sl,1                             #     add     r10, r10, #1
+mov_r6,ip                               #     mov     r6, r12                     @ the operator
+mov_r4,r0                               #     mov     r4, r0
+mov_r5,r1                               #     mov     r5, r1
+^~expr_unary CALL_ALWAYS                #     bl      expr_unary
+orrs_r5,r5,r1                           #     orrs    r5, r5, r1                  @ numbers only
+^~kinds CALL_NE                         #     blne    kinds
+mov_r1,0                                #     mov     r1, #0
+cmp_r6,42                               #     cmp     r6, #0x2a                   @ '*'
+muleq_r0,r4,r0                          #     muleq   r0, r4, r0
+^~expr_mul_more JUMP_EQUAL              #     beq     expr_mul_more
+cmp_r6,60                               #     cmp     r6, #0x3c                   @ '<<'
+lsleq_r0,r4,r0                          #     lsleq   r0, r4, r0
+^~expr_mul_more JUMP_EQUAL              #     beq     expr_mul_more
+cmp_r6,62                               #     cmp     r6, #0x3e                   @ '>>': arithmetic, as gas
+asreq_r0,r4,r0                          #     asreq   r0, r4, r0
+^~expr_mul_more JUMP_EQUAL              #     beq     expr_mul_more
+cmp_r0,0                                #     cmp     r0, #0                      @ '/' '%' by 0: fine while names are unknown
+^~expr_by_zero JUMP_EQUAL               #     beq     expr_by_zero
+mov_r1,r0                               #     mov     r1, r0
+mov_r0,r4                               #     mov     r0, r4
+^~sdivmod CALL_ALWAYS                   #     bl      sdivmod                     @ signed, as gas
+cmp_r6,37                               #     cmp     r6, #0x25                   @ '%': the remainder
+moveq_r0,r1                             #     moveq   r0, r1
+mov_r1,0                                #     mov     r1, #0
+^~expr_mul_more JUMP_ALWAYS             #     b       expr_mul_more
+:expr_by_zero                           # expr_by_zero:
+ldr_ip,[r9,28]                          #     ldr     r12, [r9, #V_known]
+cmp_ip,0                                #     cmp     r12, #0
+^~bad_expr JUMP_NE                      #     bne     bad_expr
+^~expr_mul_more JUMP_ALWAYS             #     b       expr_mul_more
+
+:sdivmod                                # sdivmod:                                @ r0 = r0 / r1, r1 = r0 % r1, signed, to 0 as C; r1 not 0 (uses r2, r3, r12)
+push_{r4,lr}                            #     push    {r4, lr}
+eor_r4,r0,r1                            #     eor     r4, r0, r1                  @ the quotient's sign
+mov_ip,r0                               #     mov     r12, r0                     @ the remainder's: the dividend's
+cmp_r0,0                                #     cmp     r0, #0
+rsblt_r0,r0,0                           #     rsblt   r0, r0, #0
+cmp_r1,0                                #     cmp     r1, #0
+rsblt_r1,r1,0                           #     rsblt   r1, r1, #0
+mov_r2,0                                #     mov     r2, #0                      @ the remainder
+mov_r3,32                               #     mov     r3, #32                     @ a bit of the quotient at a time
+:sdivmod_bit                            # sdivmod_bit:
+lsls_r0,r0,1                            #     lsls    r0, r0, #1                  @ the dividend's next bit into the remainder
+adc_r2,r2,r2                            #     adc     r2, r2, r2
+cmp_r2,r1                               #     cmp     r2, r1
+subcs_r2,r2,r1                          #     subhs   r2, r2, r1
+orrcs_r0,r0,1                           #     orrhs   r0, r0, #1                  @ and the quotient's into r0
+subs_r3,r3,1                            #     subs    r3, r3, #1
+^~sdivmod_bit JUMP_NE                   #     bne     sdivmod_bit
+cmp_r4,0                                #     cmp     r4, #0
+rsblt_r0,r0,0                           #     rsblt   r0, r0, #0
+mov_r1,r2                               #     mov     r1, r2
+cmp_ip,0                                #     cmp     r12, #0
+rsblt_r1,r1,0                           #     rsblt   r1, r1, #0
+pop_{r4,pc}                             #     pop     {r4, pc}
+
+:expr_unary                             # expr_unary:                             @ - ~ ( ), a number, a name, '.'
+push_{lr}                               #     push    {lr}
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,45                               #     cmp     r12, #0x2d                  @ '-'
+^~unary_neg JUMP_EQUAL                  #     beq     unary_neg
+cmp_ip,126                              #     cmp     r12, #0x7e                  @ '~'
+^~unary_not JUMP_EQUAL                  #     beq     unary_not
+cmp_ip,40                               #     cmp     r12, #0x28                  @ '('
+^~unary_paren JUMP_EQUAL                #     beq     unary_paren
+mov_r0,ip                               #     mov     r0, r12
+^~is_ident CALL_ALWAYS                  #     bl      is_ident
+cmp_r0,0                                #     cmp     r0, #0
+^~bad_expr JUMP_EQUAL                   #     beq     bad_expr
+^~word CALL_ALWAYS                      #     bl      word
+ldrb_r0,[r1]                            #     ldrb    r0, [r1]
+sub_r0,r0,48                            #     sub     r0, r0, #0x30               @ '0'-'9': a number
+cmp_r0,10                               #     cmp     r0, #10
+^~unary_number JUMP_CC                  #     blo     unary_number
+cmp_r2,1                                #     cmp     r2, #1                      @ '.': here
+^~unary_symbol JUMP_NE                  #     bne     unary_symbol
+ldrb_r0,[r1]                            #     ldrb    r0, [r1]
+cmp_r0,46                               #     cmp     r0, #0x2e
+^~unary_symbol JUMP_NE                  #     bne     unary_symbol
+^~here CALL_ALWAYS                      #     bl      here
+pop_{pc}                                #     pop     {pc}
+:unary_neg                              # unary_neg:
+add_sl,sl,1                             #     add     r10, r10, #1
+^~expr_unary CALL_ALWAYS                #     bl      expr_unary
+rsb_r0,r0,0                             #     rsb     r0, r0, #0
+^~unary_number_only JUMP_ALWAYS         #     b       unary_number_only
+:unary_not                              # unary_not:
+add_sl,sl,1                             #     add     r10, r10, #1
+^~expr_unary CALL_ALWAYS                #     bl      expr_unary
+mvn_r0,r0                               #     mvn     r0, r0
+:unary_number_only                      # unary_number_only:
+cmp_r1,0                                #     cmp     r1, #0
+^~kinds CALL_NE                         #     blne    kinds
+pop_{pc}                                #     pop     {pc}
+:unary_paren                            # unary_paren:
+add_sl,sl,1                             #     add     r10, r10, #1
+^~expr CALL_ALWAYS                      #     bl      expr
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,41                               #     cmp     r12, #0x29                  @ ')'
+^~bad_expr JUMP_NE                      #     bne     bad_expr
+add_sl,sl,1                             #     add     r10, r10, #1
+pop_{pc}                                #     pop     {pc}
+:unary_symbol                           # unary_symbol:
+^~find_sym CALL_ALWAYS                  #     bl      find_sym
+cmp_r0,0                                #     cmp     r0, #0
+^~undefined JUMP_EQUAL                  #     beq     undefined
+add_r0,r0,8                             #     add     r0, r0, #S_value            @ its definition
+^~unary_def JUMP_ALWAYS                 #     b       unary_def
+:unary_number                           # unary_number:                           @ digits, then b or f: a local label's
+add_r3,r1,r2                            #     add     r3, r1, r2
+ldrb_r3,[r3,-1]                         #     ldrb    r3, [r3, #-1]
+cmp_r3,98                               #     cmp     r3, #0x62                   @ 'b'
+cmpne_r3,102                            #     cmpne   r3, #0x66                   @ 'f'
+^~unary_local JUMP_EQUAL                #     beq     unary_local
+:unary_plain                            # unary_plain:
+^~number CALL_ALWAYS                    #     bl      number
+cmp_r3,0                                #     cmp     r3, #0
+^~bad_number JUMP_NE                    #     bne     bad_number
+mov_r1,0                                #     mov     r1, #0
+pop_{pc}                                #     pop     {pc}
+:unary_local                            # unary_local:
+sub_r2,r2,1                             #     sub     r2, r2, #1
+^~digits CALL_ALWAYS                    #     bl      digits
+add_r2,r2,1                             #     add     r2, r2, #1
+cmp_r3,0                                #     cmp     r3, #0
+^~unary_plain JUMP_NE                   #     bne     unary_plain
+^~local_ref CALL_ALWAYS                 #     bl      local_ref
+:unary_def                              # unary_def:                              @ definition r0: defined before, in this pass?
+ldr_r3,[r0,8]                           #     ldr     r3, [r0, #8]                @ its pass
+cmp_r3,0                                #     cmp     r3, #0
+^~undefined JUMP_EQUAL                  #     beq     undefined                   @ none yet
+ldr_ip,[r9]                             #     ldr     r12, [r9, #V_pass]
+cmp_r3,ip                               #     cmp     r3, r12
+movne_r3,0                              #     movne   r3, #0
+strne_r3,[r9,24]                        #     strne   r3, [r9, #V_exact]
+ldr_r1,[r0,4]                           #     ldr     r1, [r0, #4]                @ its kind
+ldr_r0,[r0]                             #     ldr     r0, [r0]                    @ its value
+add_ip,r9,r1,lsl2                       #     add     r12, r9, r1, lsl #2         @ plus its section's address
+ldr_ip,[ip,80]                          #     ldr     r12, [r12, #V_base]
+add_r0,r0,ip                            #     add     r0, r0, r12
+pop_{pc}                                #     pop     {pc}
+:undefined                              # undefined:                              @ a name not yet defined: an error in pass 2
+ldr_ip,[r9,4]                           #     ldr     r12, [r9, #V_emit]
+cmp_ip,0                                #     cmp     r12, #0
+^~not_defined JUMP_NE                   #     bne     not_defined
+mov_r0,0                                #     mov     r0, #0
+str_r0,[r9,24]                          #     str     r0, [r9, #V_exact]
+str_r0,[r9,28]                          #     str     r0, [r9, #V_known]
+mov_r1,0                                #     mov     r1, #0
+pop_{pc}                                #     pop     {pc}
+
+:number                                 # number:                                 @ r0 = the number r1, r2: decimal, 0x hex, 0 octal; r3 = 1 if none (uses r12)
+push_{r4,r5}                            #     push    {r4, r5}
+mov_r0,0                                #     mov     r0, #0
+mov_r3,0                                #     mov     r3, #0                      @ the next digit
+mov_r4,10                               #     mov     r4, #10                     @ the base
+ldrb_ip,[r1]                            #     ldrb    r12, [r1]
+cmp_ip,48                               #     cmp     r12, #0x30                  @ '0'
+^~number_digits JUMP_NE                 #     bne     number_digits
+cmp_r2,1                                #     cmp     r2, #1
+^~number_digits JUMP_EQUAL              #     beq     number_digits
+mov_r4,8                                #     mov     r4, #8                      @ 0...: octal
+mov_r3,1                                #     mov     r3, #1
+ldrb_ip,[r1,1]                          #     ldrb    r12, [r1, #1]
+orr_ip,ip,32                            #     orr     r12, r12, #0x20
+cmp_ip,120                              #     cmp     r12, #0x78                  @ 0x...: hex
+^~number_digits JUMP_NE                 #     bne     number_digits
+mov_r4,16                               #     mov     r4, #16
+mov_r3,2                                #     mov     r3, #2
+cmp_r2,2                                #     cmp     r2, #2
+^~number_bad JUMP_EQUAL                 #     beq     number_bad
+:number_digits                          # number_digits:
+cmp_r3,r2                               #     cmp     r3, r2
+^~number_done JUMP_CS                   #     bhs     number_done
+ldrb_ip,[r1,r3]                         #     ldrb    r12, [r1, r3]
+sub_r5,ip,48                            #     sub     r5, r12, #0x30              @ '0'-'9'
+cmp_r5,10                               #     cmp     r5, #10
+^~number_digit JUMP_CC                  #     blo     number_digit
+orr_r5,ip,32                            #     orr     r5, r12, #0x20              @ 'a'-'f', 'A'-'F': 10-15
+sub_r5,r5,87                            #     sub     r5, r5, #0x57
+cmp_r5,10                               #     cmp     r5, #10
+^~number_bad JUMP_CC                    #     blo     number_bad
+:number_digit                           # number_digit:
+cmp_r5,r4                               #     cmp     r5, r4                      @ a digit of the base
+^~number_bad JUMP_CS                    #     bhs     number_bad
+mla_r0,r4,r0,r5                         #     mla     r0, r4, r0, r5
+add_r3,r3,1                             #     add     r3, r3, #1
+^~number_digits JUMP_ALWAYS             #     b       number_digits
+:number_done                            # number_done:
+mov_r3,0                                #     mov     r3, #0
+pop_{r4,r5}                             #     pop     {r4, r5}
+bx_lr                                   #     bx      lr
+:number_bad                             # number_bad:
+mov_r3,1                                #     mov     r3, #1
+pop_{r4,r5}                             #     pop     {r4, r5}
+bx_lr                                   #     bx      lr
+
+# Directives.
+
+:directive                              # directive:                              @ r1, r2: its name
+^~pack CALL_ALWAYS                      #     bl      pack
+!directives movw_r12 ~directives movt_r12 #     la      r12, directives
+:directive_next                         # directive_next:
+ldr_r1,[ip]                             #     ldr     r1, [r12]
+cmp_r1,0                                #     cmp     r1, #0
+^~unknown_directive JUMP_EQUAL          #     beq     unknown_directive
+ldr_r2,[ip,4]                           #     ldr     r2, [r12, #4]
+cmp_r1,r0                               #     cmp     r1, r0
+cmpeq_r2,r3                             #     cmpeq   r2, r3
+^~directive_found JUMP_EQUAL            #     beq     directive_found
+add_ip,ip,12                            #     add     r12, r12, #12
+^~directive_next JUMP_ALWAYS            #     b       directive_next
+:directive_found                        # directive_found:
+ldr_r1,[ip,8]                           #     ldr     r1, [r12, #8]               @ its routine, from directives
+!directives movw_r2 ~directives movt_r2 #     la      r2, directives
+add_r1,r1,r2                            #     add     r1, r1, r2
+bx_r1                                   #     bx      r1
+:unknown_directive                      # unknown_directive:
+!msg_directive movw_r0 ~msg_directive movt_r0 #     la      r0, msg_directive
+^~fail JUMP_ALWAYS                      #     b       fail
+
+:d_globl                                # d_globl:                                @ .globl name: ld starts at _start anyway
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~word CALL_ALWAYS                      #     bl      word
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+:d_ignore                               # d_ignore:                               @ .syntax unified, .arch armv7-a, .arm: as -march=armv7-a
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,10                               #     cmp     r12, #0x0a                  @ the rest of the line, to a comment
+cmpne_ip,64                             #     cmpne   r12, #0x40
+^~end_line JUMP_EQUAL                   #     beq     end_line
+cmp_sl,fp                               #     cmp     r10, r11
+^~end_line JUMP_CS                      #     bhs     end_line
+add_sl,sl,1                             #     add     r10, r10, #1
+^~d_ignore JUMP_ALWAYS                  #     b       d_ignore
+
+:d_section                              # d_section:                              @ .section name
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~word CALL_ALWAYS                      #     bl      word
+^~pack CALL_ALWAYS                      #     bl      pack
+!sections movw_r12 ~sections movt_r12   #     la      r12, sections
+mov_r1,1                                #     mov     r1, #1
+:d_section_next                         # d_section_next:
+ldr_r2,[ip],4                           #     ldr     r2, [r12], #4
+cmp_r2,r0                               #     cmp     r2, r0
+ldr_r2,[ip],4                           #     ldr     r2, [r12], #4
+cmpeq_r2,r3                             #     cmpeq   r2, r3
+moveq_r0,r1                             #     moveq   r0, r1
+^~set_section JUMP_EQUAL                #     beq     set_section
+add_r1,r1,1                             #     add     r1, r1, #1
+cmp_r1,4                                #     cmp     r1, #4
+^~d_section_next JUMP_LS                #     bls     d_section_next
+!msg_section movw_r0 ~msg_section movt_r0 #     la      r0, msg_section
+^~fail JUMP_ALWAYS                      #     b       fail
+:d_text                                 # d_text:
+mov_r0,1                                #     mov     r0, #1
+^~set_section JUMP_ALWAYS               #     b       set_section
+:d_data                                 # d_data:
+mov_r0,3                                #     mov     r0, #3
+^~set_section JUMP_ALWAYS               #     b       set_section
+:d_bss                                  # d_bss:
+mov_r0,4                                #     mov     r0, #4
+:set_section                            # set_section:
+str_r0,[r9,8]                           #     str     r0, [r9, #V_sec]
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+:d_equ                                  # d_equ:                                  @ .equ name, expr
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~word CALL_ALWAYS                      #     bl      word
+mov_r4,r1                               #     mov     r4, r1
+mov_r5,r2                               #     mov     r5, r2
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,44                               #     cmp     r12, #0x2c                  @ ','
+^~bad_syntax JUMP_NE                    #     bne     bad_syntax
+add_sl,sl,1                             #     add     r10, r10, #1
+^~eval CALL_ALWAYS                      #     bl      eval
+add_ip,r9,r1,lsl2                       #     add     r12, r9, r1, lsl #2         @ kept in its section
+ldr_ip,[ip,80]                          #     ldr     r12, [r12, #V_base]
+sub_r3,r0,ip                            #     sub     r3, r0, r12
+mov_r0,r1                               #     mov     r0, r1
+mov_r1,r4                               #     mov     r1, r4
+mov_r2,r5                               #     mov     r2, r5
+mov_ip,0                                #     mov     r12, #0                     @ may be set again
+^~define CALL_ALWAYS                    #     bl      define
+ldr_ip,[r9,24]                          #     ldr     r12, [r9, #V_exact]         @ not known here: never a number known here
+cmp_ip,0                                #     cmp     r12, #0
+streq_ip,[r0,16]                        #     streq   r12, [r0, #S_pass]
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+:d_balign                               # d_balign:                               @ .balign n: zeros up to a multiple of n
+^~eval_number CALL_ALWAYS               #     bl      eval_number
+cmp_r0,0                                #     cmp     r0, #0
+^~bad_align JUMP_EQUAL                  #     beq     bad_align
+sub_r3,r0,1                             #     sub     r3, r0, #1                  @ a power of 2
+tst_r0,r3                               #     tst     r0, r3
+^~bad_align JUMP_NE                     #     bne     bad_align
+ldr_r1,[r9,8]                           #     ldr     r1, [r9, #V_sec]
+cmp_r1,1                                #     cmp     r1, #1                      @ gas pads .text with nops: not done
+^~bad_align JUMP_EQUAL                  #     beq     bad_align
+add_r1,r9,r1,lsl2                       #     add     r1, r9, r1, lsl #2
+ldr_r2,[r1,60]                          #     ldr     r2, [r1, #V_align]          @ the section's alignment
+cmp_r2,r0                               #     cmp     r2, r0
+strcc_r0,[r1,60]                        #     strlo   r0, [r1, #V_align]
+ldr_r2,[r1,40]                          #     ldr     r2, [r1, #V_loc]
+rsb_ip,r2,0                             #     rsb     r12, r2, #0
+and_ip,ip,r3                            #     and     r12, r12, r3                @ (-loc) & (n - 1)
+add_r2,r2,ip                            #     add     r2, r2, r12                 @ zeros: the output is zero
+str_r2,[r1,40]                          #     str     r2, [r1, #V_loc]
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+:d_skip                                 # d_skip:                                 @ .skip n: n zeros
+^~eval_number CALL_ALWAYS               #     bl      eval_number
+ldr_r1,[r9,8]                           #     ldr     r1, [r9, #V_sec]
+add_r1,r9,r1,lsl2                       #     add     r1, r9, r1, lsl #2
+ldr_r2,[r1,40]                          #     ldr     r2, [r1, #V_loc]
+add_r2,r2,r0                            #     add     r2, r2, r0
+str_r2,[r1,40]                          #     str     r2, [r1, #V_loc]
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+:d_byte                                 # d_byte:                                 @ .byte expr, ...
+mov_r4,1                                #     mov     r4, #1
+^~data JUMP_ALWAYS                      #     b       data
+:d_hword                                # d_hword:                                @ .hword expr, ...
+mov_r4,2                                #     mov     r4, #2
+^~data JUMP_ALWAYS                      #     b       data
+:d_word                                 # d_word:                                 @ .word expr, ...
+mov_r4,4                                #     mov     r4, #4
+:data                                   # data:
+^~eval CALL_ALWAYS                      #     bl      eval
+mov_r1,r4                               #     mov     r1, r4
+^~emit_n CALL_ALWAYS                    #     bl      emit_n
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,44                               #     cmp     r12, #0x2c                  @ ','
+^~end_line JUMP_NE                      #     bne     end_line
+add_sl,sl,1                             #     add     r10, r10, #1
+^~data JUMP_ALWAYS                      #     b       data
+
+:d_asciz                                # d_asciz:                                @ .asciz "text", ...: each with a 0 after it
+mov_r4,1                                #     mov     r4, #1
+^~ascii JUMP_ALWAYS                     #     b       ascii
+:d_ascii                                # d_ascii:                                @ .ascii "text", ...
+mov_r4,0                                #     mov     r4, #0
+:ascii                                  # ascii:
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,34                               #     cmp     r12, #0x22                  @ '"'
+^~bad_syntax JUMP_NE                    #     bne     bad_syntax
+add_sl,sl,1                             #     add     r10, r10, #1
+:ascii_byte                             # ascii_byte:
+cmp_sl,fp                               #     cmp     r10, r11
+^~bad_string JUMP_CS                    #     bhs     bad_string
+ldrb_r0,[sl]                            #     ldrb    r0, [r10]
+cmp_r0,10                               #     cmp     r0, #0x0a                   @ '\n'
+^~bad_string JUMP_EQUAL                 #     beq     bad_string
+add_sl,sl,1                             #     add     r10, r10, #1
+cmp_r0,34                               #     cmp     r0, #0x22                   @ '"'
+^~ascii_end JUMP_EQUAL                  #     beq     ascii_end
+cmp_r0,92                               #     cmp     r0, #0x5c                   @ '\'
+^~ascii_put JUMP_NE                     #     bne     ascii_put
+ldrb_r0,[sl]                            #     ldrb    r0, [r10]
+add_sl,sl,1                             #     add     r10, r10, #1
+cmp_r0,110                              #     cmp     r0, #0x6e                   @ \n
+moveq_r0,10                             #     moveq   r0, #0x0a
+^~ascii_put JUMP_EQUAL                  #     beq     ascii_put
+cmp_r0,116                              #     cmp     r0, #0x74                   @ \t
+moveq_r0,9                              #     moveq   r0, #0x09
+^~ascii_put JUMP_EQUAL                  #     beq     ascii_put
+sub_r1,r0,48                            #     sub     r1, r0, #0x30               @ \ooo: up to 3 octal digits
+cmp_r1,8                                #     cmp     r1, #8                      @ else the byte itself
+^~ascii_put JUMP_CS                     #     bhs     ascii_put
+mov_r0,r1                               #     mov     r0, r1
+mov_r2,2                                #     mov     r2, #2
+:ascii_octal                            # ascii_octal:
+ldrb_r1,[sl]                            #     ldrb    r1, [r10]
+sub_r1,r1,48                            #     sub     r1, r1, #0x30
+cmp_r1,8                                #     cmp     r1, #8
+^~ascii_put JUMP_CS                     #     bhs     ascii_put
+add_r0,r1,r0,lsl3                       #     add     r0, r1, r0, lsl #3
+add_sl,sl,1                             #     add     r10, r10, #1
+subs_r2,r2,1                            #     subs    r2, r2, #1
+^~ascii_octal JUMP_NE                   #     bne     ascii_octal
+:ascii_put                              # ascii_put:
+^~emit_byte CALL_ALWAYS                 #     bl      emit_byte
+^~ascii_byte JUMP_ALWAYS                #     b       ascii_byte
+:ascii_end                              # ascii_end:
+cmp_r4,0                                #     cmp     r4, #0
+movne_r0,0                              #     movne   r0, #0
+^~emit_byte CALL_NE                     #     blne    emit_byte
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,44                               #     cmp     r12, #0x2c                  @ ','
+^~end_line JUMP_NE                      #     bne     end_line
+add_sl,sl,1                             #     add     r10, r10, #1
+^~ascii JUMP_ALWAYS                     #     b       ascii
+
+# Output.
+
+:emit_byte                              # emit_byte:                              @ the byte r0 at here, in pass 2; counted (uses r3, r12)
+ldr_r3,[r9,8]                           #     ldr     r3, [r9, #V_sec]
+add_ip,r9,r3,lsl2                       #     add     r12, r9, r3, lsl #2         @ the section's variables
+ldr_r3,[ip,40]                          #     ldr     r3, [r12, #V_loc]
+add_r3,r3,1                             #     add     r3, r3, #1
+str_r3,[ip,40]                          #     str     r3, [r12, #V_loc]
+ldr_r3,[r9,4]                           #     ldr     r3, [r9, #V_emit]
+cmp_r3,0                                #     cmp     r3, #0
+bxeq_lr                                 #     bxeq    lr
+ldr_r3,[r9,8]                           #     ldr     r3, [r9, #V_sec]
+cmp_r3,4                                #     cmp     r3, #4                      @ not in .bss
+^~in_bss JUMP_EQUAL                     #     beq     in_bss
+ldr_r3,[ip,40]                          #     ldr     r3, [r12, #V_loc]           @ at its file offset, before the count
+ldr_ip,[ip,100]                         #     ldr     r12, [r12, #V_off]
+add_r3,r3,ip                            #     add     r3, r3, r12
+sub_r3,r3,1                             #     sub     r3, r3, #1
+add_r3,r3,24117248                      #     add     r3, r3, #OUTBUF
+cmp_r3,40894464                         #     cmp     r3, #OUTBUF_END
+^~output_full JUMP_CS                   #     bhs     output_full
+strb_r0,[r3]                            #     strb    r0, [r3]
+bx_lr                                   #     bx      lr
+
+:emit32                                 # emit32:                                 @ the 4 bytes of r0 (uses r0-r3, r12)
+mov_r1,4                                #     mov     r1, #4
+:emit_n                                 # emit_n:                                 @ r1 bytes of r0, the low one first
+push_{lr}                               #     push    {lr}
+mov_r2,r0                               #     mov     r2, r0
+:emit_n_byte                            # emit_n_byte:
+mov_r0,r2                               #     mov     r0, r2
+^~emit_byte CALL_ALWAYS                 #     bl      emit_byte
+lsr_r2,r2,8                             #     lsr     r2, r2, #8
+subs_r1,r1,1                            #     subs    r1, r1, #1
+^~emit_n_byte JUMP_NE                   #     bne     emit_n_byte
+pop_{pc}                                #     pop     {pc}
+
+# Macros.
+
+:d_macro                                # d_macro:                                @ .macro name param, ...: its lines up to .endm
+ldr_r4,[r9,16]                          #     ldr     r4, [r9, #V_nmac]
+add_r0,r9,9216                          #     add     r0, r9, #MACROS - VARS + MAC_max * MAC_size
+cmp_r4,r0                               #     cmp     r4, r0
+^~too_many_macros JUMP_CS               #     bhs     too_many_macros
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~word CALL_ALWAYS                      #     bl      word
+cmp_r2,0                                #     cmp     r2, #0
+^~bad_syntax JUMP_EQUAL                 #     beq     bad_syntax
+^~pack CALL_ALWAYS                      #     bl      pack
+str_r0,[r4]                             #     str     r0, [r4, #MAC_name]
+str_r3,[r4,4]                           #     str     r3, [r4, #MAC_name+4]
+mov_r5,0                                #     mov     r5, #0                      @ its parameters
+:d_macro_param                          # d_macro_param:
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,10                               #     cmp     r12, #0x0a                  @ '\n': the end of its line
+cmpne_ip,64                             #     cmpne   r12, #0x40                  @ '@': a comment
+^~d_macro_body JUMP_EQUAL               #     beq     d_macro_body
+cmp_r5,0                                #     cmp     r5, #0
+^~d_macro_name JUMP_EQUAL               #     beq     d_macro_name
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+:d_macro_name                           # d_macro_name:
+^~word CALL_ALWAYS                      #     bl      word
+cmp_r2,0                                #     cmp     r2, #0
+^~bad_syntax JUMP_EQUAL                 #     beq     bad_syntax
+cmp_r5,4                                #     cmp     r5, #4
+^~bad_syntax JUMP_CS                    #     bhs     bad_syntax
+add_r0,r4,12                            #     add     r0, r4, #MAC_params
+add_r0,r0,r5,lsl3                       #     add     r0, r0, r5, lsl #3
+str_r1,[r0]                             #     str     r1, [r0]
+str_r2,[r0,4]                           #     str     r2, [r0, #4]
+add_r5,r5,1                             #     add     r5, r5, #1
+^~d_macro_param JUMP_ALWAYS             #     b       d_macro_param
+:d_macro_body                           # d_macro_body:
+str_r5,[r4,8]                           #     str     r5, [r4, #MAC_n]
+^~skip_line CALL_ALWAYS                 #     bl      skip_line                   @ its lines from the next one on
+str_sl,[r4,48]                          #     str     r10, [r4, #MAC_body]
+:d_macro_line                           # d_macro_line:
+cmp_sl,fp                               #     cmp     r10, r11
+^~bad_syntax JUMP_CS                    #     bhs     bad_syntax                  @ no .endm
+mov_r6,sl                               #     mov     r6, r10                     @ the line's first byte
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~word CALL_ALWAYS                      #     bl      word
+^~pack CALL_ALWAYS                      #     bl      pack
+!str_endm movw_r1 ~str_endm movt_r1     #     la      r1, str_endm
+ldr_r2,[r1]                             #     ldr     r2, [r1]
+ldr_r1,[r1,4]                           #     ldr     r1, [r1, #4]
+cmp_r0,r2                               #     cmp     r0, r2
+cmpeq_r3,r1                             #     cmpeq   r3, r1
+^~d_macro_end JUMP_EQUAL                #     beq     d_macro_end
+^~skip_line CALL_ALWAYS                 #     bl      skip_line
+ldr_r0,[r9,12]                          #     ldr     r0, [r9, #V_line]
+add_r0,r0,1                             #     add     r0, r0, #1
+str_r0,[r9,12]                          #     str     r0, [r9, #V_line]
+^~d_macro_line JUMP_ALWAYS              #     b       d_macro_line
+:d_macro_end                            # d_macro_end:
+str_r6,[r4,52]                          #     str     r6, [r4, #MAC_end]
+add_r4,r4,64                            #     add     r4, r4, #MAC_size
+str_r4,[r9,16]                          #     str     r4, [r9, #V_nmac]
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+:d_endm                                 # d_endm:                                 @ .endm without its .macro
+^~bad_syntax JUMP_ALWAYS                #     b       bad_syntax
+
+:skip_line                              # skip_line:                              @ r10 after the next newline (uses r12)
+cmp_sl,fp                               #     cmp     r10, r11
+bxcs_lr                                 #     bxhs    lr
+ldrb_ip,[sl],1                          #     ldrb    r12, [r10], #1
+cmp_ip,10                               #     cmp     r12, #0x0a
+^~skip_line JUMP_NE                     #     bne     skip_line
+bx_lr                                   #     bx      lr
+
+:expand                                 # expand:                                 @ macro r4 called: its arguments, then its lines
+mov_r5,0                                #     mov     r5, #0                      @ the arguments
+ldr_r6,[r4,8]                           #     ldr     r6, [r4, #MAC_n]
+:expand_arg                             # expand_arg:
+cmp_r5,r6                               #     cmp     r5, r6
+^~expand_lines JUMP_CS                  #     bhs     expand_lines
+cmp_r5,0                                #     cmp     r5, #0
+^~expand_first JUMP_EQUAL               #     beq     expand_first
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+:expand_first                           # expand_first:
+^~blanks CALL_ALWAYS                    #     bl      blanks
+mov_r1,sl                               #     mov     r1, r10                     @ to a ',', a newline or '@'
+:expand_arg_byte                        # expand_arg_byte:
+cmp_sl,fp                               #     cmp     r10, r11
+^~expand_arg_end JUMP_CS                #     bhs     expand_arg_end
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,44                               #     cmp     r12, #0x2c
+cmpne_ip,10                             #     cmpne   r12, #0x0a
+cmpne_ip,64                             #     cmpne   r12, #0x40
+^~expand_arg_end JUMP_EQUAL             #     beq     expand_arg_end
+add_sl,sl,1                             #     add     r10, r10, #1
+^~expand_arg_byte JUMP_ALWAYS           #     b       expand_arg_byte
+:expand_arg_end                         # expand_arg_end:
+mov_r2,sl                               #     mov     r2, r10                     @ without the blanks after it
+:expand_arg_trim                        # expand_arg_trim:
+cmp_r2,r1                               #     cmp     r2, r1
+^~expand_arg_store JUMP_EQUAL           #     beq     expand_arg_store
+ldrb_ip,[r2,-1]                         #     ldrb    r12, [r2, #-1]
+cmp_ip,32                               #     cmp     r12, #0x20
+cmpne_ip,9                              #     cmpne   r12, #0x09
+subeq_r2,r2,1                           #     subeq   r2, r2, #1
+^~expand_arg_trim JUMP_EQUAL            #     beq     expand_arg_trim
+:expand_arg_store                       # expand_arg_store:
+sub_r2,r2,r1                            #     sub     r2, r2, r1
+add_r0,r9,12288                         #     add     r0, r9, #ARGS - VARS
+add_r0,r0,r5,lsl3                       #     add     r0, r0, r5, lsl #3
+str_r1,[r0]                             #     str     r1, [r0]
+str_r2,[r0,4]                           #     str     r2, [r0, #4]
+add_r5,r5,1                             #     add     r5, r5, #1
+^~expand_arg JUMP_ALWAYS                #     b       expand_arg
+:expand_lines                           # expand_lines:                           @ what the lines' statements change, on the stack:
+ldr_r0,[r9,140]                         #     ldr     r0, [r9, #V_sret]           @ 0 statement's return, 4 the line's start,
+ldr_r1,[r9,32]                          #     ldr     r1, [r9, #V_lstart]         @ 8 the macro's next line, 12 the macro,
+ldr_r2,[r4,48]                          #     ldr     r2, [r4, #MAC_body]         @ 16, 20 the rest of the call's line
+push_{r0,r1,r2,r4,sl,fp}                #     push    {r0, r1, r2, r4, r10, r11}
+:expand_line                            # expand_line:
+ldr_r3,[sp,8]                           #     ldr     r3, [sp, #8]
+ldr_r4,[sp,12]                          #     ldr     r4, [sp, #12]
+ldr_r0,[r4,52]                          #     ldr     r0, [r4, #MAC_end]
+cmp_r3,r0                               #     cmp     r3, r0
+^~expand_done JUMP_CS                   #     bhs     expand_done
+add_r5,r9,16384                         #     add     r5, r9, #EXPBUF - VARS      @ the line, \param as its argument
+:expand_byte                            # expand_byte:
+add_r0,r9,20480                         #     add     r0, r9, #EXPBUF_END - VARS
+cmp_r5,r0                               #     cmp     r5, r0
+^~bad_syntax JUMP_CS                    #     bhs     bad_syntax
+ldrb_r6,[r3],1                          #     ldrb    r6, [r3], #1
+cmp_r6,92                               #     cmp     r6, #0x5c                   @ '\'
+^~expand_param JUMP_EQUAL               #     beq     expand_param
+strb_r6,[r5],1                          #     strb    r6, [r5], #1
+cmp_r6,10                               #     cmp     r6, #0x0a
+^~expand_byte JUMP_NE                   #     bne     expand_byte
+str_r3,[sp,8]                           #     str     r3, [sp, #8]
+add_sl,r9,16384                         #     add     r10, r9, #EXPBUF - VARS
+mov_fp,r5                               #     mov     r11, r5
+str_sl,[r9,32]                          #     str     r10, [r9, #V_lstart]
+^~statement CALL_ALWAYS                 #     bl      statement
+^~expand_line JUMP_ALWAYS               #     b       expand_line
+:expand_param                           # expand_param:                           @ \name: the argument of parameter name
+mov_sl,r3                               #     mov     r10, r3
+^~word CALL_ALWAYS                      #     bl      word                        @ r1, r2
+mov_r3,sl                               #     mov     r3, r10
+ldr_r4,[sp,12]                          #     ldr     r4, [sp, #12]
+ldr_r6,[r4,8]                           #     ldr     r6, [r4, #MAC_n]
+add_r7,r4,12                            #     add     r7, r4, #MAC_params
+add_r8,r9,12288                         #     add     r8, r9, #ARGS - VARS
+:expand_find                            # expand_find:
+cmp_r6,0                                #     cmp     r6, #0
+^~bad_syntax JUMP_EQUAL                 #     beq     bad_syntax                  @ no such parameter
+ldr_r0,[r7,4]                           #     ldr     r0, [r7, #4]
+cmp_r0,r2                               #     cmp     r0, r2
+^~expand_find_on JUMP_NE                #     bne     expand_find_on
+ldr_r0,[r7]                             #     ldr     r0, [r7]
+mov_ip,0                                #     mov     r12, #0
+:expand_cmp                             # expand_cmp:
+cmp_ip,r2                               #     cmp     r12, r2
+^~expand_found JUMP_EQUAL               #     beq     expand_found
+ldrb_r4,[r0,ip]                         #     ldrb    r4, [r0, r12]
+ldrb_lr,[r1,ip]                         #     ldrb    lr, [r1, r12]
+cmp_r4,lr                               #     cmp     r4, lr
+^~expand_find_on JUMP_NE                #     bne     expand_find_on
+add_ip,ip,1                             #     add     r12, r12, #1
+^~expand_cmp JUMP_ALWAYS                #     b       expand_cmp
+:expand_find_on                         # expand_find_on:
+add_r7,r7,8                             #     add     r7, r7, #8
+add_r8,r8,8                             #     add     r8, r8, #8
+sub_r6,r6,1                             #     sub     r6, r6, #1
+^~expand_find JUMP_ALWAYS               #     b       expand_find
+:expand_found                           # expand_found:                           @ its argument's bytes
+ldr_r0,[r8]                             #     ldr     r0, [r8]
+ldr_r1,[r8,4]                           #     ldr     r1, [r8, #4]
+:expand_copy                            # expand_copy:
+cmp_r1,0                                #     cmp     r1, #0
+^~expand_byte JUMP_EQUAL                #     beq     expand_byte
+add_ip,r9,20480                         #     add     r12, r9, #EXPBUF_END - VARS
+cmp_r5,ip                               #     cmp     r5, r12
+^~bad_syntax JUMP_CS                    #     bhs     bad_syntax
+ldrb_ip,[r0],1                          #     ldrb    r12, [r0], #1
+strb_ip,[r5],1                          #     strb    r12, [r5], #1
+sub_r1,r1,1                             #     sub     r1, r1, #1
+^~expand_copy JUMP_ALWAYS               #     b       expand_copy
+:expand_done                            # expand_done:
+pop_{r0,r1,r2,r4,sl,fp}                 #     pop     {r0, r1, r2, r4, r10, r11}
+str_r0,[r9,140]                         #     str     r0, [r9, #V_sret]
+str_r1,[r9,32]                          #     str     r1, [r9, #V_lstart]
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+# The instructions: the mnemonic's routine, with r4 its base bits and its
+# condition, r5 its other bits (from mnemonics). Pass 1 only counts its 4
+# bytes. Each ends with end_line.
+
+:insn                                   # insn:                                   @ r1, r2: the mnemonic, or a macro's name
+^~pack CALL_ALWAYS                      #     bl      pack
+add_r4,r9,8192                          #     add     r4, r9, #MACROS - VARS
+ldr_r5,[r9,16]                          #     ldr     r5, [r9, #V_nmac]
+:insn_macro                             # insn_macro:
+cmp_r4,r5                               #     cmp     r4, r5
+^~insn_table JUMP_CS                    #     bhs     insn_table
+ldr_r6,[r4]                             #     ldr     r6, [r4, #MAC_name]
+ldr_r7,[r4,4]                           #     ldr     r7, [r4, #MAC_name+4]
+cmp_r6,r0                               #     cmp     r6, r0
+cmpeq_r7,r3                             #     cmpeq   r7, r3
+^~expand JUMP_EQUAL                     #     beq     expand
+add_r4,r4,64                            #     add     r4, r4, #MAC_size
+^~insn_macro JUMP_ALWAYS                #     b       insn_macro
+:insn_table                             # insn_table:
+mov_r8,-536870912                       #     mov     r8, #0xe0000000             @ al: always
+^~mnemonic CALL_ALWAYS                  #     bl      mnemonic
+cmp_r5,0                                #     cmp     r5, #0
+^~insn_found JUMP_NE                    #     bne     insn_found
+cmp_r2,2                                #     cmp     r2, #2                      @ else a condition after a mnemonic
+^~unknown_mnemonic JUMP_LS              #     bls     unknown_mnemonic
+sub_r2,r2,2                             #     sub     r2, r2, #2
+^~pack CALL_ALWAYS                      #     bl      pack
+^~mnemonic CALL_ALWAYS                  #     bl      mnemonic
+add_r2,r2,2                             #     add     r2, r2, #2
+cmp_r5,0                                #     cmp     r5, #0
+^~unknown_mnemonic JUMP_EQUAL           #     beq     unknown_mnemonic
+^~cond CALL_ALWAYS                      #     bl      cond
+:insn_found                             # insn_found:
+ldr_r0,[r9,4]                           #     ldr     r0, [r9, #V_emit]
+cmp_r0,0                                #     cmp     r0, #0
+^~insn_count JUMP_EQUAL                 #     beq     insn_count
+ldr_r0,[r5,8]                           #     ldr     r0, [r5, #8]                @ its routine, from mnemonics
+ldr_r4,[r5,12]                          #     ldr     r4, [r5, #12]
+orr_r4,r4,r8                            #     orr     r4, r4, r8
+ldr_r5,[r5,16]                          #     ldr     r5, [r5, #16]
+!mnemonics movw_r1 ~mnemonics movt_r1   #     la      r1, mnemonics
+add_r0,r0,r1                            #     add     r0, r0, r1
+bx_r0                                   #     bx      r0
+:insn_count                             # insn_count:                             @ pass 1: its 4 bytes, the rest of the line unread
+cmp_sl,fp                               #     cmp     r10, r11
+^~insn_counted JUMP_CS                  #     bhs     insn_counted
+ldrb_r0,[sl]                            #     ldrb    r0, [r10]
+cmp_r0,10                               #     cmp     r0, #0x0a
+addne_sl,sl,1                           #     addne   r10, r10, #1
+^~insn_count JUMP_NE                    #     bne     insn_count
+:insn_counted                           # insn_counted:
+mov_r0,0                                #     mov     r0, #0
+^~emit32 CALL_ALWAYS                    #     bl      emit32
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+:mnemonic                               # mnemonic:                               @ r5 = the entry of mnemonics of name r0, r3, or 0 (uses r6, r7)
+!mnemonics movw_r5 ~mnemonics movt_r5   #     la      r5, mnemonics
+:mnemonic_next                          # mnemonic_next:
+ldr_r6,[r5]                             #     ldr     r6, [r5]
+cmp_r6,0                                #     cmp     r6, #0
+moveq_r5,0                              #     moveq   r5, #0
+bxeq_lr                                 #     bxeq    lr
+ldr_r7,[r5,4]                           #     ldr     r7, [r5, #4]
+cmp_r6,r0                               #     cmp     r6, r0
+cmpeq_r7,r3                             #     cmpeq   r7, r3
+bxeq_lr                                 #     bxeq    lr
+add_r5,r5,20                            #     add     r5, r5, #20
+^~mnemonic_next JUMP_ALWAYS             #     b       mnemonic_next
+
+:cond                                   # cond:                                   @ r8 = the condition of the last 2 bytes of r1, r2, in bits 31:28 (uses r0, r3, r6)
+add_r0,r1,r2                            #     add     r0, r1, r2
+ldrb_r3,[r0,-2]                         #     ldrb    r3, [r0, #-2]
+ldrb_r0,[r0,-1]                         #     ldrb    r0, [r0, #-1]
+orr_r0,r3,r0,lsl8                       #     orr     r0, r3, r0, lsl #8
+!conds movw_r6 ~conds movt_r6           #     la      r6, conds
+:cond_next                              # cond_next:
+ldr_r3,[r6],4                           #     ldr     r3, [r6], #4
+cmp_r3,0                                #     cmp     r3, #0
+^~unknown_mnemonic JUMP_EQUAL           #     beq     unknown_mnemonic
+eor_r8,r3,r0                            #     eor     r8, r3, r0
+lsls_r8,r8,16                           #     lsls    r8, r8, #16
+^~cond_next JUMP_NE                     #     bne     cond_next
+lsr_r8,r3,16                            #     lsr     r8, r3, #16
+lsl_r8,r8,28                            #     lsl     r8, r8, #28
+bx_lr                                   #     bx      lr
+
+:insn_emit                              # insn_emit:                              @ the instruction r4
+mov_r0,r4                               #     mov     r0, r4
+^~emit32 CALL_ALWAYS                    #     bl      emit32
+^~end_line JUMP_ALWAYS                  #     b       end_line
+
+# The operands (pass 2).
+
+:p_reg                                  # p_reg:                                  @ r0 = the number of the register at r10 (uses r1-r3, r12)
+push_{lr}                               #     push    {lr}
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~word CALL_ALWAYS                      #     bl      word
+^~pack CALL_ALWAYS                      #     bl      pack
+cmp_r3,0                                #     cmp     r3, #0
+^~unknown_register JUMP_NE              #     bne     unknown_register
+tst_r0,-16777216                        #     tst     r0, #0xff000000             @ 3 bytes at most
+^~unknown_register JUMP_NE              #     bne     unknown_register
+!registers movw_r12 ~registers movt_r12 #     la      r12, registers
+:p_reg_next                             # p_reg_next:
+ldr_r1,[ip],4                           #     ldr     r1, [r12], #4
+cmp_r1,0                                #     cmp     r1, #0
+^~unknown_register JUMP_EQUAL           #     beq     unknown_register
+eor_r2,r1,r0                            #     eor     r2, r1, r0
+lsls_r2,r2,8                            #     lsls    r2, r2, #8
+^~p_reg_next JUMP_NE                    #     bne     p_reg_next
+lsr_r0,r1,24                            #     lsr     r0, r1, #24                 @ its number, after its name
+pop_{pc}                                #     pop     {pc}
+
+:p_comma                                # p_comma:                                @ skips blanks, a ',' and the blanks after it; r12 = the byte after them
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,32                               #     cmp     r12, #0x20
+cmpne_ip,9                              #     cmpne   r12, #0x09
+addeq_sl,sl,1                           #     addeq   r10, r10, #1
+^~p_comma JUMP_EQUAL                    #     beq     p_comma
+cmp_ip,44                               #     cmp     r12, #0x2c                  @ ','
+^~bad_syntax JUMP_NE                    #     bne     bad_syntax
+add_sl,sl,1                             #     add     r10, r10, #1
+^~blanks JUMP_ALWAYS                    #     b       blanks
+
+:p_hash                                 # p_hash:                                 @ skips blanks and a '#' (uses r12)
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,32                               #     cmp     r12, #0x20
+cmpne_ip,9                              #     cmpne   r12, #0x09
+addeq_sl,sl,1                           #     addeq   r10, r10, #1
+^~p_hash JUMP_EQUAL                     #     beq     p_hash
+cmp_ip,35                               #     cmp     r12, #0x23                  @ '#'
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+bx_lr                                   #     bx      lr
+
+:p_number                               # p_number:                               @ r0 = #expr, a number (uses r1-r3, r12)
+push_{lr}                               #     push    {lr}
+^~p_hash CALL_ALWAYS                    #     bl      p_hash
+^~eval CALL_ALWAYS                      #     bl      eval
+cmp_r1,0                                #     cmp     r1, #0
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+pop_{pc}                                #     pop     {pc}
+
+:p_op2                                  # p_op2:                                  @ operand 2 into r4: #imm, or rm with an optional shift (uses r0-r3, r12)
+push_{lr}                               #     push    {lr}
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,35                               #     cmp     r12, #0x23                  @ '#'
+^~p_op2_imm JUMP_EQUAL                  #     beq     p_op2_imm
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0                            #     orr     r4, r4, r0                  @ rm
+^~p_shift CALL_ALWAYS                   #     bl      p_shift
+pop_{pc}                                #     pop     {pc}
+:p_op2_imm                              # p_op2_imm:
+^~p_number CALL_ALWAYS                  #     bl      p_number
+^~dp_imm CALL_ALWAYS                    #     bl      dp_imm
+pop_{pc}                                #     pop     {pc}
+
+:p_shift                                # p_shift:                                @ an optional ", lsl|lsr|asr|ror #n" or "..., rs" into r4 (uses r0-r3, r12)
+push_{lr}                               #     push    {lr}
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,44                               #     cmp     r12, #0x2c                  @ ','
+popne_{pc}                              #     popne   {pc}
+add_sl,sl,1                             #     add     r10, r10, #1
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~word CALL_ALWAYS                      #     bl      word
+^~pack CALL_ALWAYS                      #     bl      pack
+cmp_r3,0                                #     cmp     r3, #0
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+!shifts movw_r12 ~shifts movt_r12       #     la      r12, shifts
+mov_r1,0                                #     mov     r1, #0                      @ its type
+:p_shift_next                           # p_shift_next:
+ldr_r2,[ip],4                           #     ldr     r2, [r12], #4
+cmp_r2,0                                #     cmp     r2, #0
+^~bad_operand JUMP_EQUAL                #     beq     bad_operand
+cmp_r2,r0                               #     cmp     r2, r0
+addne_r1,r1,1                           #     addne   r1, r1, #1
+^~p_shift_next JUMP_NE                  #     bne     p_shift_next
+orr_r4,r4,r1,lsl5                       #     orr     r4, r4, r1, lsl #5
+^~p_amount CALL_ALWAYS                  #     bl      p_amount
+pop_{pc}                                #     pop     {pc}
+
+:p_amount                               # p_amount:                               @ a shift's amount into r4: #n (lsl 0-31, lsr asr 1-32, ror 1-31) or rs (uses r0-r3, r12)
+push_{lr}                               #     push    {lr}
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,35                               #     cmp     r12, #0x23                  @ '#'
+^~p_amount_reg JUMP_NE                  #     bne     p_amount_reg
+^~p_number CALL_ALWAYS                  #     bl      p_number
+cmp_r0,32                               #     cmp     r0, #32
+^~out_of_range JUMP_HI                  #     bhi     out_of_range
+^~p_amount_imm JUMP_NE                  #     bne     p_amount_imm
+and_r1,r4,96                            #     and     r1, r4, #0x60               @ 32: lsr and asr as 0
+cmp_r1,32                               #     cmp     r1, #0x20
+cmpne_r1,64                             #     cmpne   r1, #0x40
+^~out_of_range JUMP_NE                  #     bne     out_of_range
+mov_r0,0                                #     mov     r0, #0
+:p_amount_imm                           # p_amount_imm:
+orr_r4,r4,r0,lsl7                       #     orr     r4, r4, r0, lsl #7
+pop_{pc}                                #     pop     {pc}
+:p_amount_reg                           # p_amount_reg:
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl8                       #     orr     r4, r4, r0, lsl #8
+orr_r4,r4,16                            #     orr     r4, r4, #0x10
+pop_{pc}                                #     pop     {pc}
+
+:dp_imm                                 # dp_imm:                                 @ the immediate r0 into data instruction r4, as gas (uses r0-r3, r12)
+push_{lr}                               #     push    {lr}
+mov_r2,r0                               #     mov     r2, r0
+^~arm_imm CALL_ALWAYS                   #     bl      arm_imm                     @ 8 bits rotated?
+cmp_r0,0                                #     cmp     r0, #0
+^~dp_imm_done JUMP_GE                   #     bge     dp_imm_done
+ubfx_r3,r4,21,4                         #     ubfx    r3, r4, #21, #4             @ else the other of its pair, negated or inverted
+!negates movw_r12 ~negates movt_r12     #     la      r12, negates
+ldrb_ip,[ip,r3]                         #     ldrb    r12, [r12, r3]
+tst_ip,16                               #     tst     r12, #0x10
+rsbne_r0,r2,0                           #     rsbne   r0, r2, #0
+tst_ip,32                               #     tst     r12, #0x20
+mvnne_r0,r2                             #     mvnne   r0, r2
+tst_ip,48                               #     tst     r12, #0x30
+^~dp_imm_movw JUMP_EQUAL                #     beq     dp_imm_movw
+^~arm_imm CALL_ALWAYS                   #     bl      arm_imm
+cmp_r0,0                                #     cmp     r0, #0
+^~dp_imm_movw JUMP_LT                   #     blt     dp_imm_movw
+bic_r4,r4,31457280                      #     bic     r4, r4, #0x01e00000         @ the other opcode
+and_ip,ip,15                            #     and     r12, r12, #15
+orr_r4,r4,ip,lsl21                      #     orr     r4, r4, r12, lsl #21
+:dp_imm_done                            # dp_imm_done:
+orr_r4,r4,33554432                      #     orr     r4, r4, #0x02000000         @ I: an immediate
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+pop_{pc}                                #     pop     {pc}
+:dp_imm_movw                            # dp_imm_movw:                            @ else for mov (S 0) of 0-0xffff: movw
+ubfx_r3,r4,20,5                         #     ubfx    r3, r4, #20, #5             @ its opcode and S
+cmp_r3,26                               #     cmp     r3, #0x1a                   @ mov, S 0
+^~out_of_range JUMP_NE                  #     bne     out_of_range
+cmp_r2,65536                            #     cmp     r2, #0x10000
+^~out_of_range JUMP_CS                  #     bhs     out_of_range
+bic_r4,r4,15728640                      #     bic     r4, r4, #0x00f00000
+orr_r4,r4,33554432                      #     orr     r4, r4, #0x02000000
+and_r0,r2,61440                         #     and     r0, r2, #0xf000             @ imm4
+orr_r4,r4,r0,lsl4                       #     orr     r4, r4, r0, lsl #4
+bic_r0,r2,61440                         #     bic     r0, r2, #0xf000             @ imm12
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+pop_{pc}                                #     pop     {pc}
+
+:arm_imm                                # arm_imm:                                @ r0 = r0 as 8 bits rotated right by the fewest even bits (rotate:imm8), or -1 (uses r1, r3)
+cmp_r0,256                              #     cmp     r0, #0x100
+bxcc_lr                                 #     bxlo    lr
+mov_r3,2                                #     mov     r3, #2
+:arm_imm_rot                            # arm_imm_rot:
+rsb_r1,r3,32                            #     rsb     r1, r3, #32
+ror_r1,r0,r1                            #     ror     r1, r0, r1                  @ r0 rotated left by r3
+cmp_r1,256                              #     cmp     r1, #0x100
+^~arm_imm_found JUMP_CC                 #     blo     arm_imm_found
+add_r3,r3,2                             #     add     r3, r3, #2
+cmp_r3,32                               #     cmp     r3, #32
+^~arm_imm_rot JUMP_CC                   #     blo     arm_imm_rot
+mvn_r0,0                                #     mvn     r0, #0
+bx_lr                                   #     bx      lr
+:arm_imm_found                          # arm_imm_found:
+orr_r0,r1,r3,lsl7                       #     orr     r0, r1, r3, lsl #7          @ rotate r3 / 2
+bx_lr                                   #     bx      lr
+
+# The instructions' routines.
+
+:h_dp                                   # h_dp:                                   @ and eor sub rsb add adc sbc rsc orr bic: rd, rn, op2
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl12                      #     orr     r4, r4, r0, lsl #12
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl16                      #     orr     r4, r4, r0, lsl #16
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_op2 CALL_ALWAYS                     #     bl      p_op2
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_mov                                  # h_mov:                                  @ mov mvn: rd, op2
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl12                      #     orr     r4, r4, r0, lsl #12
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_op2 CALL_ALWAYS                     #     bl      p_op2
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_cmp                                  # h_cmp:                                  @ tst teq cmp cmn: rn, op2
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl16                      #     orr     r4, r4, r0, lsl #16
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_op2 CALL_ALWAYS                     #     bl      p_op2
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_shift                                # h_shift:                                @ lsl lsr asr ror: rd, rm, #n or rs, as mov's shifted rm
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl12                      #     orr     r4, r4, r0, lsl #12
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+orr_r4,r4,r5                            #     orr     r4, r4, r5                  @ its type
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_amount CALL_ALWAYS                  #     bl      p_amount
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_movw                                 # h_movw:                                 @ movw movt: rd, #imm16, #:lower16:expr or #:upper16:expr
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl12                      #     orr     r4, r4, r0, lsl #12
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_hash CALL_ALWAYS                    #     bl      p_hash
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,58                               #     cmp     r12, #0x3a                  @ ':'
+^~h_movw_plain JUMP_NE                  #     bne     h_movw_plain
+add_sl,sl,1                             #     add     r10, r10, #1
+^~word CALL_ALWAYS                      #     bl      word
+^~pack CALL_ALWAYS                      #     bl      pack
+!str_lower16 movw_r12 ~str_lower16 movt_r12 #     la      r12, str_lower16
+ldr_r1,[ip]                             #     ldr     r1, [r12]
+ldr_r2,[ip,4]                           #     ldr     r2, [r12, #4]
+cmp_r0,r1                               #     cmp     r0, r1
+cmpeq_r3,r2                             #     cmpeq   r3, r2
+moveq_r6,0                              #     moveq   r6, #0                      @ the low half
+^~h_movw_colon JUMP_EQUAL               #     beq     h_movw_colon
+ldr_r1,[ip,8]                           #     ldr     r1, [r12, #8]
+ldr_r2,[ip,12]                          #     ldr     r2, [r12, #12]
+cmp_r0,r1                               #     cmp     r0, r1
+cmpeq_r3,r2                             #     cmpeq   r3, r2
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+mov_r6,16                               #     mov     r6, #16                     @ the high half
+:h_movw_colon                           # h_movw_colon:
+ldrb_ip,[sl]                            #     ldrb    r12, [r10]
+cmp_ip,58                               #     cmp     r12, #0x3a                  @ ':'
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+^~eval CALL_ALWAYS                      #     bl      eval                        @ a number or an address
+lsr_r0,r0,r6                            #     lsr     r0, r0, r6
+lsl_r0,r0,16                            #     lsl     r0, r0, #16
+lsr_r0,r0,16                            #     lsr     r0, r0, #16
+^~h_movw_put JUMP_ALWAYS                #     b       h_movw_put
+:h_movw_plain                           # h_movw_plain:
+^~eval CALL_ALWAYS                      #     bl      eval
+cmp_r1,0                                #     cmp     r1, #0
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+cmp_r0,65536                            #     cmp     r0, #0x10000
+^~out_of_range JUMP_CS                  #     bhs     out_of_range
+:h_movw_put                             # h_movw_put:
+and_r1,r0,61440                         #     and     r1, r0, #0xf000             @ imm4
+orr_r4,r4,r1,lsl4                       #     orr     r4, r4, r1, lsl #4
+bic_r0,r0,61440                         #     bic     r0, r0, #0xf000             @ imm12
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_mul                                  # h_mul:                                  @ mul mla umull: registers, each at its bit (r5: their count, then each bit / 4)
+and_r6,r5,15                            #     and     r6, r5, #15
+lsr_r5,r5,4                             #     lsr     r5, r5, #4
+^~h_mul_reg JUMP_ALWAYS                 #     b       h_mul_reg
+:h_mul_next                             # h_mul_next:
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+:h_mul_reg                              # h_mul_reg:
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+and_r1,r5,15                            #     and     r1, r5, #15
+lsl_r1,r1,2                             #     lsl     r1, r1, #2
+orr_r4,r4,r0,lslr1                      #     orr     r4, r4, r0, lsl r1
+lsr_r5,r5,4                             #     lsr     r5, r5, #4
+subs_r6,r6,1                            #     subs    r6, r6, #1
+^~h_mul_next JUMP_NE                    #     bne     h_mul_next
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_mem                                  # h_mem:                                  @ ldr ldrb str strb: rt, [rn{, #expr}]{!}, [rn], #expr or [rn, rm{, shift #n}]
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl12                      #     orr     r4, r4, r0, lsl #12
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+cmp_ip,91                               #     cmp     r12, #0x5b                  @ '['
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl16                      #     orr     r4, r4, r0, lsl #16
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,93                               #     cmp     r12, #0x5d                  @ ']'
+^~h_mem_post JUMP_EQUAL                 #     beq     h_mem_post
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+cmp_ip,35                               #     cmp     r12, #0x23                  @ '#'
+^~h_mem_reg JUMP_NE                     #     bne     h_mem_reg
+^~p_number CALL_ALWAYS                  #     bl      p_number
+^~offset12 CALL_ALWAYS                  #     bl      offset12
+orr_r4,r4,16777216                      #     orr     r4, r4, #0x01000000         @ P: an offset
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,93                               #     cmp     r12, #0x5d                  @ ']'
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,33                               #     cmp     r12, #0x21                  @ '!': written back
+orreq_r4,r4,2097152                     #     orreq   r4, r4, #0x00200000
+addeq_sl,sl,1                           #     addeq   r10, r10, #1
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+:h_mem_reg                              # h_mem_reg:                              @ [rn, rm{, shift #n}]
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+orr_r4,r4,58720256                      #     orr     r4, r4, #0x03800000         @ a register (I), P, U
+^~p_shift CALL_ALWAYS                   #     bl      p_shift
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,93                               #     cmp     r12, #0x5d                  @ ']'
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+:h_mem_post                             # h_mem_post:                             @ [rn], or [rn], #expr (post-indexed)
+add_sl,sl,1                             #     add     r10, r10, #1
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,44                               #     cmp     r12, #0x2c                  @ ','
+orrne_r4,r4,25165824                    #     orrne   r4, r4, #0x01800000         @ [rn]: P, U, offset 0
+^~insn_emit JUMP_NE                     #     bne     insn_emit
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_number CALL_ALWAYS                  #     bl      p_number
+^~offset12 CALL_ALWAYS                  #     bl      offset12
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:offset12                               # offset12:                               @ offset r0 into r4: U, imm12
+cmp_r0,0                                #     cmp     r0, #0
+orrge_r4,r4,8388608                     #     orrge   r4, r4, #0x00800000         @ U: added
+rsblt_r0,r0,0                           #     rsblt   r0, r0, #0
+cmp_r0,4096                             #     cmp     r0, #0x1000
+^~out_of_range JUMP_CS                  #     bhs     out_of_range
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+bx_lr                                   #     bx      lr
+
+:h_memd                                 # h_memd:                                 @ ldrd strd: rt, rt+1, [rn{, #expr}]
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl12                      #     orr     r4, r4, r0, lsl #12
+add_r6,r0,1                             #     add     r6, r0, #1
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+cmp_r0,r6                               #     cmp     r0, r6
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+cmp_ip,91                               #     cmp     r12, #0x5b                  @ '['
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0,lsl16                      #     orr     r4, r4, r0, lsl #16
+orr_r4,r4,16777216                      #     orr     r4, r4, #0x01000000         @ P: an offset
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,93                               #     cmp     r12, #0x5d                  @ ']'
+orreq_r4,r4,8388608                     #     orreq   r4, r4, #0x00800000         @ [rn]: U, offset 0
+^~h_memd_end JUMP_EQUAL                 #     beq     h_memd_end
+^~p_comma CALL_ALWAYS                   #     bl      p_comma
+^~p_number CALL_ALWAYS                  #     bl      p_number
+cmp_r0,0                                #     cmp     r0, #0
+orrge_r4,r4,8388608                     #     orrge   r4, r4, #0x00800000         @ U: added
+rsblt_r0,r0,0                           #     rsblt   r0, r0, #0
+cmp_r0,256                              #     cmp     r0, #0x100
+^~out_of_range JUMP_CS                  #     bhs     out_of_range
+and_r1,r0,240                           #     and     r1, r0, #0xf0               @ imm4H
+orr_r4,r4,r1,lsl4                       #     orr     r4, r4, r1, lsl #4
+and_r0,r0,15                            #     and     r0, r0, #15                 @ imm4L
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,93                               #     cmp     r12, #0x5d                  @ ']'
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+:h_memd_end                             # h_memd_end:
+add_sl,sl,1                             #     add     r10, r10, #1
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_push                                 # h_push:                                 @ push pop: {registers}; of one, gas's str or ldr (r5)
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,123                              #     cmp     r12, #0x7b                  @ '{'
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+mov_r6,0                                #     mov     r6, #0                      @ the registers
+:h_push_reg                             # h_push_reg:
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+mov_r7,r0                               #     mov     r7, r0                      @ from
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,45                               #     cmp     r12, #0x2d                  @ '-': to
+movne_r0,r7                             #     movne   r0, r7
+^~h_push_bits JUMP_NE                   #     bne     h_push_bits
+add_sl,sl,1                             #     add     r10, r10, #1
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+cmp_r0,r7                               #     cmp     r0, r7
+^~bad_operand JUMP_CC                   #     blo     bad_operand
+:h_push_bits                            # h_push_bits:
+mov_r1,1                                #     mov     r1, #1
+orr_r6,r6,r1,lslr7                      #     orr     r6, r6, r1, lsl r7
+add_r7,r7,1                             #     add     r7, r7, #1
+cmp_r7,r0                               #     cmp     r7, r0
+^~h_push_bits JUMP_LS                   #     bls     h_push_bits
+^~blanks CALL_ALWAYS                    #     bl      blanks
+cmp_ip,44                               #     cmp     r12, #0x2c                  @ ','
+addeq_sl,sl,1                           #     addeq   r10, r10, #1
+^~h_push_reg JUMP_EQUAL                 #     beq     h_push_reg
+cmp_ip,125                              #     cmp     r12, #0x7d                  @ '}'
+^~bad_operand JUMP_NE                   #     bne     bad_operand
+add_sl,sl,1                             #     add     r10, r10, #1
+sub_r0,r6,1                             #     sub     r0, r6, #1                  @ several: stmdb sp!, ldmia sp!
+tst_r0,r6                               #     tst     r0, r6
+orrne_r4,r4,r6                          #     orrne   r4, r4, r6
+^~insn_emit JUMP_NE                     #     bne     insn_emit
+clz_r0,r6                               #     clz     r0, r6                      @ one: str rt, [sp, #-4]!, ldr rt, [sp], #4
+rsb_r0,r0,31                            #     rsb     r0, r0, #31
+orr_r4,r5,r8                            #     orr     r4, r5, r8
+orr_r4,r4,r0,lsl12                      #     orr     r4, r4, r0, lsl #12
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_b                                    # h_b:                                    @ b bl: label
+^~blanks CALL_ALWAYS                    #     bl      blanks
+^~eval CALL_ALWAYS                      #     bl      eval
+cmp_r1,1                                #     cmp     r1, #1                      @ in .text
+^~bad_target JUMP_NE                    #     bne     bad_target
+mov_r6,r0                               #     mov     r6, r0
+^~here CALL_ALWAYS                      #     bl      here
+sub_r0,r6,r0                            #     sub     r0, r6, r0                  @ from the instruction + 8, in words
+sub_r0,r0,8                             #     sub     r0, r0, #8
+tst_r0,3                                #     tst     r0, #3
+^~bad_target JUMP_NE                    #     bne     bad_target
+asr_r0,r0,2                             #     asr     r0, r0, #2
+lsl_r1,r0,8                             #     lsl     r1, r0, #8                  @ in 24 bits
+cmp_r0,r1,asr8                          #     cmp     r0, r1, asr #8
+^~out_of_range JUMP_NE                  #     bne     out_of_range
+bic_r0,r0,-16777216                     #     bic     r0, r0, #0xff000000
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_bx                                   # h_bx:                                   @ bx blx: rm
+^~p_reg CALL_ALWAYS                     #     bl      p_reg
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+:h_svc                                  # h_svc:                                  @ svc #imm24
+^~p_number CALL_ALWAYS                  #     bl      p_number
+cmp_r0,16777216                         #     cmp     r0, #0x1000000
+^~out_of_range JUMP_CS                  #     bhs     out_of_range
+orr_r4,r4,r0                            #     orr     r4, r4, r0
+^~insn_emit JUMP_ALWAYS                 #     b       insn_emit
+
+# Output: the places of the sections, then the headers.
+
+:layout                                 # layout:                                 @ the sections' places, from their sizes, as ld -T ttpc.ld
+push_{r4,r5,r6,lr}                      #     push    {r4, r5, r6, lr}
+mov_r0,116                              #     mov     r0, #HDRS                   @ after the headers: .text, .rodata
+mov_r1,1                                #     mov     r1, #1
+^~place CALL_ALWAYS                     #     bl      place
+mov_r1,2                                #     mov     r1, #2
+^~place CALL_ALWAYS                     #     bl      place
+str_r0,[r9,136]                         #     str     r0, [r9, #V_tend]           @ the code's end in the file,
+add_r4,r0,65536                         #     add     r4, r0, #ADDR               @ and its address e:
+ubfx_r5,r4,0,12                         #     ubfx    r5, r4, #0, #12             @ ALIGN(0x1000) + (e & 0xfff)
+add_r6,r4,4096                          #     add     r6, r4, #0x1000
+sub_r6,r6,1                             #     sub     r6, r6, #1
+lsr_r6,r6,12                            #     lsr     r6, r6, #12
+lsl_r6,r6,12                            #     lsl     r6, r6, #12
+add_r6,r6,r5                            #     add     r6, r6, r5
+mov_r0,r6                               #     mov     r0, r6                      @ .data, aligned
+ldr_r1,[r9,72]                          #     ldr     r1, [r9, #V_align+12]
+^~alignup CALL_ALWAYS                   #     bl      alignup
+str_r0,[r9,92]                          #     str     r0, [r9, #V_base+12]
+sub_r3,r0,r6                            #     sub     r3, r0, r6                  @ its file offset: the code's end plus
+ldr_r2,[r9,136]                         #     ldr     r2, [r9, #V_tend]           @ the same padding
+add_r3,r3,r2                            #     add     r3, r3, r2
+str_r3,[r9,112]                         #     str     r3, [r9, #V_off+12]
+ldr_r2,[r9,52]                          #     ldr     r2, [r9, #V_loc+12]
+add_r0,r0,r2                            #     add     r0, r0, r2
+ldr_r1,[r9,76]                          #     ldr     r1, [r9, #V_align+16]       @ .bss, aligned
+^~alignup CALL_ALWAYS                   #     bl      alignup
+str_r0,[r9,96]                          #     str     r0, [r9, #V_base+16]
+add_r3,r3,r2                            #     add     r3, r3, r2                  @ its file offset, .ARM.attributes', the end of .data
+str_r3,[r9,116]                         #     str     r3, [r9, #V_off+16]
+str_r3,[r9,120]                         #     str     r3, [r9, #V_attr]
+add_r3,r3,29                            #     add     r3, r3, #ATTR_len           @ then .shstrtab
+str_r3,[r9,124]                         #     str     r3, [r9, #V_shstr]
+add_r0,r3,52                            #     add     r0, r3, #SHSTRTAB_len       @ then the section headers
+mov_r1,4                                #     mov     r1, #4
+^~alignup CALL_ALWAYS                   #     bl      alignup
+str_r0,[r9,128]                         #     str     r0, [r9, #V_shoff]
+add_r0,r0,280                           #     add     r0, r0, #SHDRS
+str_r0,[r9,132]                         #     str     r0, [r9, #V_fend]
+cmp_r0,16777216                         #     cmp     r0, #OUTBUF_END - OUTBUF
+^~output_full JUMP_HI                   #     bhi     output_full
+pop_{r4,r5,r6,pc}                       #     pop     {r4, r5, r6, pc}
+
+:place                                  # place:                                  @ section r1 from file offset r0, aligned; r0 = its end (uses r1, r2)
+push_{lr}                               #     push    {lr}
+add_r2,r9,r1,lsl2                       #     add     r2, r9, r1, lsl #2
+ldr_r1,[r2,60]                          #     ldr     r1, [r2, #V_align]
+^~alignup CALL_ALWAYS                   #     bl      alignup
+str_r0,[r2,100]                         #     str     r0, [r2, #V_off]
+add_r1,r0,65536                         #     add     r1, r0, #ADDR
+str_r1,[r2,80]                          #     str     r1, [r2, #V_base]
+ldr_r1,[r2,40]                          #     ldr     r1, [r2, #V_loc]
+add_r0,r0,r1                            #     add     r0, r0, r1
+pop_{pc}                                #     pop     {pc}
+
+:alignup                                # alignup:                                @ r0 up to a multiple of r1, a power of 2 (uses r1)
+sub_r1,r1,1                             #     sub     r1, r1, #1
+add_r0,r0,r1                            #     add     r0, r0, r1
+bic_r0,r0,r1                            #     bic     r0, r0, r1
+bx_lr                                   #     bx      lr
+
+:headers                                # headers:                                @ the ELF header, the program headers, .ARM.attributes, .shstrtab, the section headers
+push_{r4,lr}                            #     push    {r4, lr}
+mov_r1,4                                #     mov     r1, #4                      @ each section has bytes
+:headers_bytes                          # headers_bytes:
+add_r0,r9,r1,lsl2                       #     add     r0, r9, r1, lsl #2
+ldr_r0,[r0,40]                          #     ldr     r0, [r0, #V_loc]
+cmp_r0,0                                #     cmp     r0, #0
+^~empty_section JUMP_EQUAL              #     beq     empty_section
+subs_r1,r1,1                            #     subs    r1, r1, #1
+^~headers_bytes JUMP_NE                 #     bne     headers_bytes
+mov_r0,24117248                         #     mov     r0, #OUTBUF
+!elf_headers movw_r1 ~elf_headers movt_r1 #     la      r1, elf_headers
+mov_r2,116                              #     mov     r2, #HDRS
+^~copy CALL_ALWAYS                      #     bl      copy
+!str_start movw_r1 ~str_start movt_r1   #     la      r1, str_start               @ e_entry: _start
+mov_r2,6                                #     mov     r2, #6
+^~find_sym CALL_ALWAYS                  #     bl      find_sym
+cmp_r0,0                                #     cmp     r0, #0
+^~no_start JUMP_EQUAL                   #     beq     no_start
+ldr_r1,[r0,16]                          #     ldr     r1, [r0, #S_pass]
+cmp_r1,0                                #     cmp     r1, #0
+^~no_start JUMP_EQUAL                   #     beq     no_start
+ldr_r1,[r0,12]                          #     ldr     r1, [r0, #S_kind]
+add_r1,r9,r1,lsl2                       #     add     r1, r9, r1, lsl #2
+ldr_r1,[r1,80]                          #     ldr     r1, [r1, #V_base]
+ldr_r2,[r0,8]                           #     ldr     r2, [r0, #S_value]
+add_r2,r2,r1                            #     add     r2, r2, r1
+mov_r0,24117248                         #     mov     r0, #OUTBUF
+str_r2,[r0,24]                          #     str     r2, [r0, #24]
+ldr_r1,[r9,128]                         #     ldr     r1, [r9, #V_shoff]          @ e_shoff
+str_r1,[r0,32]                          #     str     r1, [r0, #32]
+ldr_r1,[r9,136]                         #     ldr     r1, [r9, #V_tend]           @ the code: p_filesz, p_memsz
+str_r1,[r0,68]                          #     str     r1, [r0, #52+16]
+str_r1,[r0,72]                          #     str     r1, [r0, #52+20]
+ldr_r1,[r9,112]                         #     ldr     r1, [r9, #V_off+12]         @ the data: p_offset
+str_r1,[r0,88]                          #     str     r1, [r0, #84+4]
+ldr_r1,[r9,92]                          #     ldr     r1, [r9, #V_base+12]        @ p_vaddr, p_paddr
+str_r1,[r0,92]                          #     str     r1, [r0, #84+8]
+str_r1,[r0,96]                          #     str     r1, [r0, #84+12]
+ldr_r1,[r9,52]                          #     ldr     r1, [r9, #V_loc+12]         @ p_filesz: .data
+str_r1,[r0,100]                         #     str     r1, [r0, #84+16]
+ldr_r1,[r9,96]                          #     ldr     r1, [r9, #V_base+16]        @ p_memsz: to the end of .bss
+ldr_r2,[r9,56]                          #     ldr     r2, [r9, #V_loc+16]
+add_r1,r1,r2                            #     add     r1, r1, r2
+ldr_r2,[r9,92]                          #     ldr     r2, [r9, #V_base+12]
+sub_r1,r1,r2                            #     sub     r1, r1, r2
+str_r1,[r0,104]                         #     str     r1, [r0, #84+20]
+ldr_r0,[r9,120]                         #     ldr     r0, [r9, #V_attr]           @ .ARM.attributes, then .shstrtab
+add_r0,r0,24117248                      #     add     r0, r0, #OUTBUF
+!attributes movw_r1 ~attributes movt_r1 #     la      r1, attributes
+mov_r2,81                               #     mov     r2, #ATTR_len + SHSTRTAB_len
+^~copy CALL_ALWAYS                      #     bl      copy
+ldr_r0,[r9,128]                         #     ldr     r0, [r9, #V_shoff]          @ the section headers
+add_r0,r0,24117248                      #     add     r0, r0, #OUTBUF
+mov_r4,r0                               #     mov     r4, r0
+!section_headers movw_r1 ~section_headers movt_r1 #     la      r1, section_headers
+mov_r2,280                              #     mov     r2, #SHDRS
+^~copy CALL_ALWAYS                      #     bl      copy
+mov_r1,1                                #     mov     r1, #1
+:headers_section                        # headers_section:                        @ 1-4: .text .rodata .data .bss
+add_r4,r4,40                            #     add     r4, r4, #40
+add_r2,r9,r1,lsl2                       #     add     r2, r9, r1, lsl #2
+ldr_r0,[r2,80]                          #     ldr     r0, [r2, #V_base]           @ sh_addr
+str_r0,[r4,12]                          #     str     r0, [r4, #12]
+ldr_r0,[r2,100]                         #     ldr     r0, [r2, #V_off]            @ sh_offset
+str_r0,[r4,16]                          #     str     r0, [r4, #16]
+ldr_r0,[r2,40]                          #     ldr     r0, [r2, #V_loc]            @ sh_size
+str_r0,[r4,20]                          #     str     r0, [r4, #20]
+ldr_r0,[r2,60]                          #     ldr     r0, [r2, #V_align]          @ sh_addralign
+str_r0,[r4,32]                          #     str     r0, [r4, #32]
+add_r1,r1,1                             #     add     r1, r1, #1
+cmp_r1,5                                #     cmp     r1, #5
+^~headers_section JUMP_NE               #     bne     headers_section
+ldr_r0,[r9,120]                         #     ldr     r0, [r9, #V_attr]           @ 5: .ARM.attributes' sh_offset
+str_r0,[r4,56]                          #     str     r0, [r4, #40+16]
+ldr_r0,[r9,124]                         #     ldr     r0, [r9, #V_shstr]          @ 6: .shstrtab's
+str_r0,[r4,96]                          #     str     r0, [r4, #80+16]
+pop_{r4,pc}                             #     pop     {r4, pc}
+
+:copy                                   # copy:                                   @ r2 bytes from r1 to r0 (uses r0-r2, r12)
+subs_r2,r2,1                            #     subs    r2, r2, #1
+bxcc_lr                                 #     bxlo    lr
+ldrb_ip,[r1],1                          #     ldrb    r12, [r1], #1
+strb_ip,[r0],1                          #     strb    r12, [r0], #1
+^~copy JUMP_ALWAYS                      #     b       copy
+
+# The errors: asm: line N: what: the line.
+
+:junk                                   # junk:
+!msg_junk movw_r0 ~msg_junk movt_r0     #     la      r0, msg_junk
+^~fail JUMP_ALWAYS                      #     b       fail
+:twice                                  # twice:
+!msg_twice movw_r0 ~msg_twice movt_r0   #     la      r0, msg_twice
+^~fail JUMP_ALWAYS                      #     b       fail
+:too_many_symbols                       # too_many_symbols:
+!msg_symbols movw_r0 ~msg_symbols movt_r0 #     la      r0, msg_symbols
+^~fail JUMP_ALWAYS                      #     b       fail
+:too_many_macros                        # too_many_macros:
+!msg_macros movw_r0 ~msg_macros movt_r0 #     la      r0, msg_macros
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_local                              # bad_local:
+!msg_local movw_r0 ~msg_local movt_r0   #     la      r0, msg_local
+^~fail JUMP_ALWAYS                      #     b       fail
+:not_number                             # not_number:
+!msg_not_number movw_r0 ~msg_not_number movt_r0 #     la      r0, msg_not_number
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_number                             # bad_number:
+!msg_number movw_r0 ~msg_number movt_r0 #     la      r0, msg_number
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_expr                               # bad_expr:
+!msg_expr movw_r0 ~msg_expr movt_r0     #     la      r0, msg_expr
+^~fail JUMP_ALWAYS                      #     b       fail
+:not_defined                            # not_defined:
+!msg_undefined movw_r0 ~msg_undefined movt_r0 #     la      r0, msg_undefined
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_syntax                             # bad_syntax:
+!msg_syntax movw_r0 ~msg_syntax movt_r0 #     la      r0, msg_syntax
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_align                              # bad_align:
+!msg_align movw_r0 ~msg_align movt_r0   #     la      r0, msg_align
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_string                             # bad_string:
+!msg_string movw_r0 ~msg_string movt_r0 #     la      r0, msg_string
+^~fail JUMP_ALWAYS                      #     b       fail
+:unknown_mnemonic                       # unknown_mnemonic:
+!msg_mnemonic movw_r0 ~msg_mnemonic movt_r0 #     la      r0, msg_mnemonic
+^~fail JUMP_ALWAYS                      #     b       fail
+:unknown_register                       # unknown_register:
+!msg_register movw_r0 ~msg_register movt_r0 #     la      r0, msg_register
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_operand                            # bad_operand:
+!msg_operand movw_r0 ~msg_operand movt_r0 #     la      r0, msg_operand
+^~fail JUMP_ALWAYS                      #     b       fail
+:out_of_range                           # out_of_range:
+!msg_range movw_r0 ~msg_range movt_r0   #     la      r0, msg_range
+^~fail JUMP_ALWAYS                      #     b       fail
+:bad_target                             # bad_target:
+!msg_target movw_r0 ~msg_target movt_r0 #     la      r0, msg_target
+^~fail JUMP_ALWAYS                      #     b       fail
+:in_bss                                 # in_bss:
+!msg_bss movw_r0 ~msg_bss movt_r0       #     la      r0, msg_bss
+:fail                                   # fail:                                   @ message r0 (a C string) about the line
+mov_r4,r0                               #     mov     r4, r0
+!msg_line movw_r1 ~msg_line movt_r1     #     la      r1, msg_line
+^~eputs CALL_ALWAYS                     #     bl      eputs
+ldr_r0,[r9,12]                          #     ldr     r0, [r9, #V_line]
+^~eputn CALL_ALWAYS                     #     bl      eputn
+!msg_colon movw_r1 ~msg_colon movt_r1   #     la      r1, msg_colon
+^~eputs CALL_ALWAYS                     #     bl      eputs
+mov_r1,r4                               #     mov     r1, r4
+^~eputs CALL_ALWAYS                     #     bl      eputs
+!msg_colon movw_r1 ~msg_colon movt_r1   #     la      r1, msg_colon
+^~eputs CALL_ALWAYS                     #     bl      eputs
+ldr_r1,[r9,32]                          #     ldr     r1, [r9, #V_lstart]         @ the line, to its newline
+mov_r2,r1                               #     mov     r2, r1
+:fail_line                              # fail_line:
+cmp_r2,fp                               #     cmp     r2, r11
+^~fail_line_end JUMP_CS                 #     bhs     fail_line_end
+ldrb_ip,[r2]                            #     ldrb    r12, [r2]
+cmp_ip,10                               #     cmp     r12, #0x0a
+addne_r2,r2,1                           #     addne   r2, r2, #1
+^~fail_line JUMP_NE                     #     bne     fail_line
+:fail_line_end                          # fail_line_end:
+sub_r2,r2,r1                            #     sub     r2, r2, r1
+^~ewrite CALL_ALWAYS                    #     bl      ewrite
+!msg_newline movw_r1 ~msg_newline movt_r1 #     la      r1, msg_newline
+^~eputs CALL_ALWAYS                     #     bl      eputs
+mov_r0,1                                #     mov     r0, #1
+^~exit JUMP_ALWAYS                      #     b       exit
+:output_full                            # output_full:
+!msg_full movw_r0 ~msg_full movt_r0     #     la      r0, msg_full
+^~die JUMP_ALWAYS                       #     b       die
+:empty_section                          # empty_section:
+!msg_empty movw_r0 ~msg_empty movt_r0   #     la      r0, msg_empty
+^~die JUMP_ALWAYS                       #     b       die
+:no_start                               # no_start:
+!msg_start movw_r0 ~msg_start movt_r0   #     la      r0, msg_start
+^~die JUMP_ALWAYS                       #     b       die
+:too_large                              # too_large:
+!msg_large movw_r0 ~msg_large movt_r0   #     la      r0, msg_large
+^~die JUMP_ALWAYS                       #     b       die
+:read_failed                            # read_failed:
+!msg_read movw_r0 ~msg_read movt_r0     #     la      r0, msg_read
+^~die JUMP_ALWAYS                       #     b       die
+:write_failed                           # write_failed:
+!msg_write movw_r0 ~msg_write movt_r0   #     la      r0, msg_write
+:die                                    # die:                                    @ asm: message r0
+mov_r4,r0                               #     mov     r4, r0
+!msg_asm movw_r1 ~msg_asm movt_r1       #     la      r1, msg_asm
+^~eputs CALL_ALWAYS                     #     bl      eputs
+mov_r1,r4                               #     mov     r1, r4
+^~eputs CALL_ALWAYS                     #     bl      eputs
+!msg_newline movw_r1 ~msg_newline movt_r1 #     la      r1, msg_newline
+^~eputs CALL_ALWAYS                     #     bl      eputs
+mov_r0,1                                #     mov     r0, #1                      @ status 1
+:exit                                   # exit:
+mov_r7,1                                #     mov     r7, #SYS_exit
+svc_0x00000000                          #     svc     #0
+
+:eputs                                  # eputs:                                  @ writes the C string r1 to stderr (uses r0, r2, r7, r12)
+mov_r2,r1                               #     mov     r2, r1
+:eputs_len                              # eputs_len:
+ldrb_ip,[r2]                            #     ldrb    r12, [r2]
+cmp_ip,0                                #     cmp     r12, #0
+addne_r2,r2,1                           #     addne   r2, r2, #1
+^~eputs_len JUMP_NE                     #     bne     eputs_len
+sub_r2,r2,r1                            #     sub     r2, r2, r1
+:ewrite                                 # ewrite:                                 @ writes r1, r2 to stderr (uses r0, r7)
+mov_r7,4                                #     mov     r7, #SYS_write
+mov_r0,2                                #     mov     r0, #2                      @ fd 2, stderr
+svc_0x00000000                          #     svc     #0
+bx_lr                                   #     bx      lr
+
+:eputn                                  # eputn:                                  @ writes r0 in decimal to stderr (uses r0-r3, r7, r12)
+add_r1,r9,812                           #     add     r1, r9, #NUMBUF + 12        @ the last digit first, from the end
+movw_ip,52429                           #     movw    r12, #0xcccd                @ n / 10 = (n * 0xcccccccd) >> 35
+movt_ip,52428                           #     movt    r12, #0xcccc
+:eputn_digit                            # eputn_digit:
+umull_r3,r2,r0,ip                       #     umull   r3, r2, r0, r12
+lsr_r2,r2,3                             #     lsr     r2, r2, #3
+add_r3,r2,r2,lsl2                       #     add     r3, r2, r2, lsl #2          @ the digit: n - 10 * (n / 10)
+sub_r3,r0,r3,lsl1                       #     sub     r3, r0, r3, lsl #1
+add_r3,r3,48                            #     add     r3, r3, #0x30
+strb_r3,[r1,-1]!                        #     strb    r3, [r1, #-1]!
+movs_r0,r2                              #     movs    r0, r2
+^~eputn_digit JUMP_NE                   #     bne     eputn_digit
+add_r2,r9,812                           #     add     r2, r9, #NUMBUF + 12
+sub_r2,r2,r1                            #     sub     r2, r2, r1
+^~ewrite JUMP_ALWAYS                    #     b       ewrite
+
+# The tables, 4-byte aligned: names as 8 bytes, the first lowest, 0 after
+# the name; a routine as its offset from its table.
+#     .balign 4
+:directives                             # directives:                             @ name, its routine
+2E61736369690000                        #     .ascii ".ascii\0\0"
+0CF1FFFF                                #     .word d_ascii - directives
+2E617363697A0000                        #     .ascii ".asciz\0\0"
+04F1FFFF                                #     .word d_asciz - directives
+2E62616C69676E00                        #     .ascii ".balign\0"
+68F0FFFF                                #     .word d_balign - directives
+2E62797465000000                        #     .ascii ".byte\0\0\0"
+D0F0FFFF                                #     .word d_byte - directives
+2E68776F72640000                        #     .ascii ".hword\0\0"
+D8F0FFFF                                #     .word d_hword - directives
+2E776F7264000000                        #     .ascii ".word\0\0\0"
+E0F0FFFF                                #     .word d_word - directives
+2E65717500000000                        #     .ascii ".equ\0\0\0\0"
+14F0FFFF                                #     .word d_equ - directives
+2E676C6F626C0000                        #     .ascii ".globl\0\0"
+84EFFFFF                                #     .word d_globl - directives
+2E73656374696F6E                        #     .ascii ".section"
+B0EFFFFF                                #     .word d_section - directives
+2E736B6970000000                        #     .ascii ".skip\0\0\0"
+B4F0FFFF                                #     .word d_skip - directives
+2E74657874000000                        #     .ascii ".text\0\0\0"
+F8EFFFFF                                #     .word d_text - directives
+2E64617461000000                        #     .ascii ".data\0\0\0"
+00F0FFFF                                #     .word d_data - directives
+2E62737300000000                        #     .ascii ".bss\0\0\0\0"
+08F0FFFF                                #     .word d_bss - directives
+2E6D6163726F0000                        #     .ascii ".macro\0\0"
+38F2FFFF                                #     .word d_macro - directives
+2E656E646D000000                        #     .ascii ".endm\0\0\0"
+14F3FFFF                                #     .word d_endm - directives
+2E73796E74617800                        #     .ascii ".syntax\0"
+90EFFFFF                                #     .word d_ignore - directives
+2E61726368000000                        #     .ascii ".arch\0\0\0"
+90EFFFFF                                #     .word d_ignore - directives
+2E61726D00000000                        #     .ascii ".arm\0\0\0\0"
+90EFFFFF                                #     .word d_ignore - directives
+00000000                                #     .word 0
+
+:sections                               # sections:                               @ 1-4
+2E74657874000000                        #     .ascii ".text\0\0\0"
+2E726F6461746100                        #     .ascii ".rodata\0"
+2E64617461000000                        #     .ascii ".data\0\0\0"
+2E62737300000000                        #     .ascii ".bss\0\0\0\0"
+
+:registers                              # registers:                              @ its name (3 bytes), its number
+72300000723100017232000272330003        #     .ascii "r0\0\0", "r1\0\1", "r2\0\2", "r3\0\3", "r4\0\4", "r5\0\5", "r6\0\6", "r7\0\7"
+72340004723500057236000672370007
+72380008723900097231300A7231310B        #     .ascii "r8\0\10", "r9\0\11", "r10\12", "r11\13", "r12\14", "r13\15", "r14\16", "r15\17"
+7231320C7231330D7231340E7231350F
+7370000D6C72000E7063000F6970000C        #     .ascii "sp\0\15", "lr\0\16", "pc\0\17", "ip\0\14", "fp\0\13"
+6670000B
+00000000                                #     .word 0
+
+:conds                                  # conds:                                  @ its name (2 bytes), its number, 0
+657100006E6501006373020068730200        #     .ascii "eq\0\0", "ne\1\0", "cs\2\0", "hs\2\0", "cc\3\0", "lo\3\0", "mi\4\0", "pl\5\0"
+636303006C6F03006D690400706C0500
+7673060076630700686908006C730900        #     .ascii "vs\6\0", "vc\7\0", "hi\10\0", "ls\11\0", "ge\12\0", "lt\13\0", "gt\14\0", "le\15\0"
+67650A006C740B0067740C006C650D00
+616C0E00                                #     .ascii "al\16\0"
+00000000                                #     .word 0
+
+:shifts                                 # shifts:                                 @ 0-3, the shifts' types
+6C736C006C73720061737200726F7200        #     .ascii "lsl\0", "lsr\0", "asr\0", "ror\0"
+00000000                                #     .word 0
+
+:negates                                # negates:                                @ each opcode's other: 0x10 | it negated, 0x20 | it inverted, 0 none
+2E00140012262500                        #     .byte 0x2e, 0, 0x14, 0, 0x12, 0x26, 0x25, 0    @ and eor sub rsb add adc sbc rsc
+00001B1A002F202D                        #     .byte 0, 0, 0x1b, 0x1a, 0, 0x2f, 0x20, 0x2d    @ tst teq cmp cmn orr mov bic mvn
+
+:mnemonics                              # mnemonics:                              @ name, its routine, its base bits, its other bits
+616E640000000000                        #     .ascii "and\0\0\0\0\0"
+68F6FFFF0000000000000000                #     .word h_dp - mnemonics, 0x00000000, 0
+616E647300000000                        #     .ascii "ands\0\0\0\0"
+68F6FFFF0000100000000000                #     .word h_dp - mnemonics, 0x00100000, 0
+656F720000000000                        #     .ascii "eor\0\0\0\0\0"
+68F6FFFF0000200000000000                #     .word h_dp - mnemonics, 0x00200000, 0
+656F727300000000                        #     .ascii "eors\0\0\0\0"
+68F6FFFF0000300000000000                #     .word h_dp - mnemonics, 0x00300000, 0
+7375620000000000                        #     .ascii "sub\0\0\0\0\0"
+68F6FFFF0000400000000000                #     .word h_dp - mnemonics, 0x00400000, 0
+7375627300000000                        #     .ascii "subs\0\0\0\0"
+68F6FFFF0000500000000000                #     .word h_dp - mnemonics, 0x00500000, 0
+7273620000000000                        #     .ascii "rsb\0\0\0\0\0"
+68F6FFFF0000600000000000                #     .word h_dp - mnemonics, 0x00600000, 0
+7273627300000000                        #     .ascii "rsbs\0\0\0\0"
+68F6FFFF0000700000000000                #     .word h_dp - mnemonics, 0x00700000, 0
+6164640000000000                        #     .ascii "add\0\0\0\0\0"
+68F6FFFF0000800000000000                #     .word h_dp - mnemonics, 0x00800000, 0
+6164647300000000                        #     .ascii "adds\0\0\0\0"
+68F6FFFF0000900000000000                #     .word h_dp - mnemonics, 0x00900000, 0
+6164630000000000                        #     .ascii "adc\0\0\0\0\0"
+68F6FFFF0000A00000000000                #     .word h_dp - mnemonics, 0x00a00000, 0
+6164637300000000                        #     .ascii "adcs\0\0\0\0"
+68F6FFFF0000B00000000000                #     .word h_dp - mnemonics, 0x00b00000, 0
+7362630000000000                        #     .ascii "sbc\0\0\0\0\0"
+68F6FFFF0000C00000000000                #     .word h_dp - mnemonics, 0x00c00000, 0
+7362637300000000                        #     .ascii "sbcs\0\0\0\0"
+68F6FFFF0000D00000000000                #     .word h_dp - mnemonics, 0x00d00000, 0
+7273630000000000                        #     .ascii "rsc\0\0\0\0\0"
+68F6FFFF0000E00000000000                #     .word h_dp - mnemonics, 0x00e00000, 0
+7273637300000000                        #     .ascii "rscs\0\0\0\0"
+68F6FFFF0000F00000000000                #     .word h_dp - mnemonics, 0x00f00000, 0
+6F72720000000000                        #     .ascii "orr\0\0\0\0\0"
+68F6FFFF0000800100000000                #     .word h_dp - mnemonics, 0x01800000, 0
+6F72727300000000                        #     .ascii "orrs\0\0\0\0"
+68F6FFFF0000900100000000                #     .word h_dp - mnemonics, 0x01900000, 0
+6269630000000000                        #     .ascii "bic\0\0\0\0\0"
+68F6FFFF0000C00100000000                #     .word h_dp - mnemonics, 0x01c00000, 0
+6269637300000000                        #     .ascii "bics\0\0\0\0"
+68F6FFFF0000D00100000000                #     .word h_dp - mnemonics, 0x01d00000, 0
+7473740000000000                        #     .ascii "tst\0\0\0\0\0"
+9CF6FFFF0000100100000000                #     .word h_cmp - mnemonics, 0x01100000, 0
+7465710000000000                        #     .ascii "teq\0\0\0\0\0"
+9CF6FFFF0000300100000000                #     .word h_cmp - mnemonics, 0x01300000, 0
+636D700000000000                        #     .ascii "cmp\0\0\0\0\0"
+9CF6FFFF0000500100000000                #     .word h_cmp - mnemonics, 0x01500000, 0
+636D6E0000000000                        #     .ascii "cmn\0\0\0\0\0"
+9CF6FFFF0000700100000000                #     .word h_cmp - mnemonics, 0x01700000, 0
+6D6F760000000000                        #     .ascii "mov\0\0\0\0\0"
+88F6FFFF0000A00100000000                #     .word h_mov - mnemonics, 0x01a00000, 0
+6D6F767300000000                        #     .ascii "movs\0\0\0\0"
+88F6FFFF0000B00100000000                #     .word h_mov - mnemonics, 0x01b00000, 0
+6D766E0000000000                        #     .ascii "mvn\0\0\0\0\0"
+88F6FFFF0000E00100000000                #     .word h_mov - mnemonics, 0x01e00000, 0
+6D766E7300000000                        #     .ascii "mvns\0\0\0\0"
+88F6FFFF0000F00100000000                #     .word h_mov - mnemonics, 0x01f00000, 0
+6C736C0000000000                        #     .ascii "lsl\0\0\0\0\0"
+B0F6FFFF0000A00100000000                #     .word h_shift - mnemonics, 0x01a00000, 0x00
+6C73720000000000                        #     .ascii "lsr\0\0\0\0\0"
+B0F6FFFF0000A00120000000                #     .word h_shift - mnemonics, 0x01a00000, 0x20
+6173720000000000                        #     .ascii "asr\0\0\0\0\0"
+B0F6FFFF0000A00140000000                #     .word h_shift - mnemonics, 0x01a00000, 0x40
+726F720000000000                        #     .ascii "ror\0\0\0\0\0"
+B0F6FFFF0000A00160000000                #     .word h_shift - mnemonics, 0x01a00000, 0x60
+6D6F767700000000                        #     .ascii "movw\0\0\0\0"
+D4F6FFFF0000000300000000                #     .word h_movw - mnemonics, 0x03000000, 0
+6D6F767400000000                        #     .ascii "movt\0\0\0\0"
+D4F6FFFF0000400300000000                #     .word h_movw - mnemonics, 0x03400000, 0
+6D756C0000000000                        #     .ascii "mul\0\0\0\0\0"                  @ rd 16, rn 0, rm 8
+80F7FFFF9000000043200000                #     .word h_mul - mnemonics, 0x00000090, 0x02043
+6D6C610000000000                        #     .ascii "mla\0\0\0\0\0"                  @ rd 16, rn 0, rm 8, ra 12
+80F7FFFF9000200044200300                #     .word h_mul - mnemonics, 0x00200090, 0x32044
+756D756C6C000000                        #     .ascii "umull\0\0\0"                    @ rdlo 12, rdhi 16, rn 0, rm 8
+80F7FFFF9000800034040200                #     .word h_mul - mnemonics, 0x00800090, 0x20434
+6C64720000000000                        #     .ascii "ldr\0\0\0\0\0"
+B0F7FFFF0000100400000000                #     .word h_mem - mnemonics, 0x04100000, 0
+6C64726200000000                        #     .ascii "ldrb\0\0\0\0"
+B0F7FFFF0000500400000000                #     .word h_mem - mnemonics, 0x04500000, 0
+7374720000000000                        #     .ascii "str\0\0\0\0\0"
+B0F7FFFF0000000400000000                #     .word h_mem - mnemonics, 0x04000000, 0
+7374726200000000                        #     .ascii "strb\0\0\0\0"
+B0F7FFFF0000400400000000                #     .word h_mem - mnemonics, 0x04400000, 0
+6C64726400000000                        #     .ascii "ldrd\0\0\0\0"
+7CF8FFFFD000400000000000                #     .word h_memd - mnemonics, 0x004000d0, 0
+7374726400000000                        #     .ascii "strd\0\0\0\0"
+7CF8FFFFF000400000000000                #     .word h_memd - mnemonics, 0x004000f0, 0
+7075736800000000                        #     .ascii "push\0\0\0\0"                   @ stmdb sp!; of one, str rt, [sp, #-4]!
+04F9FFFF00002D0904002D05                #     .word h_push - mnemonics, 0x092d0000, 0x052d0004
+706F700000000000                        #     .ascii "pop\0\0\0\0\0"                  @ ldmia sp!; of one, ldr rt, [sp], #4
+04F9FFFF0000BD0804009D04                #     .word h_push - mnemonics, 0x08bd0000, 0x049d0004
+6200000000000000                        #     .ascii "b\0\0\0\0\0\0\0"
+94F9FFFF0000000A00000000                #     .word h_b - mnemonics, 0x0a000000, 0
+626C000000000000                        #     .ascii "bl\0\0\0\0\0\0"
+94F9FFFF0000000B00000000                #     .word h_b - mnemonics, 0x0b000000, 0
+6278000000000000                        #     .ascii "bx\0\0\0\0\0\0"
+D8F9FFFF10FF2F0100000000                #     .word h_bx - mnemonics, 0x012fff10, 0
+626C780000000000                        #     .ascii "blx\0\0\0\0\0"
+D8F9FFFF30FF2F0100000000                #     .word h_bx - mnemonics, 0x012fff30, 0
+7376630000000000                        #     .ascii "svc\0\0\0\0\0"
+E4F9FFFF0000000F00000000                #     .word h_svc - mnemonics, 0x0f000000, 0
+00000000                                #     .word 0
+
+:elf_headers                            # elf_headers:                            @ ld's: the ELF header and the two program headers, 116 bytes
+7F454C4601010100                        #     .byte   0x7f, 0x45, 0x4c, 0x46, 1, 1, 1, 0    @ e_ident: 0x7f "ELF", 32-bit, little endian, version 1, System V
+0000000000000000                        #     .byte   0, 0, 0, 0, 0, 0, 0, 0              @ padding
+0200                                    #     .hword  2                           @ e_type: ET_EXEC
+2800                                    #     .hword  40                          @ e_machine: EM_ARM
+01000000                                #     .word   1                           @ e_version
+00000000                                #     .word   0                           @ e_entry: _start (headers)
+34000000                                #     .word   52                          @ e_phoff: the program headers follow
+00000000                                #     .word   0                           @ e_shoff: the section headers (headers)
+00020005                                #     .word   0x05000200                  @ e_flags: EABI version 5, soft float
+3400                                    #     .hword  52                          @ e_ehsize
+2000                                    #     .hword  32                          @ e_phentsize
+0200                                    #     .hword  2                           @ e_phnum
+2800                                    #     .hword  40                          @ e_shentsize
+0700                                    #     .hword  7                           @ e_shnum: 0 .text .rodata .data .bss .ARM.attributes .shstrtab
+0600                                    #     .hword  6                           @ e_shstrndx: .shstrtab
+01000000                                #     .word   1                           @ p_type: PT_LOAD, the code
+00000000                                #     .word   0                           @ p_offset: from the file's first byte
+00000100                                #     .word   ADDR                        @ p_vaddr
+00000100                                #     .word   ADDR                        @ p_paddr
+00000000                                #     .word   0                           @ p_filesz: to the end of .rodata (headers)
+00000000                                #     .word   0                           @ p_memsz: the same (headers)
+05000000                                #     .word   5                           @ p_flags: R X
+00100000                                #     .word   0x1000                      @ p_align: a page
+01000000                                #     .word   1                           @ p_type: PT_LOAD, the data
+00000000                                #     .word   0                           @ p_offset: .data's (headers)
+00000000                                #     .word   0                           @ p_vaddr: .data's address (headers)
+00000000                                #     .word   0                           @ p_paddr: the same (headers)
+00000000                                #     .word   0                           @ p_filesz: .data (headers)
+00000000                                #     .word   0                           @ p_memsz: to the end of .bss (headers)
+06000000                                #     .word   6                           @ p_flags: R W
+00100000                                #     .word   0x1000                      @ p_align: a page
+
+:section_headers                        # section_headers:                        @ the seven, without what headers fills in
+00000000000000000000000000000000        #     .word   0, 0, 0, 0, 0, 0, 0, 0, 0, 0    @ 0: none
+00000000000000000000000000000000
+0000000000000000
+0B000000010000000600000000000000        #     .word   0x0b, 1, 6, 0, 0, 0, 0, 0, 0, 0 @ 1: .text: its name, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR
+00000000000000000000000000000000
+0000000000000000
+11000000010000000200000000000000        #     .word   0x11, 1, 2, 0, 0, 0, 0, 0, 0, 0 @ 2: .rodata, SHT_PROGBITS, SHF_ALLOC
+00000000000000000000000000000000
+0000000000000000
+19000000010000000300000000000000        #     .word   0x19, 1, 3, 0, 0, 0, 0, 0, 0, 0 @ 3: .data, SHT_PROGBITS, SHF_WRITE | SHF_ALLOC
+00000000000000000000000000000000
+0000000000000000
+1F000000080000000300000000000000        #     .word   0x1f, 8, 3, 0, 0, 0, 0, 0, 0, 0 @ 4: .bss, SHT_NOBITS, SHF_WRITE | SHF_ALLOC
+00000000000000000000000000000000
+0000000000000000
+24000000030000700000000000000000        #     .word   0x24, 0x70000003, 0, 0, 0, ATTR_len, 0, 0, 1, 0  @ 5: .ARM.attributes, SHT_ARM_ATTRIBUTES; size; sh_addralign 1
+000000001D0000000000000000000000
+0100000000000000
+01000000030000000000000000000000        #     .word   0x01, 3, 0, 0, 0, SHSTRTAB_len, 0, 0, 1, 0       @ 6: .shstrtab, SHT_STRTAB
+00000000340000000000000000000000
+0100000000000000
+
+:attributes                             # attributes:                             @ .ARM.attributes as gas writes it for armv7-a, then .shstrtab
+41                                      #     .ascii  "A"                         @ format 'A'
+1C000000                                #     .word   0x1c                        @ the subsection's length
+616561626900                            #     .ascii  "aeabi\0"
+01                                      #     .byte   1                           @ Tag_File
+12000000                                #     .word   0x12                        @ its attributes' length
+05372D4100                              #     .ascii  "\0057-A\0"                 @ Tag_CPU_name "7-A"
+060A074108010902                        #     .byte   6, 10, 7, 0x41, 8, 1, 9, 2  @ Tag_CPU_arch v7, Tag_CPU_arch_profile 'A', Tag_ARM_ISA_use 1, Tag_THUMB_ISA_use 2
+:shstrtab                               # shstrtab:                               @ the section names, as ld orders them
+002E7368737472746162002E74657874        #     .ascii  "\0.shstrtab\0.text\0.rodata\0.data\0.bss\0.ARM.attributes\0"
+002E726F64617461002E64617461002E
+627373002E41524D2E61747472696275
+74657300
+
+000000                                  #     .balign 4
+:str_endm 2E656E646D000000              # str_endm:       .ascii ".endm\0\0\0"
+:str_lower16 6C6F776572313600           # str_lower16:    .ascii "lower16\0"
+:str_upper16 7570706572313600           # str_upper16:    .ascii "upper16\0"
+:str_start 5F7374617274                 # str_start:      .ascii "_start"
+:msg_asm 61736D3A2000                   # msg_asm:        .asciz "asm: "
+:msg_line 61736D3A206C696E652000        # msg_line:       .asciz "asm: line "
+:msg_colon 3A2000                       # msg_colon:      .asciz ": "
+:msg_newline 0A00                       # msg_newline:    .asciz "\n"
+:msg_junk 6A756E6B2061742074686520656E6420 # msg_junk:       .asciz "junk at the end of the line"
+6F6620746865206C696E6500
+:msg_twice 6C6162656C20646566696E6564207477 # msg_twice:      .asciz "label defined twice"
+69636500
+:msg_symbols 746F6F206D616E792073796D626F6C73 # msg_symbols:    .asciz "too many symbols"
+00
+:msg_macros 746F6F206D616E79206D6163726F7300 # msg_macros:     .asciz "too many macros"
+:msg_local 626164206C6F63616C206C6162656C00 # msg_local:      .asciz "bad local label"
+:msg_not_number 6E6F742061206E756D626572206B6E6F # msg_not_number: .asciz "not a number known here"
+776E206865726500
+:msg_number 626164206E756D62657200      # msg_number:     .asciz "bad number"
+:msg_expr 6261642065787072657373696F6E00 # msg_expr:       .asciz "bad expression"
+:msg_kinds 6E6F742061206E756D626572206F7220 # msg_kinds:      .asciz "not a number or a label plus a number"
+61206C6162656C20706C75732061206E
+756D62657200
+:msg_undefined 756E646566696E6564206E616D6500 # msg_undefined:  .asciz "undefined name"
+:msg_syntax 73796E746178206572726F7200  # msg_syntax:     .asciz "syntax error"
+:msg_align 626164202E62616C69676E00     # msg_align:      .asciz "bad .balign"
+:msg_string 62616420737472696E6700      # msg_string:     .asciz "bad string"
+:msg_directive 756E6B6E6F776E206469726563746976 # msg_directive:  .asciz "unknown directive"
+6500
+:msg_section 756E6B6E6F776E2073656374696F6E00 # msg_section:    .asciz "unknown section"
+:msg_mnemonic 756E6B6E6F776E206D6E656D6F6E6963 # msg_mnemonic:   .asciz "unknown mnemonic"
+00
+:msg_register 756E6B6E6F776E207265676973746572 # msg_register:   .asciz "unknown register"
+00
+:msg_operand 626164206F706572616E6400   # msg_operand:    .asciz "bad operand"
+:msg_range 6F7574206F662072616E676500   # msg_range:      .asciz "out of range"
+:msg_target 61206272616E636820746F20616E6F74 # msg_target:     .asciz "a branch to another section"
+6865722073656374696F6E00
+:msg_bss 627974657320696E202E62737300   # msg_bss:        .asciz "bytes in .bss"
+:msg_full 6F757470757420746F6F206C61726765 # msg_full:       .asciz "output too large"
+00
+:msg_empty 2E746578742C202E726F646174612C20 # msg_empty:      .asciz ".text, .rodata, .data and .bss each need bytes"
+2E6461746120616E64202E6273732065
+616368206E65656420627974657300
+:msg_start 6E6F205F737461727400         # msg_start:      .asciz "no _start"
+:msg_large 696E70757420746F6F206C6172676500 # msg_large:      .asciz "input too large"
+:msg_read 72656164206661696C656400      # msg_read:       .asciz "read failed"
+:msg_write 7772697465206661696C6564000000 # msg_write:      .asciz "write failed"
+:end                                    # end:

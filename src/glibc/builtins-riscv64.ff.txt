@@ -14,6 +14,14 @@
         * pointer
       tp
   comment
+    __ff_fp: the frame pointer of the function that calls it (C's frame in ttpc, which builtins.ff.txt's __builtin_return_address and __builtin_frame_address read), s0.
+  __ff_fp:
+    asm
+    mv
+      s0
+      a0
+    ret
+  comment
     gcc's __builtin_trap, which it makes ebreak on riscv64; __atomic_thread_fence, which it makes fence rw, rw.
   __builtin_trap:
     asm
@@ -335,50 +343,3 @@
   __builtin_eh_return:
     asm
     ebreak
-  comment
-    gcc's __builtin_return_address level: where the function that calls it returns to (level 0, all glibc asks: dlopen's RETURN_ADDRESS), from ttpc's frame on riscv64, which holds the caller's s0 at s0 and its return address at s0 + 8.
-    This builtin's own frame is one more: the word at its s0 is the s0 of the function that calls it.
-  __builtin_return_address:
-    void
-    * pointer
-    level:
-      u32
-    f:
-      u64
-      * pointer
-      cast
-        u64
-        * pointer
-      :
-        cast
-          u64
-          * pointer
-        s0
-      * pointer
-    return
-      cast
-        void
-        * pointer
-      :
-        f
-        +
-        1
-      * pointer
-  comment
-    gcc's __builtin_frame_address level: the frame of the function that calls it (level 0, all glibc asks: ____longjmp_chk's check that a longjmp goes up the stack), its s0 in ttpc's frame on riscv64.
-    This builtin's own frame is one more: the word at its s0 is the s0 of the function that calls it.
-  __builtin_frame_address:
-    void
-    * pointer
-    level:
-      u32
-    return
-      cast
-        void
-        * pointer
-      :
-        cast
-          u64
-          * pointer
-        s0
-      * pointer

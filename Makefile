@@ -65,7 +65,7 @@ compiler-check: compiler
 # be what the riscv64 chain makes for it; then its C programs run. The
 # x86_64, riscv64 and aarch64 seeds are built from hex0: hex0, hex2, M1 and
 # asm assemble ttpc.s (SEED=hex: hex2 from ttpc.hex2; SEED=gnu: binutils
-# from ttpc.s); arm's by binutils so far.
+# from ttpc.s); so is arm's.
 bootstrap:
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler bootstraps
 

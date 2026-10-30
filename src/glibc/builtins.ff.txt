@@ -2502,6 +2502,55 @@ builtins:
     return
       r
   comment
+    gcc's __builtin_return_address level: where the function that calls it returns to (level 0, all glibc asks: dlopen's RETURN_ADDRESS), from ttpc's frame,
+    the same on every target: the caller's frame pointer in the word at the frame pointer, its return address in the word after it.
+    This builtin's own frame is one more: the word at its frame pointer (__ff_fp, builtins-<target>.ff.txt's: riscv64's s0, x86_64's rbp, aarch64's x29, arm's r11)
+    is the frame pointer of the function that calls it.
+  __builtin_return_address:
+    void
+    * pointer
+    level:
+      u32
+    f:
+      long
+      * pointer
+      cast
+        long
+        * pointer
+      :
+        cast
+          long
+          * pointer
+        __ff_fp
+      * pointer
+    return
+      cast
+        void
+        * pointer
+      :
+        f
+        +
+        1
+      * pointer
+  comment
+    gcc's __builtin_frame_address level: the frame of the function that calls it (level 0, all glibc asks: ____longjmp_chk's check that a longjmp goes up the stack), its frame pointer in ttpc's frame.
+    This builtin's own frame is one more: the word at its frame pointer (__ff_fp) is the frame pointer of the function that calls it.
+  __builtin_frame_address:
+    void
+    * pointer
+    level:
+      u32
+    return
+      cast
+        void
+        * pointer
+      :
+        cast
+          long
+          * pointer
+        __ff_fp
+      * pointer
+  comment
     gcc's __builtin_extract_return_addr: the address itself, which riscv64 keeps as it is.
   __builtin_extract_return_addr:
     void

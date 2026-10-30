@@ -405,6 +405,19 @@ sub reserve_target {
     my ($regs) = grep { $_->{content} eq 'registers:' } @{ $sec->{children} } or die "c2ff: $t has no registers\n";
     delete $reserved{$_} for grep { /^(?:x|a|s|t|f|fa|fs|ft|v)\d+$|^(?:zero|ra|sp|gp|tp|fp|pc)$/ } keys %reserved;
     for (@{ $regs->{children} }) { (my $c = $_->{content}) =~ s/:$//; $reserved{$_} = 1 for split ' ', $c }
+    # (and on x86_64 its instructions' names, which C's names would hide
+    # nothing of: ttpc found the lock prefix for localealias.c's lock, so
+    # __libc_lock_lock (lock) took 0's address; pause, setns, fadd ... too;
+    # its groups of instructions, isa/x86_64.pl's, and x86_64gnu.ff's)
+    if ($t eq 'x86_64') {
+        my %insgroup = map { $_ => 1 } qw(alu1 alu2 move unary shift1 shift2 bit branch set cmov stack atomic system sse);
+        my @forms = map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s/:$//r } } @{ $sec->{children} };
+        if (open my $g, '<:raw', "$FindBin::Bin/../x86_64gnu.ff") {
+            my @todo = @{ read_ff(do { local $/; <$g> })->{children} };
+            while (my $x = shift @todo) { $x->{content} =~ /^[a-z]\w*:$/ && !grep { $_->{content} =~ /:$/ } @{ $x->{children} } ? push @forms, $x : push @todo, @{ $x->{children} } }
+        }
+        for (@forms) { $reserved{$1} = 1 if $_->{content} =~ /^([A-Za-z_]\w*):$/ }
+    }
 }
 my %renamed;
 sub ffname {
@@ -1484,6 +1497,16 @@ sub asm_ins_other {
         # the ALU's operations of two registers (libgcc's soft-fp: add and
         # adc, sub and sbb of two-word fractions), GNU's operands in order
         return node($op, map { node(s/^%//r) } @a) if $op =~ /^(?:add|adc|sub|sbb|and|or|xor)[lq]$/ && @a == 2 && !grep { !/^%\w+$/ } @a;
+        # a load of the TCB's word at an offset into the register output
+        # (x86_cpu_cet_active's mov %fs:72, %0 of an unsigned int): the fs
+        # prefix, then mov's absolute form, as GNU as makes it (64 8b 04 25)
+        if ($op =~ /^mov[lq]?$/ && @a == 2 && $a[0] =~ /^%fs:(\d+)$/) {
+            my ($s, $d) = (substr($op, 3) || $asm_size // '', $1);
+            if ($s && $a[1] =~ /^%(r(?:[abcd]x|[sd]i))$/) {
+                my $r = $1;
+                return (node('fs'), $s eq 'l' ? node('movl.n.a32', node($d), node($r =~ s/^r/e/r)) : node('movq.a32', node($d), node($r)));
+            }
+        }
         # FMA on xmm registers (libm's fma and fmaf): FMA3's 213 form and
         # FMA4's, both VEX3 (x86_64gnu.ff)
         if ((($op =~ /^vfmadd213s[sd]$/ && @a == 3) || ($op =~ /^vfmadds[sd]$/ && @a == 4)) && !grep { !/^%xmm\d+$/ } @a) {
@@ -1502,6 +1525,9 @@ sub asm_stmt_other {
     # an empty template whose outputs are all read and written (+r: the
     # optimization barriers of dl-new-hash.h) changes nothing: no code
     return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc;
+    # and one with inputs alone (math_force_eval's "" : : "f" (x) of a long
+    # double on x86_64, "x" of a float), of values with no effects: none
+    return () if $target eq 'x86_64' && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops;
     # (rbx too: the C layer keeps nothing in it across a call)
     my %fixed = $target eq 'x86_64' ? (a => 'rax', b => 'rbx', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
     local $asm_size;
@@ -1639,6 +1665,8 @@ sub asm_stmt_other {
         elsif ($m ne '' && !($m eq 's' && $r =~ /^s\d/) && !($m eq 'd' && $r =~ /^d\d/) && !($m eq 'x' && $r =~ /^x\d/)) { stop("the asm operand %$m$i", $n) }
         $target eq 'x86_64' && $r !~ /\(/ ? "%$r" : $r;
     }ge;
+    # (gcc's %% for a register or segment's own %: x86's %%fs)
+    $t =~ s/%%/%/g;
     push @code, map { my ($op, @a) = split /[\s,]+/; asm_ins_other($n, $op, @a) } grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t;
     push @code, @after;
     (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
@@ -1940,9 +1968,10 @@ sub expr {
         # and the other way: a libm function gcc always expands, as its
         # builtin (s_scalbn's copysign, which libc.a has no function of)
         $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
-        # (x86_64's builtins of __float128, a long double here: libgcc's
-        # _multc3 and _divtc3, its TC)
-        $name = "$1l" if $name =~ /^(__builtin_(?:fabs|copysign|huge_val|inf|nan|nans))f128$/ && $target eq 'x86_64';
+        # (x86_64's _Float128 builtins and copysignf128 / fabsf128: ttpc's
+        # long double is binary128, _Float128 is long double in ff)
+        $name =~ s/^(?:__builtin_)?(copysign|fabs)f128$/__builtin_$1l/;
+        $name =~ s/^(__builtin_(?:huge_val|inf|nan|nans|signbit))f128$/$1l/;
         # gcc's alloca: ttpc's, C on the shared page, which the function gives
         # back when it returns
         return node('alloca', map { arg($_) } @args) if $name eq '__builtin_alloca';
@@ -1993,7 +2022,7 @@ sub expr {
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target =~ /^(?:riscv64|x86_64)$/;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(?:ia32_rdsspq|ia32_incsspq|__clear_cache)$/ && $target eq 'x86_64';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
-        return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause)$/ && $target eq 'x86_64' && !@args;
+        return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause|xbegin|xend|xtest)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
         # gcc's _mm_cmpistri, _mm_cmpistrc, _mm_cmpistrz (<smmintrin.h>, whose
         # bodies clangvec.pl leaves out): the builtin of its immediate, a
@@ -2294,6 +2323,7 @@ sub texts {
 # char array of its own, text 1, 2, ..., and the value the address of its
 # first char.
 my $ntext = 0;
+my %text_item;
 # cast: type value; under address / char (or u8) a leaf is a text, so a leaf
 # value goes in a : (printf-parse's (const char *) format)
 # an expression without effects: names, members, constants, and what C
@@ -2317,9 +2347,14 @@ sub string_value {
     my ($n) = @_;
     my $s = bytes($n);
     return node('address', node('char'), texts($n)) unless $isop{$s} || $s =~ /^(?:\?|:|\.|\.\.\.)$/ || $reserved{$s} || $s =~ /\0/ || length($s) > 255 || ($s ne '' && !pieces($s));
-    my $name = 'text ' . ++$ntext;
-    my @c = (unpack('C*', $s), 0);
-    push @out, [$cur_unit, node("$name:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
+    # (one item per text and unit: glibc's tests name their variables as
+    # texts, #ret, which x86_64 reserves, 360 times in tst-printf-intn)
+    my $name = $text_item{"$cur_unit\0$s"} //= do {
+        my $nm = 'text ' . ++$ntext;
+        my @c = (unpack('C*', $s), 0);
+        push @out, [$cur_unit, node("$nm:", node('array'), node('char'), node(scalar @c), grouped(252, map { node($_) } @c))];
+        $nm;
+    };
     node('address', node($name, node('0')));
 }
 # A wide literal's elements (L"", u"", U""): each escape one element, each
@@ -2370,7 +2405,7 @@ sub special_float {
     my ($c, @args) = kids($s);
     $c = strip($c);
     my $name = ($c->{kind} // '') eq 'DeclRefExpr' ? $c->{referencedDecl}{name} // '' : '';
-    my $nan = $name =~ /^__builtin_nan[fl]?$/ ? 1 : $name =~ /^__builtin_(?:huge_val|inf)[fl]?$/ ? 0 : return;
+    my $nan = $name =~ /^__builtin_nan(?:[fl]|f128)?$/ ? 1 : $name =~ /^__builtin_(?:huge_val|inf)(?:[fl]|f128)?$/ ? 0 : return;
     if ($nan) {
         return if @args != 1;
         my $str = $args[0];

@@ -16,8 +16,9 @@ use warnings;
 local $/;
 my $t = <>;
 # each definition: extern __inline T __attribute__((__gnu_inline__, ...)) name (...) { ... }
+# (indented too, or __inline__: avx512fp16intrin.h, avx10_2convertintrin.h)
 my (@def, %def);
-while ($t =~ /^extern __inline\b[^{;]*?__gnu_inline__[^{;]*?\b(\w+)\s*\([^{;]*\)\s*\{/mg) {
+while ($t =~ /^[ \t]*extern\s+__inline(?:__)?\b[^{;]*?__gnu_inline__[^{;]*?\b(\w+)\s*\([^{;]*\)\s*\{/mg) {
     my ($name, $b) = ($1, $-[0]);
     my ($d, $i) = (1, pos($t));
     for (; $i < length $t && $d; $i++) { my $c = substr($t, $i, 1); $d++ if $c eq '{'; $d-- if $c eq '}' }

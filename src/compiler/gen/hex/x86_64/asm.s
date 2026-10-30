@@ -1952,9 +1952,11 @@ headers_bytes:                          # each section has bytes
     inc     %ecx
     cmp     $4, %ecx
     jbe     headers_bytes
-    mov     V_loc+32(%rbp), %rax        # ld's script ends .bss at a multiple of 8
+    mov     V_base+32(%rbp), %rax       # ld's script ends .bss at a multiple of 8
+    add     V_loc+32(%rbp), %rax        # (its address)
     mov     $8, %ecx
     call    alignup
+    sub     V_base+32(%rbp), %rax
     mov     %rax, V_loc+32(%rbp)
     mov     $OUTBUF, %edi
     lea     elf_headers(%rip), %rsi
