@@ -1972,7 +1972,7 @@ sub expr {
         # of the three types; fpclassify's type is its last argument's)
         if ($name =~ /^__builtin_(isnan|isinf_sign|isinf|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
-            $t =~ /^(float|double|long double)$/ or stop("$name on $t", $n);
+            $t =~ /^(float|double|long double|float128)$/ or stop("$name on $t", $n);
             return node("$name $t", map { arg($_) } @args);
         }
         # C's va_ words, as clang has them
