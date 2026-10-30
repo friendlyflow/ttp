@@ -2406,6 +2406,12 @@ sub operand {
     # a conditional (1.5) in a : where what holds it binds tighter; not as the
     # else branch of another (right to left) nor as the value of an =
     return node(':', @e) if $s->{kind} =~ /^(Binary)?ConditionalOperator$/ && (1.5 < $p || (!$right && 1.5 == $p));
+    # a compound literal of an array, a vector or a record in a : (the
+    # user's choice A): its type and items are several nodes in the words
+    # of now, and an operand of several nodes goes in a : ((int[2]){3, 4} ==
+    # p, (__v16qi){...} != c); a scalar one is a number or a suffix's
+    return node(':', @e) if $s->{kind} eq 'CompoundLiteralExpr' && @e == 1 && @{ $e[0]{children} }
+        && ($e[0]{content} =~ /^(?:array|vector)$/ || !$scalar_word{ $e[0]{content} });
     @e;
 }
 

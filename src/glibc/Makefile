@@ -766,7 +766,7 @@ $(FF)/generic.ff $(FF)/stdbit.ff: $(FF)/%.ff: builtins.ff.txt stdbit.ff.txt $(wi
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*.ff.txt > $@
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
-GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
+GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
 	$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names

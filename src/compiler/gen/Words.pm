@@ -408,7 +408,14 @@ sub newlist {
             my ($r, $j) = newrun($t, $l, $i);
             if ($r) { push @out, @$r; $i = $j; next }
         }
-        push @out, newnode($t, $n, $ctx);
+        my @r = newnode($t, $n, $ctx);
+        # (a compound literal that is an operator's operand, in a : (the
+        # user's choice A): its type and items are several nodes now, and an
+        # operand of several goes in a :; c2ff writes it so before)
+        my $op = sub { my ($x) = @_; $x && leaf($x) && exists $opix{ $x->{content} } };
+        @r = node(':', @r) if @r > 1 && !leaf($n) && ($n->{content} =~ /^(?:array|vector)$/ || $t->{rec}{ $n->{content} })
+            && ($i > 0 && $op->($l->[$i - 1]) || $op->($l->[$i + 1]));
+        push @out, @r;
         $i++;
     }
     @out;
