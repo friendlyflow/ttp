@@ -34,6 +34,12 @@ hosts/aarch64/hex2.hex0 GPL-3.0-only
 hosts/aarch64/ttpc.hex2 GPL-3.0-only
 hosts/aarch64/M1.hex2   GPL-3.0-only
 hosts/aarch64/asm.M1    GPL-3.0-only
+hosts/arm/hex0          GPL-3.0-only
+hosts/arm/hex0.hex0     GPL-3.0-only
+hosts/arm/hex2.hex0     GPL-3.0-only
+hosts/arm/ttpc.hex2     GPL-3.0-only
+hosts/arm/M1.hex2       GPL-3.0-only
+hosts/arm/asm.M1        GPL-3.0-only
 ttpc1.ff              GPL-3.0-only
 ttpc2.ff              GPL-3.0-only
 ttpc2.defs.ff         GPL-3.0-only
