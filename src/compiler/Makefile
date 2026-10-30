@@ -381,9 +381,12 @@ TARGETS := x86_64 aarch64 arm
 CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit carrayop
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
+# x86_64's long double is the x87's (gen/patches/x87.pl): the tests of
+# binary128's bits have their x87 twins there (cldlitx87 ...)
+CSKIP_x86_64 := cldlit cldneg chexinf ccomplex
 # C tests of one target only, beside the portable ones
 CONLY_aarch64 := ctlsa64
-CONLY_x86_64 := ctlsx64 cfsx64 cvecx64
+CONLY_x86_64 := ctlsx64 cfsx64 cvecx64 cldlitx87 cldnegx87 chexinfx87 ccomplexx87
 CONLY_arm := ctlsarm
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per

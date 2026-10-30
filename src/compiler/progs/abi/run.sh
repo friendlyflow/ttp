@@ -12,8 +12,8 @@ case $t in
 arm) cc=$GLIBC_CC_arm; ct="armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16"; x=armv7l-unknown-linux-gnueabihf-; s2ff=s2ff-arm.pl; q="qemu-arm"; src=s; asl=; dopt="-r -t"; gf=;;
 # (aarch64: the numeric labels named, the .Ls assembled keeping its local labels, as src/glibc does)
 aarch64) cc=$GLIBC_CC_aarch64; ct="aarch64-linux-gnu"; x=aarch64-unknown-linux-gnu-; s2ff=s2ff-aarch64.pl; q="qemu-aarch64"; src=Ls; asl=-Wa,-L; dopt="-r -t -M no-aliases"; gf=-fno-section-anchors;;
-# (x86_64: native; binary128 long doubles, as ttpc's and src/glibc's programs; GNU's forms, x86_64gnu.ff, for gcc's code)
-x86_64) cc=$GLIBC_CC_x86_64; ct="x86_64-linux-gnu -mlong-double-128"; x=$(command -v x86_64-unknown-linux-gnu-objdump > /dev/null && echo x86_64-unknown-linux-gnu- || :); s2ff=s2ff.pl; q=; src=s; asl=; dopt="-w"; gf=-mlong-double-128; gnu=x86_64gnu.ff;;
+# (x86_64: native; the x87's long doubles, gcc's and ttpc's; GNU's forms, x86_64gnu.ff, for gcc's code)
+x86_64) cc=$GLIBC_CC_x86_64; ct="x86_64-linux-gnu"; x=$(command -v x86_64-unknown-linux-gnu-objdump > /dev/null && echo x86_64-unknown-linux-gnu- || :); s2ff=s2ff.pl; q=; src=s; asl=; dopt="-w"; gf=; gnu=x86_64gnu.ff;;
 # (riscv64: without relaxation and compressed instructions, its instructions without aliases, as src/glibc assembles
 # its asm for s2ff; its constants loaded through lla and from their symbols, no section anchors)
 riscv64) cc=$GLIBC_CC; ct="riscv64-linux-gnu"; x=riscv64-unknown-linux-gnu-; s2ff=s2ff.pl; q="qemu-riscv64"; src=s; asl=-mno-relax; dopt="-M no-aliases"; gf="-march=rv64imafd_zicsr_zifencei -mno-relax -mcmodel=medany -mno-explicit-relocs -fno-section-anchors";;

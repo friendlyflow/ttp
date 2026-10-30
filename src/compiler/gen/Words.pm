@@ -50,7 +50,7 @@ sub gen_new { my ($w) = @_; my $n = 0; $w = "address void:" if $w eq "address:";
 sub gen_old { my ($w) = @_; my $n = 0; $w =~ s/:$//; $n++ while $w =~ s/(?<=.) \* pointer$//; ('address ' x $n) . $w . ':' }
 
 my %scalarword = map { $_ => 1 } ('char', 'short', 'int', 'long', 'i8', 'i16', 'i32', 'i64',
-    'u8', 'u16', 'u32', 'u64', 'void', 'type', 'va_list', 'float', 'double', 'long double');
+    'u8', 'u16', 'u32', 'u64', 'void', 'type', 'va_list', 'float', 'double', 'long double', 'float128');
 # ttpc's operators (cc_ops), as items() classes them
 my @ops = qw(= += -= || && | ^ & == != < > <= >= << >> + - * / % ++ -- ! ~ *= /= %= &= |= ^= <<= >>= ?);
 my %opix = map { $ops[$_] => $_ } 0 .. $#ops;

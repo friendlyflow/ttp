@@ -520,3 +520,322 @@
         x
         y
         z
+  comment
+    x86_64's long double is the x87's 80-bit extended format (gcc's), in 16 bytes: the u64 at 0 its significand (the integer bit explicit, bit 63), the low 16 bits of the u64 at 8 the sign (bit 15) and exponent (32767: infinity and NaN), the rest padding.
+    So gcc's builtins of its bits: __builtin_isnan, __builtin_isinf_sign, __builtin_signbit and __builtin_fpclassify on a long double, __builtin_fabsl, __builtin_copysignl, __builtin_huge_vall and __builtin_nanl.
+    builtins.ff.txt's are binary128's, which x87builtins.pl makes float128's here (and leaves these out).
+  __builtin_isnan long double:
+    int
+    x:
+      long double
+    h:
+      u64
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        1
+    m:
+      u64
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        0
+    return
+      :
+        :
+          h
+          &
+          32767
+        ==
+        32767
+      &&
+      :
+        :
+          m
+          <<
+          1
+        !=
+        0
+  __builtin_isinf_sign long double:
+    int
+    x:
+      long double
+    h:
+      u64
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        1
+    m:
+      u64
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        0
+    if
+      :
+        :
+          h
+          &
+          32767
+        ==
+        32767
+      &&
+      :
+        :
+          m
+          <<
+          1
+        ==
+        0
+      if
+        :
+          h
+          &
+          32768
+        return
+          0
+          -
+          1
+      return
+        1
+    return
+      0
+  __builtin_signbit long double:
+    int
+    x:
+      long double
+    h:
+      u64
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        1
+    return
+      cast
+        int
+      :
+        :
+          h
+          >>
+          15
+        &
+        1
+  __builtin_fpclassify long double:
+    int
+    fnan:
+      int
+    finf:
+      int
+    fnorm:
+      int
+    fsub:
+      int
+    fzero:
+      int
+    x:
+      long double
+    h:
+      u64
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        1
+    m:
+      u64
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        0
+    e:
+      u64
+      :
+        h
+        &
+        32767
+    if
+      e
+      ==
+      32767
+      if
+        :
+          m
+          <<
+          1
+        !=
+        0
+        return
+          fnan
+      return
+        finf
+    if
+      e
+      !=
+      0
+      return
+        fnorm
+    if
+      m
+      !=
+      0
+      return
+        fsub
+    return
+      fzero
+  __builtin_fabsl:
+    long double
+    x:
+      long double
+    r:
+      long double
+      :
+        x
+    :
+      cast
+        u64
+        * pointer
+      r
+      & address
+      .
+      1
+    &=
+    ULL
+    18446744073709518847
+    return
+      r
+  __builtin_copysignl:
+    long double
+    x:
+      long double
+    y:
+      long double
+    r:
+      long double
+      :
+        x
+    :
+      cast
+        u64
+        * pointer
+      r
+      & address
+      .
+      1
+    =
+    :
+      :
+        cast
+          u64
+          * pointer
+        x
+        & address
+        .
+        1
+      &
+      ULL
+      18446744073709518847
+    |
+    :
+      :
+        cast
+          u64
+          * pointer
+        y
+        & address
+        .
+        1
+      &
+      32768
+    return
+      r
+  __builtin_huge_vall:
+    long double
+    r:
+      long double
+      cast
+        long double
+      0
+    :
+      cast
+        u64
+        * pointer
+      r
+      & address
+      .
+      0
+    =
+    ULL
+    9223372036854775808
+    :
+      cast
+        u64
+        * pointer
+      r
+      & address
+      .
+      1
+    =
+    32767
+    return
+      r
+  __builtin_nanl:
+    long double
+    s:
+      char
+      * pointer
+    r:
+      long double
+      cast
+        long double
+      0
+    :
+      cast
+        u64
+        * pointer
+      r
+      & address
+      .
+      0
+    =
+    ULL
+    13835058055282163712
+    :
+      cast
+        u64
+        * pointer
+      r
+      & address
+      .
+      1
+    =
+    32767
+    return
+      r

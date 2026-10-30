@@ -99,6 +99,7 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
+    float128 => '__float128',
     va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
     'complex long double' => '_Complex long double');
 $scalar{u64} = 'unsigned long long' if $target eq 'arm';
@@ -494,12 +495,14 @@ sub operand {
         return ($w, [scalar => 'int']) if $w =~ /^-?(?:0x[0-9a-fA-F]+|\d+)$/;
         # (a hex float one exponent past its type's range: infinity, or with
         # a fraction a NaN, as C writes them, gcc's builtins)
-        if ($w =~ /^0x1(\.[0-9a-f]*)?p\+(128f|1024|16384L)$/i) {
+        if ($w =~ /^0x1(\.[0-9a-f]*)?p\+(128f|1024|16384L|16384Q)$/i) {
             my ($frac, $e) = ($1 // '', $2);
-            my ($sfx, $t) = $e eq '128f' ? ('f', 'float') : $e eq '1024' ? ('', 'double') : ('l', 'long double');
+            my ($sfx, $t) = $e eq '128f' ? ('f', 'float') : $e eq '1024' ? ('', 'double') : $e eq '16384Q' ? ('f128', 'float128') : ('l', 'long double');
             return ($frac =~ /[1-9a-f]/i ? "__builtin_nan$sfx(\"\")" : "__builtin_inf$sfx()", [scalar => $t]);
         }
         return ($w, [scalar => 'long double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+L$/i;
+        # (float128's Q, x86_64's __float128: GNU C's Q)
+        return ($w, [scalar => 'float128']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+Q$/i;
         return ($w, [scalar => $w =~ /f$/ ? 'float' : 'double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+f?$/i;
         return ('__builtin_va_arg_pack()', undef) if $w eq 'va_arg_pack';
         return ('__builtin_va_arg_pack_len()', undef) if $w eq 'va_arg_pack_len';

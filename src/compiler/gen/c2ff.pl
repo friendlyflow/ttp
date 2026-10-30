@@ -82,7 +82,7 @@ my %scalar = (
     'unsigned int' => 'u32', 'unsigned' => 'u32',
     'long' => 'long', 'signed long' => 'long', 'unsigned long' => 'u64',
     'float' => 'float', 'double' => 'double', 'long double' => 'long double',
-    '__float128' => 'long double',      # x86_64's _Float128 for clang (clang-prelude.h)
+    '__float128' => 'long double',      # x86_64's _Float128 for clang (clang-prelude.h): float128 there
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
     '_Bool' => 'u8', 'void' => 'void',
     # (C23's bool, the type of libgcc's C under gcc 16's gnu23: _Bool)
@@ -497,6 +497,10 @@ $scalar{'unsigned long'} = 'u32' if $target eq 'arm';
 # its address: ttpc's va_list, which is that struct on x86_64 and goes as
 # its address (gen/patches/abix64.pl)
 @scalar{'struct __va_list_tag[1]', 'struct __va_list_tag *'} = ('va_list', 'va_list') if $target eq 'x86_64';
+# and its long double is the x87's (gcc's), its _Float128 (clang's
+# __float128) ttpc's float128, binary128 (gen/patches/x87.pl); FFold.pm
+# rounds to them
+if ($target eq 'x86_64') { $scalar{'__float128'} = 'float128'; $scalar_word{float128} = 1; FFold::x87() }
 
 my %enumof;                 # each enum constant's enum, as a tag
 my (%enumref, %enumunit);   # the uses of each enum constant and its first unit (enum_rename)
@@ -1159,8 +1163,11 @@ my %sfop = ('+' => 'add', '-' => 'sub', '*' => 'mul', '/' => 'div');
 my %sfcmp = ('==' => 'eq', '!=' => 'ne', '<' => 'lt', '>' => 'gt', '<=' => 'le', '>=' => 'ge');
 # its floating type, from clang's spelling (ctype is not asked: it brings in
 # the types it is shown)
-sub tword { my ($n) = @_; return '' unless $n && $n->{type}; (my $q = qt($n)) =~ s/\b(const|volatile)\s+//g; $q =~ /^(float|double|long double)$/ ? $q : '' }
+sub tword { my ($n) = @_; return '' unless $n && $n->{type}; (my $q = qt($n)) =~ s/\b(const|volatile)\s+//g; $q =~ /^(float|double|long double)$/ ? $q : $q eq '__float128' ? 'float128' : '' }
 sub isld { tword($_[0]) eq 'long double' }
+# binary128, soft-fp's: long double, but on x86_64 (the x87's there) float128
+sub q128 { $target eq 'x86_64' ? 'float128' : 'long double' }
+sub isq { tword($_[0]) eq q128() }
 # the ff words of an operand's type, after C's conversions (ctype)
 sub tword_int { my ($n) = @_; join ' ', ctype(qt($n)) }
 # an integer type of a conversion to or from long double: unsigned?
@@ -1170,24 +1177,29 @@ sub softfp {
     my $k = $n->{kind} // '';
     if ($k eq 'BinaryOperator' || $k eq 'CompoundAssignOperator') {
         my $op = $n->{opcode};
-        my $ld = isld((kids($n))[0]) || isld((kids($n))[1]);
-        if ($k eq 'CompoundAssignOperator') { $op =~ s/=$//; $ld ||= ($n->{computeResultType}{qualType} // '') eq 'long double' }
+        my $ld = isq((kids($n))[0]) || isq((kids($n))[1]);
+        if ($k eq 'CompoundAssignOperator') { $op =~ s/=$//; $ld ||= ($n->{computeResultType}{qualType} // '') eq ($target eq 'x86_64' ? '__float128' : 'long double') }
         want("__$sfop{$op}tf3") if $ld && $sfop{$op};
         want("__$sfcmp{$op}tf2") if $ld && $sfcmp{$op};
-    } elsif ($k eq 'UnaryOperator' && $n->{opcode} eq '-' && isld($n)) {
+    } elsif ($k eq 'UnaryOperator' && $n->{opcode} eq '-' && isq($n)) {
         want('__negtf2');
     } elsif ($k eq 'CStyleCastExpr' || ($k eq 'ImplicitCastExpr'
             && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/)) {
         my ($to, $from) = (tword($n), tword((kids($n))[0]));
-        return if $to eq $from || ($to ne 'long double' && $from ne 'long double');
-        if ($to eq 'long double') {
+        my $q = q128();
+        return if $to eq $from || ($to ne $q && $from ne $q);
+        # (x86_64: float128 from long double is exact, ttpc's own; long
+        # double from float128 soft-fp's __trunctfxf2)
+        return if $to eq $q && $from eq 'long double';
+        return want('__trunctfxf2') if $to eq 'long double' && $q ne 'long double';
+        if ($to eq $q) {
             want($from eq 'float' ? '__extendsftf2' : $from eq 'double' ? '__extenddftf2'
                 : '__float' . (unsigned_t((kids($n))[0]) ? 'un' : '') . 'ditf');
         } else {
             want($to eq 'float' ? '__trunctfsf2' : $to eq 'double' ? '__trunctfdf2'
                 : '__fix' . (unsigned_t($n) ? 'uns' : '') . 'tfdi');
         }
-    } elsif ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean' && isld((kids($n))[0])) {
+    } elsif ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingToBoolean' && isq((kids($n))[0])) {
         want('__netf2');
     }
 }
@@ -1298,7 +1310,7 @@ sub asm_parts {
         if ($c eq ':' && $depth == 0) { push @parts, ''; next }
         $parts[-1] .= $c;
     }
-    my ($tmpl, $outs, $ins) = @parts;
+    my ($tmpl, $outs, $ins, $clob) = @parts;
     my $template = join '', $tmpl =~ /"((?:[^"\\]|\\.)*)"/g;
     $template =~ s/\\t/ /g;
     $template =~ s/\\n/;/g;
@@ -1306,7 +1318,7 @@ sub asm_parts {
     my @ic = ($ins // '') =~ /"([^"]*)"/g;
     my @ops = kids($n);
     @ops == @oc + @ic or stop('an asm statement whose operands are not its text\'s', $n);
-    ($template, \@oc, \@ic, \@ops);
+    ($template, \@oc, \@ic, \@ops, $clob // '');
 }
 sub asm_stmt {
     my ($n) = @_;
@@ -1497,13 +1509,15 @@ sub asm_ins_other {
 sub asm_stmt_other {
     my ($n) = @_;
     my $regs = $argregs{$target} or stop("an asm statement on $target", $n);
-    my ($template, $oc, $ic, $ops) = asm_parts($n);
+    my ($template, $oc, $ic, $ops, $clob) = asm_parts($n);
     # an empty template whose outputs are all read and written (+r: the
     # optimization barriers of dl-new-hash.h) changes nothing: no code
     return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc;
     # and one with inputs alone (math_force_eval's "" : : "f" (x) of a long
     # double on x86_64, "x" of a float), of values with no effects: none
     return () if $target eq 'x86_64' && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops;
+    # (x86_64's x87 operands, libm's long double: asm_x87)
+    return asm_x87($n, $template, $oc, $ic, $ops, $clob) if $target eq 'x86_64' && grep { /^[=&]*t$/ } @$oc;
     # (rbx too: the C layer keeps nothing in it across a call)
     my %fixed = $target eq 'x86_64' ? (a => 'rax', b => 'rbx', d => 'rdx', c => 'rcx', S => 'rsi', D => 'rdi') : ();
     local $asm_size;
@@ -1643,6 +1657,59 @@ sub asm_stmt_other {
     return defined $ret ? (item(expr($ops->[$ret])), node('='), $call) : $call;
 }
 
+# x86_64's x87 asm statements (libm's long double: an "=t" output, the x87's
+# st0, its input "0" there, an input "u" in st1; math_opt_barrier's of a
+# float or double too): an empty template is the output set to the input;
+# one with instructions an asm function of the operands' addresses: the "u"
+# input loaded first (fld), then the st0 one, the template, the output
+# stored and popped (fstp), and st1 popped where the template leaves it
+# (no "st(1)" clobber: fscale's); each operand a variable (its address)
+sub asm_x87 {
+    my ($n, $template, $oc, $ic, $ops, $clob) = @_;
+    @$oc == 1 && $oc->[0] =~ /^=&?t$/ or stop("the asm constraints @$oc of the x87", $n);
+    my ($t0, $u);
+    for my $j (0 .. $#$ic) {
+        my $c = $ic->[$j];
+        if ($c =~ /^[0t]$/ && !defined $t0) { $t0 = 1 + $j } elsif ($c eq 'u' && !defined $u) { $u = 1 + $j }
+        else { stop("the asm constraint $c of the x87", $n) }
+    }
+    my $sz = sub {
+        my ($o) = @_;
+        my $w = tword($ops->[$o]);
+        $w eq 'long double' ? 't' : $w eq 'double' ? 'l' : $w eq 'float' ? 's' : stop("an x87 asm operand of a $w", $n);
+    };
+    if ($template !~ /\S/) {
+        defined $t0 && !defined $u or stop('an empty x87 asm statement but of "0"', $n);
+        my @in = atom($ops->[$t0]);
+        @in = cast_node([ctype(qt($ops->[0]))], @in) if tword($ops->[0]) ne tword($ops->[$t0]);
+        return (item(expr($ops->[0])), node('='), @in);
+    }
+    for my $o (0 .. $#$ops) {
+        my $e = strip($ops->[$o]);
+        ($e->{kind} // '') =~ /^(DeclRefExpr|MemberExpr|ArraySubscriptExpr)$/ || (($e->{kind} // '') eq 'UnaryOperator' && $e->{opcode} eq '*')
+            or stop('an x87 asm operand that is no variable', $n);
+    }
+    my $regs = $argregs{$target};
+    my @order = ((defined $u ? ($u) : ()), (defined $t0 ? ($t0) : ()), 0);
+    my @code;
+    for my $k (0 .. $#order - 1) { push @code, node('fld' . $sz->($order[$k]) . '.m', node(0), node($regs->[$k])) }
+    (my $t = $template) =~ s/%%/%/g;
+    for my $l (grep { /\S/ } map { s/^\s+|\s+$//gr } split /;/, $t) {
+        my ($op, @a) = split /[\s,]+/, $l;
+        if ($op =~ /^(?:fpatan|frndint|f2xm1|fscale|fyl2x|fyl2xp1|fxtract|fld1|fldz|fchs|fabs|fsqrt|fprem|fprem1)$/ && !@a) { push @code, node($op) }
+        elsif ($op eq 'fstp' && @a == 1 && $a[0] =~ /^%st(?:\((\d)\))?$/) { push @code, ($1 // 0) == 0 ? node('fstp.st0') : node('fstp', node("st$1")) }
+        else { stop("the x87 asm instruction $l", $n) }
+    }
+    push @code, node('fstp' . $sz->(0) . '.m', node(0), node($regs->[$#order]));
+    push @code, node('fstp.st0') if defined $u && $clob !~ /"st\(1\)"/;
+    (my $name = "__asm_$template") =~ s/[^A-Za-z0-9]+/_/g;
+    $name .= '_' . join('', map { s/[^A-Za-z0-9]//gr } @$oc) . '_' . join('', map { s/[^A-Za-z0-9]//gr } @$ic) . '_' . join('', map { $sz->($_) } @order);
+    $name = asm_once($name, "$template : @$oc : @$ic : " . join('', map { $sz->($_) } @order), $n);
+    push @out, [$cur_unit, node("$name:", node('asm'), node('comment', node("glibc's asm statement \"$template\" of the x87")), @code, node('ret'))]
+        unless $asmfn{$name}++;
+    node($name, map { node('address', atom($ops->[$_])) } @order);
+}
+
 sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
@@ -1678,8 +1745,9 @@ sub expr {
         # exactly: ttpc has no conversion to run there, libm's zero = 0.0)
         my $e = strip((kids($n))[0]);
         if ($in_global && defined(my $lit = special_float((kids($n))[0], $n))) { return node($lit) }
-        if ($in_global && isld($n) && $e->{kind} eq 'FloatingLiteral' && (my $t = tword($e)) =~ /^(float|double)$/) {
-            return node($target eq 'arm' || $t eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : ldround($e->{value}, 24, -149, 127));
+        if ($in_global && (isld($n) || tword($n) eq 'float128') && $e->{kind} eq 'FloatingLiteral' && (my $t = tword($e)) =~ /^(float|double)$/) {
+            my $l = $target eq 'arm' || $t eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : ldround($e->{value}, 24, -149, 127);
+            return node(tword($n) eq 'float128' ? $l =~ s/L$/Q/r : $l);
         }
         if ($in_global && defined(my $lit = narrowlit($n, $e))) { return node($lit) }
         return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
@@ -1690,7 +1758,7 @@ sub expr {
     # double, converts
     if ($k =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($n->{castKind} // '') =~ /^(Integral|Pointer|Floating)ToBoolean$/) {
         my ($e) = kids($n);
-        my $zero = $1 ne 'Floating' ? 0 : isld($e) ? ldhexfloat('0') : hexfloat(0, qt($e));
+        my $zero = $1 ne 'Floating' ? 0 : isld($e) ? ldhexfloat('0') : tword($e) eq 'float128' ? '0x0p+0Q' : hexfloat(0, qt($e));
         return node(':', operand($e, $prec{'!='}, 0), node('!='), node($zero));
     }
     return expr((kids($n))[0]) if $k =~ /^(ImplicitCastExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/;
@@ -1720,6 +1788,8 @@ sub expr {
     # a long double literal: its exact hex float, with C's L (binary128,
     # rounded from clang's decimal as C rounds it)
     return node(ldhexfloat($n->{value})) if $k eq 'FloatingLiteral' && isld($n);
+    # (x86_64's _Float128 literal, clang's Q: binary128's exact hex float with Q)
+    return node(ldround($n->{value}, 113, -16494, 16383) =~ s/L$/Q/r) if $k eq 'FloatingLiteral' && tword($n) eq 'float128';
     return node(hexfloat($n->{value}, qt($n))) if $k eq 'FloatingLiteral';
     return wide_text($n) if $k eq 'StringLiteral' && $n->{value} =~ /^(L|u|U)"/;
     return string_value($n) if $k eq 'StringLiteral';
@@ -1932,10 +2002,13 @@ sub expr {
         # and the other way: a libm function gcc always expands, as its
         # builtin (s_scalbn's copysign, which libc.a has no function of)
         $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
-        # (x86_64's _Float128 builtins and copysignf128 / fabsf128: ttpc's
-        # long double is binary128, _Float128 is long double in ff)
-        $name =~ s/^(?:__builtin_)?(copysign|fabs)f128$/__builtin_$1l/;
-        $name =~ s/^(__builtin_(?:huge_val|inf|nan|nans|signbit))f128$/$1l/;
+        # (x86_64's _Float128 builtins and copysignf128 / fabsf128: there
+        # float128's, builtins.ff.txt's binary128 ones as x87builtins.pl names
+        # them, __builtin_fabsf128 ...; elsewhere _Float128 is long double,
+        # binary128, and they are the l ones)
+        $name =~ s/^(?:__builtin_)?(copysign|fabs)f128$/__builtin_$1f128/;
+        $name =~ s/^(__builtin_(?:huge_val|inf|nan|nans|signbit))f128$/$1f128/;
+        $name =~ s/f128$/l/ if $target ne 'x86_64' && $name =~ /^__builtin_(?:copysign|fabs|huge_val|inf|nan|nans|signbit)f128$/;
         # gcc's alloca: ttpc's, C on the shared page, which the function gives
         # back when it returns
         return node('alloca', map { arg($_) } @args) if $name eq '__builtin_alloca';
@@ -1954,7 +2027,7 @@ sub expr {
         # of the three types; fpclassify's type is its last argument's)
         if ($name =~ /^__builtin_(isnan|isinf_sign|isinf|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
-            $t =~ /^(float|double|long double)$/ or stop("$name on $t", $n);
+            $t =~ /^(float|double|long double|float128)$/ or stop("$name on $t", $n);
             return node("$name $t", map { arg($_) } @args);
         }
         # C's va_ words, as clang has them
@@ -2204,6 +2277,8 @@ sub ldhexfloat {
         my $d = ldround($s, 53, -1074, 1023);
         return defined $d ? $d : die "c2ff: a long double literal past a double: $s\n";
     }
+    # (x86_64: the x87's 64 bits, written as binary128's hex float, exact)
+    return ldround($s, 64, -16445, 16383) // die "c2ff: a long double literal past the largest: $s\n" if $target eq 'x86_64';
     ldround($s, 113, -16494, 16383) // die "c2ff: a long double literal past the largest: $s\n";
 }
 # (ldround, ratq, qlit: FFold.pm's)
@@ -2214,7 +2289,7 @@ sub ldhexfloat {
 # __trunctfdf2, which compile time has no code of)
 sub narrowlit {
     my ($n, $e) = @_;
-    return undef unless $e->{kind} eq 'FloatingLiteral' && isld($e) && $target ne 'arm';
+    return undef unless $e->{kind} eq 'FloatingLiteral' && (isld($e) || tword($e) eq 'float128') && $target ne 'arm';
     my $to = tword($n);
     my $l = $to eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : $to eq 'float' ? ldround($e->{value}, 24, -149, 127) : undef;
     return undef unless defined $l;
@@ -2375,7 +2450,7 @@ sub special_float {
         return if ($str->{kind} // '') ne 'StringLiteral' || ($str->{value} // '') ne '""';
     } else { return if @args }
     my $w = tword($t);
-    my $e = $w eq 'float' ? '128f' : $w eq 'double' ? '1024' : $w eq 'long double' ? '16384L' : return;
+    my $e = $w eq 'float' ? '128f' : $w eq 'double' ? '1024' : $w eq 'long double' ? '16384L' : $w eq 'float128' ? '16384Q' : return;
     $nan ? "0x1.8p+$e" : "0x1p+$e";
 }
 sub bare_string {

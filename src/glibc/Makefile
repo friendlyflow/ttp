@@ -39,6 +39,10 @@
 # of their own (milestone ldouble). The other targets build next to
 # riscv64's, in a folder of their name.
 GTARGET ?= riscv64
+# The builtins written by hand (builtins.ff.txt), as x86_64 has them where
+# long double is the x87's (x87builtins.pl: binary128's are float128's)
+X87B := $(if $(filter x86_64,$(GTARGET)),x87builtins.pl)
+BUILTINS = $(if $(X87B),perl x87builtins.pl builtins.ff.txt,cat builtins.ff.txt)
 # libatomic's functions: the target's real ones where it has them (mkatomics.pl)
 ATOMICS = $(firstword $(wildcard atomics-$(GTARGET).ff.txt) atomics.ff.txt)
 # arm is 32-bit armv7-a with hard-float EABI: gcc's triple and clang's
@@ -138,9 +142,8 @@ endif
 SHARED := ../compiler/shared.ff $(if $(filter x86_64,$(GTARGET)),../compiler/x86_64gnu.ff)
 
 # Per target: the CPUs a check runs on (riscv64 with V and without), and
-# the flags of a test program. On x86_64 long double is the x87's, so the
-# programs are compiled with -mlong-double-128: binary128, as ttpc's long
-# double is on every target, its arithmetic soft-fp's (__addtf3 ...).
+# the flags of a test program (gcc's defaults: x86_64's long double is the
+# x87's, as ttpc's there, gen/patches/x87.pl).
 comma := ,
 CPUS_riscv64 := rv64 rv64,v=false
 # aarch64: SVE and MOPS (max), the same without SVE, none of them
@@ -154,7 +157,6 @@ CPUS_x86_64 := max Nehalem qemu64
 # arm: armv7-a with NEON and VFPv4 at their newest (max) and a Cortex-A15
 CPUS_arm := max cortex-a15
 CPUS := $(CPUS_$(GTARGET))
-PROGFLAGS_x86_64 := -mlong-double-128
 PROGFLAGS := $(PROGFLAGS_$(GTARGET))
 # Every heavy step (mki.pl, clang, c2ff, gcc, ttpc, qemu) runs as RUN -t
 # SECONDS command: in one of the machine's shared slots (slot.sh), under a
@@ -196,13 +198,16 @@ ROOTS_stdlib := $(ROOTS_string) $(M2)
 # progs/ldouble.c needs nothing else of glibc.
 SOFTFP := addtf3 subtf3 multf3 divtf3 eqtf2 getf2 letf2 negtf2 floatditf floatunditf fixtfdi fixunstfdi \
 	extendsftf2 extenddftf2 trunctfsf2 trunctfdf2
-# x86_64's soft-fp raises its exceptions through a function of libm's
-OBJS_ldouble_x86_64 := math/sfp-exceptions
+# x86_64's soft-fp raises its exceptions through a function of libm's; its
+# long double is the x87's, whose arithmetic is ttpc's own, the soft-fp
+# there for float128 (_Float128), and from it to long double __trunctfxf2
+OBJS_ldouble_x86_64 := math/sfp-exceptions soft-fp/trunctfxf2
 # (arm's long double is double, by its EABI: no soft-fp)
 OBJS_ldouble := $(if $(filter arm,$(GTARGET)),,$(SOFTFP:%=soft-fp/%)) $(OBJS_ldouble_$(GTARGET))
 ASMS_ldouble :=
 ROOTS_ldouble := __addtf3 __subtf3 __multf3 __divtf3 __eqtf2 __netf2 __getf2 __gttf2 __letf2 __lttf2 __negtf2 \
-	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2
+	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2 $(ROOTS_ldouble_$(GTARGET))
+ROOTS_ldouble_x86_64 := __trunctfxf2
 
 # M3, malloc: malloc, free, realloc and calloc, with M2, and qsort, which
 # was waiting for them.
@@ -270,12 +275,10 @@ WEAKS_stdio := __init_array_start __init_array_end __preinit_array_start __prein
 
 # M4, floats: printf of double and long double (printf_fp, printf_fphex),
 # which the stdio reach has already, and the soft-fp the program calls for
-# its own long double (on x86_64 also strfromf128, glibc's printf_fp of
-# binary128: progs/floats.c)
+# its own long double
 OBJS_floats := $(OBJS_stdio)
 ASMS_floats := $(ASMS_stdio)
-ROOTS_floats_x86_64 := strfromf128
-ROOTS_floats := $(ROOTS_stdio) $(ROOTS_ldouble) $(ROOTS_floats_$(GTARGET))
+ROOTS_floats := $(ROOTS_stdio) $(ROOTS_ldouble)
 ZEROS_floats := $(ZEROS_stdio)
 WEAKS_floats := $(WEAKS_stdio)
 
@@ -482,12 +485,11 @@ codesec = $(if $(filter x86_64,$(GTARGET)),$$($(XPRE)objdump -h $(1) | awk '$$2 
 # template (v under AVX, nothing here: glibc is not built for AVX) and the
 # mode __libgcc_cmp_return__ (8 bytes there, as gcc says: DI); the f128 or
 # F128 suffix of a _Float128 literal (after a digit, or a digit and a
-# point: u.f128 is a field), which clang lacks (L: binary128 here
-# too); and gcc's _FloatN as associations of a _Generic, besides float,
+# point: u.f128 is a field), which clang lacks (its Q, __float128's); and gcc's _FloatN as associations of a _Generic, besides float,
 # double and long double, which for clang are those again (clang-prelude.h):
 # other types there, which no float matches.
 CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mode (__DI__               )/g' \
-	-e 's/\([0-9]\.\?\)[fF]128\b/\1L   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
+	-e 's/\([0-9]\.\?\)[fF]128\b/\1Q   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
 	-e 's/_Float32x:/_Bool    :/g' -e 's/_Float64x:/unsigned :/g'
 CLANGFIX := $(CLANGFIX_$(GTARGET))
 # (x86_64's units of gcc's SSE4.2 intrinsics, <nmmintrin.h>: clang reads
@@ -519,7 +521,7 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
-$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
+$$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
 	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
 	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS_$(1)) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
@@ -532,7 +534,7 @@ $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).asm.page.txt; \
 	done
 	$$(if $$(ASMS_all_$(1)),$$(LAYERS) $$(FF)/$(1).asm.page.txt >> $$(FF)/$(1).ff.txt)
-	cat builtins.ff.txt stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) >> $$(FF)/$(1).ff.txt
+	{ $$(BUILTINS); cat stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS); } >> $$(FF)/$(1).ff.txt
 	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
 endef
 $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
@@ -774,9 +776,9 @@ cparse-check:
 # __builtin_stdc_*, stdbit.ff.txt's) on each unsigned type, against plain
 # counts of the bits, on every target (arm too: stdbit-check).
 OWNSTART := generic stdbit
-$(FF)/generic.ff $(FF)/stdbit.ff: $(FF)/%.ff: builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
+$(FF)/generic.ff $(FF)/stdbit.ff: $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
 	mkdir -p $(FF)
-	cat license.ff.txt builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) > $(FF)/$*.ff.txt
+	{ cat license.ff.txt; $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } > $(FF)/$*.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*.ff.txt > $@
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
@@ -930,7 +932,7 @@ $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THE
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
+$(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
 	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
 	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
@@ -943,7 +945,7 @@ $(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt s
 	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
-	cat builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) >> $(FF)/glibc.ff.txt
+	{ $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } >> $(FF)/glibc.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@
 
 # the list of a kind of object, for a look at it: make print-ALL_ASM
@@ -1010,7 +1012,7 @@ $(FF)/libgcc.roots $(FF)/libgcc.units &: $(LIBGCC_C:%=$(LI)/%.json) $(LIBGCC_ASM
 	for o in $(LIBGCC_C); do $(XPRE)nm --defined-only -g $(LOBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done | sort -u > $(FF)/libgcc.roots
 	for o in $(LIBGCC_C); do echo "$(LI)/$$o.json=$(LI)/$$o.i"; done > $(FF)/libgcc.units
 
-$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
 	cp ../libgcc/license.ff.txt $(FF)/libgcc.ff.txt
 	$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --keep-going --page gcc --target $(GTARGET) @$(FF)/libgcc.units -- @$(FF)/libgcc.roots \
 	    >> $(FF)/libgcc.ff.txt 2> $(FF)/libgcc.c2ff.err || { tail -5 $(FF)/libgcc.c2ff.err; exit 1; }
@@ -1021,7 +1023,7 @@ $(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units builtins.ff.txt stdbit.ff
 	    sed 's/^/  /' $(FF)/libgcc.asm.txt >> $(FF)/libgcc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/libgcc.asm.page.txt >> $(FF)/libgcc.ff.txt
-	cat builtins.ff.txt stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) >> $(FF)/libgcc.ff.txt
+	{ $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } >> $(FF)/libgcc.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/libgcc.ff.txt > $@
 	@echo "libgcc.ff: $$(grep -c '^c2ff: left out' $(FF)/libgcc.c2ff.err) names left out, why in $(FF)/libgcc.c2ff.err"
 

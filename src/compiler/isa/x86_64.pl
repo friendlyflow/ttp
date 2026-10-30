@@ -574,6 +574,26 @@ for my $t (["ldmxcsr", [0x0f, 0xae], 2], ["stmxcsr", [0x0f, 0xae], 3],
     }
 }
 form("fwait", [], "fwait", bytes(0x9b));
+# the x87, for long double (gcc's 80-bit extended format: macros/x86_64.ff.txt's
+# cc_*_dm): loads and stores of the extended, double and single formats and
+# of 64-bit integers, the control word; on the stack the operations of st1
+# and st0 that pop it (st1 = st1 op st0, Intel's faddp st1 st0 ...: GNU as
+# names the subtraction and the division the other way), the comparison of
+# st0 with st1 that pops (fucomip) and the pop alone (fstp st0)
+for my $t (["fldt", [0xdb], 5], ["fstpt", [0xdb], 7], ["fldl", [0xdd], 0], ["fstpl", [0xdd], 3],
+           ["flds", [0xd9], 0], ["fstps", [0xd9], 3], ["fildll", [0xdf], 5], ["fistpll", [0xdf], 7],
+           ["fnstcw", [0xd9], 7], ["fldcw", [0xd9], 5]) {
+    my ($nm, $opc, $digit) = @$t;
+    for my $m (qw(m x)) {
+        form("$nm.$m", [mp($m)], pf($m) . " $nm " . mg($m), modrm_body([], 0, $opc, $digit, $m));
+    }
+}
+for my $t (["faddp.st1", "faddp %st, %st(1)", 0xde, 0xc1], ["fmulp.st1", "fmulp %st, %st(1)", 0xde, 0xc9],
+           ["fsubp.st1", "fsubrp %st, %st(1)", 0xde, 0xe9], ["fdivp.st1", "fdivrp %st, %st(1)", 0xde, 0xf9],
+           ["fucomip.st1", "fucomip %st(1), %st", 0xdf, 0xe9], ["fstp.st0", "fstp %st(0)", 0xdd, 0xd8]) {
+    my ($nm, $gnu, @op) = @$t;
+    form($nm, [], $gnu, bytes(@op));
+}
 form("int.i", ["imm:u8"], "int \$<imm>", bytes(0xcd), imm(1));
 for my $s (qw(w l)) {
     my $z = $SZ{$s};
