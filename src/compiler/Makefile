@@ -280,7 +280,8 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # named * pointer, cmisplaced, with compile time on a while, cuntyped, a global declaration
 # without a type, citems, several items on a long, cchartext, text in a
 # char, ctypeout, type outside compile time, and cbelow, a local used
-# above its declaration; cvecx64, x86_64's vector test, stops riscv64's
+# above its declaration, cargfew and cargmany, calls with fewer and
+# more arguments than parameters (on every target); cvecx64, x86_64's vector test, stops riscv64's
 # ttpc (vectors are x86_64's alone).
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
@@ -306,6 +307,9 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -q "type goes only in compile time: type$$" $(P)/ctypeout.err
 	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cbelow.ff $(P)/cbelow.celf 2> $(P)/cbelow.err
 	grep -q "used before it is declared: x$$" $(P)/cbelow.err
+	for t in riscv64 $(TARGETS); do for p in cargfew:add cargmany:one; do \
+	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/$${p%:*}.ff $(P)/$${p%:*}.$$t.celf 2> $(P)/$${p%:*}.$$t.err || exit 1; \
+	    grep -q "wrong number of arguments: $${p#*:}$$" $(P)/$${p%:*}.$$t.err || exit 1; done; done
 	@echo "ctime: compile time runs and stays out of the program"
 
 # Build files. progs/cws.ff is one, run as ttpc progs/cws.ff with nothing
