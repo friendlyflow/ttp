@@ -854,6 +854,20 @@ cparse-check:
 	    $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))
 .PHONY: cparse-check
 
+# ---- the types and semantics of C in ff (T3b) -------------------------------
+# ../compiler/tools/csema (its library tools/csem.ff), checked against clang
+# by ../compiler/gen/csemacheck.sh: every unit of the milestones of this
+# build (I, but libgcc's, which clang reads through clangfix.pl) and each
+# milestone program's .i, csema's lines (types, value categories, implicit
+# casts, folded constants, layouts) clang's (clangsema.pl), unit by unit.
+CSUNITS = $(sort $(filter-out $(I)/libgcc/% %.clang.i,$(wildcard $(I)/*/*.i)) $(wildcard $(FF)/*-prog.i))
+CSCLANG = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -Xclang -fdump-record-layouts -fsyntax-only \
+	--target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
+csema-check:
+	@echo "csema-check: $(words $(CSUNITS)) units of $(BUILD)"
+	@CLANG="$(CSCLANG)" $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema $(CSUNITS)
+.PHONY: csema-check
+
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
 # in for all of glibc (a path from an expression, a call through a comma's

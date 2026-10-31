@@ -848,6 +848,16 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # gen/cparsecheck.sh checks them: a unit parsed, printed and compiled by gcc
 # must be the code of the .i itself; tools-check on src/glibc/progs' C on
 # each target, src/glibc's cparse-check on every unit of a glibc build.
+# The types and semantics of C (T3b): tools/csem.ff (CSLIB: the type of
+# every declaration and expression, the conversions and implicit casts as
+# clang's kinds, decay, lvalues, sizeof and alignof, struct and union layout
+# per target ABI, integer constant expressions folded, initializers in their
+# semantic form) on cparse's tree, and tools/csema.ff (the annotated tree, or
+# with -d its lines). gen/csemacheck.sh checks it against clang: its JSON AST
+# and record layouts (gen/clangsema.pl) line for line (gen/csemacmp.pl);
+# tools-check on src/glibc/progs' and progs/abi's C (riscv64's semantics,
+# each target's build the same lines), src/glibc's csema-check on every unit
+# of the riscv64 milestones.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -855,7 +865,8 @@ TOOLFLAGS := -O
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff tools/files.ff
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint
+CSLIB := tools/csem.ff
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -876,6 +887,13 @@ $(TL)/cparse/in/%.i: %.c
 	$(CPCC) -E $< -o $@
 $(CPREF)/result: $(CPUNITS) $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint gen/cparsecheck.sh
 	sh gen/cparsecheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint $(CPCC) $(CPREF) $(CPUNITS) || { rm -f $@; exit 1; }
+# csema on the same units against clang (riscv64's semantics; clang from
+# nix develop): this machine's build first, every target's the same lines
+CSREF := $(TL)/csema/ref
+CSCLANG = $(C2FF_CLANG) -x c -include ../glibc/clang-prelude.h -Xclang -ast-dump=json -Xclang -fdump-record-layouts -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w
+$(CSREF)/result: $(CPUNITS) $(TL)/$(TOOLT)/csema gen/csemacheck.sh gen/clangsema.pl gen/csemacmp.pl
+	@test -n "$(C2FF_CLANG)" || { echo "csema's check needs clang: run it in nix develop"; exit 1; }
+	KEEP=1 CLANG="$(CSCLANG)" sh gen/csemacheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/csema $(CSREF) $(CPUNITS) || { rm -f $@; exit 1; }
 
 define tooltarget
 $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
@@ -893,7 +911,12 @@ $(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
-tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result
+$(TL)/$(1)/csema: tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $(CSLIB) $$< $$@ > $$@.lst
+	chmod +x $$@
+
+tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/result
 	cd $(SHAV) && $(RUN_$(1)) $(abspath $(TL))/$(1)/sha256sum $(SHAVFILES) > ../$(1).sha
 	cmp $(TL)/$(1).sha $(SHAV)/want
 	@echo "tools-check-$(1): sha256 agrees with NIST's vectors and Digest::SHA"
@@ -986,6 +1009,7 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result
 	same empty.ff o.ff t.ff; same none.ff o.ff t.ff; same empty.ff o.ff t2.ff; same base.ff o.ff o.ff; same o.ff o.ff o.ff; same base.ff none.ff t.ff
 	@echo "tools-check-$(1): ffmerge agrees with ffmerge.sh on clean merges, conflicts, a merged text that is not a tree, inputs that are not trees, an empty or missing base and the same tree on both sides"
 	sh gen/cparsecheck.sh -r "$(RUN_$(1))" -w $(CPREF) $(TL)/$(1)/cparse $(TL)/$(1)/cprint $(CPCC) $(TL)/cparse/$(1) $(CPUNITS)
+	CLANG="$(CSCLANG)" sh gen/csemacheck.sh -r "$(RUN_$(1))" -w $(CSREF) $(TL)/$(1)/csema $(TL)/csema/$(1) $(CPUNITS)
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
