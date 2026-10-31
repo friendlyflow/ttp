@@ -6,10 +6,13 @@
 # (N = 1..3), held with flock while the command runs; the first free one is
 # taken, and when none is free it waits for one.
 #
-#   sh slot.sh [-v KB] [-t SECONDS] CMD ARG...
+#   sh slot.sh [-n] [-v KB] [-t SECONDS] CMD ARG...
 #
 # -v caps the command's memory (ulimit -v, in KB: 4000000 for most, 8000000
-# for qemu-arm), -t its time (timeout). A command that is already in a slot
+# for qemu-arm), -t its time (timeout). -n runs a small command (a tenth of
+# a second, little memory: ttpc on one asm part) under those caps but in no
+# slot: on 2026-10-31 asm-check's 368 x86_64 parts waited 5419 s of their
+# step's 6107 s for slots the long steps held, to run 0.1 s each. A command that is already in a slot
 # (TTP_SLOT set, as slot.sh sets it for what it runs) takes no second one.
 # TTP_SLOTS (the folder) and TTP_NSLOTS (3) change the slots. With
 # TTP_SLOTLOG set, each command that takes a slot adds a line to that file:
@@ -31,16 +34,17 @@ if test "$depth" -gt "${TTP_MAXDEPTH:-8}"; then
     exit 3
 fi
 TTP_DEPTH=$depth; export TTP_DEPTH
-mem= secs=
+mem= secs= noslot=
 while test $# -gt 0; do
     case $1 in
         -v) mem=$2; shift 2 ;;
         -t) secs=$2; shift 2 ;;
+        -n) noslot=1; shift ;;
         --) shift; break ;;
         *) break ;;
     esac
 done
-test $# -gt 0 || { echo "usage: slot.sh [-v KB] [-t SECONDS] CMD ARG..." >&2; exit 2; }
+test $# -gt 0 || { echo "usage: slot.sh [-n] [-v KB] [-t SECONDS] CMD ARG..." >&2; exit 2; }
 
 # A timed command runs in a session of its own (setsid); when it ends, at its
 # timeout or not, what is left of that session is killed. A process group is
@@ -77,6 +81,7 @@ scoped() {
 }
 
 test -n "${TTP_SLOT:-}" && run "$@"
+test -n "$noslot" && run "$@"
 
 dir=${TTP_SLOTS:-$HOME/.cache/ttp}
 n=${TTP_NSLOTS:-3}
