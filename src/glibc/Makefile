@@ -838,7 +838,7 @@ ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
 ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
 # (and long double's soft-fp, as the ldouble milestone has it: libgcc's on
 # a gcc build, glibc's own code, which ttpc's long double calls)
-ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES))) $(SOFTFP:%=soft-fp/%)
+ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES))) $(SOFTFP:%=soft-fp/%) $(filter soft-fp/%,$(OBJS_ldouble_$(GTARGET)))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 # crt1.o's parts, crti.o and crtn.o, which a program links before libc.a:
 # their definitions are the ones of a name libc.a defines too
