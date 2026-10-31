@@ -58,7 +58,7 @@ use FF qw(node write_txt);
 
 my $page = 'glibc asm';
 my @files;
-my ($size, $items, $locals, $skipopt, @then, %zeroed);
+my ($size, $items, $locals, $skipopt, $facts, @then, %zeroed);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -66,6 +66,8 @@ while (@ARGV) {
     if ($a eq '--items') { $items = 1; next }
     if ($a eq '--locals') { $locals = 1; next }
     if ($a eq '--skip') { $skipopt = 1; next }
+    # (--facts FILE: the ff, and in FILE what --size and --skip print)
+    if ($a eq '--facts') { $facts = shift @ARGV; next }
     if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     if ($a eq '--zero') { $zeroed{ shift @ARGV } = 1; next }
     push @files, $a;
@@ -234,6 +236,7 @@ my $skip = 0;
 while (@made && $made[0]{op} eq 'hint' && $made[0]{args} eq '#0x0' && !$sym{'.text'}{ $made[0]{addr} }) { shift @made; $skip += 4 }
 if ($size) { print 4 * @made, "\n"; exit }
 if ($skipopt) { print "$skip\n"; exit }
+if (defined $facts) { open my $h, ">", $facts or die "s2ff: cannot write $facts: $!\n"; print $h "size ", 4 * @made, "\nskip $skip\n" }
 push @made, grep { $_->{sec} ne '.text' } @all;
 
 # ---- the source: where each label is, its aliases, its other sections ---------

@@ -707,7 +707,11 @@ asm-check:
 # s2ff-aarch64.pl aarch64's (from the .Ls: SSRC), s2ff-arm.pl arm's
 # (S2FF). On aarch64 the bytes start after the padding before the first
 # label (s2ff-aarch64.pl --skip: strncmp's nops), and the .s must make
-# glibc's own object (the same .text).
+# glibc's own object (the same .text). s2ff reads each .s once (--facts:
+# its size, and x86_64's alignment, aarch64's padding), and ttpc's run of one
+# part, a tenth of a second, waits for no slot (slot.sh -n): on 2026-10-31
+# x86_64's 368 parts waited 5419 s of 6107 s for slots, and read each .s
+# three times.
 ASMTRAP_riscv64 := ebreak
 ASMHDR_riscv64 := 120
 ASMTRAP_aarch64 := brk\n    0
@@ -724,13 +728,13 @@ ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
 S2FFDEPS_x86_64 := ../compiler/gen/s2ffx86.pm ../compiler/isa/x86_64.pl ../compiler/isa/x86_64gnu.pl
 $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(S2FFDEPS_$(GTARGET)) $(SHARED) $(TTPC)
 	@rm -f $@; a=$(I)/$*; \
-	{ perl $(S2FF) $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
+	{ perl $(S2FF) --facts $$a.facts $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
-	$(RUN) -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
-	size=$$(perl $(S2FF) --size $$a$(SSRC) $$a.dump) || exit 1; \
-	skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $$a$(SSRC) $$a.dump) || exit 1,0); \
-	hdr=$(if $(filter x86_64,$(GTARGET)),$$(perl $(S2FF) --align $$a$(SSRC) $$a.dump | awk '{ print int(($(ASMHDR) + $$1 - 1) / $$1) * $$1 }') || exit 1,$(ASMHDR)); \
+	$(RUN) -n -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
+	size=$$(sed -n 's/^size //p' $$a.facts); test -n "$$size" || exit 1; \
+	skip=$(if $(filter aarch64,$(GTARGET)),$$(sed -n 's/^skip //p' $$a.facts),0); \
+	hdr=$(if $(filter x86_64,$(GTARGET)),$$(sed -n 's/^align //p' $$a.facts | awk '{ print int(($(ASMHDR) + $$1 - 1) / $$1) * $$1 }'),$(ASMHDR)); \
 	sec=$(call codesec,$$a.ref.o); \
 	$(if $(filter aarch64 x86_64,$(GTARGET)),$(XPRE)objcopy -O binary -j $$sec $(if $(filter libgcc/%,$*),$(LOBJ)/$(patsubst libgcc/%,%,$*),$(OBJ)/$*).o $$a.glibc.bin && \
 	    cmp -s $$a.glibc.bin $$a.bin || { echo "asm-check: $*: the .s does not make glibc's object"; exit 1; };) \
@@ -888,6 +892,20 @@ $(foreach m,$(MILESTONES),$(eval $(call licenses,$(m))))
 glibc-licenses: licenses $(MILESTONES:%=%-licenses)
 .PHONY: licenses glibc-licenses
 
+# ---- the C parser in ff (T3a) -----------------------------------------------
+# ../compiler/tools/cparse and cprint (their library tools/c.ff), checked by
+# ../compiler/gen/cparsecheck.sh: every unit of this build (I) and each
+# milestone program's .i parsed into its ff tree, the tree written back as C
+# and compiled by gcc as the .i is: the same code, unit by unit. The tools
+# are this machine's build of the compiler's (make compiler-check makes them).
+CPTOOLS ?= ../../build/compiler/tools/$(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
+CPRUN := $(if $(filter x86_64,$(shell uname -m)),,qemu-riscv64)
+cparse-check:
+	@echo "cparse-check: $(words $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))) units of $(BUILD)"
+	@$(RUN) -t 3600 sh ../compiler/gen/cparsecheck.sh -r "$(CPRUN)" $(CPTOOLS)/cparse $(CPTOOLS)/cprint $(GLIBC_CC) $(BUILD)/cparse \
+	    $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))
+.PHONY: cparse-check
+
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
 # in for all of glibc (a path from an expression, a call through a comma's
@@ -907,7 +925,7 @@ $(FF)/generic.ff $(FF)/stdbit.ff: $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*.ff.txt > $@
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
-GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
+GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
 	$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names

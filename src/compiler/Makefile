@@ -50,7 +50,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -378,7 +378,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld
+CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # x86_64's long double is the x87's (gen/patches/x87.pl): the tests of
@@ -842,19 +842,40 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # gen/ISA.pm and isa/<target>.pl, the second implementation) and compares.
 # mkff runs after stage2 exists (it builds it): the chain reads the
 # committed shared.ff and never makes it.
+# The C parser (T3a, so that clang can go): tools/c.ff (CLIB: a lexer and a
+# parser of GNU C as gcc -E leaves it, its parse tree an ff tree of its own,
+# and a printer of such a tree as C), tools/cparse.ff and tools/cprint.ff.
+# gen/cparsecheck.sh checks them: a unit parsed, printed and compiled by gcc
+# must be the code of the .i itself; tools-check on src/glibc/progs' C on
+# each target, src/glibc's cparse-check on every unit of a glibc build.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
 TOOLFLAGS := -O
 TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.ff tools/files.ff
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge
+CLIB := tools/c.ff
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
 TOOLTARGETS := $(if $(CAN_RISCV),riscv64) $(RUNNABLE)
 SHAV := $(TL)/vectors
 SHAVFILES := abc empty m448 m896 million $(foreach n,0 1 55 56 63 64 65 119 120 127 128 1000 65536 65537,r$(n))
+
+# The C parser's inputs in tools-check: the C of src/glibc/progs and
+# progs/abi, preprocessed by the host's gcc (CPCC); this machine's build of
+# the tools (CT) makes the trees and the C that each target's must be.
+CPCC ?= cc
+CPSRC := $(wildcard ../glibc/progs/*.c progs/abi/*.c)
+CPUNITS := $(addprefix $(TL)/cparse/in/,$(notdir $(CPSRC:.c=.i)))
+CPREF := $(TL)/cparse/ref
+vpath %.c ../glibc/progs progs/abi
+$(TL)/cparse/in/%.i: %.c
+	@mkdir -p $(dir $@)
+	$(CPCC) -E $< -o $@
+$(CPREF)/result: $(CPUNITS) $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint gen/cparsecheck.sh
+	sh gen/cparsecheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint $(CPCC) $(CPREF) $(CPUNITS) || { rm -f $@; exit 1; }
 
 define tooltarget
 $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
@@ -867,7 +888,12 @@ $(TL)/$(1)/mkff: tools/mkff.ff $(TOOLLIB) $(MKFFLIB) $(SHARED) $(BOOT)/stage2
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(MKFFLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
-tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
+$(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $$< $$@ > $$@.lst
+	chmod +x $$@
+
+tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result
 	cd $(SHAV) && $(RUN_$(1)) $(abspath $(TL))/$(1)/sha256sum $(SHAVFILES) > ../$(1).sha
 	cmp $(TL)/$(1).sha $(SHAV)/want
 	@echo "tools-check-$(1): sha256 agrees with NIST's vectors and Digest::SHA"
@@ -959,6 +985,7 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want
 	same base.ff bad.ff t.ff; same bad.ff o.ff t.ff; same base.ff o.ff cut.ff; same base.ff root.ff t.ff; \
 	same empty.ff o.ff t.ff; same none.ff o.ff t.ff; same empty.ff o.ff t2.ff; same base.ff o.ff o.ff; same o.ff o.ff o.ff; same base.ff none.ff t.ff
 	@echo "tools-check-$(1): ffmerge agrees with ffmerge.sh on clean merges, conflicts, a merged text that is not a tree, inputs that are not trees, an empty or missing base and the same tree on both sides"
+	sh gen/cparsecheck.sh -r "$(RUN_$(1))" -w $(CPREF) $(TL)/$(1)/cparse $(TL)/$(1)/cprint $(CPCC) $(TL)/cparse/$(1) $(CPUNITS)
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 

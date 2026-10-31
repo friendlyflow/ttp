@@ -81,6 +81,15 @@ arrlit (void)
          + ((unsigned long[3]) { 4, 5, 6 })[2];
 }
 
+/* a compound literal as an operator's operand, left or right (the
+   user's choice A: in a :) */
+static long
+arrlit_op (int *p)
+{
+  return *((int[2]) { 3, 4 } + 1) + ((int[1]) { 5 } != p) * 10
+         + (p != (int[1]) { 5 }) * 20;
+}
+
 /* tst-random's const int nseq = 3 and long rnd[nseq][nrnd]: a const
    global's number as an array's count (in C a VLA) */
 static const int rows = 3;
@@ -257,6 +266,7 @@ main (void)
   f += vla_size (7) != 27;
   f += label_attr (3) != 3 || label_attr (0) != 5;
   f += arrlit () != 8;
+  f += arrlit_op (0) != 34;
   f += const_counts () != 3 + 4 * (0 + 10 + 20) + 3 * (0 + 1 + 2 + 3);
   f += tag_names (0) != 0 || tag_names (1) != 36 + 7;
   f += LATER_A != -2 || LATER_C != 0 || later_p != 0;
