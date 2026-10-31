@@ -103,6 +103,19 @@ long double g_ld (void);
 long double g_varld (void);
 long long g_vard (void);
 #endif
+#ifdef __x86_64__
+/* the SysV ABI's x87 classes of a result (gcc's default long double, the
+   x87's): a struct of one long double in st0, as a long double; a complex
+   long double in st0 and st1 */
+typedef struct { long double x; } ld1;
+typedef _Complex long double cld;
+ld1 r_ld1 (long double a);
+cld r_cld (long double re, long double im);
+ld1 cb_ld1 (long double a);
+cld cb_cld (long double re, long double im);
+long double g_ld1 (void);
+long double g_cld (void);
+#endif
 #if defined __x86_64__ || defined __riscv
 /* the SysV ABI's own shapes (on riscv64: a double and a long, an int and a
    float in an fa and a general register, three fields as two words): a struct's eightbytes in a general and an xmm

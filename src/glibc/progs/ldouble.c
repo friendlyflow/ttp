@@ -88,5 +88,23 @@ main (void)
     s = s * 3 - s / 7;
   bits (s);
 
+#ifdef __x86_64__
+  /* x86_64's _Float128 beside its long double: soft-fp's binary128, and
+     the conversions both ways (long double from it by __trunctfxf2, to it
+     exact) */
+  {
+    volatile __float128 q = 1.0Q / 3, r = (__float128) s * q;
+    union { __float128 q; unsigned long w[2]; } u;
+    u.q = q;
+    mix (u.w[0]);
+    mix (u.w[1]);
+    u.q = r;
+    mix (u.w[0]);
+    mix (u.w[1]);
+    bits ((long double) q);
+    bits ((long double) r);
+    bits ((long double) (q * 1e4000Q));
+  }
+#endif
   return (int) ((h ^ (h >> 8) ^ (h >> 16) ^ (h >> 24) ^ (h >> 32) ^ (h >> 40) ^ (h >> 48) ^ (h >> 56)) & 255);
 }
