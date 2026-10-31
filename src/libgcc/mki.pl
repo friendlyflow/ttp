@@ -35,7 +35,9 @@ for my $l (split /\n/, $all) {
 my $bad = 0;
 for my $o (@want) {
     my $c = $cmd{$o} or do { warn "mki: no command for $o in $dir/build.log\n"; $bad = 1; next };
-    my $ext = $c =~ / -xassembler-with-cpp / ? 's' : 'i';
+    # (an asm source: -xassembler-with-cpp, or a .S that gcc knows by its
+    # name, aarch64's lse.S)
+    my $ext = $c =~ / -xassembler-with-cpp / || $c =~ / -c \S+\.S\b/ ? 's' : 'i';
     (my $i = "$out/$o") =~ s/\.o$/.$ext/;
     if ($dry) { print "$i\n"; next }
     make_path($out);

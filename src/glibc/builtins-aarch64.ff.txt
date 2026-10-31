@@ -38,3 +38,172 @@
     dmb
       11
     ret
+  comment
+    gcc's builtins of libgcc's unwinder (unwind-dw2.c), for ttpc's frames on aarch64. A C function's x29 holds its caller's x29 at x29 and its return address at x29 + 8, its CFA is x29 + 16 (ttpc -g's .eh_frame), and of the callee-saved
+    registers it keeps only x29 and x30 (ttpc's C uses no other: x19 ... x28 and d8 ... d15 are as its caller left them, what the unwinder takes of a register no frame saved).
+    __builtin_dwarf_cfa: the CFA of the function that calls it, its x29 + 16 (an asm function has no frame of its own: x29 is the caller's).
+  __builtin_dwarf_cfa:
+    asm
+    addi
+      16
+      x29
+      x0
+    ret
+  comment
+    __builtin_unwind_init: gcc saves every callee-saved register in the frame of the function that calls it, for uw_init_context_1 to find; a ttpc frame changes none but x29 and x30, which it saves always: nothing to do.
+  __builtin_unwind_init:
+    void
+  comment
+    __builtin_dwarf_sp_column, __builtin_eh_return_data_regno: DWARF's numbers of sp (31) and of the registers a landing pad takes the exception in (x0 ... x3, 0 ... 3), as gcc has them on aarch64; __builtin_frob_return_addr: the address itself.
+  __builtin_dwarf_sp_column:
+    int
+    return
+      31
+  __builtin_eh_return_data_regno:
+    int
+    n:
+      int
+    return
+      n
+      >=
+      0
+      &&
+      n
+      <
+      4
+      ?
+      n
+      :
+      -
+      1
+  __builtin_frob_return_addr:
+    void
+    * pointer
+    a:
+      void
+      * pointer
+    return
+      a
+  comment
+    __builtin_init_dwarf_reg_size_table: the bytes of each DWARF register as the unwinder saves it, as gcc fills the table on aarch64: x0 ... x30 and sp (0 ... 31), VG (46) and d8 ... d15 (72 ... 79) 8 bytes, and 96, the rest 0.
+  __builtin_init_dwarf_reg_size_table:
+    void
+    t:
+      u8
+      * pointer
+    comment
+      i is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    i:
+      int
+    for
+      i
+      =
+      0
+      i
+      <=
+      31
+      i
+      ++
+      t
+        i
+      =
+      8
+    t
+      46
+    =
+    8
+    for
+      i
+      =
+      72
+      i
+      <=
+      79
+      i
+      ++
+      t
+        i
+      =
+      8
+    t
+      96
+    =
+    8
+  comment
+    __builtin_eh_return: gcc's epilogue of a function that installs a context (_Unwind_RaiseException, _Unwind_ForcedUnwind ...): only a frame with a personality routine has one, and ttpc writes none (no LSDA); glibc's cancellation longjmps out of
+    its stop function. A gcc frame's landing pad (C++'s, lane A-cxx) takes the exception in x0 and x1 and its callee-saved registers from the frames between, which ttpc's frame does not keep yet: until then it stops here, as brk.
+  __builtin_eh_return:
+    asm
+    brk
+      1000
+  comment
+    The pointer authentication and guarded control stack builtins of libgcc's aarch64-unwind.h. __builtin_aarch64_autia1716 a s, __builtin_aarch64_autib1716 a s: a (x17) authenticated with the salt s (x16), key A or B (a hint: a CPU
+    without PAC leaves x17). __builtin_aarch64_chkfeat x: x (x16) with the bits of the features enabled cleared (GCS, 1). __builtin_aarch64_gcspr: the GCS pointer (mrs GCSPR_EL0, s3_3_c2_c5_1); __builtin_aarch64_gcspopm: a pop of the GCS.
+  __builtin_aarch64_autia1716:
+    asm
+    addi
+      0
+      x0
+      x17
+    addi
+      0
+      x1
+      x16
+    autia1716
+    addi
+      0
+      x17
+      x0
+    ret
+  __builtin_aarch64_autib1716:
+    asm
+    addi
+      0
+      x0
+      x17
+    addi
+      0
+      x1
+      x16
+    autib1716
+    addi
+      0
+      x17
+      x0
+    ret
+  __builtin_aarch64_chkfeat:
+    asm
+    addi
+      0
+      x0
+      x16
+    chkfeat
+    addi
+      0
+      x16
+      x0
+    ret
+  __builtin_aarch64_gcspr:
+    asm
+    mrs
+      55593
+      x0
+    ret
+  __builtin_aarch64_gcspopm:
+    asm
+    gcspopm
+      x0
+    ret
+  comment
+    gcc's __builtin___clear_cache b e: a call of libgcc's __aarch64_sync_cache_range, as gcc makes it on aarch64.
+  __builtin___clear_cache:
+    void
+    b:
+      void
+      * pointer
+    e:
+      void
+      * pointer
+    __aarch64_sync_cache_range
+      b
+      e
