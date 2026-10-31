@@ -1234,10 +1234,8 @@ $(FF)/gccrt.ff: $(FF)/libgcc.roots
 libgcc-roundtrip: gccrt-roundtrip
 libgcc-licenses: $(FF)/libgcc.ff $(FF)/libgcc/index.ff
 	$(LICENSES_PL) --pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff
-# (and its asm, as glibc's: ttpc makes each object's bytes, asm-check's way;
-# not yet x86_64's morestack.S, which ttpc stops in: a later step)
-LIBGCC_ASMSKIP_x86_64 := morestack
-LIBGCC_ASMCHECK = $(filter-out $(LIBGCC_ASMSKIP_$(GTARGET)),$(LIBGCC_ASM)) $(LIBGCC_ASMWEAK_$(GTARGET))
+# (and its asm, as glibc's: ttpc makes each object's bytes, asm-check's way)
+LIBGCC_ASMCHECK = $(LIBGCC_ASM) $(LIBGCC_ASMWEAK_$(GTARGET))
 libgcc-asm-check: $(LIBGCC_ASMCHECK:%=$(LI)/%.asmok)
 	@for a in $(LIBGCC_ASMCHECK); do cat $(LI)/$$a.asmok; done
 libgcc-checks: libgcc-roundtrip libgcc-licenses libgcc-asm-check
