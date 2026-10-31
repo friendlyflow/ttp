@@ -33,6 +33,7 @@ undef $text;
 # ---- types: clang's spelling parsed, typedefs resolved, printed again ----
 my @tdscope = ({});         # typedef names in scope: canonical types
 my %typeof;                 # a typeof (...) spelling and its type, per top-level declaration
+our @typeof_scopes;        # the typeof (...) spellings of the blocks the walk is in, innermost last
 my %declty;               # declared names and their types, for typeof (name)
 our @tok; our $tp;
 
@@ -90,13 +91,20 @@ sub parse_specs {
         last if $w eq '' || $w eq '*' || $w eq '(' || $w eq '[' || $w eq ')' || $w eq ',' || $w eq '...';
         if ($kd eq 'attr') {
             # a vector's size before its element type; another attribute (address_space, ...) kept as a word
+            # (aarch64's NEON vectors, the same as gcc's of their size)
+            if ($w =~ /^__attribute__\s*\(\(neon_(?:poly)?vector_type\((\d+)\)\)\)$/) { $tp++; my $n = $1; my $rest = parse_specs(); return qual_add({ k => 'vec', n => $n, of => $rest }, %q) }
             if ($w =~ /^__attribute__\s*\(\(__vector_size__\((\d+) \* sizeof\((.*)\)\)\)\)$/s) { $tp++; my ($n, $e) = ($1, $2); my $et = parse_type_str($e); my $rest = parse_specs(); return qual_add({ k => 'vec', n => $n, of => $rest // $et }, %q) }
             if ($w =~ /noreturn/) { last }
+            # (x86_64's address spaces, __seg_fs and __seg_gs: a qualifier)
+            if ($w =~ /^__attribute__\(\(address_space\(\d+\)\)\)$/) { $q{$w} = 1; $tp++; next }
             push @words, $w; $tp++; next;
         }
         if ($kd eq 'typeof') {
             $tp++;
-            my $r = $typeof{$w} // $typeof{ $w =~ s/^__typeof__/typeof/r } // typeof_inner($w);
+            my $r;
+            # (the innermost block's first: the same spelling is another type in another block, glibc's atomics' __typeof (*mem))
+            for my $sc (reverse @typeof_scopes) { $r //= $sc->{$w} }
+            $r //= $typeof{$w} // $typeof{ $w =~ s/^__typeof__/typeof/r } // typeof_inner($w);
             $base = $r;
             next;
         }
@@ -116,6 +124,8 @@ sub parse_specs {
             $base = { k => 'tag', tag => $w, name => $name, q => {} }; next;
         }
         if ($basic{$w}) { push @words, $w; $tp++; next }
+        # (aarch64's sizeless SVE types and clang's tuples of them: builtin names)
+        if (!$base && !@words && $w =~ /^(?:__SV\w+_t|__clang_sv\w+_t|__mfp8)$/) { $tp++; $base = { k => 'b', name => $w, q => {} }; next }
         if (!$base && !@words && $w =~ /^[A-Za-z_]/) {
             $tp++;
             my $t = lookup_td($w);
@@ -148,6 +158,8 @@ sub typeof_inner {
     my ($in) = $w =~ /^\S+?\s*\((.*)\)$/s;
     # typeof (name): the declared name's type
     return $declty{$1} if $in =~ /^\s*\(*\s*([A-Za-z_]\w*)\s*\)*\s*$/ && $declty{$1};
+    # typeof (*name): what the name points to
+    if ($in =~ /^\s*\*\s*\(*\s*([A-Za-z_]\w*)\s*\)*\s*$/ && $declty{$1} && $declty{$1}{k} eq 'ptr') { return $declty{$1}{to} }
     my @save = @tok; my $sp = $tp;
     my $r = eval { parse_type_str($in) };
     @tok = @save; $tp = $sp;
@@ -235,13 +247,13 @@ sub canon {
     my $t = parse_type_str($s);
     tstr($t);
 }
-sub qstr { my ($q) = @_; join(' ', grep { $q->{$_} } qw(const volatile restrict)), }
+sub qstr { my ($q) = @_; join(' ', (grep { $q->{$_} } qw(const volatile restrict)), sort grep { /^__attribute__/ } keys %$q) }
 sub tstr {
     my ($t, $in) = @_;
     $in //= '';
     my $k = $t->{k};
     if ($k eq 'ptr') {
-        my $q = qstr($t->{q});
+        my $q = join(' ', grep { $t->{q}{$_} } qw(const volatile restrict));
         my $attrs = join(' ', grep { /^__attribute__/ } sort keys %{ $t->{q} });
         my $p = '*' . ($q ne '' ? $q : '') . ($attrs ne '' ? " $attrs" : '');
         $p .= ' ' if ($q ne '' || $attrs ne '') && $in ne '';
@@ -278,8 +290,10 @@ sub line { push @out, join(' ', @_) }
 my %skipkind = map { $_ => 1 } qw(EmptyDecl LabelDecl IndirectFieldDecl FileScopeAsmDecl UsingDecl);
 
 sub decl_typeofs {
-    # the typeof (...) spellings in a declaration, and their types
-    my ($n) = @_;
+    # the typeof (...) spellings in a declaration, and their types (with a
+    # map and a block: that block's own, not its inner blocks')
+    my ($n, $map, $top) = @_;
+    $map //= \%typeof;
     return unless ref $n eq 'HASH';
     for my $f (qw(type argType computeLHSType computeResultType)) {
         my $t = $n->{$f} or next;
@@ -287,10 +301,11 @@ sub decl_typeofs {
         if ($q =~ /^(?:typeof|__typeof__|typeof_unqual|__typeof_unqual__)\s*\(/ && defined $t->{desugaredQualType}) {
             # the whole spelling (no declarator after it) only
             my @t = lex_type($q);
-            if (@t == 1) { $typeof{ $t[0][1] } //= parse_type_str($t->{desugaredQualType}) }
+            if (@t == 1) { $map->{ $t[0][1] } //= parse_type_str($t->{desugaredQualType}) }
         }
     }
-    decl_typeofs($_) for @{ $n->{inner} || [] };
+    return if $top && ($n->{kind} // '') eq 'CompoundStmt';
+    decl_typeofs($_, $map, 1) for @{ $n->{inner} || [] };
 }
 sub typedef_of {
     my ($n) = @_;
@@ -334,7 +349,16 @@ sub walk {
     if ($k eq 'ParmVarDecl') { line('param', $n->{name} // '-', ty($n)); return }
     if ($k eq 'VarDecl') { line('var', $n->{name}, ty($n), $n->{storageClass} // ()); walk($_) for @in; return }
     if ($k eq 'StaticAssertDecl') { line('static_assert'); walk($in[0]); return }
-    if ($k eq 'CompoundStmt' || $k eq 'StmtExpr' && 0) { push @tdscope, {}; walk($_) for @in; pop @tdscope; return }
+    if ($k eq 'CompoundStmt') {
+        my %m;
+        decl_typeofs($_, \%m, 1) for @in;
+        push @tdscope, {};
+        push @typeof_scopes, \%m;
+        walk($_) for @in;
+        pop @typeof_scopes;
+        pop @tdscope;
+        return;
+    }
     if ($k =~ /Stmt$/ || $k eq 'TranslationUnitDecl') { walk($_) for @in; return }
     # expressions
     if ($k eq 'ParenExpr') { walk($_) for @in; return }
