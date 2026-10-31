@@ -439,7 +439,7 @@ LIBGCC_C_arm := _muldi3 _negdi2 _cmpdi2 _ucmpdi2 _trampoline __main _absvsi2 _ab
 	_divmodbitint4 bpabi unaligned-funcs sfp-exceptions addsf3 divsf3 eqsf2 gesf2 lesf2 mulsf3 negsf2 subsf3 unordsf2 \
 	fixsfsi floatsisf floatunsisf adddf3 divdf3 eqdf2 gedf2 ledf2 muldf3 negdf2 subdf3 unorddf2 fixdfsi floatsidf \
 	floatunsidf extendsfdf2 truncdfsf2 fixsfbitint floatbitintsf fixdfbitint floatbitintdf floatbitinthf \
-	enable-execute-stack hardcfr fp16 unwind-arm pr-support unwind-c emutls
+	enable-execute-stack hardcfr fp16 unwind-arm pr-support unwind-c emutls linux-atomic linux-atomic-64bit
 LIBGCC_C := $(LIBGCC_C_$(GTARGET))
 # (and its asm: riscv64's save-restore and division, x86_64's ms_abi
 # register saves and the split stack's morestack.S)
@@ -460,20 +460,20 @@ LIBGCC_ASM_aarch64 := cas_1_1 cas_2_1 cas_4_1 cas_8_1 cas_16_1 cas_1_2 cas_2_2 c
 	swp_2_5 ldadd_2_5 ldclr_2_5 ldeor_2_5 ldset_2_5 swp_4_5 ldadd_4_5 ldclr_4_5 ldeor_4_5 ldset_4_5 swp_8_5 ldadd_8_5 \
 	ldclr_8_5 ldeor_8_5 ldset_8_5 __arm_get_current_vg __arm_sme_state __arm_tpidr2_restore __arm_tpidr2_save \
 	__arm_za_disable
-# (arm's: lib1funcs.S's division and shifts, ieee754-df/sf's for a
-# soft-float caller, and libunwind.S: the unwinder's entries that save the
-# core registers)
+# (arm's: lib1funcs.S's division, 64-bit shifts and clz, ieee754-df/sf.S's
+# soft-float arithmetic and comparisons for a soft-float caller,
+# _interwork_call_via_rX, and libunwind.S: the unwinder's entries that save
+# the core registers; their conditional A32 forms are isa/arm's .if twins.
+# Not in the tree: _arm_muldf3 and _arm_mulsf3, a smaller __aeabi_dmul and
+# __aeabi_fmul, weak, which _arm_muldivdf3 and _arm_muldivsf3 define too:
+# one name for two functions; ttpc makes their bytes, libgcc-asm-check)
+LIBGCC_ASMWEAK_arm := _arm_muldf3 _arm_mulsf3
 LIBGCC_ASM_arm := _thumb1_case_sqi _thumb1_case_uqi _thumb1_case_shi _thumb1_case_uhi _thumb1_case_si \
 	_speculation_barrier _bb_init_func _call_via_rX _arm_negdf2 _arm_unorddf2 _arm_fixdfsi _arm_fixunsdfsi _arm_negsf2 \
 	_arm_unordsf2 _arm_fixsfsi _arm_fixunssfsi _arm_floatdidf _arm_floatdisf _arm_floatundidf _arm_floatundisf _clzsi2 \
-	_ctzsi2 _aeabi_lcmp _aeabi_ulcmp _aeabi_ldivmod _aeabi_uldivmod _dvmd_lnx _clear_cache libunwind
-# (and those of A32 forms ttpc has none of yet: conditional ones, subcs,
-# streq, teqne ... (ieee754-df/sf.S's soft-float arithmetic, which a
-# hard-float program never calls; lib1funcs.S's division, ttpc divides
-# itself; its 64-bit shifts): not in libgcc.ff yet, a later step, as forms)
-LIBGCC_ASMOUT_arm := _arm_muldf3 _arm_mulsf3 _udivsi3 _divsi3 _umodsi3 _modsi3 _interwork_call_via_rX _lshrdi3 _ashrdi3 \
-	_ashldi3 _arm_addsubdf3 _arm_muldivdf3 _arm_cmpdf2 _arm_truncdfsf2 _arm_addsubsf3 _arm_muldivsf3 _arm_cmpsf2 _clzdi2 \
-	libunwind
+	_ctzsi2 _aeabi_lcmp _aeabi_ulcmp _aeabi_ldivmod _aeabi_uldivmod _dvmd_lnx _clear_cache libunwind \
+	_udivsi3 _divsi3 _umodsi3 _modsi3 _interwork_call_via_rX _lshrdi3 _ashrdi3 \
+	_ashldi3 _arm_addsubdf3 _arm_muldivdf3 _arm_cmpdf2 _arm_truncdfsf2 _arm_addsubsf3 _arm_muldivsf3 _arm_cmpsf2 _clzdi2
 LIBGCC_ASM := $(LIBGCC_ASM_$(GTARGET))
 OBJS_gccrt := $(OBJS_unwind) nptl/pthread_key_create nptl/pthread_setspecific nptl/pthread_getspecific stdio-common/fprintf libio/iofflush $(LIBGCC_C:%=libgcc/%)
 # (x86_64's split stack, generic-morestack.c: its glibc calls and
@@ -858,9 +858,14 @@ $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl ../compiler/
 RTFLAGS_x86_64 := -msse4.2
 # (aarch64's with aarch64.h: libgcc's unwinder calls gcc's builtins clang has not)
 RTFLAGS_aarch64 := -include ../libgcc/aarch64.h
+# (arm's libgcc defines the __sync functions, clang's builtins: __Sync_
+# in the C clang reads, __sync_ in its AST again, as clangfix.pl and the
+# units' rule, $(LI)/%.json)
 $(FF)/%.rt.json: $(FF)/%.rt.c
+	$(if $(filter arm,$(GTARGET)),sed -i 's/\b__sync_/__Sync_/g' $<)
 	$(RUN) -t 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
+	$(if $(filter arm,$(GTARGET)),sed -i 's/"__Sync_/"__sync_/g' $@)
 
 define roundtrip
 $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json)
@@ -1153,12 +1158,11 @@ LIBGCC_NOCLANG_x86_64 := strub $(LIBGCC_DFP)
 LIBGCC_NOCLANG_aarch64 := strub $(LIBGCC_DFP)
 # (arm's: fixed-bit.c's fixed point, _Fract and _Accum (ISO/IEC TR 18037),
 # which ttpc has no type of: 1602 objects, by their source in build.log;
-# linux-atomic.c's __sync functions, which clang has as builtins (as
-# riscv64's atomic.c); the four of libgcc2.c that AEABI gives the base
-# procedure call standard, pcs ("aapcs"): their floats in core registers,
-# which ttpc's arm calls (AAPCS-VFP) have no form of)
+# the four of libgcc2.c that AEABI gives the base procedure call
+# standard, pcs ("aapcs"): their floats in core registers, which ttpc's arm
+# calls (AAPCS-VFP) have no form of)
 LIBGCC_FIXED = $(shell sed -n 's/.* -o \([^ ]*\)\.o .*fixed-bit\.c.*/\1/p' $(LOBJ)/build.log | sort -u)
-LIBGCC_NOCLANG_arm = $(LIBGCC_ASMOUT_arm) strub linux-atomic linux-atomic-64bit _fixdfdi _fixsfdi _fixunsdfdi _fixunssfdi $(LIBGCC_FIXED)
+LIBGCC_NOCLANG_arm = $(LIBGCC_ASMWEAK_arm) strub _fixdfdi _fixsfdi _fixunsdfdi _fixunssfdi $(LIBGCC_FIXED)
 LIBGCC_NOCLANG = $(LIBGCC_NOCLANG_$(GTARGET))
 
 libgcc-ref: $(LOBJ)/libgcc.a
@@ -1187,9 +1191,11 @@ $(LI)/%.json: $(LI)/%.i ../libgcc/clangfix.pl ../libgcc/aarch64.h clangvec.pl cl
 	perl ../libgcc/clangfix.pl --target $(GTARGET) $< $(if $(filter $*,$(LCLANGVEC_$(GTARGET))),| perl clangvec.pl) > $(LI)/$*.clang.i
 	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w $(LI)/$*.clang.i > $@
+	$(if $(filter arm,$(GTARGET)),sed -i 's/"__Sync_/"__sync_/g' $@)
 # (x86_64's milestones take a C object's pass, UNITDEP c2ff: libgcc's from
-# its AST, which stays)
-$(LI)/%.c2ff: $(LI)/%.json ../compiler/gen/c2ff.pl
+# its AST, which stays; a static pattern, so that a unit whose AST is not
+# made yet does not take glibc's rule, $(I)/%.c2ff, of the .i alone)
+$(LIBGCC_C:%=$(LI)/%.c2ff): $(LI)/%.c2ff: $(LI)/%.json ../compiler/gen/c2ff.pl
 	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $<=$(LI)/$*.i
 	@touch $@
 
@@ -1225,12 +1231,9 @@ libgcc-roundtrip: gccrt-roundtrip
 libgcc-licenses: $(FF)/libgcc.ff $(FF)/libgcc/index.ff
 	$(LICENSES_PL) --pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff
 # (and its asm, as glibc's: ttpc makes each object's bytes, asm-check's way;
-# not yet riscv64's save-restore.S and div.S, whose local labels s2ff
-# --items finds in another function (.Ls10, .L20), nor x86_64's
-# morestack.S, which ttpc stops in: later steps)
-LIBGCC_ASMSKIP_riscv64 := save-restore div
+# not yet x86_64's morestack.S, which ttpc stops in: a later step)
 LIBGCC_ASMSKIP_x86_64 := morestack
-LIBGCC_ASMCHECK = $(filter-out $(LIBGCC_ASMSKIP_$(GTARGET)),$(LIBGCC_ASM))
+LIBGCC_ASMCHECK = $(filter-out $(LIBGCC_ASMSKIP_$(GTARGET)),$(LIBGCC_ASM)) $(LIBGCC_ASMWEAK_$(GTARGET))
 libgcc-asm-check: $(LIBGCC_ASMCHECK:%=$(LI)/%.asmok)
 	@for a in $(LIBGCC_ASMCHECK); do cat $(LI)/$$a.asmok; done
 libgcc-checks: libgcc-roundtrip libgcc-licenses libgcc-asm-check

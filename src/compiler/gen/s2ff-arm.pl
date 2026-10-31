@@ -333,9 +333,12 @@ for my $s (@secs) {
         my ($at, $n) = @$o;
         if ($at != $lines[0]{addr} && ($names{$at} || $target{$at})) {
             my $l = $lname->($at);
+            # (the other names there, ieee754-df.S's __aeabi_dadd at
+            # __adddf3: entries of their own, empty, before it: ttpc knows an
+            # alias of a function, not of an entry in one)
+            push @{ $fn->{children} }, map { node("$_:", node('asm')) } @{ $names{$at} }[1 .. $#{ $names{$at} }] if $names{$at};
             $into = node("$l:", $names{$at} ? (node('asm')) : ());
             push @{ $fn->{children} }, $into;
-            push @aliases, map { node("$_:", node('alias'), node($l)) } @{ $names{$at} }[1 .. $#{ $names{$at} }] if $names{$at};
         }
         push @{ $into->{children} }, $n;
     }

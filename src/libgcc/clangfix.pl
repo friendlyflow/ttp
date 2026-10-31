@@ -5,6 +5,7 @@
 # riscv64 (__libgcc_cmp_return__, __libgcc_shift_count__: DI; SI on arm), and HF and
 # HC, which clang makes __fp16, no parameter type there: _Float16 and its
 # complex, as gcc has them; BF, which clang has no mode of: __bf16.
+# arm (--target arm): __sync_ names as __Sync_ (linux-atomic.c's own).
 # x86_64 (--target x86_64): the suffix F128 of a _Float128 literal as Q,
 # which clang has; %v in an asm template (v under AVX, nothing here: c2ff
 # drops it too) as spaces; gcc's rdssp builtins of no argument as clang's of
@@ -26,6 +27,9 @@ while (<>) {
     s/(float (\w+) __attribute__ \(\(mode \(HF\)\)\))/pad($1, "_Float16 $2")/ge;
     s/(float (\w+) __attribute__ \(\(mode \(BF\)\)\))/pad($1, "__bf16 $2")/ge;
     s/(_Complex float (\w+) __attribute__ \(\(mode \(HC\)\)\))/pad($1, "_Complex _Float16 $2")/ge;
+    # (arm's linux-atomic.c defines the __sync functions, which clang has
+    # as builtins: __Sync_ here, its AST's names __sync_ again, Makefile)
+    s/\b__sync_/__Sync_/g if $target eq 'arm';
     if ($target eq 'x86_64') {
         s/([0-9]\.?)[fF]128\b/$1Q   /g;
         s/%v/  /g if /__asm__/;
