@@ -53,13 +53,15 @@ use FF qw(node write_txt);
 use armdec;
 
 my $page = 'glibc asm';
-my (@files, $size, $items, @then, %zeroed);
+my (@files, $size, $items, $facts, @then, %zeroed);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     if ($a eq '--zero') { $zeroed{ shift @ARGV } = 1; next }
     if ($a eq '--size') { $size = 1; next }
+    # (--facts FILE: the ff, and in FILE what --size prints)
+    if ($a eq '--facts') { $facts = shift @ARGV; next }
     if ($a eq '--items') { $items = 1; next }
     push @files, $a;
 }
@@ -376,6 +378,7 @@ sub data_reloc {
 }
 
 if ($size) { print $bytes // 0, "\n"; exit }
+if (defined $facts) { open my $h, ">", $facts or die "s2ff: cannot write $facts: $!\n"; print $h "size ", $bytes // 0, "\n" }
 # the GOT: its start, then a word for each symbol read through it, each a
 # function of data, placed where the code names it (the code reads it at
 # its offset from the start: it may be anywhere); the word of a weak name
