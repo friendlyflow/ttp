@@ -472,8 +472,7 @@ LIBGCC_ASM_arm := _thumb1_case_sqi _thumb1_case_uqi _thumb1_case_shi _thumb1_cas
 # hard-float program never calls; lib1funcs.S's division, ttpc divides
 # itself; its 64-bit shifts): not in libgcc.ff yet, a later step, as forms)
 LIBGCC_ASMOUT_arm := _arm_muldf3 _arm_mulsf3 _udivsi3 _divsi3 _umodsi3 _modsi3 _interwork_call_via_rX _lshrdi3 _ashrdi3 \
-	_ashldi3 _arm_addsubdf3 _arm_muldivdf3 _arm_cmpdf2 _arm_truncdfsf2 _arm_addsubsf3 _arm_muldivsf3 _arm_cmpsf2 _clzdi2 \
-	libunwind
+	_ashldi3 _arm_addsubdf3 _arm_muldivdf3 _arm_cmpdf2 _arm_truncdfsf2 _arm_addsubsf3 _arm_muldivsf3 _arm_cmpsf2 _clzdi2
 LIBGCC_ASM := $(LIBGCC_ASM_$(GTARGET))
 OBJS_gccrt := $(OBJS_unwind) nptl/pthread_key_create nptl/pthread_setspecific nptl/pthread_getspecific stdio-common/fprintf libio/iofflush $(LIBGCC_C:%=libgcc/%)
 # (x86_64's split stack, generic-morestack.c: its glibc calls and
