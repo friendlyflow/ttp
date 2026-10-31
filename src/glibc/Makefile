@@ -53,6 +53,15 @@ CTARGET_arm := armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16
 CTARGET := $(or $(CTARGET_$(GTARGET)),$(GTARGET)-linux-gnu)
 BUILD ?= $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 OBJ := $(BUILD)/obj
+# The shared reference is built by glibc-ref alone and then only read: any
+# other goal in it needs a BUILD of its own, so no check writes there (a
+# libgcc-ref without BUILD= once left an ff/ folder in it)
+REFROOT := $(HOME)/.cache/ttp/glibc-gcc16
+ifneq ($(filter $(REFROOT) $(REFROOT)/%,$(abspath $(BUILD))),)
+ifneq ($(filter-out glibc-ref build-gcroots,$(or $(MAKECMDGOALS),all)),)
+$(error BUILD is the shared reference $(BUILD): only glibc-ref builds there; give the rest a folder of its own, BUILD=...)
+endif
+endif
 # a make that calls itself without end stops here (MAKELEVEL counts the
 # makes above this one; glibc's own, deeper, never read this file)
 ifneq ($(filter-out 0 1 2 3 4 5 6 7 8,$(or $(MAKELEVEL),0)),)
@@ -68,6 +77,7 @@ GLIBC_CC ?= $(error GLIBC_CC is not set: run this in `nix develop`)
 ifneq ($(GTARGET),riscv64)
 GLIBC_HEADERS := $(GLIBC_HEADERS_$(GTARGET))
 GLIBC_CC := $(GLIBC_CC_$(GTARGET))
+LIBGCC_HEADERS := $(LIBGCC_HEADERS_$(GTARGET))
 endif
 
 # The target's binutils have its triple in their names, except where the
@@ -312,17 +322,27 @@ ROOTS_gnuc := $(ROOTS_ldouble) $(ROOTS_gnuc_$(GTARGET))
 # (PT_GNU_EH_FRAME): progs/unwind.c's _Unwind_Backtrace and
 # _Unwind_ForcedUnwind walk its frames, ttpc's with -g (.eh_frame), as gcc's
 # libgcc walks gcc's. Its tree has libgcc's license too (license-libgcc.ff.txt).
-LIBGCC_EH := unwind-dw2 unwind-dw2-fde-dip unwind-c
+# (and on aarch64 what its unwinder calls of SME's: __libgcc_arm_za_disable,
+# which saves the ZA state that a frame left lazily, __aarch64_have_sme's
+# word its asm reads)
+LIBGCC_EH_C_aarch64 := __aarch64_have_sme
+LIBGCC_EH_ASM_aarch64 := __arm_za_disable __arm_tpidr2_save
+LIBGCC_EH := unwind-dw2 unwind-dw2-fde-dip unwind-c $(LIBGCC_EH_C_$(GTARGET))
+LIBGCC_EH_ASM := $(LIBGCC_EH_ASM_$(GTARGET))
 OBJS_unwind := elf/dl-iteratephdr setjmp/longjmp setjmp/jmp-unwind nptl/pthread_cleanup_upto nptl/pthread_cond_wait nptl/pthread_cond_broadcast nptl/pthread_mutex_cond_lock nptl/pthread_cond_signal $(LIBGCC_EH:%=libgcc/%)
-ASMS_unwind :=
+ASMS_unwind := $(LIBGCC_EH_ASM:%=libgcc/%)
 ROOTS_unwind := $(ROOTS_stdio) _Unwind_Backtrace _Unwind_ForcedUnwind _Unwind_GetIP _Unwind_GetCFA _Unwind_FindEnclosingFunction _setjmp longjmp \
 	open read mmap __register_frame
 # (and gcc's frames among the program's: progs/unwind-gcc.c, by gcc alone at
 # an address of its own, which the program maps and registers)
 RUN_unwind = $(FF)/unwind-gcc.elf
+# (x86_64's without a .note.gnu.property (CET's, gas's x86 ISA used), which ld puts right after
+# .eh_frame, where __register_frame reads to its end: a 0 word; crtend's
+# terminator is not linked)
+UNWINDGCC_x86_64 := -fcf-protection=none -Wa,-mx86-used-note=no
 $(FF)/unwind-gcc.elf: progs/unwind-gcc.c
 	mkdir -p $(FF)
-	$(RUN) -t 60 $(GLIBC_CC) -O1 -funwind-tables -fno-pic -no-pie -static -nostdlib -Wl,-Ttext-segment=0x30000000 -Wl,-e,gcc_mid -Wl,--build-id=none $< -o $@
+	$(RUN) -t 60 $(GLIBC_CC) -O1 $(UNWINDGCC_$(GTARGET)) -funwind-tables -fno-pic -no-pie -static -nostdlib -Wl,-Ttext-segment=0x30000000 -Wl,-e,gcc_mid -Wl,--build-id=none $< -o $@
 unwind-check unwind-check-O: $(FF)/unwind-gcc.elf
 ZEROS_unwind := $(ZEROS_stdio)
 WEAKS_unwind := $(WEAKS_stdio)
@@ -341,7 +361,7 @@ TTPCFLAGS_unwind := -g
 # link.h's, which libgcc's unwinder has; libgcc's then come before stdio's,
 # so its soft-fp is the one of the names glibc's soft-fp defines too, the
 # same code.)
-LIBGCC_C := $(addprefix _,negdi2 lshrdi3 ashldi3 ashrdi3 cmpdi2 ucmpdi2 clear_cache trampoline _main absvsi2 absvdi2 addvsi3 \
+LIBGCC_C_riscv64 := $(addprefix _,negdi2 lshrdi3 ashldi3 ashrdi3 cmpdi2 ucmpdi2 clear_cache trampoline _main absvsi2 absvdi2 addvsi3 \
 	addvdi3 subvsi3 subvdi3 mulvsi3 mulvdi3 negvsi2 negvdi2 ctors ffssi2 ffsdi2 clz clzsi2 clzdi2 ctzsi2 ctzdi2 popcount_tab \
 	popcountsi2 popcountdi2 paritysi2 paritydi2 powisf2 powidf2 powixf2 powitf2 mulhc3 mulsc3 muldc3 mulxc3 multc3 divhc3 \
 	divsc3 divdc3 divxc3 divtc3 bswapsi2 bswapdi2 clrsbsi2 clrsbdi2 mulbitint3 fixunssfsi fixunsdfsi fixunsxfsi fixsfdi \
@@ -354,16 +374,81 @@ LIBGCC_C := $(addprefix _,negdi2 lshrdi3 ashldi3 ashrdi3 cmpdi2 ucmpdi2 clear_ca
 	floatunsihf floatundihf floatsibf floatdibf floatunsibf floatundibf floatbitinthf fixhfti fixunshfti floattihf floatuntihf \
 	floattibf floatuntibf fixsfbitint floatbitintsf fixdfbitint floatbitintdf multi3 feature_bits enable-execute-stack hardcfr \
 	unwind-dw2 unwind-dw2-fde-dip unwind-sjlj unwind-c emutls
+# (x86_64's: its own helpers (cpuinfo, sfp-exceptions, the split stack's
+# generic-morestack), binary128's soft-fp of __float128 (TF, ff's float128),
+# x87's long double (XF, ff's long double there), and no riscv64 division
+# or save-restore asm)
+LIBGCC_C_x86_64 := _muldi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3 _cmpdi2 _ucmpdi2 _clear_cache _trampoline __main _absvsi2 \
+	_absvdi2 _addvsi3 _addvdi3 _subvsi3 _subvdi3 _mulvsi3 _mulvdi3 _negvsi2 _negvdi2 _ctors _ffssi2 _ffsdi2 _clz _clzsi2 \
+	_clzdi2 _ctzsi2 _ctzdi2 _popcount_tab _popcountsi2 _popcountdi2 _paritysi2 _paritydi2 _powisf2 _powidf2 _mulsc3 _muldc3 \
+	_divsc3 _divdc3 _bswapsi2 _bswapdi2 _clrsbsi2 _clrsbdi2 _mulbitint3 _fixunssfsi _fixunsdfsi _fixsfdi _fixdfdi \
+	_fixunssfdi _fixunsdfdi _floatdisf _floatdidf _floatundisf _floatundidf _eprintf __gcc_bcmp _divdi3 _moddi3 _divmoddi4 \
+	_udivdi3 _umoddi3 _udivmoddi4 _udiv_w_sdiv _divmodbitint4 cpuinfo sfp-exceptions _divhc3 _mulhc3 addtf3 divtf3 multf3 \
+	negtf2 subtf3 unordtf2 fixtfsi fixunstfsi floatsitf floatunsitf fixtfdi fixunstfdi floatditf floatunditf fixtfti \
+	fixunstfti floattitf floatuntitf extendhfsf2 extendhfdf2 extendhftf2 extendhfxf2 extendsfdf2 extendsftf2 extenddftf2 \
+	extendxftf2 extendbfsf2 trunctfhf2 truncxfhf2 truncdfhf2 truncsfhf2 trunctfsf2 truncdfsf2 trunctfdf2 trunctfxf2 \
+	trunctfbf2 truncxfbf2 truncdfbf2 truncsfbf2 trunchfbf2 fixtfbitint floatbitinttf fixhfti fixunshfti floattihf \
+	floatuntihf floattibf floatuntibf eqhf2 fixxfbitint floatbitinthf floatbitintbf floatbitintxf fixsfbitint floatbitintsf \
+	fixdfbitint floatbitintdf getf2 letf2 eqtf2 _divtc3 _multc3 _powitf2 enable-execute-stack hardcfr generic-morestack \
+	generic-morestack-thread bitintpow10 unwind-dw2 unwind-dw2-fde-dip unwind-sjlj unwind-c heap-trampoline emutls \
+	_powixf2 _mulxc3 _divxc3 _fixunsxfsi _fixxfdi _fixunsxfdi _floatdixf _floatundixf
+# (aarch64's: lse-init (outline atomics' choice), sync-cache, cpuinfo, the
+# unwinder with its pointer authentication and GCS builtins)
+LIBGCC_C_aarch64 := lse-init _muldi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3 _cmpdi2 _ucmpdi2 _clear_cache _trampoline __main \
+	_absvsi2 _absvdi2 _addvsi3 _addvdi3 _subvsi3 _subvdi3 _mulvsi3 _mulvdi3 _negvsi2 _negvdi2 _ctors _ffssi2 _ffsdi2 _clz \
+	_clzsi2 _clzdi2 _ctzsi2 _ctzdi2 _popcount_tab _popcountsi2 _popcountdi2 _paritysi2 _paritydi2 _powisf2 _powidf2 \
+	_powixf2 _powitf2 _mulhc3 _mulsc3 _muldc3 _mulxc3 _multc3 _divhc3 _divsc3 _divdc3 _divxc3 _divtc3 _bswapsi2 _bswapdi2 \
+	_clrsbsi2 _clrsbdi2 _mulbitint3 _fixunssfsi _fixunsdfsi _fixunsxfsi _fixsfdi _fixdfdi _fixxfdi _fixunssfdi _fixunsdfdi \
+	_fixunsxfdi _floatdisf _floatdidf _floatdixf _floatundisf _floatundidf _floatundixf _eprintf __gcc_bcmp _divdi3 _moddi3 \
+	_divmoddi4 _udivdi3 _umoddi3 _udivmoddi4 _udiv_w_sdiv _divmodbitint4 sync-cache cpuinfo sfp-exceptions addtf3 divtf3 \
+	eqtf2 getf2 letf2 multf3 negtf2 subtf3 unordtf2 fixtfsi fixunstfsi floatsitf floatunsitf fixtfdi fixunstfdi floatditf \
+	floatunditf fixtfti fixunstfti floattitf floatuntitf extendsftf2 extenddftf2 extendhftf2 extendbfsf2 trunctfsf2 \
+	trunctfdf2 trunctfhf2 trunctfbf2 truncdfbf2 truncsfbf2 trunchfbf2 fixhfti fixunshfti floattihf floatuntihf floatdibf \
+	floatundibf floattibf floatuntibf floatbitinthf floatbitintbf floatbitinttf fixtfbitint fixsfbitint floatbitintsf \
+	fixdfbitint floatbitintdf enable-execute-stack hardcfr bitintpow10 unwind-dw2 unwind-dw2-fde-dip unwind-sjlj unwind-c \
+	__aarch64_have_sme heap-trampoline emutls
+LIBGCC_C := $(LIBGCC_C_$(GTARGET))
+# (and its asm: riscv64's save-restore and division, x86_64's ms_abi
+# register saves and the split stack's morestack.S)
+LIBGCC_ASM_riscv64 := save-restore muldi3 div
+LIBGCC_ASM_x86_64 := avx_savms64 avx_resms64 avx_resms64x avx_savms64f avx_resms64f avx_resms64fx sse_savms64 \
+	sse_resms64 sse_resms64x sse_savms64f sse_resms64f sse_resms64fx morestack
+# (aarch64's: lse.S's outline atomics, one object for each operation, size
+# and model, and SME's state functions)
+LIBGCC_ASM_aarch64 := cas_1_1 cas_2_1 cas_4_1 cas_8_1 cas_16_1 cas_1_2 cas_2_2 cas_4_2 cas_8_2 cas_16_2 cas_1_3 cas_2_3 \
+	cas_4_3 cas_8_3 cas_16_3 cas_1_4 cas_2_4 cas_4_4 cas_8_4 cas_16_4 cas_1_5 cas_2_5 cas_4_5 cas_8_5 cas_16_5 swp_1_1 \
+	ldadd_1_1 ldclr_1_1 ldeor_1_1 ldset_1_1 swp_2_1 ldadd_2_1 ldclr_2_1 ldeor_2_1 ldset_2_1 swp_4_1 ldadd_4_1 ldclr_4_1 \
+	ldeor_4_1 ldset_4_1 swp_8_1 ldadd_8_1 ldclr_8_1 ldeor_8_1 ldset_8_1 swp_1_2 ldadd_1_2 ldclr_1_2 ldeor_1_2 ldset_1_2 \
+	swp_2_2 ldadd_2_2 ldclr_2_2 ldeor_2_2 ldset_2_2 swp_4_2 ldadd_4_2 ldclr_4_2 ldeor_4_2 ldset_4_2 swp_8_2 ldadd_8_2 \
+	ldclr_8_2 ldeor_8_2 ldset_8_2 swp_1_3 ldadd_1_3 ldclr_1_3 ldeor_1_3 ldset_1_3 swp_2_3 ldadd_2_3 ldclr_2_3 ldeor_2_3 \
+	ldset_2_3 swp_4_3 ldadd_4_3 ldclr_4_3 ldeor_4_3 ldset_4_3 swp_8_3 ldadd_8_3 ldclr_8_3 ldeor_8_3 ldset_8_3 swp_1_4 \
+	ldadd_1_4 ldclr_1_4 ldeor_1_4 ldset_1_4 swp_2_4 ldadd_2_4 ldclr_2_4 ldeor_2_4 ldset_2_4 swp_4_4 ldadd_4_4 ldclr_4_4 \
+	ldeor_4_4 ldset_4_4 swp_8_4 ldadd_8_4 ldclr_8_4 ldeor_8_4 ldset_8_4 swp_1_5 ldadd_1_5 ldclr_1_5 ldeor_1_5 ldset_1_5 \
+	swp_2_5 ldadd_2_5 ldclr_2_5 ldeor_2_5 ldset_2_5 swp_4_5 ldadd_4_5 ldclr_4_5 ldeor_4_5 ldset_4_5 swp_8_5 ldadd_8_5 \
+	ldclr_8_5 ldeor_8_5 ldset_8_5 __arm_get_current_vg __arm_sme_state __arm_tpidr2_restore __arm_tpidr2_save \
+	__arm_za_disable
+LIBGCC_ASM := $(LIBGCC_ASM_$(GTARGET))
 OBJS_gccrt := $(OBJS_unwind) nptl/pthread_key_create nptl/pthread_setspecific nptl/pthread_getspecific stdio-common/fprintf libio/iofflush $(LIBGCC_C:%=libgcc/%)
-ASMS_gccrt :=
+# (x86_64's split stack, generic-morestack.c: its glibc calls and
+# morestack.S's guards, libgcc's asm)
+OBJS_gccrt_x86_64 := csu/errno-loc misc/writev signal/sigempty signal/sigfillset signal/sigdelset
+OBJS_gccrt += $(OBJS_gccrt_$(GTARGET))
+ASMS_gccrt_x86_64 := misc/syscall $(LIBGCC_ASM_x86_64:%=libgcc/%)
+ASMS_gccrt_aarch64 := $(LIBGCC_ASM_aarch64:%=libgcc/%)
+ASMS_gccrt := $(ASMS_gccrt_$(GTARGET))
 ROOTS_gccrt = $(ROOTS_unwind) __mulsc3 __divsc3 __muldc3 __divdc3 __multc3 __divtc3 __popcountdi2 __clzdi2 __ctzdi2 __ffsdi2 \
 	__paritydi2 __clrsbdi2 __bswapsi2 __bswapdi2 __absvsi2 __absvdi2 __addvsi3 __addvdi3 __subvdi3 __mulvsi3 __powidf2 \
-	__powisf2 __powitf2 __fixunsdfdi __fixunssfdi __floatsitf __floatunsitf __fixtfsi __fixunstfsi __unordtf2 __divdf3 __divsf3 \
+	__powisf2 __powitf2 __fixunsdfdi __fixunssfdi __floatsitf __floatunsitf __fixtfsi __fixunstfsi __unordtf2 $(ROOTS_gccrt_$(GTARGET)) \
 	__gcc_bcmp $(ROOTS_ldouble) $(filter-out $(LIBGCC_NOGCCRT),$(shell cat $(FF)/libgcc.roots))
+# (riscv64's soft-fp division of float and double, which x86_64 has in SSE)
+ROOTS_gccrt_riscv64 := __divdf3 __divsf3
 # (but feature_bits.c's, riscv's function multi-versioning: its hwprobe
 # system call is an asm statement of register variables, which c2ff has no
 # form for yet; libgcc.ff leaves it out, with why)
-LIBGCC_NOGCCRT := __init_riscv_feature_bits __riscv_feature_bits __riscv_cpu_model
+# (and x86_64's __wrap_pthread_create, for ld's --wrap=pthread_create with
+# the split stack: its __real_pthread_create is weak here, a function of no
+# parameters in ff, so its round trip has no conversion of an argument)
+LIBGCC_NOGCCRT := __init_riscv_feature_bits __riscv_feature_bits __riscv_cpu_model __wrap_pthread_create
 ZEROS_gccrt := $(ZEROS_stdio)
 WEAKS_gccrt := $(WEAKS_stdio)
 LICENSE_gccrt := license-libgcc.ff.txt
@@ -411,9 +496,9 @@ UNITDEP_aarch64 := c2ff
 UNITDEP_x86_64 := c2ff
 UNITDEP_arm := c2ff
 UNITDEP := $(or $(UNITDEP_$(GTARGET)),json)
-LINKED_aarch64 := string stdlib ldouble malloc stdio floats args
+LINKED_aarch64 := string stdlib ldouble malloc stdio floats args unwind gccrt
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
-LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc
+LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 # (arm the same way: start.S, crti.S and crtn.S through s2ff-arm, as aarch64's)
 LINKED_arm := string stdlib ldouble malloc stdio floats args
 LINKED := $(LINKED_$(GTARGET))
@@ -427,7 +512,9 @@ endif
 # (elf/dl-debug-symbols.S only reserves _r_debug_extended, c2ff --zero's,
 # with _r_debug an alias of it: left out, as on riscv64)
 ASMS_skip := elf/dl-debug-symbols
-objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip) $(OBJS_skip_$(GTARGET)),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
+# (and libgcc's milestones their own objects too, after those: libgcc's
+# units, and the objects of glibc libgcc calls that the program does not)
+objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip) $(OBJS_skip_$(GTARGET)),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter unwind gccrt,$(2)),$($(1)_$(2))) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
 
 .PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
@@ -669,7 +756,9 @@ $(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
 # what a check expects: progs/NAME.expect, or progs/NAME.<target>.expect
 # where the target's glibc differs (soft-fp's NaNs: riscv64 makes them
 # canonical, aarch64 and x86_64 keep a NaN's payload, x86_64's sign is 1;
-# gnuc: riscv64's program hashes its asm statements' results too)
+# gnuc: riscv64's program hashes its asm statements' results too; x86_64's
+# gccrt: qemu's, whose SSE makes a positive default NaN where the hardware's
+# is negative: natively ttpc's and gcc's programs agree with each other too)
 expect = $(firstword $(wildcard progs/$(1).$(GTARGET).expect) progs/$(1).expect)
 
 define check
@@ -719,6 +808,8 @@ $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl ../compiler/
 
 # (x86_64's with SSE4.2: the builtins of gcc's intrinsics that strcspn-sse4's C calls)
 RTFLAGS_x86_64 := -msse4.2
+# (aarch64's with aarch64.h: libgcc's unwinder calls gcc's builtins clang has not)
+RTFLAGS_aarch64 := -include ../libgcc/aarch64.h
 $(FF)/%.rt.json: $(FF)/%.rt.c
 	$(RUN) -t 600 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
@@ -753,6 +844,20 @@ $(foreach m,$(MILESTONES),$(eval $(call licenses,$(m))))
 glibc-licenses: licenses $(MILESTONES:%=%-licenses)
 .PHONY: licenses glibc-licenses
 
+# ---- the C parser in ff (T3a) -----------------------------------------------
+# ../compiler/tools/cparse and cprint (their library tools/c.ff), checked by
+# ../compiler/gen/cparsecheck.sh: every unit of this build (I) and each
+# milestone program's .i parsed into its ff tree, the tree written back as C
+# and compiled by gcc as the .i is: the same code, unit by unit. The tools
+# are this machine's build of the compiler's (make compiler-check makes them).
+CPTOOLS ?= ../../build/compiler/tools/$(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
+CPRUN := $(if $(filter x86_64,$(shell uname -m)),,qemu-riscv64)
+cparse-check:
+	@echo "cparse-check: $(words $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))) units of $(BUILD)"
+	@$(RUN) -t 3600 sh ../compiler/gen/cparsecheck.sh -r "$(CPRUN)" $(CPTOOLS)/cparse $(CPTOOLS)/cprint $(GLIBC_CC) $(BUILD)/cparse \
+	    $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))
+.PHONY: cparse-check
+
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
 # in for all of glibc (a path from an expression, a call through a comma's
@@ -772,7 +877,7 @@ $(FF)/generic.ff $(FF)/stdbit.ff: $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*.ff.txt > $@
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
-GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
+GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
 	$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
@@ -899,21 +1004,22 @@ LAYERS := perl -I../compiler/gen -MFF=node,layers,read_txt,write_txt -0777 -ne \
 	'print write_txt(map { node($$_->{content}, layers(@{ $$_->{children} })) } read_txt($$_, $$ARGV))'
 ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # libgcc_eh's unwinder, which a static program has from gcc (glibc's
-# __pthread_unwind, backtrace): on riscv64 libgcc's own in ff (src/libgcc,
+# __pthread_unwind, backtrace): on riscv64 and x86_64 libgcc's own in ff (src/libgcc,
 # as the milestone unwind has it), its units after glibc's, as gcc links
 # libgcc_eh.a after libc.a, the tree's root license with libgcc's
 # (license-libgcc.ff.txt); a program that unwinds is built with ttpc -g
 # (its .eh_frame: the tests, TTPCFLAGS_tests); elsewhere not in ff yet,
 # its names weak (address 0), as for a program that never unwinds
-UNWIND_glibc := $(if $(filter riscv64,$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
-LIBGCC_glibc := $(if $(filter riscv64,$(GTARGET)),$(LIBGCC_EH))
+LIBGCC_TARGETS := riscv64 x86_64 aarch64
+UNWIND_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
+LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
 # (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
 # forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
 # crti's _init and _fini, s2ff --then, as in a milestone)
 GLIBC_ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM))
 GLIBC_THEN = $(if $(filter-out riscv64,$(GTARGET)),$(filter csu/crtn,$(ALL_ASM)))
-GLIBC_ASM = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)) $(GLIBC_THEN),$(ALL_ASM))
+GLIBC_ASM = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)) $(GLIBC_THEN),$(ALL_ASM)) $(if $(LIBGCC_glibc),$(LIBGCC_EH_ASM:%=libgcc/%))
 $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THEN:%=$(I)/%.dump) $(LIBGCC_glibc:%=$(I)/libgcc/%.json)
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
@@ -966,17 +1072,38 @@ print-%:
 # $(FF)/libgcc.c2ff.err: _Float16 and __bf16 (HF, BF), the trapping
 # arithmetic of 128 bits. clang reads neither atomic.c (it redefines gcc's
 # __sync builtins) nor strub.c (__builtin_stack_address, which clang lacks).
-# Only riscv64 so far.
+# x86_64 (gcc's libgcc built with -mlong-double-80): its long double is
+# x87's, as ttpc's there, and __float128 (TF) ff's float128; clang does
+# not read the decimal float of libbid and dfp-bit.c (LIBGCC_DFP: clang has
+# no _Decimal32, _Decimal64, _Decimal128). Its asm: the ms_abi register
+# saves of i386/cygming's stubs and the split stack's morestack.S.
 # the shared reference (the user, 2026-10-28), as glibc-gcc16: built once with
 # make libgcc-ref, then only read by the checks of every lane
 LBUILD ?= $(HOME)/.cache/ttp/libgcc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 LOBJ := $(LBUILD)/build/$(TRIPLE)/libgcc
 export LIBGCC_SRC := $(LBUILD)/gcc-16.2.0
 LI := $(I)/libgcc
-# The objects of libgcc.a and libgcc_eh.a: its C (LIBGCC_C, above), its asm,
-# and what clang cannot read (libgcc.roots checks the list against them)
-LIBGCC_ASM := save-restore muldi3 div
-LIBGCC_NOCLANG := atomic strub
+# The objects of libgcc.a and libgcc_eh.a: its C and asm (LIBGCC_C and
+# LIBGCC_ASM, above) and what clang cannot read (libgcc.roots checks the
+# list against them)
+LIBGCC_NOCLANG_riscv64 := atomic strub
+LIBGCC_DFP := bid_decimal_globals bid_decimal_data bid_binarydecimal bid_convert_data _isinfd32 _isinfd64 _isinfd128 \
+	bid64_noncomp bid128_noncomp bid128_fma bid_round bid_from_int bid64_add bid128_add bid64_div bid128_div bid64_mul \
+	bid128_mul bid64_compare bid128_compare bid128 bid32_to_bid64 bid32_to_bid128 bid64_to_bid128 bid64_to_int32 \
+	bid64_to_int64 bid64_to_uint32 bid64_to_uint64 bid128_to_int32 bid128_to_int64 bid128_to_uint32 bid128_to_uint64 \
+	_addsub_sd _div_sd _mul_sd _eq_sd _ne_sd _lt_sd _gt_sd _le_sd _ge_sd _sd_to_si _sd_to_di _sd_to_usi _sd_to_udi \
+	_si_to_sd _di_to_sd _usi_to_sd _udi_to_sd _sd_to_sf _sd_to_df _sd_to_xf _sd_to_tf _sf_to_sd _df_to_sd _xf_to_sd \
+	_tf_to_sd _sd_to_dd _sd_to_td _unord_sd _hf_to_sd _sd_to_hf _addsub_dd _div_dd _mul_dd _eq_dd _ne_dd _lt_dd _gt_dd \
+	_le_dd _ge_dd _dd_to_si _dd_to_di _dd_to_usi _dd_to_udi _si_to_dd _di_to_dd _usi_to_dd _udi_to_dd _dd_to_sf _dd_to_df \
+	_dd_to_xf _dd_to_tf _sf_to_dd _df_to_dd _xf_to_dd _tf_to_dd _dd_to_sd _dd_to_td _unord_dd _hf_to_dd _dd_to_hf \
+	_addsub_td _div_td _mul_td _eq_td _ne_td _lt_td _gt_td _le_td _ge_td _td_to_si _td_to_di _td_to_usi _td_to_udi \
+	_si_to_td _di_to_td _usi_to_td _udi_to_td _td_to_sf _td_to_df _td_to_xf _td_to_tf _sf_to_td _df_to_td _xf_to_td \
+	_tf_to_td _td_to_sd _td_to_dd _unord_td _hf_to_td _td_to_hf fixsdbitint floatbitintsd fixsdti fixunssdti floattisd \
+	floatuntisd fixddbitint floatbitintdd fixddti fixunsddti floattidd floatuntidd fixtdbitint floatbitinttd fixtdti \
+	fixunstdti floattitd floatuntitd
+LIBGCC_NOCLANG_x86_64 := strub $(LIBGCC_DFP)
+LIBGCC_NOCLANG_aarch64 := strub $(LIBGCC_DFP)
+LIBGCC_NOCLANG := $(LIBGCC_NOCLANG_$(GTARGET))
 
 libgcc-ref: $(LOBJ)/libgcc.a
 $(LOBJ)/libgcc.a:
@@ -990,10 +1117,23 @@ $(LI)/%.i: $(LOBJ)/libgcc.a ../libgcc/mki.pl
 	$(RUN) -t 120 perl ../libgcc/mki.pl $(LOBJ) $(LI) $*.o > /dev/null
 $(LI)/%.s: $(LOBJ)/libgcc.a ../libgcc/mki.pl
 	$(RUN) -t 120 perl ../libgcc/mki.pl $(LOBJ) $(LI) $*.o > /dev/null
-$(LI)/%.json: $(LI)/%.i ../libgcc/clangfix.pl clang-prelude.h
-	perl ../libgcc/clangfix.pl $< > $(LI)/$*.clang.i
-	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+# (x86_64's: the shadow stack's builtins (-mshstk, as gcc's
+# -fcf-protection -mshstk), the casts of longlong.h's asm
+# outputs, which gcc takes as their lvalues; unwind-dw2's intrinsics
+# headers as glibc's SSE4.2 units have them, clangvec.pl)
+LCLANG_x86_64 := -mshstk -Wno-invalid-gnu-asm-cast
+LCLANGVEC_x86_64 := unwind-dw2
+# (aarch64's: aarch64.h, the unwinder's builtins of gcc that clang has not)
+LCLANG_aarch64 := -include ../libgcc/aarch64.h
+$(LI)/%.json: $(LI)/%.i ../libgcc/clangfix.pl ../libgcc/aarch64.h clangvec.pl clang-prelude.h
+	perl ../libgcc/clangfix.pl --target $(GTARGET) $< $(if $(filter $*,$(LCLANGVEC_$(GTARGET))),| perl clangvec.pl) > $(LI)/$*.clang.i
+	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w $(LI)/$*.clang.i > $@
+# (x86_64's milestones take a C object's pass, UNITDEP c2ff: libgcc's from
+# its AST, which stays)
+$(LI)/%.c2ff: $(LI)/%.json ../compiler/gen/c2ff.pl
+	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $<=$(LI)/$*.i
+	@touch $@
 
 $(FF)/libgcc.roots $(FF)/libgcc.units &: $(LIBGCC_C:%=$(LI)/%.json) $(LIBGCC_ASM:%=$(LI)/%.dump)
 	mkdir -p $(FF)
@@ -1002,14 +1142,14 @@ $(FF)/libgcc.roots $(FF)/libgcc.units &: $(LIBGCC_C:%=$(LI)/%.json) $(LIBGCC_ASM
 	for o in $(LIBGCC_C); do $(XPRE)nm --defined-only -g $(LOBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done | sort -u > $(FF)/libgcc.roots
 	for o in $(LIBGCC_C); do echo "$(LI)/$$o.json=$(LI)/$$o.i"; done > $(FF)/libgcc.units
 
-$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl ../compiler/gen/Header.pm
+$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
 	cp ../libgcc/license.ff.txt $(FF)/libgcc.ff.txt
 	$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --keep-going --page gcc --target $(GTARGET) @$(FF)/libgcc.units -- @$(FF)/libgcc.roots \
 	    >> $(FF)/libgcc.ff.txt 2> $(FF)/libgcc.c2ff.err || { tail -5 $(FF)/libgcc.c2ff.err; exit 1; }
 	echo 'gcc asm:' > $(FF)/libgcc.asm.page.txt
 	perl ../compiler/gen/s2ff.pl --header $(LIBGCC_ASM:%=$(LI)/%.s) | sed 's/^/  /' >> $(FF)/libgcc.asm.page.txt
 	for a in $(LIBGCC_ASM); do \
-	    $(RUN) -t 60 perl ../compiler/gen/s2ff.pl --items $(LI)/$$a.s $(LI)/$$a.dump > $(FF)/libgcc.asm.txt || exit 1; \
+	    $(RUN) -t 60 perl $(S2FF) --items $(LI)/$$a$(SSRC) $(LI)/$$a.dump > $(FF)/libgcc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/libgcc.asm.txt >> $(FF)/libgcc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/libgcc.asm.page.txt >> $(FF)/libgcc.ff.txt

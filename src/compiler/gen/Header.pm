@@ -28,7 +28,7 @@ use FF ();
 use File::Spec;
 use Cwd ();
 
-our @EXPORT_OK = qw(source_of leading_comment leading_header spdx notice_lines header_text header_of shown_path real_path GENERATED NOHEADER NOHEADER_GCC license_nodes unit_label);
+our @EXPORT_OK = qw(nolicense_lines source_of leading_comment leading_header spdx notice_lines header_text header_of shown_path real_path GENERATED NOHEADER NOHEADER_GCC license_nodes unit_label);
 
 # The source file of a .i or .s (its first two line markers), or nothing
 # for a generated one (<stdin>: a system call from syscalls.list).
@@ -139,6 +139,14 @@ use constant GENERATED => 'generated from syscalls.list; glibc-2.44 COPYING.LIB'
 use constant NOHEADER => 'no header of its own; glibc-2.44 COPYING.LIB';
 # (and one of gcc's, libgcc's enable-execute-stack-empty.c: libgcc's license)
 use constant NOHEADER_GCC => 'no header of its own; gcc-16.2.0 COPYING3 and COPYING.RUNTIME';
+# (and one whose header is its copyright alone: it names no license, the
+# tree's; its lines, the comment's text then that, headers.pl's too)
+use constant NOLICENSE_GCC => 'the file names no license of its own: the tree\'s, gcc-16.2.0 COPYING3 and COPYING.RUNTIME';
+sub nolicense_lines {
+    my @l = notice_lines($_[0]);
+    @l = ($1) if @l == 1 && $l[0] =~ m{^/\*\s*(.*?)\s*\*/$};
+    (@l, NOLICENSE_GCC);
+}
 
 # The source trees a file comes from, by the variable that names each:
 # glibc's (GLIBC_SRC) and gcc's (LIBGCC_SRC, the libgcc of src/libgcc),
@@ -255,6 +263,13 @@ sub header_of {
         my $h = leading_header(slurp($f)) // next;
         my $x = spdx($h);
         if (!$x) {
+            # (a file of gcc's whose header is its copyright alone, i386's
+            # heap-trampoline.c: the tree's license, the master's and the
+            # user's choice, 2026-10-30, its copyright kept)
+            my ($r) = root_of($f);
+            if ($r->{var} eq 'LIBGCC_SRC' && $h !~ /licen[cs]e|permission|redistribut/i && $h =~ /copyright/i) {
+                return { file => shown_path($f), name => $r->{name}, spdx => $r->{spdx}, lines => [lines_ok($f, nolicense_lines($h))] };
+            }
             die "header: $f: its header names a license this cannot name (add it to spdx in gen/Header.pm)\n" if licensed($h);
             $first //= [$f, $h] if defined $src && $f eq $src;
             next;

@@ -1299,6 +1299,7 @@ sub asm_ins {
 }
 # An asm statement's text from the .i: its template (\t a space, \n a ;),
 # the constraints of its outputs and inputs, and its operands (clang's).
+sub size_class { my %s = (u64 => 8, long => 8, i64 => 8, u32 => 4, int => 4, i32 => 4); $s{ $_[0] } }
 sub asm_parts {
     my ($n) = @_;
     my $b = $n->{range}{begin}{offset} // $n->{range}{begin}{expansionLoc}{offset};
@@ -1322,6 +1323,16 @@ sub asm_parts {
     my @ic = ($ins // '') =~ /"([^"]*)"/g;
     my @ops = kids($n);
     @ops == @oc + @ic or stop('an asm statement whose operands are not its text\'s', $n);
+    # (an output cast to an integer of its own size, gcc's lvalue there:
+    # x86_64's longlong.h and sfp-machine.h, "=r" ((UDItype) (q)): the
+    # variable itself)
+    for my $i (0 .. $#oc) {
+        my $o = $ops[$i];
+        next unless $o->{kind} eq 'CStyleCastExpr';
+        my $in = strip((kids($o))[0]);
+        my ($to, $from) = (tword_int($o), tword_int($in));
+        $ops[$i] = $in if $to eq $from || ("$to $from" =~ /^(\S+) (\S+)$/ && size_class($1) && size_class($1) eq size_class($2));
+    }
     ($template, \@oc, \@ic, \@ops, $clob // '');
 }
 sub asm_stmt {
@@ -1438,6 +1449,12 @@ sub asm_ins_other {
         # barrier's option (dmb ish)
         return node($op, node($1 =~ /^0x/i ? hex $1 : $1)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
         return node($op) if $op =~ /^(?:nop|yield|wfe|wfi|sev|sevl|isb|clrex)$/ && !@a;
+        # a cache's line cleaned by address (libgcc's __aarch64_sync_cache_range:
+        # dc cvau, ic ivau)
+        return node(lc("$op.$a[0]"), node($a[1])) if $op =~ /^(?:dc|ic)$/ && @a == 2 && $a[0] =~ /^(?:cvau|ivau)$/i && $a[1] =~ /^x\d+$/;
+        # an instruction as its word (libgcc's aarch64_vg: .inst of cntd x0,
+        # for an old assembler)
+        return node('word', node($1 =~ /^0x/i ? hex $1 : $1)) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
         # a hint by its number: ttpc names the ones it has (hint 40 is chkfeat)
         my %hint = (0 => 'nop', 1 => 'yield', 25 => 'paciasp', 29 => 'autiasp', 32 => 'bti', 34 => 'bti.c', 36 => 'bti.j', 38 => 'bti.jc', 40 => 'chkfeat');
         return node($hint{$1}) if $op eq 'hint' && @a == 1 && $a[0] =~ /^#?(\d+)$/ && $hint{$1};
@@ -1461,6 +1478,9 @@ sub asm_ins_other {
         return node('vmrs', node($a[0])) if $op eq 'vmrs' && @a == 2 && $a[0] =~ /^r\d+$/ && $a[1] eq 'fpscr';
         return node('vmsr', node($a[1])) if $op eq 'vmsr' && @a == 2 && $a[0] eq 'fpscr' && $a[1] =~ /^r\d+$/;
     } elsif ($target eq 'x86_64') {
+        # an instruction as its bytes (libgcc's cpuinfo.h: xgetbv as .byte
+        # 0x0f, 0x01, 0xd0, for an old assembler)
+        return map { node('byte', node($_)) } @a if $op eq '.byte' && @a && !grep { !/^(?:0x[0-9a-f]+|\d+)$/i } @a;
         # instructions without operands (ABORT_INSTRUCTION's hlt, the spin
         # loops' pause, cpuid with its fixed registers)
         return node($op) if !@a && $op =~ /^(?:fwait|hlt|pause|nop|cpuid|xgetbv|rdtsc|mfence|lfence|sfence|fnclex|fpatan|syscall)$/;
@@ -1489,6 +1509,9 @@ sub asm_ins_other {
             return node($o, map { node(s/^%//r) } @a) if $o =~ /^(?:bsr|bsf|bswap|xchg|lzcnt|tzcnt|popcnt)[lq]$/;
         }
         return node($op, node($1)) if $op =~ /^(?:div|mul)q$/ && @a == 1 && $a[0] =~ /^%(\w+)$/;
+        # the ALU's operations of two registers (libgcc's soft-fp: add and
+        # adc, sub and sbb of two-word fractions), GNU's operands in order
+        return node($op, map { node(s/^%//r) } @a) if $op =~ /^(?:add|adc|sub|sbb|and|or|xor)[lq]$/ && @a == 2 && !grep { !/^%\w+$/ } @a;
         # a load of the TCB's word at an offset into the register output
         # (x86_cpu_cet_active's mov %fs:72, %0 of an unsigned int): the fs
         # prefix, then mov's absolute form, as GNU as makes it (64 8b 04 25)
@@ -1531,7 +1554,7 @@ sub asm_stmt_other {
         $asm_size = $t =~ /^(long|u64|i64|address)$/ ? 'q' : $t =~ /^(int|u32|i32)$/ ? 'l' : undef;
     }
     # each operand: what it is, and the register it wants (x86's a, d ...)
-    my (@want, $ret, @code, @after, %text);
+    my (@want, $ret, @code, @after, %text, $second);
     # (x86_64's x operands of a float or a double in a template that has
     # instructions, libm's fma: each in an xmm register of its own, xmm0
     # up, loaded from its address and an output stored there after; an
@@ -1541,7 +1564,11 @@ sub asm_stmt_other {
         my $out = $i < @$oc;
         my $c = $out ? $oc->[$i] : $ic->[$i - @$oc];
         (my $k = $c) =~ s/[=+&]//g;
-        $k = 'r' if ($k eq 'rm' || $k eq 'g') && $target eq 'x86_64';
+        # (x86_64: % marks an operand commutative with the next, which says
+        # nothing here; an input that may be a register, memory or an
+        # immediate is in a register: libgcc's sfp-machine.h, "rme")
+        $k =~ s/%//g if $target eq 'x86_64';
+        $k = 'r' if ($k eq 'rm' || $k eq 'g' || $k eq 'rme' || $k eq 're' || $k eq 'rmi' || $k eq 'ri') && $target eq 'x86_64';
         if ($target eq 'x86_64' && $template =~ /\S/ && ($k =~ /^xm?$/ || ($k =~ /^\d$/ && !$out && $xreg{$k}))) {
             stop("the asm constraint $c", $n) if $c =~ /\+/;
             my $t = tword($ops->[$i]);
@@ -1558,6 +1585,14 @@ sub asm_stmt_other {
             $text{$i} = $fixed{$k};
         } elsif ($out && ($k eq 'r' || ($k eq 'x' && $target eq 'x86_64'))) {
             # the register output: the function's value (+: it goes in first, as an argument)
+            # (x86_64: a second one in r11, stored through its address after,
+            # as an output in a fixed register: libgcc's soft-fp, add and
+            # adc of two words)
+            if (defined $ret && $target eq 'x86_64' && $c !~ /\+/ && !$second++) {
+                push @want, [$i, 'address'];
+                $text{$i} = 'r11';
+                next;
+            }
             stop('an asm statement with two register outputs', $n) if defined $ret;
             $ret = $i;
             $text{$i} = $retreg{$target};
@@ -1591,7 +1626,7 @@ sub asm_stmt_other {
     for my $w (@want) { next if defined $w->[3]; $w->[3] = 100 + $fpn++ }
     stop('an asm statement with too many operands', $n) if grep { $_->[3] > $#$regs && $_->[3] < 100 } @want or $fpn > 8;
     my @arg;
-    my @scratch = qw(r10 r11);
+    my @scratch = $second ? qw(r10) : qw(r10 r11);
     for my $w (sort { $a->[3] <=> $b->[3] } @want) {
         my ($i, $how, $r, $j) = @$w;
         my $a = $j < 100 ? $regs->[$j] : undef;
@@ -1721,6 +1756,16 @@ sub asm_x87 {
 sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
+    # (the address or the size of a 128-bit integer is no value of one: its
+    # layout, two u64, is right; libgcc's aarch64_fallback_frame_state,
+    # &ctx->vregs[i] and sizeof (ctx->vregs[0]) of the signal frame)
+    if ((($k eq 'UnaryOperator' && $n->{opcode} eq '&') || $k eq 'UnaryExprOrTypeTraitExpr') && !$n->{i128_addr}) {
+        local $n->{i128_addr} = 1;
+        my $was = $saw_i128;
+        my @r = expr($n);
+        $saw_i128 = $was;
+        return @r;
+    }
     softfp($n);
     if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
         && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
@@ -2063,7 +2108,12 @@ sub expr {
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unreachable|trap|return_address|frame_address|extract_return_addr|clz|clzl|clzll|ctz|ctzl|ctzll|popcount|popcountl|popcountll|bswap16|bswap32|bswap64|add_overflow|mul_overflow|add_overflow_p|mul_overflow_p|thread_pointer|fabsf?|fabsl|copysignf?|copysignl|signbitf|signbitl|inff|huge_valf?|huge_vall|nanf?|nanl|fmaf?|sqrtf?|ffs|ffsl|ffsll)$/ || $name eq '__atomic_always_lock_free';
         # and those of one target (builtins-<target>.ff.txt)
         # (riscv64's for libgcc's unwinder, unwind-dw2.c: its frame and registers)
-        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target eq 'riscv64';
+        # (and x86_64's: its shadow stack's too, which libgcc's unwinder reads, and the cache's)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(unwind_init|dwarf_cfa|dwarf_sp_column|eh_return|eh_return_data_regno|frob_return_addr|init_dwarf_reg_size_table)$/ && $target =~ /^(?:riscv64|x86_64|aarch64)$/;
+        # (aarch64's pointer authentication and guarded control stack, its unwinder's)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_aarch64_(?:autia1716|autib1716|chkfeat|gcspr|gcspopm)$/ && $target eq 'aarch64';
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(?:ia32_rdsspq|ia32_incsspq|__clear_cache)$/ && $target eq 'x86_64';
+        return node($name, map { arg($_) } @args) if $name eq '__builtin___clear_cache' && $target eq 'aarch64';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         # (x86_64's float128 ones, x87builtins.pl's)
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(fabs|copysign|signbit|huge_val|nan)f128$/ && $target eq 'x86_64';
@@ -2491,6 +2541,12 @@ sub operand {
     # a conditional (1.5) in a : where what holds it binds tighter; not as the
     # else branch of another (right to left) nor as the value of an =
     return node(':', @e) if $s->{kind} =~ /^(Binary)?ConditionalOperator$/ && (1.5 < $p || (!$right && 1.5 == $p));
+    # a compound literal of an array, a vector or a record in a : (the
+    # user's choice A): its type and items are several nodes in the words
+    # of now, and an operand of several nodes goes in a : ((int[2]){3, 4} ==
+    # p, (__v16qi){...} != c); a scalar one is a number or a suffix's
+    return node(':', @e) if $s->{kind} eq 'CompoundLiteralExpr' && @e == 1 && @{ $e[0]{children} }
+        && ($e[0]{content} =~ /^(?:array|vector)$/ || !$scalar_word{ $e[0]{content} });
     @e;
 }
 
@@ -3113,9 +3169,11 @@ sub next_name {
 # (--keep-going: a definition c2ff cannot translate yet is left out, said
 # on stderr with why, and the rest goes on: all of glibc while a few of
 # its objects wait)
+my %left_out;              # (their ff names: an alias of one is left out too)
 sub leave_out {
     my ($name) = @_;
     die $@ unless $keep_going;
+    $left_out{ ffname($name) } = 1;
     (my $why = $@) =~ s/\n+$//;
     warn "c2ff: left out: $name: $why\n";
 }
@@ -3171,6 +3229,16 @@ while (defined(my $name = next_name())) {
     # ld does): the section's globals come with them
     if ($name =~ /^__(?:start|stop)_(\w+)$/ && $section{$1}) { want($_) for @{ $section{$1} }; next }
     warn "c2ff: no definition of $name, left out\n";
+}
+# (an alias of what was left out is left out too: libgcc's __nehf2, of
+# __eqhf2, a function of _Float16)
+{
+    my @a;
+    while (@a = grep { @{ $_->[1]{children} } == 2 && $_->[1]{children}[0]{content} eq 'alias' && $left_out{ $_->[1]{children}[1]{content} } } @out) {
+        my %drop = map { $_ => 1 } @a;
+        for (@a) { (my $n = $_->[1]{content}) =~ s/:$//; $left_out{$n} = 1; warn "c2ff: left out: $n: an alias of $_->[1]{children}[1]{content}, left out\n" }
+        @out = grep { !$drop{$_} } @out;
+    }
 }
 
 # An enum constant whose name a function or global of the tree has too (a
