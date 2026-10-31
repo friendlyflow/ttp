@@ -497,6 +497,8 @@ my (@made, $n, $pos, @fns, $fn, $block, $other, @pending, %datadef, $ends, %got,
 # the end (after crtn's part of it, --then); the weak names' GOT words, C
 # globals
 my (%MADE, %CODE, $code, %zeroed, %weak, @carried, %weakgot);
+# the size and first alignment of the last run's .text (s2ff --facts)
+our %facts;
 my (%rodata, $roblob, %ro, @carry, %roset);    # read-only data: a label's bytes, the labels a function names
 # (and the runs of it: the labels of each section, in order,
 # each [its labels, its bytes, the alignment before it]; a label's run)
@@ -673,6 +675,8 @@ sub run {
         if (@$c > 1 && $c->[1]{content} eq 'align') { $c->[1]{children}[0]{content} = $maxalign }
         else { splice @$c, 1, 0, node('align', node($maxalign)) }
     }
+    # (what s2ff --facts writes of the ff's run)
+    %facts = (size => $CODE{'.text'}{pos}, align => $maxalign // 1);
     return $CODE{'.text'}{pos} if $mode eq 'size';
     return $maxalign // 1 if $mode eq 'align';
     merge_runons();

@@ -56,6 +56,9 @@ my @files;
 my $size;
 my $items;
 my $alignopt;             # --align (x86_64): the first function's alignment
+my $facts;                # --facts FILE: the ff, and in FILE what --size
+                          # and --align print ("size N", "align N"), so a
+                          # check reads the .s once, not three times
 my $header;
 my (@zero, @then);               # --header file.s ...: the license of each one's file (Header.pm)
 while (@ARGV) {
@@ -65,6 +68,7 @@ while (@ARGV) {
     if ($a eq '--items') { $items = 1; next }
     if ($a eq '--header') { $header = 1; next }
     if ($a eq '--align') { $alignopt = 1; next }
+    if ($a eq '--facts') { $facts = shift @ARGV; next }
     # (x86_64: c2ff --zero's objects; crtn's .s and dump, the end of crti's)
     if ($a eq '--zero') { push @zero, shift @ARGV; next }
     if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
@@ -75,6 +79,7 @@ die "usage: s2ff.pl [--page name | --items | --size] file.s file.dump\n" unless 
 my ($src, $dump) = @files;
 my $where = $src;
 sub fail { die "s2ff: $where: @_\n" }
+sub facts { return unless defined $facts; open my $h, ">", $facts or die "s2ff: cannot write $facts: $!\n"; print $h map { "$_\n" } @_ }
 # the name of gcc's local data label as an asm function's (.LC0 of x.s: LC0 x)
 my %dlabel;
 sub dname { my ($l) = @_; $dlabel{$l} ? ($l =~ s/^\.//r) . ' ' . ($src =~ s{.*/}{}r =~ s/\.\w+$//r) : $l }
@@ -87,6 +92,7 @@ if (do { open my $h, "<", $dump or die "s2ff: cannot open $dump: $!\n"; local $/
     my %opt = (zero => \@zero, @then ? (then => \@then) : ());
     if ($size || $alignopt) { print s2ffx86::run($size ? "size" : "align", $src, $dump, %opt), "\n"; exit }
     my $out = s2ffx86::run("ff", $src, $dump, %opt);
+    facts("size $s2ffx86::facts{size}", "align $s2ffx86::facts{align}");
     print $items ? write_txt(@$out) : write_txt(node("$page:", license_nodes($src), @$out));
     exit;
 }
@@ -492,7 +498,7 @@ finish();
 # what is left is the padding GNU as puts at the end of the section
 pop @made while @made > $n && $made[-1]{op} =~ /^c\.(addi|nop)$|^addi$/ && $made[-1]{args} =~ /^zero,(zero,)?0$/;
 fail "GNU as made " . scalar(@made) . " instructions, $src has $n" unless $n == @made;
-if ($size) { my $b = 0; $b += $_->{bytes} for @made; print "$b\n"; exit }
+{ my $b = 0; $b += $_->{bytes} for @made; if ($size) { print "$b\n"; exit } facts("size $b") }
 # A function that jumps to a block label of the function after it (setjmp.S's
 # _setjmp: j __sigsetjmp, which runs on from setjmp): the two are one asm
 # function, the second's name a block label in it, as a block label is
