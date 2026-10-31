@@ -205,9 +205,9 @@ OBJS_ldouble_x86_64 := math/sfp-exceptions soft-fp/trunctfxf2
 # (arm's long double is double, by its EABI: no soft-fp)
 OBJS_ldouble := $(if $(filter arm,$(GTARGET)),,$(SOFTFP:%=soft-fp/%)) $(OBJS_ldouble_$(GTARGET))
 ASMS_ldouble :=
+ROOTS_ldouble_x86_64 := __trunctfxf2
 ROOTS_ldouble := __addtf3 __subtf3 __multf3 __divtf3 __eqtf2 __netf2 __getf2 __gttf2 __letf2 __lttf2 __negtf2 \
 	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2 $(ROOTS_ldouble_$(GTARGET))
-ROOTS_ldouble_x86_64 := __trunctfxf2
 
 # M3, malloc: malloc, free, realloc and calloc, with M2, and qsort, which
 # was waiting for them.
@@ -1097,7 +1097,11 @@ $(TI)/%.i: mki.pl | $(TOBJ)/$(AREA).log
 # tests; glibc's own units have none that it translates)
 TCLANGFIX_riscv64 := sed -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\?\)[fF]64x\b/\1L   /g' \
 	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g' -e 's/\([0-9]\.\?\)[fF]128\b/\1L   /g'
-TCLANGFIX = $(or $(CLANGFIX),$(TCLANGFIX_$(GTARGET)))
+# (x86_64: its CLANGFIX, and the same _FloatN suffixes but f64x, its long
+# double the x87's as gcc's _Float64x is there)
+TCLANGFIX_x86_64 = $(CLANGFIX) -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\?\)[fF]64x\b/\1L   /g' \
+	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g'
+TCLANGFIX = $(or $(TCLANGFIX_$(GTARGET)),$(CLANGFIX))
 # (and on x86_64 a test of gcc's intrinsics headers, <x86intrin.h>: the
 # tst-*-rtm tests' _xbegin and _xend, through clangvec.pl as glibc's
 # units of them, clang with -msse4.2 -mrtm)
