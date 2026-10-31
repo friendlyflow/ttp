@@ -84,6 +84,9 @@ sub tstr {
     $s =~ s/\b(?:long int)\b/long/g;
     $s =~ s/\b(?:short int)\b/short/g;
     $s =~ s/\bunsigned\b(?! (?:char|short|int|long))/unsigned int/g;
+    # (a 128-bit integer: c2ff's layout of one, two u64, where only its
+    # address or size is taken: libgcc's aarch64_fallback_frame_state)
+    return 'arr(u64,2)' if $s =~ /^(?:(?:unsigned|signed) )?(?:int )?__int128$|^__u?int128_t$/;
     return tstr($tdef{$s}) if exists $tdef{$s};
     return tstr($typeof{$s}) if exists $typeof{$s};
     # (typeof (name): the type of what the unit declares by that name)
