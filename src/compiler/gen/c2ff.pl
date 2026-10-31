@@ -669,7 +669,10 @@ for my $u (@units) {
             if ($own && $recid{ $own->{id} } && defined(my $al = align_attr($d))) { $recid{ $own->{id} }{ff_align} = max_align($recid{ $own->{id} }{ff_align}, $al) }
             if ($own && ($own->{name} // '') eq '' && (my $e = $enumid{ $own->{id} })) {
                 # a typedef of an anonymous enum: the enum takes its name
-                $enumd{"enum $name"} //= $e;
+                # (another unit's with more constants, the first's and more:
+                # libgcc's arm _Unwind_VRS_RegClass has _UVRSC_PAC, glibc's
+                # copy of unwind.h not)
+                set_enumd("enum $name", $e);
                 $tagname{"enum $name"} //= ffname($name);
                 $typedef{$name} //= "enum $name";
                 $enumof{ $_->{name} } = "enum $name" for grep { $_->{kind} eq 'EnumConstantDecl' } @{ $e->{inner} || [] };
@@ -2106,6 +2109,8 @@ sub expr {
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_aarch64_(?:autia1716|autib1716|chkfeat|gcspr|gcspopm)$/ && $target eq 'aarch64';
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(?:ia32_rdsspq|ia32_incsspq|__clear_cache)$/ && $target eq 'x86_64';
         return node($name, map { arg($_) } @args) if $name eq '__builtin___clear_cache' && $target eq 'aarch64';
+        # (arm's EHABI unwinder: the address itself, builtins-arm.ff.txt)
+        return node($name, map { arg($_) } @args) if $name eq '__builtin_frob_return_addr' && $target eq 'arm';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause|xbegin|xend|xtest)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';

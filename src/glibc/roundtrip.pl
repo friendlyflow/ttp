@@ -44,12 +44,13 @@ FFold::x87() if $target eq 'x86_64';
 my ($namesfile, $backjson, @unitjson) = @ARGV;
 die "usage: roundtrip.pl [--target t] names.txt back.json [unit.json ...]\n" unless defined $backjson;
 
-my (@bodies, %orig, %asmfn, @globals);
+my (@bodies, %orig, %asmfn, %noproto, @globals);
 open my $h, '<', $namesfile or die "roundtrip: $namesfile: $!\n";
 while (<$h>) {
     chomp;
     my ($k, $cid, $o, $unit) = split /\t/;
     if ($k eq 'asm') { $asmfn{$o} = 1; next }
+    if ($k eq 'noproto') { $noproto{$o} = 1; next }
     if ($k eq 'global' || $k eq 'gfailed') { push @globals, [$cid, $o, $unit, $k]; next }
     $orig{$cid} = $o;
     push @bodies, [$cid, $o, $unit, $k] if $k eq 'body' || $k eq 'failed';
@@ -336,6 +337,7 @@ sub E {
     return '(asm)' if $k eq 'GCCAsmStmt';
     "(?$k)";
 }
+sub unpromote { my ($n) = @_; $n = (kids($n))[0] while $n && (($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/ || (($n->{kind} // '') eq 'ImplicitCastExpr' && ($n->{castKind} // '') !~ /ToBoolean$/)); $n }
 sub unimplicit { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub seqform { my (@i) = @_; @i == 1 ? $i[0] : '(seq ' . join(' ', @i) . ')' }
 sub seq { my ($n) = @_; my $s = unparen($n); return ($s->{kind} eq 'BinaryOperator' && $s->{opcode} eq ',') ? map { seq($_) } kids($s) : E($n) }
@@ -437,6 +439,13 @@ sub call {
         @args = ($args[0]) if $name eq '__builtin_va_start';
         # an asm function has no C type in ff: C's conversions of its arguments are not there
         @args = map { unimplicit($_) } @args if $asmfn{$name};
+        # (a weak function's, declared without parameters on ff's side: C's
+        # conversions of its arguments are not there, but a bool's, which
+        # c2ff writes (x != 0))
+        @args = map { unpromote($_) } @args if $noproto{$name};
+        # (and ff's x != 0 for it, which a parameter's bool made (tobool x))
+        @args = map { my $b = unparen($_); ($b->{kind} // '') eq 'BinaryOperator' && $b->{opcode} eq '!=' && is_zero((kids($b))[1])
+            ? { kind => 'ImplicitCastExpr', castKind => 'IntegralToBoolean', type => $b->{type}, inner => [(kids($b))[0]] } : $_ } @args if $noproto{$name} && $side eq 'ff';
         # (nor its pointer arguments' conversions to void *, either side)
         @args = map { my $a = $_; $a = (kids($a))[0] while ($a->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($a->{castKind} // '') =~ /^(BitCast|NoOp)$/; $a } @args if $asmfn{$name};
         return '(asm)' if $name =~ /^_+asm_/;

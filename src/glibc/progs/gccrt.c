@@ -40,56 +40,70 @@ unsigned long __fixunsxfdi (long double);
 tf __extendxftf2 (long double);
 long double __trunctfxf2 (tf);
 #endif
-int __popcountdi2 (long);
-int __clzdi2 (unsigned long);
-int __ctzdi2 (unsigned long);
-int __ffsdi2 (long);
-int __paritydi2 (long);
-int __clrsbdi2 (long);
+int __popcountdi2 (long long);
+int __clzdi2 (unsigned long long);
+int __ctzdi2 (unsigned long long);
+int __ffsdi2 (long long);
+int __paritydi2 (long long);
+int __clrsbdi2 (long long);
 unsigned int __bswapsi2 (unsigned int);
-long __bswapdi2 (long);
+long long __bswapdi2 (long long);
 int __absvsi2 (int);
-long __absvdi2 (long);
+long long __absvdi2 (long long);
 int __addvsi3 (int, int);
-long __addvdi3 (long, long);
-long __subvdi3 (long, long);
+long long __addvdi3 (long long, long long);
+long long __subvdi3 (long long, long long);
 int __mulvsi3 (int, int);
 double __powidf2 (double, int);
 float __powisf2 (float, int);
+#ifndef __arm__
 tf __powitf2 (tf, int);
-unsigned long __fixunsdfdi (double);
-unsigned long __fixunssfdi (float);
+unsigned long long __fixunsdfdi (double);
+unsigned long long __fixunssfdi (float);
 tf __floatsitf (int);
 tf __floatunsitf (unsigned int);
 int __fixtfsi (tf);
 unsigned int __fixunstfsi (tf);
 int __unordtf2 (tf, tf);
+#else
+/* (arm: no binary128, its long double a double; its 64-bit division, C;
+   not the four of AEABI's base procedure call standard, __fixunsdfdi ...,
+   whose floats come in core registers, nor lib1funcs.S's shifts, asm of
+   conditional forms ttpc has none of yet) */
+long long __divdi3 (long long, long long);
+long long __moddi3 (long long, long long);
+unsigned long long __udivdi3 (unsigned long long, unsigned long long);
+unsigned long long __umoddi3 (unsigned long long, unsigned long long);
+#endif
 #ifdef __riscv
 /* (soft-fp's division of float and double: riscv64's libgcc has them, x86_64
    divides in SSE) */
 double __divdf3 (double, double);
 float __divsf3 (float, float);
 #endif
-int __gcc_bcmp (const unsigned char *, const unsigned char *, unsigned long);
+int __gcc_bcmp (const unsigned char *, const unsigned char *, __SIZE_TYPE__);
 
 static int n;
 
-static void w (unsigned long x) { printf ("%d %016lx\n", n++, x); }
+static void w (unsigned long long x) { printf ("%d %016llx\n", n++, x); }
 /* (an unsigned int as itself: this file declares __bswapsi2 unsigned, where
    libgcc's is SItype, an int; gcc takes a call's type from the caller's
    declaration, ttpc from the function's definition) */
 static void w32 (unsigned int x) { printf ("%d %08x\n", n++, x); }
-/* (a NaN's sign on aarch64 as 0: gcc's libgcc there computes a * b + c as
-   one fmadd, fmsub ... (C's FP_CONTRACT, gcc's -ffp-contract=fast), whose
-   NaN takes another sign than two operations', ttpc's) */
-#ifdef __aarch64__
+/* (a NaN's sign on aarch64 and arm as 0: gcc's libgcc there computes
+   a * b + c as one fmadd, fmsub ..., arm's vmla, vmls (C's FP_CONTRACT,
+   gcc's -ffp-contract=fast), whose NaN takes another sign than two
+   operations', ttpc's) */
+#if defined __aarch64__ || defined __arm__
 #define NANSIGN(x, s) ((x) != (x) ? (s) : 0)
 #else
 #define NANSIGN(x, s) 0
 #endif
 static void f (float x) { union { float f; unsigned int u; } v; v.f = x; w (v.u & ~NANSIGN (x, 0x80000000u)); }
-static void d (double x) { union { double d; unsigned long u; } v; v.d = x; w (v.u & ~NANSIGN (x, 0x8000000000000000ul)); }
-static void l (tf x) { union { tf d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & ~NANSIGN (x, 0x8000000000000000ul)); }
+static void d (double x) { union { double d; unsigned long long u; } v; v.d = x; w (v.u & ~NANSIGN (x, 0x8000000000000000ul)); }
+#ifndef __arm__
+static void l (tf x) { union { tf d; unsigned long long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & ~NANSIGN (x, 0x8000000000000000ul)); }
+#endif
 #ifdef __x86_64__
 /* (the x87's 80 bits: the 6 bytes above them are padding) */
 static void xl (long double x) { union { long double d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & 0xffff); }
@@ -109,44 +123,65 @@ int main (void)
         d (__real__ z); d (__imag__ z); d (__real__ q); d (__imag__ q);
         cf zf = __mulsc3 (a, b, c, e), qf = __divsc3 (a, b, c, e);
         f (__real__ zf); f (__imag__ zf); f (__real__ qf); f (__imag__ qf);
-#ifndef __x86_64__
+#if !defined __x86_64__ && !defined __arm__
         cl zl = __multc3 (a, b, c, e), ql = __divtc3 (a, b, c, e);
         l (__real__ zl); l (__imag__ zl); l (__real__ ql); l (__imag__ ql);
-#else
+#elif defined __x86_64__
         cx zx = __mulxc3 (a, b, c, e), qx = __divxc3 (a, b, c, e);
         xl (__real__ zx); xl (__imag__ zx); xl (__real__ qx); xl (__imag__ qx);
 #endif
       }
-  static long iv[] = { 0, 1, -1, 2, 0x7f, 0x80, 0x12345678, -0x7fffffffL, 0x0102030405060708L, 0x7fffffffffffffffL, (long) 0x8000000000000000UL };
+  static long long iv[] = { 0, 1, -1, 2, 0x7f, 0x80, 0x12345678, -0x7fffffffLL, 0x0102030405060708LL, 0x7fffffffffffffffLL, (long long) 0x8000000000000000ULL };
   for (i = 0; i < sizeof iv / sizeof iv[0]; i++)
     {
-      long x = iv[i];
+      long long x = iv[i];
       w (__popcountdi2 (x)); w (__ffsdi2 (x)); w (__paritydi2 (x)); w (__clrsbdi2 (x));
       if (x)
-        { w (__clzdi2 (x)); w (__ctzdi2 (x)); }
+        {
+#ifndef __arm__
+          w (__clzdi2 (x));   /* (arm's is lib1funcs.S's asm, not in ff yet) */
+#endif
+          w (__ctzdi2 (x));
+        }
       w32 (__bswapsi2 (x)); w (__bswapdi2 (x));
-      if (x != (long) 0x8000000000000000UL)
+#ifndef __arm__
+      /* (arm's trapping arithmetic of 64 bits: its overflow builtins of
+         long long, which c2ff has no form of on arm yet) */
+      if (x != (long long) 0x8000000000000000ULL)
         w (__absvdi2 (x));
+#endif
       if ((int) x != (int) 0x80000000)
         w (__absvsi2 ((int) x));
-      w (__addvsi3 ((int) x >> 2, 12345)); w (__addvdi3 (x >> 2, -77)); w (__subvdi3 (x >> 2, 99)); w (__mulvsi3 ((int) x >> 17, 3));
+      w (__addvsi3 ((int) x >> 2, 12345));
+#ifndef __arm__
+      w (__addvdi3 (x >> 2, -77)); w (__subvdi3 (x >> 2, 99));
+#endif
+      w (__mulvsi3 ((int) x >> 17, 3));
       d (__powidf2 (1.0 + (double) (x & 0xff) / 64, (int) (x & 31) - 8));
       f (__powisf2 (1.0f + (float) (x & 0xff) / 32, (int) (x & 15) - 4));
+#ifndef __arm__
       l (__powitf2 ((tf) 1 + (tf) (x & 0xff) / 16, (int) (x & 63) - 20));
       l (__floatsitf ((int) x)); l (__floatunsitf ((unsigned int) x));
       w (__fixtfsi ((tf) (int) x / 3)); w32 (__fixunstfsi ((tf) (unsigned int) x / 5));
-      w (__fixunsdfdi ((double) (unsigned long) x)); w (__fixunssfdi ((float) (unsigned int) x));
+      w (__fixunsdfdi ((double) (unsigned long long) x)); w (__fixunssfdi ((float) (unsigned int) x));
+#else
+      w (__divdi3 (x, 7)); w (__moddi3 (x, -5)); w (__udivdi3 (x, 3)); w (__umoddi3 (x, 1000003));
+      if (x != (long long) 0x8000000000000000ULL)
+        w (__divdi3 (x, x | 1));
+#endif
 #ifdef __riscv
       d (__divdf3 ((double) x, 7.0)); f (__divsf3 ((float) x, -3.0f));
 #endif
 #ifdef __x86_64__
       xl (__powixf2 (1.0L + (long double) (x & 0xff) / 16, (int) (x & 63) - 20));
-      w (__fixunsxfdi ((long double) (unsigned long) x / 5));
+      w (__fixunsxfdi ((long double) (unsigned long long) x / 5));
       l (__extendxftf2 ((long double) x / 3)); xl (__trunctfxf2 ((tf) x / 3));
 #endif
     }
+#ifndef __arm__
   for (i = 0; i < N; i++)
     w (__unordtf2 (dv[i], dv[(i + 7) % N]));
+#endif
   static const unsigned char s1[] = "libgcc in ff", s2[] = "libgcc in FF";
   w (__gcc_bcmp (s1, s2, 10)); w (__gcc_bcmp (s1, s2, 12) != 0);
   return 0;

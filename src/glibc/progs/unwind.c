@@ -17,6 +17,9 @@
    registered (__register_frame), and its gcc_mid and gcc_forced call back
    into the program, whose walks pass through gcc's frame. */
 
+#ifdef __arm__
+#define _GNU_SOURCE     /* (link.h's dl_iterate_phdr) */
+#endif
 #include <elf.h>
 #include <fcntl.h>
 #include <setjmp.h>
@@ -25,8 +28,60 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <unwind.h>
+#ifdef __ARM_EABI_UNWINDER__
+#include <link.h>
+#endif
 
+/* (an ELF of the target's word: arm's 32 bits) */
+#if __SIZEOF_POINTER__ == 8
+typedef Elf64_Ehdr Ehdr; typedef Elf64_Phdr Phdr; typedef Elf64_Shdr Shdr; typedef Elf64_Sym Sym;
+#else
+typedef Elf32_Ehdr Ehdr; typedef Elf32_Phdr Phdr; typedef Elf32_Shdr Shdr; typedef Elf32_Sym Sym;
+#endif
+
+#ifndef __ARM_EABI_UNWINDER__
 void __register_frame (void *);
+#else
+/* arm's EHABI unwinder has no __register_frame and no
+   _Unwind_FindEnclosingFunction: it asks __gnu_Unwind_Find_exidx for the
+   index table of an address (glibc's, which takes the program's,
+   PT_ARM_EXIDX, from dl_iterate_phdr), here the program's own: gcc's part's
+   .ARM.exidx where the address is in its text, else the program's as
+   glibc's does; a function is the nearest of fns at or below the address */
+static unsigned long gcc_lo, gcc_hi, gcc_exidx, gcc_nexidx;
+struct find { unsigned long pc, exidx; int n; };
+static int find_phdr (struct dl_phdr_info *info, size_t size, void *arg)
+{
+  struct find *f = arg;
+  const ElfW(Phdr) *load = 0, *exidx = 0;
+  for (int i = 0; i < info->dlpi_phnum; i++)
+    {
+      const ElfW(Phdr) *p = &info->dlpi_phdr[i];
+      if (p->p_type == PT_LOAD && f->pc >= info->dlpi_addr + p->p_vaddr && f->pc < info->dlpi_addr + p->p_vaddr + p->p_memsz)
+        load = p;
+      if (p->p_type == PT_ARM_EXIDX)
+        exidx = p;
+    }
+  if (!load || !exidx)
+    return 0;
+  f->exidx = info->dlpi_addr + exidx->p_vaddr;
+  f->n = exidx->p_memsz / 8;
+  return 1;
+}
+_Unwind_Ptr __gnu_Unwind_Find_exidx (_Unwind_Ptr pc, int *count)
+{
+  if (pc >= gcc_lo && pc < gcc_hi)
+    {
+      *count = gcc_nexidx;
+      return gcc_exidx;
+    }
+  struct find f = { pc, 0, 0 };
+  if (dl_iterate_phdr (find_phdr, &f) <= 0)
+    return 0;
+  *count = f.n;
+  return f.exidx;
+}
+#endif
 
 static int walk (int);
 static int f1 (int), f2 (int), f3 (int);
@@ -44,11 +99,23 @@ static struct { void *fn; const char *name; } fns[] = {
 
 static const char *name_of (struct _Unwind_Context *c)
 {
+#ifndef __ARM_EABI_UNWINDER__
   void *f = _Unwind_FindEnclosingFunction ((void *) (_Unwind_GetIP (c) - 1));
   for (unsigned int i = 0; i < sizeof fns / sizeof fns[0]; i++)
     if (fns[i].fn == f)
       return fns[i].name;
   return "?";
+#else
+  unsigned long ip = _Unwind_GetIP (c) - 1, best = 0;
+  const char *n = "?";
+  for (unsigned int i = 0; i < sizeof fns / sizeof fns[0]; i++)
+    if ((unsigned long) fns[i].fn <= ip && (unsigned long) fns[i].fn > best)
+      {
+        best = (unsigned long) fns[i].fn;
+        n = fns[i].name;
+      }
+  return n;
+#endif
 }
 
 static char seen[256];
@@ -106,7 +173,7 @@ static _Unwind_Reason_Code stop (int version, _Unwind_Action actions, _Unwind_Ex
 
 static __attribute__ ((noinline)) void g3 (int x)
 {
-  exc.exception_class = 0x7474705f66660000UL;
+  memcpy (&exc.exception_class, "\0\0ff_ptt", 8);
   sink = x;
   _Unwind_ForcedUnwind (&exc, stop, &exc);
   printf ("forced: returned\n");
@@ -125,8 +192,8 @@ static int load (const char *path)
   int fd = open (path, O_RDONLY);
   if (fd < 0 || read (fd, file, sizeof file) <= 0)
     return 0;
-  Elf64_Ehdr *e = (Elf64_Ehdr *) file;
-  Elf64_Phdr *ph = (Elf64_Phdr *) (file + e->e_phoff);
+  Ehdr *e = (Ehdr *) file;
+  Phdr *ph = (Phdr *) (file + e->e_phoff);
   for (int i = 0; i < e->e_phnum; i++)
     if (ph[i].p_type == PT_LOAD)
       {
@@ -136,15 +203,23 @@ static int load (const char *path)
           return 0;
         memcpy ((void *) ph[i].p_vaddr, file + ph[i].p_offset, ph[i].p_filesz);
       }
-  Elf64_Shdr *sh = (Elf64_Shdr *) (file + e->e_shoff);
+  Shdr *sh = (Shdr *) (file + e->e_shoff);
   const char *shstr = (const char *) file + sh[e->e_shstrndx].sh_offset;
   for (int i = 0; i < e->e_shnum; i++)
     {
       if (strcmp (shstr + sh[i].sh_name, ".eh_frame") == 0)
+#ifndef __ARM_EABI_UNWINDER__
         __register_frame ((void *) sh[i].sh_addr);
+#else
+        ;
+      if (strcmp (shstr + sh[i].sh_name, ".ARM.exidx") == 0)
+        gcc_exidx = sh[i].sh_addr, gcc_nexidx = sh[i].sh_size / 8;
+      if (strcmp (shstr + sh[i].sh_name, ".text") == 0)
+        gcc_lo = sh[i].sh_addr, gcc_hi = sh[i].sh_addr + sh[i].sh_size;
+#endif
       if (sh[i].sh_type == SHT_SYMTAB)
         {
-          Elf64_Sym *sym = (Elf64_Sym *) (file + sh[i].sh_offset);
+          Sym *sym = (Sym *) (file + sh[i].sh_offset);
           const char *str = (const char *) file + sh[sh[i].sh_link].sh_offset;
           for (unsigned long k = 0; k < sh[i].sh_size / sizeof *sym; k++)
             for (unsigned int f = 0; f < sizeof fns / sizeof fns[0]; f++)

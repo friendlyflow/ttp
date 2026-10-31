@@ -476,9 +476,19 @@ A("mcr", "mcr p{coproc}, {opc1}, {rt}, c{crn}, c{crm}, {opc2}", $CP, "op=1110", 
 my $CPL = { coproc => [1, 14], crd => [10, 15, 0], uimm => [8, 0, 1020] };
 A("ldcl.post", "ldcl p{coproc}, c{crd}, [{rn}], #{uimm}", $CPL, "op=110", "p=0", "u=1", "n=1", "w=1", "l=1", "rn", "crd[3:0]", "coproc[3:0]", "uimm[9:2]");
 A("stcl.post", "stcl p{coproc}, c{crd}, [{rn}], #{uimm}", $CPL, "op=110", "p=0", "u=1", "n=1", "w=1", "l=0", "rn", "crd[3:0]", "coproc[3:0]", "uimm[9:2]");
+# (and ldc2/stc2, unconditional (1111), libgcc's libunwind.S's iWMMXt
+# control registers)
+def("ldc2.post", "a", "ldc2 p{coproc}, c{crd}, [{rn}], #{uimm}", $CPL, "op=1111110", "p=0", "u=1", "n=0", "w=1", "l=1", "rn", "crd[3:0]", "coproc[3:0]", "uimm[9:2]");
+def("stc2.post", "a", "stc2 p{coproc}, c{crd}, [{rn}], #{uimm}", $CPL, "op=1111110", "p=0", "u=1", "n=0", "w=1", "l=0", "rn", "crd[3:0]", "coproc[3:0]", "uimm[9:2]");
 my $VLM = { params => ["dd", "n", "rn"], dd => [8, 0, 16], n => [8, 1, 16] };
 A("vldmia.64", "vldmia {rn}!, {dd~n}", $VLM, "op=11001", vX("dd"), "w=1", "l=1", "rn", vV("dd"), "x=1011", "n[6:0]", "z=0");
 A("vstmia.64", "vstmia {rn}!, {dd~n}", $VLM, "op=11001", vX("dd"), "w=1", "l=0", "rn", vV("dd"), "x=1011", "n[6:0]", "z=0");
+# (without writeback, and the FLDMX/FSTMX format of the same, whose
+# imm8 is odd: libgcc's libunwind.S's saves and restores of d0..d31)
+A("vldmia.64n", "vldmia {rn}, {dd~n}", $VLM, "op=11001", vX("dd"), "w=0", "l=1", "rn", vV("dd"), "x=1011", "n[6:0]", "z=0");
+A("vstmia.64n", "vstmia {rn}, {dd~n}", $VLM, "op=11001", vX("dd"), "w=0", "l=0", "rn", vV("dd"), "x=1011", "n[6:0]", "z=0");
+A("fldmiax", "fldmiax {rn}, {dd~n}", $VLM, "op=11001", vX("dd"), "w=0", "l=1", "rn", vV("dd"), "x=1011", "n[6:0]", "z=1");
+A("fstmiax", "fstmiax {rn}, {dd~n}", $VLM, "op=11001", vX("dd"), "w=0", "l=0", "rn", vV("dd"), "x=1011", "n[6:0]", "z=1");
 A("vmov.32rd", "vmov.32 {rt}, {dn}[{lane}]", { lane => [0, 1] }, "op=1110", "u=0", "o=0", "lane[0]", "l=1", vV("dn"), "rt", "x=1011", vX("dn"), "opc2=00", "y=1", "z=0000");
 A("vdup.8q", "vdup.8 {qd}, {rt}", undef, "op=11101", "b=1", "q=1", "z=0", vV("qd"), "rt", "x=1011", vX("qd"), "y=0", "e=0", "w=1", "v=0000");
 # NEON operations: A32 1111 001U, Thumb-2 111U 1111, then the same

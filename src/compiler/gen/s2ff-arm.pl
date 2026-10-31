@@ -199,7 +199,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
                 next;
             }
             # GNU's numeric labels (99:) are .L99^B1, .L99^B2 ... in its object
-            if ($st =~ s/^(\d+):\s*//) { my $n = ".L$1\x02" . ++$numeric{$1}; $label->($n) if defined $other; redo if $st ne ''; next }
+            if ($st =~ s/^(\d+):\s*//) { my $n = ".L$1\x02" . ++$numeric{$1}; $label->($n) if defined $other && $other !~ /^\.debug_/; redo if $st ne ''; next }
             next if $st =~ /^\.(ident|file)\b/;
             if ($st =~ /^\.pushsection\s+([^,\s]+)/) { $close->(); push @stack, $other; my $sn = $1; $other = $sn =~ /^\.(text|init|fini)$/ ? undef : $sn; next }
             if ($st =~ /^\.popsection$/) { $close->(); $other = pop @stack; next }
@@ -211,6 +211,9 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
             }
             $weakref{$1} = 1 if $st =~ /^\.weak\s+([.\w]+)$/;
             next unless defined $other;
+            # (debugging data, lib1funcs.S's own .debug_frame: not the
+            # program's, ttpc writes its own)
+            next if $other =~ /^\.debug_/;
             next if $st =~ /^\.(globl|global|weak|type|size|hidden)\b/;
             if ($st =~ /^\.(p2align|align|balign)\s+(\d+)/) {
                 my $a = $1 eq 'balign' ? $2 : 2**$2;

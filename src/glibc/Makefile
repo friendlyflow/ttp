@@ -327,12 +327,26 @@ ROOTS_gnuc := $(ROOTS_ldouble) $(ROOTS_gnuc_$(GTARGET))
 # word its asm reads)
 LIBGCC_EH_C_aarch64 := __aarch64_have_sme
 LIBGCC_EH_ASM_aarch64 := __arm_za_disable __arm_tpidr2_save
-LIBGCC_EH := unwind-dw2 unwind-dw2-fde-dip unwind-c $(LIBGCC_EH_C_$(GTARGET))
+# (arm's unwinder is EHABI's, over .ARM.exidx: unwind-arm.c, pr-support.c
+# and libunwind.S, whose entries save the core registers for it; its
+# __gnu_Unwind_Find_exidx is glibc's (elf/find_exidx: dl_iterate_phdr's
+# PT_ARM_EXIDX, which ttpc -g writes) or, in progs/unwind.c, the program's)
+LIBGCC_EH_arm := unwind-arm pr-support unwind-c
+LIBGCC_EH_ASM_arm := libunwind
+# (the bounds of .ARM.exidx that ld defines, which unwind-arm.c reads where
+# no __gnu_Unwind_Find_exidx is linked: weak here, address 0, as ttpc
+# defines none; glibc's and progs/unwind.c's find the table)
+WEAKS_unwind_arm := __exidx_start __exidx_end
+# (and progs/unwind.c's own __gnu_Unwind_Find_exidx, which only libgcc's
+# unwinder calls: a root of the program besides main)
+PROGROOTS_unwind := $(if $(filter arm,$(GTARGET)),__gnu_Unwind_Find_exidx)
+ROOTS_unwind_arm := dl_iterate_phdr
+LIBGCC_EH := $(or $(LIBGCC_EH_$(GTARGET)),unwind-dw2 unwind-dw2-fde-dip unwind-c) $(LIBGCC_EH_C_$(GTARGET))
 LIBGCC_EH_ASM := $(LIBGCC_EH_ASM_$(GTARGET))
-OBJS_unwind := elf/dl-iteratephdr setjmp/longjmp setjmp/jmp-unwind nptl/pthread_cleanup_upto nptl/pthread_cond_wait nptl/pthread_cond_broadcast nptl/pthread_mutex_cond_lock nptl/pthread_cond_signal $(LIBGCC_EH:%=libgcc/%)
+OBJS_unwind := $(OBJS_unwind_$(GTARGET)) elf/dl-iteratephdr setjmp/longjmp setjmp/jmp-unwind nptl/pthread_cleanup_upto nptl/pthread_cond_wait nptl/pthread_cond_broadcast nptl/pthread_mutex_cond_lock nptl/pthread_cond_signal $(LIBGCC_EH:%=libgcc/%)
 ASMS_unwind := $(LIBGCC_EH_ASM:%=libgcc/%)
 ROOTS_unwind := $(ROOTS_stdio) _Unwind_Backtrace _Unwind_ForcedUnwind _Unwind_GetIP _Unwind_GetCFA _Unwind_FindEnclosingFunction _setjmp longjmp \
-	open read mmap __register_frame
+	open read mmap __register_frame $(ROOTS_unwind_$(GTARGET))
 # (and gcc's frames among the program's: progs/unwind-gcc.c, by gcc alone at
 # an address of its own, which the program maps and registers)
 RUN_unwind = $(FF)/unwind-gcc.elf
@@ -340,14 +354,21 @@ RUN_unwind = $(FF)/unwind-gcc.elf
 # .eh_frame, where __register_frame reads to its end: a 0 word; crtend's
 # terminator is not linked)
 UNWINDGCC_x86_64 := -fcf-protection=none -Wa,-mx86-used-note=no
+# (arm's compact .ARM.exidx entries name the personality routine
+# __aeabi_unwind_cpp_pr0, to link it: the unwinder of the program decodes
+# them itself, and this part links no libgcc)
+UNWINDGCC_arm := -Wl,--defsym=__aeabi_unwind_cpp_pr0=0
 $(FF)/unwind-gcc.elf: progs/unwind-gcc.c
 	mkdir -p $(FF)
 	$(RUN) -t 60 $(GLIBC_CC) -O1 $(UNWINDGCC_$(GTARGET)) -funwind-tables -fno-pic -no-pie -static -nostdlib -Wl,-Ttext-segment=0x30000000 -Wl,-e,gcc_mid -Wl,--build-id=none $< -o $@
 unwind-check unwind-check-O: $(FF)/unwind-gcc.elf
 ZEROS_unwind := $(ZEROS_stdio)
-WEAKS_unwind := $(WEAKS_stdio)
+WEAKS_unwind := $(WEAKS_stdio) $(WEAKS_unwind_$(GTARGET))
 LICENSE_unwind := license-libgcc.ff.txt
 TTPCFLAGS_unwind := -g
+# (gcc's on arm with unwind tables, .ARM.exidx, which its C has not by
+# default there; the other targets' have them, -fasynchronous-unwind-tables)
+CFLAGS_unwind := $(if $(filter arm,$(GTARGET)),-funwind-tables)
 
 # gccrt: libgcc's own functions in ff (src/libgcc, as unwind's), called by
 # name (progs/gccrt.c): complex multiply and divide, the integer helpers,
@@ -407,6 +428,18 @@ LIBGCC_C_aarch64 := lse-init _muldi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3 _cmpdi2 
 	floatundibf floattibf floatuntibf floatbitinthf floatbitintbf floatbitinttf fixtfbitint fixsfbitint floatbitintsf \
 	fixdfbitint floatbitintdf enable-execute-stack hardcfr bitintpow10 unwind-dw2 unwind-dw2-fde-dip unwind-sjlj unwind-c \
 	__aarch64_have_sme heap-trampoline emutls
+# (arm's: EHABI's unwinder, unwind-arm.c and pr-support.c over .ARM.exidx,
+# bpabi's 64-bit division, VFP hardware's float helpers, fp16)
+LIBGCC_C_arm := _muldi3 _negdi2 _cmpdi2 _ucmpdi2 _trampoline __main _absvsi2 _absvdi2 _addvsi3 _addvdi3 _subvsi3 \
+	_subvdi3 _mulvsi3 _mulvdi3 _negvsi2 _negvdi2 _ctors _ffssi2 _ffsdi2 _clz _ctzdi2 _popcount_tab _popcountsi2 \
+	_popcountdi2 _paritysi2 _paritydi2 _powisf2 _powidf2 _powixf2 _powitf2 _mulhc3 _mulsc3 _muldc3 _mulxc3 _multc3 _divhc3 \
+	_divsc3 _divdc3 _divxc3 _divtc3 _bswapsi2 _bswapdi2 _clrsbsi2 _clrsbdi2 _mulbitint3 _fixunssfsi _fixunsdfsi _fixunsxfsi \
+	_fixxfdi _fixtfdi _fixunsxfdi _fixunstfdi _floatdisf _floatdidf _floatdixf _floatditf _floatundisf _floatundidf \
+	_floatundixf _floatunditf _eprintf __gcc_bcmp _divdi3 _moddi3 _divmoddi4 _udivdi3 _umoddi3 _udivmoddi4 _udiv_w_sdiv \
+	_divmodbitint4 bpabi unaligned-funcs sfp-exceptions addsf3 divsf3 eqsf2 gesf2 lesf2 mulsf3 negsf2 subsf3 unordsf2 \
+	fixsfsi floatsisf floatunsisf adddf3 divdf3 eqdf2 gedf2 ledf2 muldf3 negdf2 subdf3 unorddf2 fixdfsi floatsidf \
+	floatunsidf extendsfdf2 truncdfsf2 fixsfbitint floatbitintsf fixdfbitint floatbitintdf floatbitinthf \
+	enable-execute-stack hardcfr fp16 unwind-arm pr-support unwind-c emutls
 LIBGCC_C := $(LIBGCC_C_$(GTARGET))
 # (and its asm: riscv64's save-restore and division, x86_64's ms_abi
 # register saves and the split stack's morestack.S)
@@ -427,6 +460,20 @@ LIBGCC_ASM_aarch64 := cas_1_1 cas_2_1 cas_4_1 cas_8_1 cas_16_1 cas_1_2 cas_2_2 c
 	swp_2_5 ldadd_2_5 ldclr_2_5 ldeor_2_5 ldset_2_5 swp_4_5 ldadd_4_5 ldclr_4_5 ldeor_4_5 ldset_4_5 swp_8_5 ldadd_8_5 \
 	ldclr_8_5 ldeor_8_5 ldset_8_5 __arm_get_current_vg __arm_sme_state __arm_tpidr2_restore __arm_tpidr2_save \
 	__arm_za_disable
+# (arm's: lib1funcs.S's division and shifts, ieee754-df/sf's for a
+# soft-float caller, and libunwind.S: the unwinder's entries that save the
+# core registers)
+LIBGCC_ASM_arm := _thumb1_case_sqi _thumb1_case_uqi _thumb1_case_shi _thumb1_case_uhi _thumb1_case_si \
+	_speculation_barrier _bb_init_func _call_via_rX _arm_negdf2 _arm_unorddf2 _arm_fixdfsi _arm_fixunsdfsi _arm_negsf2 \
+	_arm_unordsf2 _arm_fixsfsi _arm_fixunssfsi _arm_floatdidf _arm_floatdisf _arm_floatundidf _arm_floatundisf _clzsi2 \
+	_ctzsi2 _aeabi_lcmp _aeabi_ulcmp _aeabi_ldivmod _aeabi_uldivmod _dvmd_lnx _clear_cache libunwind
+# (and those of A32 forms ttpc has none of yet: conditional ones, subcs,
+# streq, teqne ... (ieee754-df/sf.S's soft-float arithmetic, which a
+# hard-float program never calls; lib1funcs.S's division, ttpc divides
+# itself; its 64-bit shifts): not in libgcc.ff yet, a later step, as forms)
+LIBGCC_ASMOUT_arm := _arm_muldf3 _arm_mulsf3 _udivsi3 _divsi3 _umodsi3 _modsi3 _interwork_call_via_rX _lshrdi3 _ashrdi3 \
+	_ashldi3 _arm_addsubdf3 _arm_muldivdf3 _arm_cmpdf2 _arm_truncdfsf2 _arm_addsubsf3 _arm_muldivsf3 _arm_cmpsf2 _clzdi2 \
+	libunwind
 LIBGCC_ASM := $(LIBGCC_ASM_$(GTARGET))
 OBJS_gccrt := $(OBJS_unwind) nptl/pthread_key_create nptl/pthread_setspecific nptl/pthread_getspecific stdio-common/fprintf libio/iofflush $(LIBGCC_C:%=libgcc/%)
 # (x86_64's split stack, generic-morestack.c: its glibc calls and
@@ -435,6 +482,7 @@ OBJS_gccrt_x86_64 := csu/errno-loc misc/writev signal/sigempty signal/sigfillset
 OBJS_gccrt += $(OBJS_gccrt_$(GTARGET))
 ASMS_gccrt_x86_64 := misc/syscall $(LIBGCC_ASM_x86_64:%=libgcc/%)
 ASMS_gccrt_aarch64 := $(LIBGCC_ASM_aarch64:%=libgcc/%)
+ASMS_gccrt_arm := $(LIBGCC_ASM_arm:%=libgcc/%)
 ASMS_gccrt := $(ASMS_gccrt_$(GTARGET))
 ROOTS_gccrt = $(ROOTS_unwind) __mulsc3 __divsc3 __muldc3 __divdc3 __multc3 __divtc3 __popcountdi2 __clzdi2 __ctzdi2 __ffsdi2 \
 	__paritydi2 __clrsbdi2 __bswapsi2 __bswapdi2 __absvsi2 __absvdi2 __addvsi3 __addvdi3 __subvdi3 __mulvsi3 __powidf2 \
@@ -450,7 +498,7 @@ ROOTS_gccrt_riscv64 := __divdf3 __divsf3
 # parameters in ff, so its round trip has no conversion of an argument)
 LIBGCC_NOGCCRT := __init_riscv_feature_bits __riscv_feature_bits __riscv_cpu_model __wrap_pthread_create
 ZEROS_gccrt := $(ZEROS_stdio)
-WEAKS_gccrt := $(WEAKS_stdio)
+WEAKS_gccrt := $(WEAKS_stdio) $(WEAKS_unwind_$(GTARGET))
 LICENSE_gccrt := license-libgcc.ff.txt
 C2FFFLAGS_gccrt := --keep-going
 
@@ -500,7 +548,7 @@ LINKED_aarch64 := string stdlib ldouble malloc stdio floats args unwind gccrt
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
 LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 # (arm the same way: start.S, crti.S and crtn.S through s2ff-arm, as aarch64's)
-LINKED_arm := string stdlib ldouble malloc stdio floats args
+LINKED_arm := string stdlib ldouble malloc stdio floats args unwind gccrt
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -684,7 +732,7 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(S2FFDEPS_$(GTARGET)) $(SHARED) $(
 	skip=$(if $(filter aarch64,$(GTARGET)),$$(perl $(S2FF) --skip $$a$(SSRC) $$a.dump) || exit 1,0); \
 	hdr=$(if $(filter x86_64,$(GTARGET)),$$(perl $(S2FF) --align $$a$(SSRC) $$a.dump | awk '{ print int(($(ASMHDR) + $$1 - 1) / $$1) * $$1 }') || exit 1,$(ASMHDR)); \
 	sec=$(call codesec,$$a.ref.o); \
-	$(if $(filter aarch64 x86_64,$(GTARGET)),$(XPRE)objcopy -O binary -j $$sec $(OBJ)/$*.o $$a.glibc.bin && \
+	$(if $(filter aarch64 x86_64,$(GTARGET)),$(XPRE)objcopy -O binary -j $$sec $(if $(filter libgcc/%,$*),$(LOBJ)/$(patsubst libgcc/%,%,$*),$(OBJ)/$*).o $$a.glibc.bin && \
 	    cmp -s $$a.glibc.bin $$a.bin || { echo "asm-check: $*: the .s does not make glibc's object"; exit 1; };) \
 	$(XPRE)objdump -r $$a.ref.o > $$a.relocs; \
 	tail -c +$$((skip + 1)) $$a.bin | head -c $$size > $$a.want.raw; \
@@ -739,7 +787,7 @@ $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl ../compiler/g
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(call startms,$*),,--start)) \
-	    $(if $(filter $*,$(INDEXED)),--index $(FF)/$*/index.ff) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main > $(FF)/$*-prog.ff.txt
+	    $(if $(filter $*,$(INDEXED)),--index $(FF)/$*/index.ff) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main $(PROGROOTS_$*) > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
 # (a program that names a record of its tree's it only declares, unwind's
 # struct _Unwind_Context: c2ff reads the tree's index and types, --index)
@@ -992,10 +1040,10 @@ ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # (license-libgcc.ff.txt); a program that unwinds is built with ttpc -g
 # (its .eh_frame: the tests, TTPCFLAGS_tests); elsewhere not in ff yet,
 # its names weak (address 0), as for a program that never unwinds
-LIBGCC_TARGETS := riscv64 x86_64 aarch64
+LIBGCC_TARGETS := riscv64 x86_64 aarch64 arm
 UNWIND_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
 LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH))
-WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc)
+WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc) $(WEAKS_unwind_$(GTARGET))
 # (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
 # forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
 # crti's _init and _fini, s2ff --then, as in a milestone)
@@ -1085,7 +1133,15 @@ LIBGCC_DFP := bid_decimal_globals bid_decimal_data bid_binarydecimal bid_convert
 	fixunstdti floattitd floatuntitd
 LIBGCC_NOCLANG_x86_64 := strub $(LIBGCC_DFP)
 LIBGCC_NOCLANG_aarch64 := strub $(LIBGCC_DFP)
-LIBGCC_NOCLANG := $(LIBGCC_NOCLANG_$(GTARGET))
+# (arm's: fixed-bit.c's fixed point, _Fract and _Accum (ISO/IEC TR 18037),
+# which ttpc has no type of: 1602 objects, by their source in build.log;
+# linux-atomic.c's __sync functions, which clang has as builtins (as
+# riscv64's atomic.c); the four of libgcc2.c that AEABI gives the base
+# procedure call standard, pcs ("aapcs"): their floats in core registers,
+# which ttpc's arm calls (AAPCS-VFP) have no form of)
+LIBGCC_FIXED = $(shell sed -n 's/.* -o \([^ ]*\)\.o .*fixed-bit\.c.*/\1/p' $(LOBJ)/build.log | sort -u)
+LIBGCC_NOCLANG_arm = $(LIBGCC_ASMOUT_arm) strub linux-atomic linux-atomic-64bit _fixdfdi _fixsfdi _fixunsdfdi _fixunssfdi $(LIBGCC_FIXED)
+LIBGCC_NOCLANG = $(LIBGCC_NOCLANG_$(GTARGET))
 
 libgcc-ref: $(LOBJ)/libgcc.a
 $(LOBJ)/libgcc.a:
@@ -1107,6 +1163,8 @@ LCLANG_x86_64 := -mshstk -Wno-invalid-gnu-asm-cast
 LCLANGVEC_x86_64 := unwind-dw2
 # (aarch64's: aarch64.h, the unwinder's builtins of gcc that clang has not)
 LCLANG_aarch64 := -include ../libgcc/aarch64.h
+# (arm's: soft-fp's casts of asm outputs, as x86_64's)
+LCLANG_arm := -Wno-invalid-gnu-asm-cast
 $(LI)/%.json: $(LI)/%.i ../libgcc/clangfix.pl ../libgcc/aarch64.h clangvec.pl clang-prelude.h
 	perl ../libgcc/clangfix.pl --target $(GTARGET) $< $(if $(filter $*,$(LCLANGVEC_$(GTARGET))),| perl clangvec.pl) > $(LI)/$*.clang.i
 	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json \
@@ -1148,8 +1206,17 @@ $(FF)/gccrt.ff: $(FF)/libgcc.roots
 libgcc-roundtrip: gccrt-roundtrip
 libgcc-licenses: $(FF)/libgcc.ff $(FF)/libgcc/index.ff
 	$(LICENSES_PL) --pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff
-libgcc-checks: libgcc-roundtrip libgcc-licenses
-.PHONY: libgcc-ref libgcc-checks libgcc-licenses libgcc-roundtrip
+# (and its asm, as glibc's: ttpc makes each object's bytes, asm-check's way;
+# not yet riscv64's save-restore.S and div.S, whose local labels s2ff
+# --items finds in another function (.Ls10, .L20), nor x86_64's
+# morestack.S, which ttpc stops in: later steps)
+LIBGCC_ASMSKIP_riscv64 := save-restore div
+LIBGCC_ASMSKIP_x86_64 := morestack
+LIBGCC_ASMCHECK = $(filter-out $(LIBGCC_ASMSKIP_$(GTARGET)),$(LIBGCC_ASM))
+libgcc-asm-check: $(LIBGCC_ASMCHECK:%=$(LI)/%.asmok)
+	@for a in $(LIBGCC_ASMCHECK); do cat $(LI)/$$a.asmok; done
+libgcc-checks: libgcc-roundtrip libgcc-licenses libgcc-asm-check
+.PHONY: libgcc-ref libgcc-checks libgcc-licenses libgcc-roundtrip libgcc-asm-check
 
 # ---- glibc's own tests -----------------------------------------------------------
 # The tests of an area of glibc (AREA: one of its directories, string,

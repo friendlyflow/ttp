@@ -189,3 +189,13 @@
         b
       <
       a
+  comment
+    gcc's __builtin_frob_return_addr of libgcc's EHABI unwinder: the address itself, as gcc has it on arm.
+  __builtin_frob_return_addr:
+    void
+    * pointer
+    a:
+      void
+      * pointer
+    return
+      a
