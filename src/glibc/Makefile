@@ -439,7 +439,8 @@ LIBGCC_C_arm := _muldi3 _negdi2 _cmpdi2 _ucmpdi2 _trampoline __main _absvsi2 _ab
 	_divmodbitint4 bpabi unaligned-funcs sfp-exceptions addsf3 divsf3 eqsf2 gesf2 lesf2 mulsf3 negsf2 subsf3 unordsf2 \
 	fixsfsi floatsisf floatunsisf adddf3 divdf3 eqdf2 gedf2 ledf2 muldf3 negdf2 subdf3 unorddf2 fixdfsi floatsidf \
 	floatunsidf extendsfdf2 truncdfsf2 fixsfbitint floatbitintsf fixdfbitint floatbitintdf floatbitinthf \
-	enable-execute-stack hardcfr fp16 unwind-arm pr-support unwind-c emutls linux-atomic linux-atomic-64bit
+	enable-execute-stack hardcfr fp16 unwind-arm pr-support unwind-c emutls linux-atomic linux-atomic-64bit \
+	_fixdfdi _fixsfdi _fixunsdfdi _fixunssfdi
 LIBGCC_C := $(LIBGCC_C_$(GTARGET))
 # (and its asm: riscv64's save-restore and division, x86_64's ms_abi
 # register saves and the split stack's morestack.S)
@@ -1161,12 +1162,11 @@ LIBGCC_DFP := bid_decimal_globals bid_decimal_data bid_binarydecimal bid_convert
 LIBGCC_NOCLANG_x86_64 := strub $(LIBGCC_DFP)
 LIBGCC_NOCLANG_aarch64 := strub $(LIBGCC_DFP)
 # (arm's: fixed-bit.c's fixed point, _Fract and _Accum (ISO/IEC TR 18037),
-# which ttpc has no type of: 1602 objects, by their source in build.log;
-# the four of libgcc2.c that AEABI gives the base procedure call
-# standard, pcs ("aapcs"): their floats in core registers, which ttpc's arm
-# calls (AAPCS-VFP) have no form of)
+# which ttpc has no type of: 1602 objects, by their source in build.log)
+# (libgcc2.c's four of AEABI's base procedure call standard, pcs
+# ("aapcs"), are ff's base pcs functions)
 LIBGCC_FIXED = $(shell sed -n 's/.* -o \([^ ]*\)\.o .*fixed-bit\.c.*/\1/p' $(LOBJ)/build.log | sort -u)
-LIBGCC_NOCLANG_arm = $(LIBGCC_ASMWEAK_arm) strub _fixdfdi _fixsfdi _fixunsdfdi _fixunssfdi $(LIBGCC_FIXED)
+LIBGCC_NOCLANG_arm = $(LIBGCC_ASMWEAK_arm) strub $(LIBGCC_FIXED)
 LIBGCC_NOCLANG = $(LIBGCC_NOCLANG_$(GTARGET))
 
 libgcc-ref: $(LOBJ)/libgcc.a
@@ -1203,7 +1203,13 @@ $(LIBGCC_C:%=$(LI)/%.c2ff): $(LI)/%.c2ff: $(LI)/%.json ../compiler/gen/c2ff.pl
 	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $<=$(LI)/$*.i
 	@touch $@
 
-$(FF)/libgcc.roots $(FF)/libgcc.units &: $(LIBGCC_C:%=$(LI)/%.json) $(LIBGCC_ASM:%=$(LI)/%.dump)
+# (the lists themselves: libgcc.roots checks them against gcc's archives,
+# so it is made again when one changes, a file touched only then)
+$(FF)/libgcc.lists: FORCE
+	@mkdir -p $(FF); echo '$(LIBGCC_C) / $(LIBGCC_ASM) / $(LIBGCC_NOCLANG)' | cmp -s - $@ || echo '$(LIBGCC_C) / $(LIBGCC_ASM) / $(LIBGCC_NOCLANG)' > $@
+FORCE:
+.PHONY: FORCE
+$(FF)/libgcc.roots $(FF)/libgcc.units &: $(FF)/libgcc.lists $(LIBGCC_C:%=$(LI)/%.json) $(LIBGCC_ASM:%=$(LI)/%.dump)
 	mkdir -p $(FF)
 	test "$$(for a in libgcc.a libgcc_eh.a; do $(XPRE)ar t $(LOBJ)/$$a; done | sed 's/\.o$$//' | sort)" = "$$(echo $(LIBGCC_C) $(LIBGCC_ASM) $(LIBGCC_NOCLANG) | tr ' ' '\n' | sort)" \
 	    || { echo "libgcc: LIBGCC_C, LIBGCC_ASM and LIBGCC_NOCLANG are not the objects of $(LOBJ)/libgcc.a and libgcc_eh.a"; exit 1; }

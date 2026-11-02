@@ -5,7 +5,8 @@
 # riscv64 (__libgcc_cmp_return__, __libgcc_shift_count__: DI; SI on arm), and HF and
 # HC, which clang makes __fp16, no parameter type there: _Float16 and its
 # complex, as gcc has them; BF, which clang has no mode of: __bf16.
-# arm (--target arm): __sync_ names as __Sync_ (linux-atomic.c's own).
+# arm (--target arm): __sync_ names as __Sync_ (linux-atomic.c's own);
+# libgcc2.c's functions of pcs ("aapcs") declared with it first.
 # x86_64 (--target x86_64): the suffix F128 of a _Float128 literal as Q,
 # which clang has; %v in an asm template (v under AVX, nothing here: c2ff
 # drops it too) as spaces; gcc's rdssp builtins of no argument as clang's of
@@ -22,7 +23,18 @@ my $target = @ARGV >= 2 && $ARGV[0] eq '--target' ? (splice @ARGV, 0, 2)[1] : 'r
 my $word = $target eq 'arm' ? '__SI__' : '__DI__';
 my %mode = (__libgcc_cmp_return__ => $word, __libgcc_shift_count__ => $word);
 sub pad { my ($old, $new) = @_; $new . ' ' x (length($old) - length($new)) }
-while (<>) {
+my @lines = <>;
+# (arm's libgcc2.c gives AEABI's four functions pcs ("aapcs") after
+# libgcc2.h declared them without it, which clang refuses: their plain
+# declarations as spaces, and each one's own declaration before the
+# typeof of it that makes its AEABI alias)
+my %pcs;
+if ($target eq 'arm') { for (@lines) { $pcs{$1} = 1 while /\b(\w+) \([^()]*\)(?: __asm__\("\w+"\))? __attribute__\(\(pcs\("aapcs"\)\)\)/g } }
+for (@lines) {
+    if (%pcs) {
+        s/^(extern \w+ (\w+) \(\w+\);)/$pcs{$2} ? ' ' x length($1) : $1/e;
+        s/(typeof \((\w+)\) \w+ __attribute__\(\(alias \([^()]*\)\)\);) (extern \w+ \2 \(\w+\) __attribute__\(\(pcs\("aapcs"\)\)\);)/$3 $1/;
+    }
     s/mode \((__libgcc_\w+__)\)/'mode (' . pad($1, $mode{$1} \/\/ die "clangfix: no mode for $1\n") . ')'/ge;
     s/(float (\w+) __attribute__ \(\(mode \(HF\)\)\))/pad($1, "_Float16 $2")/ge;
     s/(float (\w+) __attribute__ \(\(mode \(BF\)\)\))/pad($1, "__bf16 $2")/ge;

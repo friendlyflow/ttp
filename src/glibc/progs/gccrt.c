@@ -68,8 +68,17 @@ unsigned int __fixunstfsi (tf);
 int __unordtf2 (tf, tf);
 #else
 /* (arm: no binary128, its long double a double; its 64-bit division, C;
-   not the four of AEABI's base procedure call standard, __fixunsdfdi ...,
-   whose floats come in core registers) */
+   the four of AEABI's base procedure call standard, their floats in core
+   registers (ff's base pcs), by both their names) */
+#define PCS __attribute__ ((pcs ("aapcs")))
+long long __fixdfdi (double) PCS;
+long long __aeabi_d2lz (double) PCS;
+unsigned long long __fixunsdfdi (double) PCS;
+unsigned long long __aeabi_d2ulz (double) PCS;
+long long __fixsfdi (float) PCS;
+long long __aeabi_f2lz (float) PCS;
+unsigned long long __fixunssfdi (float) PCS;
+unsigned long long __aeabi_f2ulz (float) PCS;
 long long __divdi3 (long long, long long);
 long long __moddi3 (long long, long long);
 unsigned long long __udivdi3 (unsigned long long, unsigned long long);
@@ -224,6 +233,10 @@ int main (void)
       w (__divdi3 (x, 7)); w (__moddi3 (x, -5)); w (__udivdi3 (x, 3)); w (__umoddi3 (x, 1000003));
       if (x != (long long) 0x8000000000000000ULL)
         w (__divdi3 (x, x | 1));
+      u64 hx = (u64) x >> 1;
+      w (__fixdfdi ((double) x / 3)); w (__aeabi_d2lz (-(double) (x >> 1))); w (__fixunsdfdi ((double) hx));
+      w (__aeabi_d2ulz ((double) (u32) x * 7)); w (__fixsfdi ((float) x / 5)); w (__aeabi_f2lz (-(float) (int) x));
+      w (__fixunssfdi ((float) (u32) x)); w (__aeabi_f2ulz ((float) hx * 0.5f));
       u32 y = (u32) x, z = (u32) (x >> 32) | 3;
       w32 (__aeabi_uidiv (y, z)); w32 (__aeabi_idiv ((int) y, (int) z)); w (h64.uidivmod (y, 7));
       w (h64.idivmod ((int) y, -(int) z)); w32 (__umodsi3 (y, 10)); w32 (__modsi3 ((int) y, 3));

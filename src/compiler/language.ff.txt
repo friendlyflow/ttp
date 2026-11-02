@@ -294,6 +294,8 @@ ff, the language ttpc compiles
       cleanup / f, first under a local's name (after its align) and before its type, calls f with the local's address at every exit of the local's block, newest first (C's cleanup attribute)
       a block's exits: its end, a return (after its value is computed), a break or continue out of it, a goto to a label outside it; glibc's _IO_acquire_lock unlocks a FILE so
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
+      base pcs, first under a function's name and before its type, gives it arm's base procedure call standard (C's pcs ("aapcs")): its floats and doubles in core registers and on the stack, as a variadic function's
+      a base pcs function's calls (through a pointer of its type too), prologue and return are so; on the other targets the word changes nothing
       constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
       ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled
       constructor / 101 gives it a priority, lower first, those without one last
