@@ -1584,12 +1584,12 @@ sub asm_stmt_other {
         $k =~ s/%//g if $target eq 'x86_64';
         $k = 'r' if ($k eq 'rm' || $k eq 'g' || $k eq 'rme' || $k eq 're' || $k eq 'rmi' || $k eq 'ri') && $target eq 'x86_64';
         if ($target eq 'x86_64' && $template =~ /\S/ && ($k =~ /^xm?$/ || ($k =~ /^\d$/ && !$out && $xreg{$k}))) {
-            stop("the asm constraint $c", $n) if $c =~ /\+/;
+            # (+x, read and written: fraiseexcpt's divss_inline_asm: loaded and stored)
             my $t = tword($ops->[$i]);
             my $w = $t eq 'float' ? 's' : $t eq 'double' ? 'd' : stop("the asm operand $c of a $t", $n);
             $xreg{$i} = $k =~ /^\d$/ ? $xreg{$k} : ['xmm' . ($xn++ // 0), $w];
             $text{$i} = $xreg{$i}[0];
-            push @want, [$i, $out ? 'xout' : 'xin'];
+            push @want, [$i, $c =~ /\+/ ? 'xio' : $out ? 'xout' : 'xin'];
             next;
         }
         if ($out && $fixed{$k}) {
@@ -1645,10 +1645,10 @@ sub asm_stmt_other {
         my ($i, $how, $r, $j) = @$w;
         my $a = $j < 100 ? $regs->[$j] : undef;
         $arg[$j] = [$i, $how eq 'value' ? 'value' : 'address'];
-        if ($how =~ /^x(in|out)$/) {
+        if ($how =~ /^x(in|out|io)$/) {
             my ($x, $w) = @{ $xreg{$i} };
-            push @code, node("movs$w.n.m0", node(0), node($a), node($x)) if $how eq 'xin';
-            push @after, node("movs$w.n.m0r", node($x), node(0), node($a)) if $how eq 'xout';
+            push @code, node("movs$w.n.m0", node(0), node($a), node($x)) if $how =~ /^xi/;
+            push @after, node("movs$w.n.m0r", node($x), node(0), node($a)) if $how =~ /^xo|^xio/;
         } elsif ($how eq 'address') {
             stop("the asm output $oc->[$i]", $n) unless $target eq 'x86_64';
             # stored by its C type's size (cpuid's are 32 bits); an address
