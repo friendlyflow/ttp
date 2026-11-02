@@ -669,7 +669,10 @@ for my $u (@units) {
             if ($own && $recid{ $own->{id} } && defined(my $al = align_attr($d))) { $recid{ $own->{id} }{ff_align} = max_align($recid{ $own->{id} }{ff_align}, $al) }
             if ($own && ($own->{name} // '') eq '' && (my $e = $enumid{ $own->{id} })) {
                 # a typedef of an anonymous enum: the enum takes its name
-                $enumd{"enum $name"} //= $e;
+                # (another unit's with more constants, the first's and more:
+                # libgcc's arm _Unwind_VRS_RegClass has _UVRSC_PAC, glibc's
+                # copy of unwind.h not)
+                set_enumd("enum $name", $e);
                 $tagname{"enum $name"} //= ffname($name);
                 $typedef{$name} //= "enum $name";
                 $enumof{ $_->{name} } = "enum $name" for grep { $_->{kind} eq 'EnumConstantDecl' } @{ $e->{inner} || [] };
@@ -879,6 +882,10 @@ sub pass_hash {
     my $d = Digest::SHA->new(256);
     # (a sub of one line, or up to its closing brace)
     for my $s (@pass_subs) { $text =~ /^(sub \Q$s\E\b[^\n]*\}\n|sub \Q$s\E\b.*?^\}\n)/ms or die "c2ff: no sub $s\n"; $d->add($1) }
+    # (and how clang read the .i where the build says, C2FF_ASTKEY: x86_64's
+    # flags and CLANGFIX, which change its types and literals; a pass made
+    # another way is no pass of it)
+    $d->add("ast: $ENV{C2FF_ASTKEY}") if ($ENV{C2FF_ASTKEY} // '') ne '';
     $d->hexdigest;
 }
 # (the .i's size and time, then its hash: an .i made again, the same,
@@ -1733,6 +1740,10 @@ sub asm_x87 {
         my ($op, @a) = split /[\s,]+/, $l;
         if ($op =~ /^(?:fpatan|frndint|f2xm1|fscale|fyl2x|fyl2xp1|fxtract|fld1|fldz|fchs|fabs|fsqrt|fprem|fprem1)$/ && !@a) { push @code, node($op) }
         elsif ($op eq 'fstp' && @a == 1 && $a[0] =~ /^%st(?:\((\d)\))?$/) { push @code, ($1 // 0) == 0 ? node('fstp.st0') : node('fstp', node("st$1")) }
+        elsif ($op =~ /^(?:fld|fxch|fadd|fsub|fmul|fdiv)$/ && @a == 1 && $a[0] =~ /^%st(?:\((\d)\))?$/) { push @code, node($op, node('st' . ($1 // 0))) }
+        # (GNU's faddp ... without operands: %st, %st(1), its form of st(i)
+        # for st1: fsubp DE E1, st1 = st0 - st1, as GNU as makes it)
+        elsif ($op =~ /^f(?:add|mul|sub|subr|div|divr)p$/ && !@a) { push @code, node($op, node('st1')) }
         else { stop("the x87 asm instruction $l", $n) }
     }
     push @code, node('fstp' . $sz->(0) . '.m', node(0), node($regs->[$#order]));
@@ -2106,7 +2117,11 @@ sub expr {
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_aarch64_(?:autia1716|autib1716|chkfeat|gcspr|gcspopm)$/ && $target eq 'aarch64';
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(?:ia32_rdsspq|ia32_incsspq|__clear_cache)$/ && $target eq 'x86_64';
         return node($name, map { arg($_) } @args) if $name eq '__builtin___clear_cache' && $target eq 'aarch64';
+        # (arm's EHABI unwinder: the address itself, builtins-arm.ff.txt)
+        return node($name, map { arg($_) } @args) if $name eq '__builtin_frob_return_addr' && $target eq 'arm';
         return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
+        # (x86_64's float128 ones, x87builtins.pl's)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(fabs|copysign|signbit|huge_val|nan)f128$/ && $target eq 'x86_64';
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause|xbegin|xend|xtest)$/ && $target eq 'x86_64' && !@args;
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_ia32_(pmovmskb128|pshufb128)$/ && $target eq 'x86_64';
         # gcc's _mm_cmpistri, _mm_cmpistrc, _mm_cmpistrz (<smmintrin.h>, whose

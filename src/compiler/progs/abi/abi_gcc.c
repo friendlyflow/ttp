@@ -101,6 +101,12 @@ long double g_ld (void) { return cb_ld (1, 3.0L, 2.5, 7.0L); }
 long double g_varld (void) { return cb_varld (3, 1.0, 1.0L, 2.0, 2.0L, 3.0, 3.0L); }
 long long g_vard (void) { return cb_vard (10, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5); }
 #endif
+#ifdef __x86_64__
+ld1 r_ld1 (long double a) { ld1 r = { a * 2 }; return r; }
+cld r_cld (long double re, long double im) { cld z; __real__ z = re; __imag__ z = im; return z; }
+long double g_ld1 (void) { return cb_ld1 (5.0L).x; }
+long double g_cld (void) { cld z = cb_cld (2.0L, 3.0L); return __real__ z * 10 + __imag__ z; }
+#endif
 #if defined __x86_64__ || defined __riscv
 long f_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g)
 { return a.l + 2 * b.l + 3 * c.l + 4 * d.l + 5 * e.l + 6 * f.l + 7 * g.l + (long) (2 * (a.d + b.d + c.d + d.d + e.d + f.d + g.d)); }

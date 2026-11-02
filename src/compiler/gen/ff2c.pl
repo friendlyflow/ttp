@@ -1017,7 +1017,8 @@ for my $f (grep { $glibcpage{$_} } @order) {
     push @names, join("\t", 'body', cid($f), orig($f), $unit // '-');
 }
 # clang's own builtins, which C does not declare
-sub clang_builtin { $_[0] =~ /^__builtin_|^__atomic_(?:always_lock_free|is_lock_free|thread_fence|signal_fence|load|store)$/ }
+# (and __clear_cache, a library builtin of clang's: arm's libgcc has it as asm)
+sub clang_builtin { $_[0] =~ /^__builtin_|^__atomic_(?:always_lock_free|is_lock_free|thread_fence|signal_fence|load|store)$|^__clear_cache$/ }
 # The labels of a body: name: nodes that are no declaration
 sub labels_in {
     map {
@@ -1045,6 +1046,9 @@ push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { $var{$_} || $f
 # (and the enum constants c2ff named with their unit: C's name for them)
 push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { /^\S+ \S+\/\S+$/ } sort keys %econst;
 push @names, map { join("\t", 'asm', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'asm' } @order;
+# (a weak function, declared without its parameters: noproto, its calls'
+# arguments without C's conversions to them, roundtrip.pl)
+push @names, map { join("\t", 'noproto', cid($_), orig($_)) } grep { $fn{$_} && $fn{$_}{kind} eq 'weak' } @order;
 # (and the aliases of asm functions, which C calls as they are: aarch64's
 # stpcpy of __stpcpy)
 sub asm_target { my ($n, $d) = @_; return 0 if $d > 8 || !$fn{$n}; return 1 if $fn{$n}{kind} eq 'asm'; $fn{$n}{kind} eq 'alias' && asm_target($fn{$n}{target}, $d + 1) }
