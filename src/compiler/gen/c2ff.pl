@@ -390,6 +390,7 @@ my %reserved = map { $_ => 1 } qw(
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor fs vector line zero ra sp gp tp fp pc
+    byte half word dword
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -1536,6 +1537,8 @@ sub asm_ins_other {
         if ((($op =~ /^vfmadd213s[sd]$/ && @a == 3) || ($op =~ /^vfmadds[sd]$/ && @a == 4)) && !grep { !/^%xmm\d+$/ } @a) {
             return node("$op.vex3", map { node(s/^%//r) } @a);
         }
+        # (fraiseexcpt's divss_inline_asm)
+        return node('divss', map { node(s/^%//r) } @a) if $op eq 'divss' && @a == 2 && !grep { !/^%xmm\d+$/ } @a;
         if ($op =~ /^(?:ldmxcsr|stmxcsr|fldenv|fnstenv)$/ && @a == 1 && $a[0] =~ /^(-?\d*)\(%(\w+)\)$/) {
             return node("$op.m", node($1 eq '' ? 0 : $1), node($2));
         }
@@ -1693,7 +1696,7 @@ sub asm_stmt_other {
         my ($m, $i) = ($1, $2);
         my $r = $text{$i} // stop("the asm operand %$m$i", $n);
         if ($m eq 'w' && $r =~ /^x(\d+)$/) { $r = "w$1" }
-        elsif ($m ne '' && !($m eq 's' && $r =~ /^s\d/) && !($m eq 'd' && $r =~ /^d\d/) && !($m eq 'x' && $r =~ /^x\d/)) { stop("the asm operand %$m$i", $n) }
+        elsif ($m ne '' && !($target eq 'x86_64' && $m eq 'd' && $r =~ /^xmm/) && !($m eq 's' && $r =~ /^s\d/) && !($m eq 'd' && $r =~ /^d\d/) && !($m eq 'x' && $r =~ /^x\d/)) { stop("the asm operand %$m$i", $n) }
         $target eq 'x86_64' && $r !~ /\(/ ? "%$r" : $r;
     }ge;
     # (gcc's %% for a register or segment's own %: x86's %%fs)
