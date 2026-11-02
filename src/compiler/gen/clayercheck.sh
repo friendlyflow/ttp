@@ -38,10 +38,11 @@ if test "${1:-}" = --one; then
     # (one c2ff.pl stops on, libgcc's of __int128 and _Float16, which its --keep-going leaves out in a milestone: nothing to compare)
     perl "$G/c2ff.pl" --target "$tg" "$I/$u.json=$I/$u.i" -- $roots > "$d/$b.ref" 2> "$d/$b.referr" || { echo "NOREF $u: $(tail -n 1 "$d/$b.referr" | head -c 200)"; exit 0; }
     in=$I/$u.i
+    # (libgcc's: clang's copy, which has what clangfix.pl makes clang's of gcc's __builtin_ia32_rdsspq ())
+    case "$u" in libgcc/*) test -e "$I/$u.clang.i" && in=$I/$u.clang.i ;; esac
     for v in $vec; do
         if test "$v" = "$u"; then
-            in=$d/$b.clang.i
-            eval "${CLANGFIX:-cat}" '"$I/$u.i"' | perl "$CLANGVECPL" > "$in"
+            case "$u" in libgcc/*) ;; *) in=$d/$b.clang.i; eval "${CLANGFIX:-cat}" '"$I/$u.i"' | perl "$CLANGVECPL" > "$in" ;; esac
         fi
     done
     if $run $cs -l -t "$tg" -s "$gsrc" -g "${LIBGCC_SRC:-}" -S "$shared" -n "$I/$u.i" "$in" $roots > "$d/$b.ff.txt" 2> "$d/$b.err"; then
