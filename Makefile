@@ -200,20 +200,21 @@ pc-generic-riscv64: pc-units-riscv64
 pc-libgcc-riscv64: pc-units-riscv64
 	$(call pc_step,libgcc-riscv64,$(call PC_GLIBC) libgcc-licenses libgcc-asm-check)
 # the C parser in ff (T3a) on every unit and milestone program's .i
-pc-cparse-riscv64: $(PC_MS:%=pc-%-check)
+pc-cparse-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 	$(call pc_step,cparse-riscv64,$(call PC_GLIBC) cparse-check)
 # the types and semantics of C in ff (T3b) against clang on the same units
-pc-csema-riscv64: $(PC_MS:%=pc-%-check)
+# (after compiler-check, which makes the tools: not the tools of before)
+pc-csema-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 	$(call pc_step,csema-riscv64,$(call PC_GLIBC) csema-check)
 # the C layer written in ff (T3c) against c2ff.pl on the same units, byte for byte
-pc-clayer-riscv64: $(PC_MS:%=pc-%-check)
+pc-clayer-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 	$(call pc_step,clayer-riscv64,$(call PC_GLIBC) clayer-check)
 # (csema on the other targets' units, a minute or two each)
-pc-csema-aarch64: $(PC_A64:%=pc-%-aarch64)
+pc-csema-aarch64: pc-compiler-check $(PC_A64:%=pc-%-aarch64)
 	$(call pc_step,csema-aarch64,$(call PC_GLIBC,aarch64) csema-check)
-pc-csema-x86_64: $(PC_X64:%=pc-%-x86_64)
+pc-csema-x86_64: pc-compiler-check $(PC_X64:%=pc-%-x86_64)
 	$(call pc_step,csema-x86_64,$(call PC_GLIBC,x86_64) csema-check)
-pc-csema-arm: $(PC_ARM:%=pc-%-arm)
+pc-csema-arm: pc-compiler-check $(PC_ARM:%=pc-%-arm)
 	$(call pc_step,csema-arm,$(call PC_GLIBC,arm) csema-check)
 pc-units-aarch64: pc-bootstrap pc-gbuild
 	$(call pc_step,units-aarch64,$(call PC_GLIBC,aarch64) units-ready)
