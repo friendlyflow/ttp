@@ -920,7 +920,7 @@ CSCLANG = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -Xc
 	--target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 csema-check:
 	@echo "csema-check: $(words $(CSUNITS)) units of $(BUILD)"
-	@CLANG="$(CSCLANG)" $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema $(CSUNITS)
+	@CLANG="$(CSCLANG)" CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema $(CSUNITS)
 .PHONY: csema-check
 
 # ---- glibc's C constructs, on their own -------------------------------------
