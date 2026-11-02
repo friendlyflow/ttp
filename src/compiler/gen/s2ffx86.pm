@@ -664,6 +664,9 @@ sub run {
     my %defined = map { $_->{content} =~ s/:$//r => 1 } @fns;
     for my $w (sort keys %weak) {
         next if $defined{$w};
+        # (morestack.S's DW.ref.__gcc_personality_v0: the word of its
+        # personality, in a section left out (below), which nothing here names)
+        next if $w =~ /^DW\.ref\./;
         push @fns, node("$w:", node('weak'), node('function'), node('void'));
     }
     push @fns, node(".Lgot $_:", node('void'), node('* pointer'), node($_), node('& address')) for sort keys %weakgot;

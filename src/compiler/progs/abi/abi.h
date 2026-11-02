@@ -103,6 +103,17 @@ long double g_ld (void);
 long double g_varld (void);
 long long g_vard (void);
 #endif
+#ifdef __arm__
+/* base pcs: arm's base standard, C's pcs ("aapcs") (libgcc's __aeabi_d2lz
+   ...): floats and doubles in core registers and on the stack, both ways,
+   through a pointer of the function's type too */
+double f_pcs (float a, double b, int c, double d, float e) __attribute__ ((pcs ("aapcs")));
+float f_pcsf (int a, float b) __attribute__ ((pcs ("aapcs")));
+double cb_pcs (float a, double b, int c, double d, float e) __attribute__ ((pcs ("aapcs")));
+float cb_pcsf (int a, float b) __attribute__ ((pcs ("aapcs")));
+double g_pcs (void);
+float g_pcsf (void);
+#endif
 #ifdef __x86_64__
 /* the SysV ABI's x87 classes of a result (gcc's default long double, the
    x87's): a struct of one long double in st0, as a long double; a complex

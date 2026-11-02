@@ -127,6 +127,22 @@ static void a64 (void)
   check (p_g_vard () == 55 + 180, "a64: gcc calls ttpc: variadic doubles past v7, ttpc's va_list to gcc");
 }
 #endif
+#ifdef __arm__
+double cb_pcs (float a, double b, int c, double d, float e) { return a + 2 * b + 3 * c + 4 * d + 5 * e; }
+float cb_pcsf (int a, float b) { return a + 2 * b; }
+static void pcs (void)
+{
+  double (*p_f_pcs) (float, double, int, double, float) __attribute__ ((pcs ("aapcs"))) = f_pcs;
+  float (*p_f_pcsf) (int, float) __attribute__ ((pcs ("aapcs"))) = f_pcsf;
+  double (*p_g_pcs) (void) = g_pcs;
+  float (*p_g_pcsf) (void) = g_pcsf;
+  check (p_f_pcs (1.5f, 2.25, 3, 4.5, 5.5f) == 1.5 + 4.5 + 9 + 18 + 27.5, "arm: base pcs: floats and doubles in core registers and on the stack");
+  check (p_f_pcsf (7, 1.25f) == 9.5f, "arm: base pcs: a float result in r0");
+  check (p_g_pcs () == 1.5 + 4.5 + 9 + 18 + 27.5, "arm: gcc calls ttpc: base pcs");
+  check (p_g_pcsf () == 9.5f, "arm: gcc calls ttpc: base pcs, a float result");
+  check (cb_pcs (1.5f, 2.25, 3, 4.5, 5.5f) == 60.5, "arm: ttpc calls ttpc: base pcs");
+}
+#endif
 #ifdef __x86_64__
 ld1 cb_ld1 (long double a) { ld1 r = { a + 1 }; return r; }
 cld cb_cld (long double re, long double im) { cld z; __real__ z = re; __imag__ z = im; return z; }
@@ -311,6 +327,9 @@ int main (void)
   check (p_g_r_hd2 () == 9.5, "gcc calls ttpc: a double aggregate result");
 #if defined __aarch64__ || defined __x86_64__ || defined __riscv
   a64 ();
+#endif
+#ifdef __arm__
+  pcs ();
 #endif
 #ifdef __x86_64__
   x87 ();

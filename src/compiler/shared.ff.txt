@@ -121,6 +121,10 @@ comment
   weak: C, first under a name, before its type: a global that may stay undefined (C's #pragma weak, a weak symbol nothing defines); its address is 0. weak / function / type is a function, called through 0.
 weak:
 comment
+  base pcs: C, first under a function's name, before its type (a definition, a declaration, a function type): on arm the function takes and gives its floats and doubles in core registers, r0..r3 and the stack,
+  as the AAPCS's base standard has them (C's pcs ("aapcs"): libgcc's __aeabi_d2lz ...), as a variadic function does; elsewhere it changes nothing.
+base pcs:
+comment
   cleanup f: C, first under a local, before its type (after its align): at every exit of the local's block the function f is called with the local's address, newest first (C's cleanup attribute).
   The exits: the block's end, a return (after its value), a break, continue or goto out of it.
 cleanup:

@@ -155,6 +155,7 @@ sub ctype {
     $t = trim($t =~ s/_Atomic\s*\(([^()]*)\)/$1/gr =~ s/\b_Atomic\b//gr) if $t =~ /_Atomic/;
     $t = typeof_subst($t) if $t =~ /typeof/;
     $t = vector_mark($t);
+    $t =~ s/\s*__attribute__\s*\(\(pcs\("aapcs"\)\)\)/ __pcs_aapcs__/g;
     # (x86_64's __seg_fs, clang's address space 257: the user's fs, a type
     # word after the type it qualifies, here a prefix as address is: fs / T)
     $t =~ s/__attribute__\s*\(\(address_space\(257\)\)\)/ __seg_fs /g;
@@ -187,6 +188,9 @@ sub ctype {
     # (a declarator in parentheses of its own, as the source has them:
     # regex's reg_errcode_t ((*)(void *, bin_tree_t *)))
     $t = "$1 $2" while $t =~ /^(.*?\S)\s*\((\(\*\)\s*\(.*\))\)$/;
+    # (clang's ((*)) where the pointer's function type has an attribute)
+    return ('address', fntype($1, $2, 1)) if $t =~ /^(.*?)\s*\(?\(\*\)\)?\s*\((.*)\)\s*__pcs_aapcs__$/;
+    $t = trim($t =~ s/\s*__pcs_aapcs__//gr) if $t =~ /__pcs_aapcs__/;
     return ('address', fntype($1, $2)) if $t =~ /^(.*?)\s*\(\*\)\s*\((.*)\)$/;
     if ($t =~ /^(.*)\*$/) {
         my $base = expand($1);
@@ -302,6 +306,9 @@ sub expand {
     $t = typeof_subst($t) if $t =~ /typeof/;
     for (1 .. 50) {
         $t = vector_mark(trim($t));
+        # (arm's pcs ("aapcs") of a function type kept as a mark, the base
+        # pcs of its fnN, ctype)
+        $t =~ s/\s*__attribute__\s*\(\(pcs\("aapcs"\)\)\)/ __pcs_aapcs__/g;
         $t =~ s/\s*__attribute__\s*(\(\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)\))?//g;
         $t =~ s/\b(const|volatile|restrict|__restrict)\b//g;
         $t = trim($t);
@@ -318,7 +325,7 @@ sub expand {
 # undef. The parameters are the last balanced ( ) at the end.
 sub split_fn {
     my ($t) = @_;
-    $t = trim($t);
+    $t = trim($t =~ s/\s*__pcs_aapcs__$//r);
     return undef unless $t =~ /\)$/;
     # clang's spelling of an anonymous type, struct (unnamed struct at f.c:9:3),
     # and a typeof (expression) are no function types
@@ -343,8 +350,8 @@ sub split_fn {
 }
 
 sub fntype {
-    my ($ret, $params) = @_;
-    my $key = trim($ret) . ' (' . trim($params) . ')';
+    my ($ret, $params, $pcs) = @_;
+    my $key = trim($ret) . ' (' . trim($params) . ')' . ($pcs ? ' pcs' : '');
     return $fntype{$key} if $fntype{$key};
     # (with --index, not a name of the tree's own: its code would take the
     # program's function type for its own fnN)
@@ -352,7 +359,7 @@ sub fntype {
     1 while $treedefs{ 'fn' . ++$fnlast };
     my $name = "fn$fnlast";
     $fntype{$key} = $name;
-    push @fntypes, [$name, trim($ret), trim($params)];
+    push @fntypes, [$name, trim($ret), trim($params), $pcs];
     $name;
 }
 
@@ -3141,6 +3148,10 @@ sub function {
     # choice, 2026-10-21)
     my $c = $ctor{$name};
     unshift @head, node($c->[0], defined $c->[1] ? node($c->[1]) : ()) if $c;
+    # (arm's base procedure call standard, C's pcs ("aapcs"), which clang
+    # has in the function's type: base pcs first, the user's choice,
+    # 2026-10-31)
+    unshift @head, node('base pcs') if ($d->{type}{qualType} // '') =~ /__attribute__\(\(pcs\("aapcs"\)\)\)/;
     # (the function's place first, with its file: where its name is)
     local ($lfile, $lline) = ('', 0);
     my @at = line_at(offset_of($d->{loc}));
@@ -3266,9 +3277,10 @@ my @types;
 my ($fdone, %tdone) = (0);
 while ($fdone < @fntypes || grep { !$tdone{$_} } keys %wanttag) {
 while ($fdone < @fntypes) {
-    my ($name, $ret, $ps) = @{ $fntypes[$fdone++] };
+    my ($name, $ret, $ps, $pcs) = @{ $fntypes[$fdone++] };
     my $i = 0;
-    push @types, node("$name:", node('function'), map({ node($_) } ctype($ret)),
+    # (base pcs first: arm's pcs ("aapcs"))
+    push @types, node("$name:", ($pcs ? node('base pcs') : ()), node('function'), map({ node($_) } ctype($ret)),
         # (a variadic one's ... a leaf after its parameters, as a function's)
         map({ $_ eq '...' ? node('...') : do { $i++; node("p$i:", map { node($_) } ctype($_)) } } params($ps)));
 }

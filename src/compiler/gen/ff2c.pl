@@ -158,6 +158,13 @@ for my $page (@top) {
             $glibcpage{$name} = 1 if $glibc;
             next;
         }
+        # base pcs: arm's base procedure call standard, C's pcs ("aapcs")
+        if ($w eq 'base pcs' && @k > 1 && c($k[1]) eq 'function' && $page) { $fntype{$name} = $d; next }
+        if ($w eq 'base pcs') {
+            $fn{$name} = { kind => 'c', node => $d, from => 1, attr => 'pcs("aapcs")' };
+            $glibcpage{$name} = 1 if $glibc;
+            next;
+        }
         if ($w eq 'thread local') { $var{$name} = { node => $d, from => 1, tls => 1, glibc => $glibc }; next }
         # a global of a named section; its bounds __start_ and __stop_ of
         # the name are arrays of its type, as C declares them
@@ -361,6 +368,7 @@ sub fnptr_sig {
     return { ret => sig($t->[1])->{ret} } if $t && $t->[0] eq 'fndef' && sig($t->[1]);
     return undef unless $t && $t->[0] eq 'fn';
     my @l = kids($fntype{ $t->[1] });
+    shift @l if c($l[0]) eq 'base pcs';
     my $i = 1;
     my $ret = ptype(\@l, \$i);
     { ret => $ret };
@@ -912,6 +920,7 @@ for my $e (grep { $enum{$_} } @order) {
 # the function types
 for my $f (grep { $fntype{$_} } @order) {
     my @l = kids($fntype{$f});
+    my $pcs = c($l[0]) eq 'base pcs' ? shift @l : undef;
     my $i = 1;
     my $ret = ptype(\@l, \$i);
     my (@p, $va);
@@ -922,7 +931,7 @@ for my $f (grep { $fntype{$_} } @order) {
         push @p, ctype(ptype(\@pl, \$j));
     }
     push @p, '...' if $va;
-    push @c, 'typedef ' . cdecl($ret, cid($f) . '(' . (@p ? join(', ', @p) : 'void') . ')') . ';';
+    push @c, 'typedef ' . cdecl($ret, cid($f) . '(' . (@p ? join(', ', @p) : 'void') . ')') . ($pcs ? ' __attribute__((pcs("aapcs")))' : '') . ';';
 }
 # the records' fields, each after those it holds by value
 my %rdone;
@@ -977,7 +986,7 @@ sub proto {
     cdecl($s->{ret}, cid($name) . "($ps)");
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} ne 'alias' && !clang_builtin($_) } @order) {
-    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ';';
+    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ($fn{$f}{attr} ? " __attribute__(($fn{$f}{attr}))" : '') . ';';
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} eq 'alias' } @order) {
     my $t = $fn{$f}{target};
