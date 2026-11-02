@@ -115,6 +115,16 @@ ld1 cb_ld1 (long double a);
 cld cb_cld (long double re, long double im);
 long double g_ld1 (void);
 long double g_cld (void);
+/* _Complex __float128: in memory, as an argument and as a result */
+#ifdef __clang__
+typedef _Complex __float128 cq;
+#else
+typedef _Complex _Float128 cq;
+#endif
+cq r_cq (__float128 re, __float128 im);
+int eq_cq (cq z, __float128 re, __float128 im);
+cq cb_cq (cq z);
+int g_cq (void);
 #endif
 #if defined __x86_64__ || defined __riscv
 /* the SysV ABI's own shapes (on riscv64: a double and a long, an int and a

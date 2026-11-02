@@ -130,6 +130,7 @@ static void a64 (void)
 #ifdef __x86_64__
 ld1 cb_ld1 (long double a) { ld1 r = { a + 1 }; return r; }
 cld cb_cld (long double re, long double im) { cld z; __real__ z = re; __imag__ z = im; return z; }
+cq cb_cq (cq z) { cq r; __real__ r = __imag__ z; __imag__ r = __real__ z; return r; }
 static void x87 (void)
 {
   ld1 (*p_r_ld1) (long double) = r_ld1;
@@ -142,6 +143,12 @@ static void x87 (void)
   check (__real__ z == 4.0L && __imag__ z == 5.0L, "x87: a complex long double as a result, in st0 and st1");
   check (p_g_ld1 () == 6.0L, "x87: gcc calls ttpc: a struct of one long double as a result");
   check (p_g_cld () == 23.0L, "x87: gcc calls ttpc: a complex long double as a result");
+  cq (*p_r_cq) (__float128, __float128) = r_cq;
+  int (*p_eq_cq) (cq, __float128, __float128) = eq_cq;
+  int (*p_g_cq) (void) = g_cq;
+  cq q = p_r_cq (4.0Q, 5.0Q);
+  check (p_eq_cq (q, 4.0Q, 5.0Q), "a complex float128 as a result and an argument, in memory");
+  check (p_g_cq (), "gcc calls ttpc: a complex float128 as an argument and a result");
 }
 #endif
 #if defined __x86_64__ || defined __riscv
