@@ -645,6 +645,15 @@ sub asm_text {
     $template =~ s/\\n/;/g;
     ($template, [($outs // '') =~ /"([^"]*)"/g], [($ins // '') =~ /"([^"]*)"/g]);
 }
+# Does a value compute in floating point, as c2ff's fp_computes?
+sub fp_computes {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    my $q = $n->{type} ? $n->{type}{desugaredQualType} // $n->{type}{qualType} // '' : '';
+    return 1 if $k =~ /^(?:BinaryOperator|UnaryOperator)$/ && $q =~ /^(?:float|double|long double|_Float\d+x?|__float128)$/;
+    return 1 if $k =~ /CastExpr$/ && ($n->{castKind} // '') =~ /Floating/;
+    !!grep { fp_computes($_) } kids($n);
+}
 # glibc's optimization barrier, asm ("" : "+r" (x)): c2ff makes no code of it
 sub asm_barrier {
     my ($n) = @_;
@@ -775,7 +784,16 @@ sub S {
         if ($k eq 'ContinueStmt') { push @out, '(continue)'; next }
         if ($k eq 'GotoStmt') { push @out, '(goto ' . ($labels{ $n->{targetLabelDeclId} } // '?') . ')'; next }
         if ($k eq 'IndirectGotoStmt') { push @out, '(goto* ' . E((kids($n))[0]) . ')'; next }
-        if ($k eq 'GCCAsmStmt') { push @out, '(asm)' unless $side eq 'glibc' && asm_barrier($n); next }
+        if ($k eq 'GCCAsmStmt') {
+            if ($side eq 'glibc' && asm_barrier($n)) {
+                # (what an input computes in floating point stays, its value
+                # unused: c2ff's)
+                push @out, map { '(cast ToVoid void ' . E($_) . ')' } grep { fp_computes($_) } kids($n) if $target eq 'x86_64' && !(asm_text($n))[1]->@*;
+                next;
+            }
+            push @out, '(asm)';
+            next;
+        }
         # an expression whose value is not used
         push @out, xstmt($n);
     }
