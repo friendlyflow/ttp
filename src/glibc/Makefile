@@ -932,7 +932,7 @@ CLUNITS = $(patsubst $(I)/%.i,%,$(sort $(filter-out %.clang.i,$(wildcard $(I)/*/
 CLPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
 clayer-check:
 	@echo "clayer-check: $(words $(CLUNITS)) units and $(words $(CLPROGS)) programs of $(BUILD)"
-	@s=0; NM=$(XPRE)nm LOBJ=$(LOBJ) CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl PROGROOTS_unwind="$(PROGROOTS_unwind)" $(RUN) -t 3600 sh ../compiler/gen/clayercheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC) $(LCLANGVEC_$(GTARGET):%=libgcc/%)" \
+	@s=0; NM=$(XPRE)nm LOBJ=$(LOBJ) CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl PROGROOTS_unwind="$(PROGROOTS_unwind)" $(RUN) -t 3600 sh ../compiler/gen/clayercheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" \
 	    -f $(FF) -p "$(CLPROGS)" -x "$(INDEXED)" -i $(I) -o $(OBJ) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff $(CPTOOLS)/csema $(BUILD)/clayer $(CLUNITS) || s=$$?; \
 	$(foreach m,$(CHECK_MS),echo "clayer-check $(m): $$(n=0; for o in $(OBJS_all_$(m)); do grep -q "^OK $$o$$" $(BUILD)/clayer/result && n=$$((n + 1)); done; echo $$n) of $(words $(OBJS_all_$(m))) objects$$(grep -q '^OK $(m)-prog$$' $(BUILD)/clayer/result && echo ', its program too')";) \
 	exit $$s
