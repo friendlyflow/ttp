@@ -146,7 +146,7 @@ PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
 PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
-PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 \
+PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 clayer-riscv64 \
 	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 libgcc-aarch64 csema-aarch64 \
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm \
@@ -205,7 +205,10 @@ pc-cparse-riscv64: $(PC_MS:%=pc-%-check)
 # the types and semantics of C in ff (T3b) against clang on the same units
 pc-csema-riscv64: $(PC_MS:%=pc-%-check)
 	$(call pc_step,csema-riscv64,$(call PC_GLIBC) csema-check)
-# (the same on the other targets' units, a minute or two each)
+# the C layer written in ff (T3c) against c2ff.pl on the same units, byte for byte
+pc-clayer-riscv64: $(PC_MS:%=pc-%-check)
+	$(call pc_step,clayer-riscv64,$(call PC_GLIBC) clayer-check)
+# (csema on the other targets' units, a minute or two each)
 pc-csema-aarch64: $(PC_A64:%=pc-%-aarch64)
 	$(call pc_step,csema-aarch64,$(call PC_GLIBC,aarch64) csema-check)
 pc-csema-x86_64: $(PC_X64:%=pc-%-x86_64)
