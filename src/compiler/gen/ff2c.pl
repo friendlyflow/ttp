@@ -55,7 +55,7 @@ my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt
     $flat->($_) for @top;
     Words::long32() if $target eq 'arm';
     @top = Words::oldwords($t, @top);
-    my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 u8 u16 u32 u64);
+    my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 i128 u8 u16 u32 u64 u128);
     my $pad;
     $pad = sub {
         my ($n) = @_;
@@ -99,7 +99,7 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
-    float128 => '__float128',
+    float128 => '__float128', i128 => '__int128', u128 => 'unsigned __int128',
     va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
     'complex long double' => '_Complex long double');
 $scalar{u64} = 'unsigned long long' if $target eq 'arm';

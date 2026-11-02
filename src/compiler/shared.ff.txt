@@ -452,6 +452,14 @@ comment
 long double:
   value
 comment
+  i128 value: C, signed 16 bytes aligned to 16, C's __int128 (riscv64, x86_64 and aarch64; not on arm; at compile time for its size alone); called with a value, converts it.
+i128:
+  value
+comment
+  u128 value: C, unsigned 16 bytes aligned to 16, C's unsigned __int128 (riscv64, x86_64 and aarch64; not on arm; at compile time for its size alone); called with a value, converts it.
+u128:
+  value
+comment
   float128 value: C, binary128 (C's _Float128, GNU C's __float128): x86_64's, beside its long double; long double on riscv64 and aarch64. Its literal is the exact hex float with Q after it.
 float128:
   value

@@ -189,3 +189,45 @@ int g_u16 (void);
 double g_r_fi (void);
 double g_r_cd (void);
 #endif
+#ifdef __SIZEOF_INT128__
+/* i128 and u128: registers (x86_64 any two, aarch64 an even pair, riscv64
+   any two, an unnamed one an even pair), split (riscv64), on the stack
+   (16-aligned), in structs, by value and as results, va_arg */
+typedef __int128 i128_t;
+typedef unsigned __int128 u128_t;
+typedef struct { i128_t x; } si;
+typedef struct { long a; i128_t x; } sli;
+typedef struct { double d; i128_t x; } sdi;
+#define BIG(n) ((((i128_t) (n)) << 64) + (n) * 3 + 1)
+#define W2(a, b) ((a) + 3 * (b))
+#define W4(a, b, c, d) ((a) + 3 * (b) + 5 * (c) + 7 * (d))
+#define W6(a, b, c, d, e, f) ((a) + 3 * (b) + 5 * (c) + 7 * (d) + 9 * (e) + 11 * (f))
+static inline long qbits (double d) { union { double d; long l; } u; u.d = d; return u.l; }
+i128_t f_q2 (i128_t a, i128_t b);
+i128_t f_q4 (int a, i128_t b, int c, i128_t d);
+i128_t f_q9 (long a, long b, long c, long d, long e, i128_t f, long g, i128_t h, long i);
+u128_t f_q8 (long a, long b, long c, long d, long e, long f, long g, u128_t h, long i);
+i128_t f_q6 (i128_t a, i128_t b, i128_t c, i128_t d, i128_t e, long f);
+i128_t f_qs (si a, sli b, sdi c, si d);
+si r_qs (i128_t a);
+sli r_qsl (long a, i128_t b);
+i128_t f_qv (int n, ...);
+i128_t cb_q2 (i128_t a, i128_t b);
+i128_t cb_q4 (int a, i128_t b, int c, i128_t d);
+i128_t cb_q9 (long a, long b, long c, long d, long e, i128_t f, long g, i128_t h, long i);
+u128_t cb_q8 (long a, long b, long c, long d, long e, long f, long g, u128_t h, long i);
+i128_t cb_q6 (i128_t a, i128_t b, i128_t c, i128_t d, i128_t e, long f);
+i128_t cb_qs (si a, sli b, sdi c, si d);
+si cb_r_qs (i128_t a);
+sli cb_r_qsl (long a, i128_t b);
+i128_t cb_qv (int n, ...);
+i128_t g_q2 (void);
+i128_t g_q4 (void);
+i128_t g_q9 (void);
+u128_t g_q8 (void);
+i128_t g_q6 (void);
+i128_t g_qs (void);
+i128_t g_r_qs (void);
+i128_t g_r_qsl (void);
+i128_t g_qv (void);
+#endif

@@ -58,6 +58,53 @@ int __mulvsi3 (int, int);
 double __powidf2 (double, int);
 float __powisf2 (float, int);
 #ifndef __arm__
+/* the TI functions: __int128 (ff's i128, u128) */
+typedef __int128 ti;
+typedef unsigned __int128 uti;
+ti __multi3 (ti, ti);
+ti __divti3 (ti, ti);
+ti __modti3 (ti, ti);
+uti __udivti3 (uti, uti);
+uti __umodti3 (uti, uti);
+uti __udivmodti4 (uti, uti, uti *);
+ti __divmodti4 (ti, ti, ti *);
+ti __negti2 (ti);
+ti __ashlti3 (ti, int);
+ti __ashrti3 (ti, int);
+ti __lshrti3 (ti, int);
+int __cmpti2 (ti, ti);
+int __ucmpti2 (uti, uti);
+ti __absvti2 (ti);
+ti __addvti3 (ti, ti);
+ti __subvti3 (ti, ti);
+ti __mulvti3 (ti, ti);
+ti __negvti2 (ti);
+int __ffsti2 (ti);
+int __clzti2 (uti);
+int __ctzti2 (uti);
+int __popcountti2 (uti);
+int __parityti2 (uti);
+int __clrsbti2 (ti);
+float __floattisf (ti);
+float __floatuntisf (uti);
+double __floattidf (ti);
+double __floatuntidf (uti);
+tf __floattitf (ti);
+tf __floatuntitf (uti);
+ti __fixsfti (float);
+uti __fixunssfti (float);
+ti __fixdfti (double);
+uti __fixunsdfti (double);
+ti __fixtfti (tf);
+uti __fixunstfti (tf);
+#ifdef __x86_64__
+long double __floattixf (ti);
+long double __floatuntixf (uti);
+ti __fixxfti (long double);
+uti __fixunsxfti (long double);
+#endif
+#endif
+#ifndef __arm__
 tf __powitf2 (tf, int);
 unsigned long long __fixunsdfdi (double);
 unsigned long long __fixunssfdi (float);
@@ -259,6 +306,67 @@ int main (void)
         w (sync_val_cas_8 (&m8, m8, x ^ 0x55)); w (sync_val_cas_8 (&m8, 3, 4));
         sync_synchronize ();
         w32 (m4); w32 ((unsigned short) m2); w32 ((unsigned char) m1); w (m8);
+      }
+#endif
+#ifndef __arm__
+      {
+        ti a = ((ti) x << 64) | (unsigned long long) (x * 0x9e3779b97f4a7c15ULL);
+        ti b = ((ti) (x >> (x & 63)) << (x & 63)) ^ (ti) (long long) (x * 0xd1342543de82ef95ULL);
+        ti c = (ti) (long long) (x | 1) ;
+        ti r2; uti u2;
+        int n = (int) (x & 127);
+        w ((unsigned long long) (__multi3 (a, b) >> 64)); w ((unsigned long long) __multi3 (a, b));
+        if (b != 0)
+          {
+            w ((unsigned long long) (__divti3 (a, b) >> 64)); w ((unsigned long long) __divti3 (a, b));
+            w ((unsigned long long) (__modti3 (a, b) >> 64)); w ((unsigned long long) __modti3 (a, b));
+            w ((unsigned long long) (__udivti3 (a, b) >> 64)); w ((unsigned long long) __udivti3 (a, b));
+            w ((unsigned long long) (__umodti3 (a, b) >> 64)); w ((unsigned long long) __umodti3 (a, b));
+            w ((unsigned long long) (__udivmodti4 (a, b, &u2) >> 64)); w ((unsigned long long) (u2 >> 64)); w ((unsigned long long) u2);
+            w ((unsigned long long) (__divmodti4 (a, b, &r2) >> 64)); w ((unsigned long long) (r2 >> 64)); w ((unsigned long long) r2);
+          }
+        w ((unsigned long long) (__divti3 (a, c) >> 64)); w ((unsigned long long) __modti3 (a, c));
+        w ((unsigned long long) (__udivti3 (a, (unsigned long long) c) >> 64)); w ((unsigned long long) __umodti3 (a, (unsigned long long) c));
+        w ((unsigned long long) (__negti2 (a) >> 64)); w ((unsigned long long) __negti2 (a));
+        w ((unsigned long long) (__ashlti3 (a, n) >> 64)); w ((unsigned long long) __ashlti3 (a, n));
+        w ((unsigned long long) (__ashrti3 (a, n) >> 64)); w ((unsigned long long) __ashrti3 (a, n));
+        w ((unsigned long long) (__lshrti3 (a, n) >> 64)); w ((unsigned long long) __lshrti3 (a, n));
+        w (__cmpti2 (a, b)); w (__ucmpti2 (a, b)); w (__cmpti2 (a, a));
+        w ((unsigned long long) (__absvti2 (a >> 1) >> 64));
+        w ((unsigned long long) (__addvti3 (a >> 2, b >> 2) >> 64)); w ((unsigned long long) (__subvti3 (a >> 2, b >> 2) >> 64));
+        w ((unsigned long long) (__mulvti3 (a >> 90, b >> 90)));
+        w ((unsigned long long) (__negvti2 (a >> 1) >> 64));
+        w (__ffsti2 (a)); w (__ffsti2 ((ti) x << 64)); w (__ffsti2 (0));
+        w (__clzti2 (a | 1)); w (__clzti2 ((a >> 64 & 0xffffffffffffffffULL) | 1)); w (__ctzti2 (a | ((ti) 1 << 127)));
+        w (__ctzti2 ((a & ~(uti) 0 << 64) | ((ti) 1 << 127)));
+        w (__popcountti2 (a)); w (__parityti2 (a)); w (__clrsbti2 (a)); w (__clrsbti2 (a >> 70));
+        f (__floattisf (a)); f (__floatuntisf (a)); d (__floattidf (a)); d (__floatuntidf (a));
+        l (__floattitf (a)); l (__floatuntitf (a));
+        f (__floattisf (a >> 40)); d (__floattidf (a >> 40)); l (__floattitf (a >> 40));
+        {
+          ti t; uti tu;
+          t = __fixsfti ((float) (long long) x); w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          tu = __fixunssfti ((float) (x >> 1)); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+          t = __fixdfti ((double) (long long) x * 1e10); w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          tu = __fixunsdfti ((double) x * 1e10); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+          t = __fixtfti ((tf) (long long) x * 1e15); w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          tu = __fixunstfti ((tf) x * 1e15); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+        }
+#ifdef __x86_64__
+        xl (__floattixf (a)); xl (__floatuntixf (a));
+        {
+          ti t = __fixxfti ((long double) (long long) x * 1e10L); uti tu = __fixunsxfti ((long double) x * 1e10L);
+          w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+        }
+#endif
+        /* the operators: gcc's and ttpc's own calls of these */
+        w ((unsigned long long) ((a * b) >> 64));
+        if (b != 0)
+          { w ((unsigned long long) ((a / b) >> 64)); w ((unsigned long long) (a % b)); w ((unsigned long long) (((uti) a / (uti) b) >> 64)); w ((unsigned long long) ((uti) a % (uti) b)); }
+        f ((float) a); d ((double) a); l ((tf) a); f ((float) (uti) a); d ((double) (uti) a); l ((tf) (uti) a);
+        { float ff = (float) (long long) x; double dd = (double) (long long) x * 1e10; tf tt = (tf) (long long) x * 1e15;
+          ti t = ff; w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); t = dd; w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          t = tt; w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); }
       }
 #endif
 #ifdef __riscv

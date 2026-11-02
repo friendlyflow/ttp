@@ -84,6 +84,8 @@ my %scalar = (
     'float' => 'float', 'double' => 'double', 'long double' => 'long double',
     '__float128' => 'long double',      # x86_64's _Float128 for clang (clang-prelude.h): float128 there
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
+    '__int128' => 'i128', 'signed __int128' => 'i128', '__int128_t' => 'i128',
+    'unsigned __int128' => 'u128', '__uint128_t' => 'u128',
     '_Bool' => 'u8', 'void' => 'void',
     # (C23's bool, the type of libgcc's C under gcc 16's gnu23: _Bool)
     'bool' => 'u8',
@@ -100,7 +102,6 @@ my %scalar = (
 my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
-our $saw_i128;             # (a 128-bit integer's type met: a function of one stops, sub function)
 my %treerec;               # --index file: the records its tree's types page defines
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
 my %ownfnrec;              # a function's own definitions of tags its unit defines otherwise
@@ -203,11 +204,6 @@ sub ctype {
     return ('fs', ctype($1)) if $t =~ /^__seg_fs\s+(.*)$/;
     return ('fs', ctype("$1 $2")) if $t =~ /^(.*?)\s*\b__seg_fs\b\s*(.*)$/;
     return $scalar{$t} if exists $scalar{$t};
-    # (__int128, x86_64's, which ttpc has no integer of: its 16 bytes as two
-    # u64, for the layout of the audit interface's La_x86_64_regs and
-    # La_x86_64_retval, which no code of a static program reads; arithmetic
-    # on one stops ttpc)
-    if ($t =~ /^(?:__int128_t|__uint128_t|(?:unsigned )?__int128)$/) { $saw_i128 = 1; return ('array', 'u64', 2) }
     return ctype($owntd{$cur_unit}{$t}) if $cur_unit && $owntd{$cur_unit} && exists $owntd{$cur_unit}{$t};
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($desugar{$t}) if exists $desugar{$t};
@@ -391,7 +387,7 @@ my %reserved = map { $_ => 1 } qw(
     if else while for return break continue comment address content syscall U L UL LL ULL
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
-    type i8 i16 i32 i64 u8 u16 u32 u64 va_list va_start va_arg va_end va_copy
+    type i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor fs vector line zero ra sp gp tp fp pc
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
@@ -1242,9 +1238,9 @@ sub asm_once {
     "${name}_$h";
 }
 # the overflow builtins builtins.ff.txt has, by name and operand types
-my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
-$ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int';
-$ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long';
+my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'i128 i128 i128', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
+$ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int', 'long long long';
+$ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long', 'i128 i128 i128', 'int i128 i128', 'int int int', 'int long long', 'u64 u64 u64';
 # (and builtins-arm.ff.txt's, of arm's 32-bit size_t)
 my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
@@ -1766,17 +1762,20 @@ sub asm_x87 {
 sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
-    # (the address or the size of a 128-bit integer is no value of one: its
-    # layout, two u64, is right; libgcc's aarch64_fallback_frame_state,
-    # &ctx->vregs[i] and sizeof (ctx->vregs[0]) of the signal frame)
-    if ((($k eq 'UnaryOperator' && $n->{opcode} eq '&') || $k eq 'UnaryExprOrTypeTraitExpr') && !$n->{i128_addr}) {
-        local $n->{i128_addr} = 1;
-        my $was = $saw_i128;
-        my @r = expr($n);
-        $saw_i128 = $was;
-        return @r;
-    }
     softfp($n);
+    # (a 128-bit integer's initializer: ttpc reads a number there, -N all
+    # ones above it; C has no 128-bit literal, and one wider than 64 bits has
+    # no form in ttpc yet)
+    if ($in_global && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|IntegerLiteral)$/ && "@{[ctype(qt($n))]}" =~ /^[iu]128$/) {
+        my $v = fold128($n);
+        stop("a 128-bit integer's initializer that is no constant here", $n) unless defined $v;
+        my $m = Math::BigInt->new(1)->blsft(128);
+        $v = $v->copy->bmod($m);
+        return node($v->as_hex) if $v < Math::BigInt->new(1)->blsft(64);
+        my $n2 = $m - $v;
+        return node('-' . $n2->bstr) if $n2 <= Math::BigInt->new(1)->blsft(63);
+        stop("a 128-bit constant wider than 64 bits in a global, which ttpc has no form of", $n);
+    }
     if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
         && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
         my @f = femit($v, tword($n));
@@ -1797,6 +1796,14 @@ sub expr {
     # on arm, where a long long is a pair of registers and a word is not, the
     # conversion of a narrower integer to it too (ttpc keeps a word's value in
     # one register, without the high word a pair needs)
+    # (to and from a 128-bit integer, written: a call through a pointer has
+    # no parameter's type in ttpc, and a word is no pair)
+    if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
+        my ($v) = kids($n);
+        my @to = ctype(qt($n));
+        my @from = ctype(qt($v));
+        return cast_node([@to], item(expr($v))) if "@to" ne "@from" && "@to @from" =~ /\b[iu]128\b/;
+    }
     if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
         my @to = ctype(qt($n));
         my @from = ctype(qt((kids($n))[0]));
@@ -2249,6 +2256,46 @@ sub const_init {
 # The call of libatomic's function for an atomic builtin
 # The value of an integer constant expression (literals, parentheses, casts,
 # + - * & | ^ << >> ~ and unary -), or undef.
+# The value of a constant expression of 128-bit integers, a Math::BigInt
+# (modulo 2^128 and wrapped by its type where a cast or an operator has one).
+sub fold128 {
+    my ($n) = @_;
+    require Math::BigInt;
+    my $k = $n->{kind} // '';
+    my $wrap = sub {
+        my ($v, $t) = @_;
+        my @t = ctype($t);
+        my %bits = (i128 => [128, 1], u128 => [128, 0], long => [64, 1], i64 => [64, 1], u64 => [64, 0], int => [32, 1], u32 => [32, 0], i32 => [32, 1], short => [16, 1], u16 => [16, 0], i16 => [16, 1], char => [8, $target eq 'x86_64' ? 1 : 0], i8 => [8, 1], u8 => [8, 0]);
+        my $b = $bits{"@t"} or return;
+        my $m = Math::BigInt->new(1)->blsft($b->[0]);
+        my $r = $v->copy->bmod($m);
+        $r -= $m if $b->[1] && $r >= Math::BigInt->new(1)->blsft($b->[0] - 1);
+        $r;
+    };
+    if ($k =~ /^(IntegerLiteral|ConstantExpr)$/ && defined $n->{value} && $n->{value} =~ /^-?\d+$/) { return Math::BigInt->new($n->{value}) }
+    return fold128((kids($n))[0]) if $k eq 'ParenExpr' || $k eq 'ConstantExpr';
+    if ($k =~ /^(ImplicitCastExpr|CStyleCastExpr)$/) {
+        my $v = fold128((kids($n))[0]) // return;
+        return $wrap->($v, qt($n));
+    }
+    if ($k eq 'UnaryOperator') {
+        my $v = fold128((kids($n))[0]) // return;
+        my $o = $n->{opcode};
+        return $wrap->($o eq '-' ? -$v : $o eq '~' ? -$v - 1 : $o eq '+' ? $v : return, qt($n));
+    }
+    if ($k eq 'BinaryOperator') {
+        my ($a, $b) = map { fold128($_) } kids($n);
+        return unless defined $a && defined $b;
+        my $o = $n->{opcode};
+        my $m = Math::BigInt->new(1)->blsft(128);
+        my ($ua, $ub) = ($a->copy->bmod($m), $b->copy->bmod($m));
+        my $r = $o eq '|' ? $ua->copy->bior($ub) : $o eq '&' ? $ua->copy->band($ub) : $o eq '^' ? $ua->copy->bxor($ub)
+            : $o eq '+' ? $a + $b : $o eq '-' ? $a - $b : $o eq '*' ? $a * $b : $o eq '<<' ? $a->copy->bmul(Math::BigInt->new(1)->blsft($b))
+            : $o eq '>>' ? $a->copy->bdiv(Math::BigInt->new(1)->blsft($b)) : return;
+        return $wrap->($r, qt($n));
+    }
+    return;
+}
 sub int_const {
     my ($n) = @_;
     my $k = $n->{kind} // '';
@@ -3131,10 +3178,6 @@ sub function {
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);
     my ($ret) = split_fn(expand(qt($d)));
     defined $ret or die "c2ff: not a function type: " . qt($d) . "\n";
-    # (a function of 128-bit integers, its value, a parameter or a local:
-    # ttpc has no such integer, and c2ff's two u64 of one are its layout
-    # only: libgcc's TImode helpers, __multi3 ..., stop, once translated)
-    local $saw_i128 = 0;
     my @p = grep { $_->{kind} eq 'ParmVarDecl' } kids($d);
     my ($cs) = grep { $_->{kind} eq 'CompoundStmt' } kids($d);
     my $i = 0;
@@ -3156,7 +3199,6 @@ sub function {
     local ($lfile, $lline) = ('', 0);
     my @at = line_at(offset_of($d->{loc}));
     my $f = node(ffname($name) . ':', @head, stmt_layers(scalar @head, (@at ? [@at] : ()), map { [lstmt($_)] } kids($cs)));
-    stop("a function of __int128 values, which ttpc has no integer of", $d) if $saw_i128;
     $f;
 }
 # A function's statements, each a run of nodes: past what a node holds

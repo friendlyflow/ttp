@@ -1179,6 +1179,205 @@ builtins:
       <
       a
   comment
+    __builtin_add_overflow and __builtin_sub_overflow on 128-bit integers (libgcc's __addvti3, __subvti3, __absvti2, __negvti2), and the rest of libgcc's traps: the result wrapped, and whether it did.
+  __builtin_add_overflow i128 i128 i128:
+    int
+    a:
+      i128
+    b:
+      i128
+    r:
+      i128
+      * pointer
+    s:
+      i128
+      a
+      +
+      b
+    r
+    * pointer
+    =
+    s
+    return
+      :
+        :
+          a
+          ^
+          s
+        &
+        :
+          b
+          ^
+          s
+      <
+      0
+  __builtin_sub_overflow i128 i128 i128:
+    int
+    a:
+      i128
+    b:
+      i128
+    r:
+      i128
+      * pointer
+    s:
+      i128
+      a
+      -
+      b
+    r
+    * pointer
+    =
+    s
+    return
+      :
+        :
+          a
+          ^
+          b
+        &
+        :
+          a
+          ^
+          s
+      <
+      0
+  __builtin_sub_overflow int i128 i128:
+    int
+    a:
+      int
+    b:
+      i128
+    r:
+      i128
+      * pointer
+    return
+      __builtin_sub_overflow i128 i128 i128
+        cast
+          i128
+        a
+        b
+        r
+  __builtin_sub_overflow int int int:
+    int
+    a:
+      int
+    b:
+      int
+    r:
+      int
+      * pointer
+    d:
+      long
+      cast
+        long
+      a
+      -
+      cast
+        long
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    d
+    return
+      d
+      !=
+      cast
+        long
+      cast
+        int
+      d
+  __builtin_sub_overflow int long long:
+    int
+    a:
+      int
+    b:
+      long
+    r:
+      long
+      * pointer
+    x:
+      long
+      cast
+        long
+      a
+    s:
+      long
+      x
+      -
+      b
+    r
+    * pointer
+    =
+    s
+    return
+      :
+        :
+          x
+          ^
+          b
+        &
+        :
+          x
+          ^
+          s
+      <
+      0
+  __builtin_sub_overflow u64 u64 u64:
+    int
+    a:
+      u64
+    b:
+      u64
+    r:
+      u64
+      * pointer
+    r
+    * pointer
+    =
+    a
+    -
+    b
+    return
+      a
+      <
+      b
+  __builtin_mul_overflow long long long:
+    int
+    a:
+      long
+    b:
+      long
+    r:
+      long
+      * pointer
+    p:
+      i128
+      cast
+        i128
+      a
+      *
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    p
+    return
+      p
+      !=
+      cast
+        i128
+      cast
+        long
+      p
+  comment
     __builtin_mul_overflow_p as glibc uses it (gnulib's hash.c, with a ptrdiff_t 1 as its third): whether the product of two sizes is past what a long holds.
   __builtin_mul_overflow_p:
     int

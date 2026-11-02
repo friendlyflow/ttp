@@ -197,6 +197,8 @@ sub full {
     return ins('slt', 'zero', $o[1], $o[0]) if $op eq 'sltz';
     return ins('slt', $o[1], 'zero', $o[0]) if $op eq 'sgtz';
     return ins('sltu', $o[1], 'zero', $o[0]) if $op eq 'snez';
+    return ins('sltu', $o[1], $o[2], $o[0]) if $op eq 'sgtu';
+    return ins('slt', $o[1], $o[2], $o[0]) if $op eq 'sgt';
     return ins('xori', -1, $o[1], $o[0]) if $op eq 'not';
     return ins('subw', $o[1], 'zero', $o[0]) if $op eq 'negw';
     return ins('addiw', 0, $o[1], $o[0]) if $op eq 'sext.w';

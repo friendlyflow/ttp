@@ -120,6 +120,10 @@ ff, the language ttpc compiles
       a type is a run of leaf siblings, one word per node, the first word first; a node with children ends the run
       scalars: char (1 byte, signed on x86_64, unsigned on riscv64, aarch64 and arm, as their ABIs say: the target's cc_char), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void, va_list (a word)
       i64 and u64 are refused on arm
+      i128 and u128 (C's __int128 and unsigned __int128): 16 bytes aligned to 16, on riscv64, x86_64 and aarch64; refused on arm (gcc has none there); at compile time for its size alone; no literal of their own, as C has none: a smaller number widens
+      their arithmetic is done in a pair of registers: add with carry, mul with its high part, shifts across the halves, compares
+      / and % call libgcc's __divti3 __udivti3 __modti3 __umodti3, conversions with float, double, long double and float128 its __floattisf ... __fixunsxfti, as gcc does: the program has them (libgcc.ff)
+      by each platform's ABI: a result in rax:rdx, x0:x1, a0:a1; an argument in two registers (aarch64 from an even one; riscv64 an unnamed one from an even one, a named one split between a7 and the stack if it must be) or on the stack, 16-aligned
       T * pointer: a word, the address of a T, the base type and then * pointer, siblings, in C's order: char / * pointer is char *, char / * pointer / * pointer char **; void / * pointer the address of nothing (C's void *)
       a type run is its base, a type word (or an array node), and the * pointer leaves after it; it ends at the first node that is neither, so the items after it are never read as a type (a variable is never named as a type)
       fs after the type it qualifies, before the * pointer that points at it, is gcc's __seg_fs (x86_64): pthread / fs / * pointer is C's struct pthread __seg_fs *, pthread / * pointer / fs / * pointer struct pthread *__seg_fs *
