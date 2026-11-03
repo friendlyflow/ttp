@@ -169,19 +169,18 @@ if ($cmd eq 'run') {
         }
     }
     system('rm', '-rf', $run);
-    my ($want) = $got{ref}{ $cpus[0] };
+    # (each CPU's run against gcc's on that CPU: a test that lists glibc's
+    # ifunc variants, tst-memmove-overflow's "testing __memmove_sve", prints
+    # other lines on another CPU, with gcc's too)
     my @diff;
-    for my $b ("ref", "prog") {
-        for my $cpu (@cpus) {
-            next if $b eq 'ref' && $cpu eq $cpus[0];
-            my $g = $got{$b}{$cpu};
-            my $who = ($b eq 'ref' ? "gcc's" : "ttpc's") . " on $cpu";
-            if ($g->[0] != $want->[0]) { push @diff, "$who: exit $g->[0], gcc's on $cpus[0] $want->[0]" }
-            elsif (!same($g->[1], $want->[1], $t)) { push @diff, "$who: other output" }
-            elsif (!same($g->[2], $want->[2], $t)) { push @diff, "$who: other stderr" }
-        }
+    for my $cpu (@cpus) {
+        my ($g, $want) = ($got{prog}{$cpu}, $got{ref}{$cpu});
+        my $who = "ttpc's on $cpu";
+        if ($g->[0] != $want->[0]) { push @diff, "$who: exit $g->[0], gcc's $want->[0]" }
+        elsif (!same($g->[1], $want->[1], $t)) { push @diff, "$who: other output" }
+        elsif (!same($g->[2], $want->[2], $t)) { push @diff, "$who: other stderr" }
     }
-    my $s = $want->[0];
+    my $s = $got{ref}{ $cpus[0] }[0];
     if (@diff) { print "differ: ", join('; ', @diff), "\n" }
     else { print "equal: exit $s (", status_word($s), ")", @cpus > 1 ? ", on " . join(' and ', @cpus) : '', "\n" }
     exit 0;
