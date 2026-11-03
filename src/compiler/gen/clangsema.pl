@@ -93,7 +93,7 @@ sub parse_specs {
             # a vector's size before its element type; another attribute (address_space, ...) kept as a word
             # (aarch64's NEON vectors, the same as gcc's of their size)
             if ($w =~ /^__attribute__\s*\(\(neon_(?:poly)?vector_type\((\d+)\)\)\)$/) { $tp++; my $n = $1; my $rest = parse_specs(); return qual_add({ k => 'vec', n => $n, of => $rest }, %q) }
-            if ($w =~ /^__attribute__\s*\(\(__vector_size__\((\d+) \* sizeof\((.*)\)\)\)\)$/s) { $tp++; my ($n, $e) = ($1, $2); my $et = parse_type_str($e); my $rest = parse_specs(); return qual_add({ k => 'vec', n => $n, of => $rest // $et }, %q) }
+            if ($w =~ /^__attribute__\s*\(\(__vector_size__\((\d+) \* sizeof\((.*)\)\)\)\)$/s) { $tp++; my ($n, $e) = ($1, $2); my $et = parse_type_str($e); my $rest = parse_specs(); my %rq = %{ ($rest && $rest->{q}) || {} }; return qual_add({ k => 'vec', n => $n, of => $rest ? unqual($rest) : $et }, %q, %rq) }
             if ($w =~ /noreturn/) { last }
             # (x86_64's address spaces, __seg_fs and __seg_gs: a qualifier)
             if ($w =~ /^__attribute__\(\(address_space\(\d+\)\)\)$/) { $q{$w} = 1; $tp++; next }
@@ -160,6 +160,20 @@ sub typeof_inner {
     return $declty{$1} if $in =~ /^\s*\(*\s*([A-Za-z_]\w*)\s*\)*\s*$/ && $declty{$1};
     # typeof (*name): what the name points to
     if ($in =~ /^\s*\*\s*\(*\s*([A-Za-z_]\w*)\s*\)*\s*$/ && $declty{$1} && $declty{$1}{k} eq 'ptr') { return $declty{$1}{to} }
+    # typeof (*(*(T)...)): what a cast's type points to, x86_64's THREAD_SELF as __typeof (*(*(struct pthread *__seg_fs *)&...))
+    if ($in =~ /^\s*\*/) {
+        my ($e, $n) = ($in, 0);
+        while ($e =~ s/^\s*\*\s*//) { $n++; 1 while $e =~ s/^\(\s*(?=[*(])//; }
+        if ($n && $e =~ /^\(/) {
+            my ($d, $i) = (0, 0);
+            for (; $i < length $e; $i++) { my $c = substr($e, $i, 1); $d++ if $c eq '('; if ($c eq ')') { last if --$d == 0 } }
+            my @save = @tok; my $sp = $tp;
+            my $t = eval { parse_type_str(substr($e, 1, $i - 1)) };
+            @tok = @save; $tp = $sp;
+            while ($t && $n--) { $t = $t->{k} eq 'ptr' ? $t->{to} : undef }
+            return $t if $t;
+        }
+    }
     my @save = @tok; my $sp = $tp;
     my $r = eval { parse_type_str($in) };
     @tok = @save; $tp = $sp;
