@@ -1378,6 +1378,122 @@ builtins:
         long
       p
   comment
+    gcc's builtins on a float16 (libgcc's __mulhc3, __divhc3), from its bits.
+  __builtin_isnan float16:
+    int
+    x:
+      float16
+    b:
+      u32
+      :
+        cast
+          u16
+          * pointer
+        x
+        & address
+      * pointer
+    return
+      :
+        b
+        &
+        0x7fff
+      >
+      0x7c00
+  __builtin_isinf float16:
+    int
+    x:
+      float16
+    b:
+      u32
+      :
+        cast
+          u16
+          * pointer
+        x
+        & address
+      * pointer
+    return
+      :
+        b
+        &
+        0x7fff
+      ==
+      0x7c00
+  __builtin_isfinite float16:
+    int
+    x:
+      float16
+    b:
+      u32
+      :
+        cast
+          u16
+          * pointer
+        x
+        & address
+      * pointer
+    return
+      :
+        b
+        &
+        0x7c00
+      !=
+      0x7c00
+  __builtin_copysignf16:
+    float16
+    x:
+      float16
+    y:
+      float16
+    r:
+      u16
+      cast
+        u16
+      :
+        :
+          :
+            cast
+              u16
+              * pointer
+            x
+            & address
+          * pointer
+        &
+        0x7fff
+      |
+      :
+        :
+          :
+            cast
+              u16
+              * pointer
+            y
+            & address
+          * pointer
+        &
+        0x8000
+    return
+      :
+        cast
+          float16
+          * pointer
+        r
+        & address
+      * pointer
+  __builtin_huge_valf16:
+    float16
+    r:
+      u16
+      0x7c00
+    return
+      :
+        cast
+          float16
+          * pointer
+        r
+        & address
+      * pointer
+  comment
     __builtin_mul_overflow_p as glibc uses it (gnulib's hash.c, with a ptrdiff_t 1 as its third): whether the product of two sizes is past what a long holds.
   __builtin_mul_overflow_p:
     int

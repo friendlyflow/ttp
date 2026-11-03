@@ -311,6 +311,60 @@ static void q128 (void)
   { i128_t (*p) (i128_t, i128_t) = f_q2; check (p (BIG (1), BIG (2)) == W2 (BIG (1), BIG (2)), "f_q2 through a pointer"); }
 }
 #endif
+#if defined __x86_64__ || defined __aarch64__ || defined __riscv
+h_t cb_hci (int n, hc_t z, h_t a) { return n == 1 ? __real__ z : n == 2 ? __imag__ z : a; }
+hc_t cb_r_hc (h_t a, h_t b) { hc_t r; __real__ r = a; __imag__ r = b; return r; }
+h_t cb_h2 (h_t a, h_t b) { return b; }
+b_t cb_b2 (int a, b_t b, float c) { return b; }
+h_t cb_h10 (h_t a, h_t b, h_t c, h_t d, h_t e, h_t f, h_t g, h_t h, h_t i, h_t j) { return j; }
+int cb_hsum (h_t a, double b, h_t c, long d, b_t e) { return HB (a) + 2 * HB (c) + 3 * d + 4 * BB (e); }
+int cb_h2s (h2 a, hin b, h5 c) { return HB (a.x) + 2 * HB (a.y) + 3 * HB (b.x) + 5 * b.i + 7 * HB (c.a) + 11 * HB (c.e); }
+h2 cb_r_h2 (unsigned short a, unsigned short b) { h2 r = { H (a), H (b) }; return r; }
+hin cb_r_hin (unsigned short a, int i) { hin r = { H (a), i }; return r; }
+static void f16 (void)
+{ /* (gcc's functions have no type in ff: through pointers of theirs) */
+  h_t (*p_h2) (h_t, h_t) = f_h2;
+  b_t (*p_b2) (int, b_t, float) = f_b2;
+  h_t (*p_h10) (h_t, h_t, h_t, h_t, h_t, h_t, h_t, h_t, h_t, h_t) = f_h10;
+  int (*p_hsum) (h_t, double, h_t, long, b_t) = f_hsum;
+  int (*p_h2s) (h2, hin, h5) = f_h2s;
+  h2 (*p_r_h2) (unsigned short, unsigned short) = r_h2;
+  hin (*p_r_hin) (unsigned short, int) = r_hin;
+  check (HB (p_h2 (H (0x3c00), H (0x3e00))) == 0x3e00, "f_h2");
+  check (BB (p_b2 (1, B (0x3f80), 2.0f)) == 0x3f80, "f_b2");
+  check (HB (p_h10 (H (1), H (2), H (3), H (4), H (5), H (6), H (7), H (8), H (9), H (10))) == 10, "f_h10");
+  check (p_hsum (H (1), 2.0, H (3), 4, B (5)) == 1 + 6 + 12 + 20, "f_hsum");
+  { h2 a = { H (1), H (2) }; hin b = { H (3), 4 }; h5 c = { H (5), H (0), H (0), H (0), H (6) };
+    check (p_h2s (a, b, c) == 1 + 4 + 9 + 20 + 35 + 66, "f_h2s"); }
+  { h2 r = p_r_h2 (1, 2); check (HB (r.x) == 1 && HB (r.y) == 2, "r_h2"); }
+  { hin r = p_r_hin (1, 2); check (HB (r.x) == 1 && r.i == 2, "r_hin"); }
+  { h_t (*p_hci) (int, hc_t, h_t) = f_hci; hc_t (*p_r_hc) (h_t, h_t) = r_hc; hc_t z; __real__ z = H (1); __imag__ z = H (2);
+    check (HB (p_hci (1, z, H (3))) == 1 && HB (p_hci (2, z, H (3))) == 2 && HB (p_hci (3, z, H (3))) == 3, "f_hci");
+    z = p_r_hc (H (1), H (2)); check (HB (__real__ z) == 1 && HB (__imag__ z) == 2, "r_hc"); }
+  check (g_hci (), "g_hci");
+  check (g_r_hc (), "g_r_hc");
+  check (g_h2 (), "g_h2");
+  check (g_b2 (), "g_b2");
+  check (g_h10 (), "g_h10");
+  check (g_hsum (), "g_hsum");
+  check (g_h2s (), "g_h2s");
+  check (g_r_h2 (), "g_r_h2");
+  check (g_r_hin (), "g_r_hin");
+}
+#endif
+#ifdef __arm__
+ah_t cb_ah2 (ah_t a, ah_t b) { return b; }
+ah_t cb_ah3 (ah_t a, double b, float c, int d, ah_t e) { return e; }
+static void af16 (void)
+{ double dz = 2.0;
+  ah_t (*p2) (ah_t, ah_t) = f_ah2;
+  ah_t (*p3) (ah_t, double, float, int, ah_t) = f_ah3;
+  check (AB (p2 (AH (0x3c00), AH (0x3e00))) == 0x3e00, "f_ah2");
+  check (AB (p3 (AH (1), dz, 3.0f, 4, AH (5))) == 5, "f_ah3");
+  check (g_ah2 (), "g_ah2");
+  check (g_ah3 (), "g_ah3");
+}
+#endif
 int main (void)
 {
   /* the functions of gcc whose result is not an int: through pointers of
@@ -400,6 +454,12 @@ int main (void)
 #endif
 #ifdef __SIZEOF_INT128__
   q128 ();
+#endif
+#ifdef __arm__
+  af16 ();
+#endif
+#if defined __x86_64__ || defined __aarch64__ || defined __riscv
+  f16 ();
 #endif
   return fails;
 }

@@ -460,6 +460,18 @@ comment
 u128:
   value
 comment
+  float16 value: C, a 2-byte floating point number (C's _Float16, IEEE binary16; at compile time for its size alone); called with a value, converts it.
+float16:
+  value
+comment
+  bfloat16 value: C, a 2-byte floating point number (GNU C's __bf16; at compile time for its size alone); called with a value, converts it.
+bfloat16:
+  value
+comment
+  complex float16 value: C, a complex number of two float16 parts, real part and imag part (C's _Complex _Float16); called with a value, converts it.
+complex float16:
+  value
+comment
   float128 value: C, binary128 (C's _Float128, GNU C's __float128): x86_64's, beside its long double; long double on riscv64 and aarch64. Its literal is the exact hex float with Q after it.
 float128:
   value
