@@ -30,6 +30,33 @@ my @lines = <>;
 # typeof of it that makes its AEABI alias)
 my %pcs;
 if ($target eq 'arm') { for (@lines) { $pcs{$1} = 1 while /\b(\w+) \([^()]*\)(?: __asm__\("\w+"\))? __attribute__\(\(pcs\("aapcs"\)\)\)/g } }
+# (arm's fixed-bit.c: its modes of _Fract as clang's types, with -ffixed-point;
+# clang has no 64-bit _Fract, the mode DQ, which only moves through memcpy in
+# these functions: long long there, its ABI (a pair), and no word of ff's. All
+# before its first typedef is blanked, keeping the offsets: its headers make
+# a thousand ASTs of megabytes.)
+my %fixed = (QQ => 'short _Fract', UQQ => 'unsigned short _Fract', HQ => '_Fract', UHQ => 'unsigned _Fract',
+    SQ => 'long _Fract', USQ => 'unsigned long _Fract', DQ => 'long long', UDQ => 'unsigned long long',
+    HA => 'short _Accum', UHA => 'unsigned short _Accum', SA => '_Accum', USA => 'unsigned _Accum',
+    DA => 'long _Accum', UDA => 'unsigned long _Accum');
+if (grep { /^typedef _Fract QQtype / } @lines) {
+    my ($first) = grep { $lines[$_] =~ /^typedef int QItype / } 0 .. $#lines;
+    defined $first or die "clangfix: fixed-bit.c: no QItype\n";
+    for my $i (0 .. $first - 1) { $lines[$i] =~ s/[^\n]/ /g }
+    # (what it declares from before: in the blank room)
+    my $decl = 'void *memcpy (void *, const void *, unsigned int);';
+    my $room = 0;
+    for my $i (0 .. $first - 1) { next if length($lines[$i]) <= length($decl); substr($lines[$i], 0, length $decl) = $decl; $room = 1; last }
+    $room or die "clangfix: fixed-bit.c: no room\n";
+    for my $i ($first .. $#lines) { $lines[$i] =~ s/[^\n]/ /g if $lines[$i] =~ /^#/ }
+    # (an unsigned mode's INTunion has unsigned members, another type than a
+    # signed mode's of the same name, which c2ff takes for one: its own name,
+    # of the same length)
+    if (grep { /^  UDItype ll;/ } @lines) { for (@lines) { s/\bINTunion\b/INTunioU/g; s/\bINTstruct\b/INTstrucU/g } }
+    for (@lines) {
+        s/^(typedef (?:unsigned )?_Fract (\w+)type __attribute__ \(\(mode \(\w+\)\)\);)/pad($1, "typedef $fixed{$2} $2type;")/e;
+    }
+}
 for (@lines) {
     if (%pcs) {
         s/^(extern \w+ (\w+) \(\w+\);)/$pcs{$2} ? ' ' x length($1) : $1/e;

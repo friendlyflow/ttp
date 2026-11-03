@@ -50,7 +50,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -378,15 +378,15 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop
+CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # x86_64's long double is the x87's (gen/patches/x87.pl): the tests of
 # binary128's bits have their x87 twins there (cldlitx87 ...)
 CSKIP_x86_64 := cldlit cldneg chexinf ccomplex
 # C tests of one target only, beside the portable ones
-CONLY_aarch64 := ctlsa64 ci128
-CONLY_x86_64 := ci128 ctlsx64 cfsx64 cvecx64 cldlitx87 cldnegx87 chexinfx87 ccomplexx87
+CONLY_aarch64 := ctlsa64 ci128 cf16
+CONLY_x86_64 := ci128 cf16 ctlsx64 cfsx64 cvecx64 cldlitx87 cldnegx87 chexinfx87 ccomplexx87
 CONLY_arm := ctlsarm
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per
@@ -857,7 +857,10 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # and record layouts (gen/clangsema.pl) line for line (gen/csemacmp.pl);
 # tools-check on src/glibc/progs' and progs/abi's C (riscv64's semantics,
 # each target's build the same lines), src/glibc's csema-check on every unit
-# of the riscv64 milestones.
+# of each target's milestones. csema -l (T3c, same library): the C layer of
+# what a unit's roots reach, gen/c2ff.pl's output; gen/clayercheck.sh and
+# src/glibc's clayer-check compare the two unit by unit, byte for byte;
+# tools-check: each target's build writes the same (the machine's build).
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -911,9 +914,9 @@ $(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
-$(TL)/$(1)/csema: tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
+$(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $(CSLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $(CSLIB) tools/csema.ff $$< $$@ > $$@.lst
 	chmod +x $$@
 
 tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/result
@@ -1010,6 +1013,10 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	@echo "tools-check-$(1): ffmerge agrees with ffmerge.sh on clean merges, conflicts, a merged text that is not a tree, inputs that are not trees, an empty or missing base and the same tree on both sides"
 	sh gen/cparsecheck.sh -r "$(RUN_$(1))" -w $(CPREF) $(TL)/$(1)/cparse $(TL)/$(1)/cprint $(CPCC) $(TL)/cparse/$(1) $(CPUNITS)
 	CLANG="$(CSCLANG)" sh gen/csemacheck.sh -r "$(RUN_$(1))" -w $(CSREF) $(TL)/$(1)/csema $(TL)/csema/$(1) $(CPUNITS)
+	@for u in $(CPUNITS); do b=$$$$(basename $$$$u .i); for w in $(1) $(TOOLT); do s=0; r="$$$$(test $$$$w = $(1) && echo '$(RUN_$(1))' || echo '$(RUN_$(TOOLT))')"; \
+	    $$$$r $(TL)/$$$$w/csema -l -s ../glibc -S shared.ff $$$$u main > $(TL)/csema/$(1)/$$$$b.l.$$$$w 2>&1 || s=$$$$?; echo "exit $$$$s" >> $(TL)/csema/$(1)/$$$$b.l.$$$$w; done; \
+	    cmp $(TL)/csema/$(1)/$$$$b.l.$(1) $(TL)/csema/$(1)/$$$$b.l.$(TOOLT) || { echo "tools-check-$(1): csema -l on $$$$u: not this machine's build's"; exit 1; }; done
+	@echo "tools-check-$(1): csema -l writes this machine's build's C layer on $(words $(CPUNITS)) units"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
