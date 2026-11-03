@@ -1925,6 +1925,18 @@ sub expr {
     if ($k eq 'UnaryOperator') {
         my $op = $n->{opcode};
         my ($e) = kids($n);
+        # (the result of a function of no C, an asm function's on aarch64, has
+        # no type for ttpc: *__strchrnul (buf, 10) = 0 of res_hconf.c, cast)
+        if ($op eq '*' && $target eq 'aarch64') {
+            my $c = $e;
+            $c = (kids($c))[0] while $c->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
+            if ($c->{kind} eq 'CallExpr') {
+                my $f = (kids($c))[0];
+                $f = (kids($f))[0] while $f->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
+                my $name = $f->{kind} eq 'DeclRefExpr' ? $f->{referencedDecl}{name} : undef;
+                return node('content', cast_node([ctype(qt($e))], item(expr($e)))) if defined $name && !$fn{$name};
+            }
+        }
         return node('content', expr($e)) if $op eq '*';
         # in a global's items, the address of an element of a global array is
         # the array and that many elements on, as C has it (&a[i] is a + i),
