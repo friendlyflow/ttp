@@ -1,15 +1,20 @@
 # complexq.pl: the type word complex float128 (the user's choice, 2026-11-02;
 # C's _Complex __float128), beside complex float, complex double and complex
-# long double: cc_tynames 22, a struct type of ttpc's own whose fields real
+# long double: a word after what cc_tynames has, a struct type of ttpc's own whose fields real
 # part and imag part are float128s, 32 bytes, in memory by every ABI. ~ of one
 # flips the top bit of its last four bytes as ~ of binary128's complex long
 # double does, on x86_64 too, where complex long double's is the x87's sign
 # (x87.pl). After complexty.pl, complexops.pl and x87.pl. Test: ccomplexq.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
-once(\$t, "complex long double\\x00float128\\x00\\x00\n", "complex long double\\x00float128\\x00complex float128\\x00\\x00\n", 'cc_tynames');
+# (its place in the list: tyname takes what is past 18 and not an earlier word to cx_nodes)
+$t =~ /^ *cc_tynames:\n\s*ascii\n\s*(.*?)\\x00\\x00\n/m or die 'cc_tynames';
+my $list = $1;
+my $idx = () = $list =~ /\\x00/g;
+$idx++;
+once(\$t, "$list\\x00\\x00\n", "$list\\x00complex float128\\x00\\x00\n", 'cc_tynames');
 
-# (tyname's index past 18 into cx_nodes: 21, float128, never comes there)
+# (tyname's index past 18 into cx_nodes: float128 and the words before this one never come there)
 my $node = sub {
     my ($label, $text, @kids) = @_;
     my $s = "  $label:\n    reserve\n      32\n    dword\n      " . scalar(@kids) . "\n    dword\n      " . (@kids ? "${label}_k" : 0)
@@ -17,7 +22,7 @@ my $node = sub {
     $s .= "  ${label}_k:\n" . join('', map { "    dword\n      $_\n" } @kids) if @kids;
     $s;
 };
-once(\$t, "    dword\n      cxn_l\n", "    dword\n      cxn_l\n    dword\n      0\n    dword\n      cxn_q\n", 'cx_nodes');
+once(\$t, "    dword\n      cxn_l\n", "    dword\n      cxn_l\n" . "    dword\n      0\n" x ($idx - 21) . "    dword\n      cxn_q\n", 'cx_nodes');
 my %texts = (cxn_q_t => 'complex float128:', cxn_qr_t => 'real part:', cxn_qi_t => 'imag part:', cxn_qty_t => 'float128');
 my $data = $node->('cxn_q', 'complex float128:', 'cxn_struct', 'cxn_qr', 'cxn_qi')
     . $node->('cxn_qr', 'real part:', 'cxn_qty') . $node->('cxn_qi', 'imag part:', 'cxn_qty') . $node->('cxn_qty', 'float128')

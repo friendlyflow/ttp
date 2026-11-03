@@ -127,6 +127,22 @@ static void a64 (void)
   check (p_g_vard () == 55 + 180, "a64: gcc calls ttpc: variadic doubles past v7, ttpc's va_list to gcc");
 }
 #endif
+#ifdef __arm__
+double cb_pcs (float a, double b, int c, double d, float e) { return a + 2 * b + 3 * c + 4 * d + 5 * e; }
+float cb_pcsf (int a, float b) { return a + 2 * b; }
+static void pcs (void)
+{
+  double (*p_f_pcs) (float, double, int, double, float) __attribute__ ((pcs ("aapcs"))) = f_pcs;
+  float (*p_f_pcsf) (int, float) __attribute__ ((pcs ("aapcs"))) = f_pcsf;
+  double (*p_g_pcs) (void) = g_pcs;
+  float (*p_g_pcsf) (void) = g_pcsf;
+  check (p_f_pcs (1.5f, 2.25, 3, 4.5, 5.5f) == 1.5 + 4.5 + 9 + 18 + 27.5, "arm: base pcs: floats and doubles in core registers and on the stack");
+  check (p_f_pcsf (7, 1.25f) == 9.5f, "arm: base pcs: a float result in r0");
+  check (p_g_pcs () == 1.5 + 4.5 + 9 + 18 + 27.5, "arm: gcc calls ttpc: base pcs");
+  check (p_g_pcsf () == 9.5f, "arm: gcc calls ttpc: base pcs, a float result");
+  check (cb_pcs (1.5f, 2.25, 3, 4.5, 5.5f) == 60.5, "arm: ttpc calls ttpc: base pcs");
+}
+#endif
 #ifdef __x86_64__
 ld1 cb_ld1 (long double a) { ld1 r = { a + 1 }; return r; }
 cld cb_cld (long double re, long double im) { cld z; __real__ z = re; __imag__ z = im; return z; }
@@ -244,6 +260,64 @@ static void rv (void)
   check (p_g_r_cd () == 7.25, "rv: gcc calls ttpc: a struct of a char and a double as a result");
 }
 #endif
+#ifdef __SIZEOF_INT128__
+i128_t cb_q2 (i128_t a, i128_t b) { return W2 (a, b); }
+i128_t cb_q4 (int a, i128_t b, int c, i128_t d) { return W4 (a, b, c, d); }
+i128_t cb_q9 (long a, long b, long c, long d, long e, i128_t f, long g, i128_t h, long i) { return W6 (a + b, c + d, e, f, h, g + 2 * i); }
+u128_t cb_q8 (long a, long b, long c, long d, long e, long f, long g, u128_t h, long i) { return W4 (a + b + c, d + e + f, g, h) + i; }
+i128_t cb_q6 (i128_t a, i128_t b, i128_t c, i128_t d, i128_t e, long f) { return W6 (a, b, c, d, e, f); }
+i128_t cb_qs (si a, sli b, sdi c, si d) { return W6 (a.x, b.a, b.x, qbits (c.d), c.x, d.x); }
+si cb_r_qs (i128_t a) { si r = { a + 1 }; return r; }
+sli cb_r_qsl (long a, i128_t b) { sli r = { a + 1, b + 2 }; return r; }
+i128_t cb_qv (int n, ...)
+{ va_list ap; i128_t s = 0; va_start (ap, n);
+  for (int i = 0; i < n; i++) { s += va_arg (ap, int); s = 3 * s + va_arg (ap, i128_t); s = 3 * s + qbits (va_arg (ap, double)); }
+  va_end (ap); return s; }
+static void q128 (void)
+{ i128_t q;
+  /* (gcc's functions have no type in ff: through pointers of theirs) */
+  i128_t (*p_f_q2) (i128_t, i128_t) = f_q2;
+  i128_t (*p_f_q4) (int, i128_t, int, i128_t) = f_q4;
+  i128_t (*p_f_q9) (long, long, long, long, long, i128_t, long, i128_t, long) = f_q9;
+  u128_t (*p_f_q8) (long, long, long, long, long, long, long, u128_t, long) = f_q8;
+  i128_t (*p_f_q6) (i128_t, i128_t, i128_t, i128_t, i128_t, long) = f_q6;
+  i128_t (*p_f_qs) (si, sli, sdi, si) = f_qs;
+  si (*p_r_qs) (i128_t) = r_qs;
+  sli (*p_r_qsl) (long, i128_t) = r_qsl;
+  i128_t (*p_f_qv) (int, ...) = f_qv;
+  i128_t (*p_g_q2) (void) = g_q2;
+  i128_t (*p_g_q4) (void) = g_q4;
+  i128_t (*p_g_q9) (void) = g_q9;
+  u128_t (*p_g_q8) (void) = g_q8;
+  i128_t (*p_g_q6) (void) = g_q6;
+  i128_t (*p_g_qs) (void) = g_qs;
+  i128_t (*p_g_r_qs) (void) = g_r_qs;
+  i128_t (*p_g_r_qsl) (void) = g_r_qsl;
+  i128_t (*p_g_qv) (void) = g_qv;
+  check (p_f_q2 (BIG (1), BIG (2)) == W2 (BIG (1), BIG (2)), "f_q2");
+  check (p_f_q4 (1, BIG (2), 3, BIG (4)) == W4 (1, BIG (2), 3, BIG (4)), "f_q4");
+  check (p_f_q9 (1, 2, 3, 4, 5, BIG (6), 7, BIG (8), 9) == W6 (1 + 2, 3 + 4, 5, BIG (6), BIG (8), 7 + 2 * 9), "f_q9");
+  check (p_f_q8 (1, 2, 3, 4, 5, 6, 7, BIG (8), 9) == (u128_t) W4 (1 + 2 + 3, 4 + 5 + 6, 7, BIG (8)) + 9, "f_q8");
+  check (p_f_q6 (BIG (1), BIG (2), BIG (3), BIG (4), BIG (5), 6) == W6 (BIG (1), BIG (2), BIG (3), BIG (4), BIG (5), 6), "f_q6");
+  { si a = { BIG (1) }; sli b = { 2, BIG (3) }; sdi c = { 4.0, BIG (5) }; si d = { BIG (6) };
+    check (p_f_qs (a, b, c, d) == W6 (BIG (1), 2, BIG (3), qbits (4.0), BIG (5), BIG (6)), "f_qs"); }
+  { si r = p_r_qs (BIG (1)); check (r.x == BIG (1) + 1, "r_qs"); }
+  { sli r = p_r_qsl (5, BIG (1)); check (r.a == 6 && r.x == BIG (1) + 2, "r_qsl"); }
+  q = 0; q += 1; q = 3 * q + BIG (2); q = 3 * q + qbits (3.0); q += 4; q = 3 * q + BIG (5); q = 3 * q + qbits (6.0); q += 7; q = 3 * q + BIG (8); q = 3 * q + qbits (9.0);
+  check (p_f_qv (3, 1, BIG (2), 3.0, 4, BIG (5), 6.0, 7, BIG (8), 9.0) == q, "f_qv");
+  check (p_g_qv () == q, "g_qv");
+  check (cb_qv (3, 1, BIG (2), 3.0, 4, BIG (5), 6.0, 7, BIG (8), 9.0) == q, "cb_qv");
+  check (p_g_q2 () == W2 (BIG (1), BIG (2)), "g_q2");
+  check (p_g_q4 () == W4 (1, BIG (2), 3, BIG (4)), "g_q4");
+  check (p_g_q9 () == W6 (1 + 2, 3 + 4, 5, BIG (6), BIG (8), 7 + 2 * 9), "g_q9");
+  check (p_g_q8 () == (u128_t) W4 (1 + 2 + 3, 4 + 5 + 6, 7, BIG (8)) + 9, "g_q8");
+  check (p_g_q6 () == W6 (BIG (1), BIG (2), BIG (3), BIG (4), BIG (5), 6), "g_q6");
+  check (p_g_qs () == W6 (BIG (1), 2, BIG (3), qbits (4.0), BIG (5), BIG (6)), "g_qs");
+  check (p_g_r_qs () == BIG (1) + 1, "g_r_qs");
+  check (p_g_r_qsl () == 6 + BIG (1) + 2, "g_r_qsl");
+  { i128_t (*p) (i128_t, i128_t) = f_q2; check (p (BIG (1), BIG (2)) == W2 (BIG (1), BIG (2)), "f_q2 through a pointer"); }
+}
+#endif
 int main (void)
 {
   /* the functions of gcc whose result is not an int: through pointers of
@@ -319,6 +393,9 @@ int main (void)
 #if defined __aarch64__ || defined __x86_64__ || defined __riscv
   a64 ();
 #endif
+#ifdef __arm__
+  pcs ();
+#endif
 #ifdef __x86_64__
   x87 ();
 #endif
@@ -327,6 +404,9 @@ int main (void)
 #endif
 #ifdef __riscv
   rv ();
+#endif
+#ifdef __SIZEOF_INT128__
+  q128 ();
 #endif
   return fails;
 }

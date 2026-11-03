@@ -55,7 +55,7 @@ my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt
     $flat->($_) for @top;
     Words::long32() if $target eq 'arm';
     @top = Words::oldwords($t, @top);
-    my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 u8 u16 u32 u64);
+    my %scalar = map { $_ => 1 } qw(char short int long i8 i16 i32 i64 i128 u8 u16 u32 u64 u128);
     my $pad;
     $pad = sub {
         my ($n) = @_;
@@ -99,7 +99,7 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
-    float128 => '__float128',
+    float128 => '__float128', i128 => '__int128', u128 => 'unsigned __int128',
     va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
     'complex long double' => '_Complex long double', 'complex float128' => '_Complex __float128');
 $scalar{u64} = 'unsigned long long' if $target eq 'arm';
@@ -155,6 +155,13 @@ for my $page (@top) {
         if ($w eq 'constructor' || $w eq 'destructor') {
             my @p = kids($k[0]);
             $fn{$name} = { kind => 'c', node => $d, from => 1, ctor => $w . (@p ? '(' . c($p[0]) . ')' : '') };
+            $glibcpage{$name} = 1 if $glibc;
+            next;
+        }
+        # base pcs: arm's base procedure call standard, C's pcs ("aapcs")
+        if ($w eq 'base pcs' && @k > 1 && c($k[1]) eq 'function' && $page) { $fntype{$name} = $d; next }
+        if ($w eq 'base pcs') {
+            $fn{$name} = { kind => 'c', node => $d, from => 1, attr => 'pcs("aapcs")' };
             $glibcpage{$name} = 1 if $glibc;
             next;
         }
@@ -361,6 +368,7 @@ sub fnptr_sig {
     return { ret => sig($t->[1])->{ret} } if $t && $t->[0] eq 'fndef' && sig($t->[1]);
     return undef unless $t && $t->[0] eq 'fn';
     my @l = kids($fntype{ $t->[1] });
+    shift @l if c($l[0]) eq 'base pcs';
     my $i = 1;
     my $ret = ptype(\@l, \$i);
     { ret => $ret };
@@ -912,6 +920,7 @@ for my $e (grep { $enum{$_} } @order) {
 # the function types
 for my $f (grep { $fntype{$_} } @order) {
     my @l = kids($fntype{$f});
+    my $pcs = c($l[0]) eq 'base pcs' ? shift @l : undef;
     my $i = 1;
     my $ret = ptype(\@l, \$i);
     my (@p, $va);
@@ -922,7 +931,7 @@ for my $f (grep { $fntype{$_} } @order) {
         push @p, ctype(ptype(\@pl, \$j));
     }
     push @p, '...' if $va;
-    push @c, 'typedef ' . cdecl($ret, cid($f) . '(' . (@p ? join(', ', @p) : 'void') . ')') . ';';
+    push @c, 'typedef ' . cdecl($ret, cid($f) . '(' . (@p ? join(', ', @p) : 'void') . ')') . ($pcs ? ' __attribute__((pcs("aapcs")))' : '') . ';';
 }
 # the records' fields, each after those it holds by value
 my %rdone;
@@ -977,7 +986,7 @@ sub proto {
     cdecl($s->{ret}, cid($name) . "($ps)");
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} ne 'alias' && !clang_builtin($_) } @order) {
-    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ';';
+    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ($fn{$f}{attr} ? " __attribute__(($fn{$f}{attr}))" : '') . ';';
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} eq 'alias' } @order) {
     my $t = $fn{$f}{target};

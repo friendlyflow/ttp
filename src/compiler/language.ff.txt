@@ -120,6 +120,10 @@ ff, the language ttpc compiles
       a type is a run of leaf siblings, one word per node, the first word first; a node with children ends the run
       scalars: char (1 byte, signed on x86_64, unsigned on riscv64, aarch64 and arm, as their ABIs say: the target's cc_char), short (2), int (4), long (a word of the target: 8, 4 on arm), i8 i16 i32 i64, u8 u16 u32 u64, void, va_list (a word)
       i64 and u64 are refused on arm
+      i128 and u128 (C's __int128 and unsigned __int128): 16 bytes aligned to 16, on riscv64, x86_64 and aarch64; refused on arm (gcc has none there); at compile time for its size alone; no literal of their own, as C has none: a smaller number widens
+      their arithmetic is done in a pair of registers: add with carry, mul with its high part, shifts across the halves, compares
+      / and % call libgcc's __divti3 __udivti3 __modti3 __umodti3, conversions with float, double, long double and float128 its __floattisf ... __fixunsxfti, as gcc does: the program has them (libgcc.ff)
+      by each platform's ABI: a result in rax:rdx, x0:x1, a0:a1; an argument in two registers (aarch64 from an even one; riscv64 an unnamed one from an even one, a named one split between a7 and the stack if it must be) or on the stack, 16-aligned
       T * pointer: a word, the address of a T, the base type and then * pointer, siblings, in C's order: char / * pointer is char *, char / * pointer / * pointer char **; void / * pointer the address of nothing (C's void *)
       a type run is its base, a type word (or an array node), and the * pointer leaves after it; it ends at the first node that is neither, so the items after it are never read as a type (a variable is never named as a type)
       fs after the type it qualifies, before the * pointer that points at it, is gcc's __seg_fs (x86_64): pthread / fs / * pointer is C's struct pthread __seg_fs *, pthread / * pointer / fs / * pointer struct pthread *__seg_fs *
@@ -295,6 +299,8 @@ ff, the language ttpc compiles
       cleanup / f, first under a local's name (after its align) and before its type, calls f with the local's address at every exit of the local's block, newest first (C's cleanup attribute)
       a block's exits: its end, a return (after its value is computed), a break or continue out of it, a goto to a label outside it; glibc's _IO_acquire_lock unlocks a FILE so
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
+      base pcs, first under a function's name and before its type, gives it arm's base procedure call standard (C's pcs ("aapcs")): its floats and doubles in core registers and on the stack, as a variadic function's
+      a base pcs function's calls (through a pointer of its type too), prologue and return are so; on the other targets the word changes nothing
       constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
       ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled
       constructor / 101 gives it a priority, lower first, those without one last

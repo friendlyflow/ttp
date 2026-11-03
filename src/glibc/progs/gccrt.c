@@ -6,7 +6,8 @@
 
 /* libgcc's own functions, called by name: complex multiply and divide
    (C99's Annex G, its infinities and NaNs too), the integer helpers, the
-   powers to an int, and soft-fp's float conversions and division. Each
+   powers to an int, soft-fp's float conversions and division, and arm's
+   AEABI helpers in asm (division, shifts, soft-float) and __sync functions. Each
    result's bits are printed: gcc + libc.a + gcc's libgcc.a and ttpc + glibc
    and libgcc in ff agree only when every bit does. */
 
@@ -57,6 +58,53 @@ int __mulvsi3 (int, int);
 double __powidf2 (double, int);
 float __powisf2 (float, int);
 #ifndef __arm__
+/* the TI functions: __int128 (ff's i128, u128) */
+typedef __int128 ti;
+typedef unsigned __int128 uti;
+ti __multi3 (ti, ti);
+ti __divti3 (ti, ti);
+ti __modti3 (ti, ti);
+uti __udivti3 (uti, uti);
+uti __umodti3 (uti, uti);
+uti __udivmodti4 (uti, uti, uti *);
+ti __divmodti4 (ti, ti, ti *);
+ti __negti2 (ti);
+ti __ashlti3 (ti, int);
+ti __ashrti3 (ti, int);
+ti __lshrti3 (ti, int);
+int __cmpti2 (ti, ti);
+int __ucmpti2 (uti, uti);
+ti __absvti2 (ti);
+ti __addvti3 (ti, ti);
+ti __subvti3 (ti, ti);
+ti __mulvti3 (ti, ti);
+ti __negvti2 (ti);
+int __ffsti2 (ti);
+int __clzti2 (uti);
+int __ctzti2 (uti);
+int __popcountti2 (uti);
+int __parityti2 (uti);
+int __clrsbti2 (ti);
+float __floattisf (ti);
+float __floatuntisf (uti);
+double __floattidf (ti);
+double __floatuntidf (uti);
+tf __floattitf (ti);
+tf __floatuntitf (uti);
+ti __fixsfti (float);
+uti __fixunssfti (float);
+ti __fixdfti (double);
+uti __fixunsdfti (double);
+ti __fixtfti (tf);
+uti __fixunstfti (tf);
+#ifdef __x86_64__
+long double __floattixf (ti);
+long double __floatuntixf (uti);
+ti __fixxfti (long double);
+uti __fixunsxfti (long double);
+#endif
+#endif
+#ifndef __arm__
 tf __powitf2 (tf, int);
 unsigned long long __fixunsdfdi (double);
 unsigned long long __fixunssfdi (float);
@@ -67,13 +115,79 @@ unsigned int __fixunstfsi (tf);
 int __unordtf2 (tf, tf);
 #else
 /* (arm: no binary128, its long double a double; its 64-bit division, C;
-   not the four of AEABI's base procedure call standard, __fixunsdfdi ...,
-   whose floats come in core registers, nor lib1funcs.S's shifts, asm of
-   conditional forms ttpc has none of yet) */
+   the four of AEABI's base procedure call standard, their floats in core
+   registers (ff's base pcs), by both their names) */
+#define PCS __attribute__ ((pcs ("aapcs")))
+long long __fixdfdi (double) PCS;
+long long __aeabi_d2lz (double) PCS;
+unsigned long long __fixunsdfdi (double) PCS;
+unsigned long long __aeabi_d2ulz (double) PCS;
+long long __fixsfdi (float) PCS;
+long long __aeabi_f2lz (float) PCS;
+unsigned long long __fixunssfdi (float) PCS;
+unsigned long long __aeabi_f2ulz (float) PCS;
 long long __divdi3 (long long, long long);
 long long __moddi3 (long long, long long);
 unsigned long long __udivdi3 (unsigned long long, unsigned long long);
 unsigned long long __umoddi3 (unsigned long long, unsigned long long);
+/* AEABI's helpers in asm: lib1funcs.S's division of 32 bits (divmod's
+   quotient in r0, its remainder in r1: a 64-bit result here) and shifts of
+   64, ieee754-df/sf.S's soft-float arithmetic, conversions and comparisons,
+   whose floats come in core registers: here their bits, as integers */
+typedef unsigned long long u64;
+typedef unsigned int u32;
+u32 __aeabi_uidiv (u32, u32);
+int __aeabi_idiv (int, int);
+u64 __aeabi_uidivmod (u32, u32);
+u64 __aeabi_idivmod (int, int);
+u32 __umodsi3 (u32, u32);
+int __modsi3 (int, int);
+long long __aeabi_llsr (long long, int);
+long long __aeabi_lasr (long long, int);
+long long __aeabi_llsl (long long, int);
+u64 __aeabi_dadd (u64, u64);
+u64 __aeabi_dsub (u64, u64);
+u64 __aeabi_drsub (u64, u64);
+u64 __aeabi_dmul (u64, u64);
+u64 __aeabi_ddiv (u64, u64);
+int __aeabi_dcmpeq (u64, u64);
+int __aeabi_dcmplt (u64, u64);
+int __aeabi_dcmpge (u64, u64);
+u32 __aeabi_d2f (u64);
+u64 __aeabi_f2d (u32);
+u64 __aeabi_i2d (int);
+u64 __aeabi_l2d (long long);
+u32 __aeabi_fadd (u32, u32);
+u32 __aeabi_fsub (u32, u32);
+u32 __aeabi_fmul (u32, u32);
+u32 __aeabi_fdiv (u32, u32);
+int __aeabi_fcmple (u32, u32);
+int __aeabi_fcmpgt (u32, u32);
+u32 __aeabi_ui2f (u32);
+u32 __aeabi_l2f (long long);
+/* (an asm function's result is a long to ttpc's C, 32 bits on arm: those
+   of 64 bits are called through pointers of their types) */
+static struct
+{
+  u64 (*uidivmod) (u32, u32);
+  u64 (*idivmod) (int, int);
+  long long (*llsr) (long long, int), (*lasr) (long long, int), (*llsl) (long long, int);
+  u64 (*dadd) (u64, u64), (*dsub) (u64, u64), (*drsub) (u64, u64), (*dmul) (u64, u64), (*ddiv) (u64, u64);
+  u64 (*f2d) (u32);
+  u64 (*i2d) (int);
+  u64 (*l2d) (long long);
+} h64 = { __aeabi_uidivmod, __aeabi_idivmod, __aeabi_llsr, __aeabi_lasr, __aeabi_llsl, __aeabi_dadd, __aeabi_dsub,
+          __aeabi_drsub, __aeabi_dmul, __aeabi_ddiv, __aeabi_f2d, __aeabi_i2d, __aeabi_l2d };
+/* linux-atomic.c's __sync functions (through the kernel's cmpxchg helper),
+   by their asm names: gcc and clang know the names as builtins */
+int sync_fetch_and_add_4 (int *, int) __asm__ ("__sync_fetch_and_add_4");
+int sync_fetch_and_nand_4 (int *, int) __asm__ ("__sync_fetch_and_nand_4");
+short sync_sub_and_fetch_2 (short *, short) __asm__ ("__sync_sub_and_fetch_2");
+signed char sync_val_cas_1 (signed char *, signed char, signed char) __asm__ ("__sync_val_compare_and_swap_1");
+int sync_lock_test_and_set_4 (int *, int) __asm__ ("__sync_lock_test_and_set_4");
+long long sync_fetch_and_add_8 (long long *, long long) __asm__ ("__sync_fetch_and_add_8");
+long long sync_val_cas_8 (long long *, long long, long long) __asm__ ("__sync_val_compare_and_swap_8");
+void sync_synchronize (void) __asm__ ("__sync_synchronize");
 #endif
 #ifdef __riscv
 /* (soft-fp's division of float and double: riscv64's libgcc has them, x86_64
@@ -138,9 +252,7 @@ int main (void)
       w (__popcountdi2 (x)); w (__ffsdi2 (x)); w (__paritydi2 (x)); w (__clrsbdi2 (x));
       if (x)
         {
-#ifndef __arm__
-          w (__clzdi2 (x));   /* (arm's is lib1funcs.S's asm, not in ff yet) */
-#endif
+          w (__clzdi2 (x));
           w (__ctzdi2 (x));
         }
       w32 (__bswapsi2 (x)); w (__bswapdi2 (x));
@@ -168,6 +280,94 @@ int main (void)
       w (__divdi3 (x, 7)); w (__moddi3 (x, -5)); w (__udivdi3 (x, 3)); w (__umoddi3 (x, 1000003));
       if (x != (long long) 0x8000000000000000ULL)
         w (__divdi3 (x, x | 1));
+      u64 hx = (u64) x >> 1;
+      w (__fixdfdi ((double) x / 3)); w (__aeabi_d2lz (-(double) (x >> 1))); w (__fixunsdfdi ((double) hx));
+      w (__aeabi_d2ulz ((double) (u32) x * 7)); w (__fixsfdi ((float) x / 5)); w (__aeabi_f2lz (-(float) (int) x));
+      w (__fixunssfdi ((float) (u32) x)); w (__aeabi_f2ulz ((float) hx * 0.5f));
+      u32 y = (u32) x, z = (u32) (x >> 32) | 3;
+      w32 (__aeabi_uidiv (y, z)); w32 (__aeabi_idiv ((int) y, (int) z)); w (h64.uidivmod (y, 7));
+      w (h64.idivmod ((int) y, -(int) z)); w32 (__umodsi3 (y, 10)); w32 (__modsi3 ((int) y, 3));
+      w (h64.llsr (x, i * 5)); w (h64.lasr (x, i * 6)); w (h64.llsl (x, 63 - i * 4));
+      u64 a = (u64) x, b = (u64) iv[(i + 4) % (sizeof iv / sizeof iv[0])] ^ 0x4000000000000000ULL;
+      w (h64.dadd (a, b)); w (h64.dsub (a, b)); w (h64.drsub (a, b)); w (h64.dmul (a, b));
+      w (h64.ddiv (a, b)); w (__aeabi_dcmpeq (a, b)); w (__aeabi_dcmplt (a, b)); w (__aeabi_dcmpge (a, a));
+      w32 (__aeabi_d2f (b)); w (h64.f2d (y)); w (h64.i2d ((int) y)); w (h64.l2d (x));
+      w32 (__aeabi_fadd (y, z)); w32 (__aeabi_fsub (y, z)); w32 (__aeabi_fmul (y, z)); w32 (__aeabi_fdiv (y, z));
+      w (__aeabi_fcmple (y, z)); w (__aeabi_fcmpgt (y, y)); w32 (__aeabi_ui2f (y)); w32 (__aeabi_l2f (x));
+      {
+        static int m4 = 5;
+        static short m2 = 300;
+        static signed char m1 = -7;
+        static long long m8 = 0x100000000LL;
+        w32 (sync_fetch_and_add_4 (&m4, (int) y)); w32 (sync_fetch_and_nand_4 (&m4, (int) z));
+        w32 ((unsigned short) sync_sub_and_fetch_2 (&m2, (short) y));
+        w32 ((unsigned char) sync_val_cas_1 (&m1, m1, (signed char) y)); w32 ((unsigned char) sync_val_cas_1 (&m1, 1, 2));
+        w32 (sync_lock_test_and_set_4 (&m4, (int) z)); w (sync_fetch_and_add_8 (&m8, x));
+        w (sync_val_cas_8 (&m8, m8, x ^ 0x55)); w (sync_val_cas_8 (&m8, 3, 4));
+        sync_synchronize ();
+        w32 (m4); w32 ((unsigned short) m2); w32 ((unsigned char) m1); w (m8);
+      }
+#endif
+#ifndef __arm__
+      {
+        ti a = ((ti) x << 64) | (unsigned long long) (x * 0x9e3779b97f4a7c15ULL);
+        ti b = ((ti) (x >> (x & 63)) << (x & 63)) ^ (ti) (long long) (x * 0xd1342543de82ef95ULL);
+        ti c = (ti) (long long) (x | 1) ;
+        ti r2; uti u2;
+        int n = (int) (x & 127);
+        w ((unsigned long long) (__multi3 (a, b) >> 64)); w ((unsigned long long) __multi3 (a, b));
+        if (b != 0)
+          {
+            w ((unsigned long long) (__divti3 (a, b) >> 64)); w ((unsigned long long) __divti3 (a, b));
+            w ((unsigned long long) (__modti3 (a, b) >> 64)); w ((unsigned long long) __modti3 (a, b));
+            w ((unsigned long long) (__udivti3 (a, b) >> 64)); w ((unsigned long long) __udivti3 (a, b));
+            w ((unsigned long long) (__umodti3 (a, b) >> 64)); w ((unsigned long long) __umodti3 (a, b));
+            w ((unsigned long long) (__udivmodti4 (a, b, &u2) >> 64)); w ((unsigned long long) (u2 >> 64)); w ((unsigned long long) u2);
+            w ((unsigned long long) (__divmodti4 (a, b, &r2) >> 64)); w ((unsigned long long) (r2 >> 64)); w ((unsigned long long) r2);
+          }
+        w ((unsigned long long) (__divti3 (a, c) >> 64)); w ((unsigned long long) __modti3 (a, c));
+        w ((unsigned long long) (__udivti3 (a, (unsigned long long) c) >> 64)); w ((unsigned long long) __umodti3 (a, (unsigned long long) c));
+        w ((unsigned long long) (__negti2 (a) >> 64)); w ((unsigned long long) __negti2 (a));
+        w ((unsigned long long) (__ashlti3 (a, n) >> 64)); w ((unsigned long long) __ashlti3 (a, n));
+        w ((unsigned long long) (__ashrti3 (a, n) >> 64)); w ((unsigned long long) __ashrti3 (a, n));
+        w ((unsigned long long) (__lshrti3 (a, n) >> 64)); w ((unsigned long long) __lshrti3 (a, n));
+        w (__cmpti2 (a, b)); w (__ucmpti2 (a, b)); w (__cmpti2 (a, a));
+        w ((unsigned long long) (__absvti2 (a >> 1) >> 64));
+        w ((unsigned long long) (__addvti3 (a >> 2, b >> 2) >> 64)); w ((unsigned long long) (__subvti3 (a >> 2, b >> 2) >> 64));
+        w ((unsigned long long) (__mulvti3 (a >> 90, b >> 90)));
+        w ((unsigned long long) (__negvti2 (a >> 1) >> 64));
+        w (__ffsti2 (a)); w (__ffsti2 ((ti) x << 64)); w (__ffsti2 (0));
+        w (__clzti2 (a | 1)); w (__clzti2 ((a >> 64 & 0xffffffffffffffffULL) | 1)); w (__ctzti2 (a | ((ti) 1 << 127)));
+        w (__ctzti2 ((a & ~(uti) 0 << 64) | ((ti) 1 << 127)));
+        w (__popcountti2 (a)); w (__parityti2 (a)); w (__clrsbti2 (a)); w (__clrsbti2 (a >> 70));
+        f (__floattisf (a)); f (__floatuntisf (a)); d (__floattidf (a)); d (__floatuntidf (a));
+        l (__floattitf (a)); l (__floatuntitf (a));
+        f (__floattisf (a >> 40)); d (__floattidf (a >> 40)); l (__floattitf (a >> 40));
+        {
+          ti t; uti tu;
+          t = __fixsfti ((float) (long long) x); w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          tu = __fixunssfti ((float) (x >> 1)); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+          t = __fixdfti ((double) (long long) x * 1e10); w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          tu = __fixunsdfti ((double) x * 1e10); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+          t = __fixtfti ((tf) (long long) x * 1e15); w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          tu = __fixunstfti ((tf) x * 1e15); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+        }
+#ifdef __x86_64__
+        xl (__floattixf (a)); xl (__floatuntixf (a));
+        {
+          ti t = __fixxfti ((long double) (long long) x * 1e10L); uti tu = __fixunsxfti ((long double) x * 1e10L);
+          w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); w ((unsigned long long) (tu >> 64)); w ((unsigned long long) tu);
+        }
+#endif
+        /* the operators: gcc's and ttpc's own calls of these */
+        w ((unsigned long long) ((a * b) >> 64));
+        if (b != 0)
+          { w ((unsigned long long) ((a / b) >> 64)); w ((unsigned long long) (a % b)); w ((unsigned long long) (((uti) a / (uti) b) >> 64)); w ((unsigned long long) ((uti) a % (uti) b)); }
+        f ((float) a); d ((double) a); l ((tf) a); f ((float) (uti) a); d ((double) (uti) a); l ((tf) (uti) a);
+        { float ff = (float) (long long) x; double dd = (double) (long long) x * 1e10; tf tt = (tf) (long long) x * 1e15;
+          ti t = ff; w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); t = dd; w ((unsigned long long) (t >> 64)); w ((unsigned long long) t);
+          t = tt; w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); }
+      }
 #endif
 #ifdef __riscv
       d (__divdf3 ((double) x, 7.0)); f (__divsf3 ((float) x, -3.0f));

@@ -101,6 +101,12 @@ long double g_ld (void) { return cb_ld (1, 3.0L, 2.5, 7.0L); }
 long double g_varld (void) { return cb_varld (3, 1.0, 1.0L, 2.0, 2.0L, 3.0, 3.0L); }
 long long g_vard (void) { return cb_vard (10, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5); }
 #endif
+#ifdef __arm__
+double f_pcs (float a, double b, int c, double d, float e) { return a + 2 * b + 3 * c + 4 * d + 5 * e; }
+float f_pcsf (int a, float b) { return a + 2 * b; }
+double g_pcs (void) { return cb_pcs (1.5f, 2.25, 3, 4.5, 5.5f); }
+float g_pcsf (void) { return cb_pcsf (7, 1.25f); }
+#endif
 #ifdef __x86_64__
 ld1 r_ld1 (long double a) { ld1 r = { a * 2 }; return r; }
 cld r_cld (long double re, long double im) { cld z; __real__ z = re; __imag__ z = im; return z; }
@@ -156,4 +162,29 @@ int g_u32 (void) { long r; unsigned v = cb_u32 (-1); __asm__ ("mv %0, %1" : "=r"
 int g_u16 (void) { long r; unsigned short v = cb_u16 (-1); __asm__ ("mv %0, %1" : "=r" (r) : "r" (v)); return r == 0xffff; }
 double g_r_fi (void) { fi r = cb_r_fi (1.5f, 3); return r.f + r.i; }
 double g_r_cd (void) { cd r = cb_r_cd (5, 2.25); return r.c + r.d; }
+#endif
+#ifdef __SIZEOF_INT128__
+i128_t f_q2 (i128_t a, i128_t b) { return W2 (a, b); }
+i128_t f_q4 (int a, i128_t b, int c, i128_t d) { return W4 (a, b, c, d); }
+i128_t f_q9 (long a, long b, long c, long d, long e, i128_t f, long g, i128_t h, long i) { return W6 (a + b, c + d, e, f, h, g + 2 * i); }
+u128_t f_q8 (long a, long b, long c, long d, long e, long f, long g, u128_t h, long i) { return W4 (a + b + c, d + e + f, g, h) + i; }
+i128_t f_q6 (i128_t a, i128_t b, i128_t c, i128_t d, i128_t e, long f) { return W6 (a, b, c, d, e, f); }
+i128_t f_qs (si a, sli b, sdi c, si d) { return W6 (a.x, b.a, b.x, qbits (c.d), c.x, d.x); }
+si r_qs (i128_t a) { si r = { a + 1 }; return r; }
+sli r_qsl (long a, i128_t b) { sli r = { a + 1, b + 2 }; return r; }
+i128_t f_qv (int n, ...)
+{ va_list ap; i128_t s = 0; va_start (ap, n);
+  for (int i = 0; i < n; i++) { s += va_arg (ap, int); s = 3 * s + va_arg (ap, i128_t); s = 3 * s + qbits (va_arg (ap, double)); }
+  va_end (ap); return s; }
+i128_t g_q2 (void) { return cb_q2 (BIG (1), BIG (2)); }
+i128_t g_q4 (void) { return cb_q4 (1, BIG (2), 3, BIG (4)); }
+i128_t g_q9 (void) { return cb_q9 (1, 2, 3, 4, 5, BIG (6), 7, BIG (8), 9); }
+u128_t g_q8 (void) { return cb_q8 (1, 2, 3, 4, 5, 6, 7, BIG (8), 9); }
+i128_t g_q6 (void) { return cb_q6 (BIG (1), BIG (2), BIG (3), BIG (4), BIG (5), 6); }
+/* (not constants: an aarch64 16-byte constant's label loses its alignment in s2ff) */
+__attribute__ ((noipa)) static long q_one (void) { return 1; }
+i128_t g_qs (void) { long u = q_one (); si a = { BIG (u) }; sli b = { 2, BIG (3 * u) }; sdi c = { 4.0, BIG (5 * u) }; si d = { BIG (6 * u) }; return cb_qs (a, b, c, d); }
+i128_t g_r_qs (void) { si r = cb_r_qs (BIG (1)); return r.x; }
+i128_t g_r_qsl (void) { sli r = cb_r_qsl (5, BIG (1)); return r.a + r.x; }
+i128_t g_qv (void) { return cb_qv (3, 1, BIG (2), 3.0, 4, BIG (5), 6.0, 7, BIG (8), 9.0); }
 #endif

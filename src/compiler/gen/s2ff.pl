@@ -197,6 +197,8 @@ sub full {
     return ins('slt', 'zero', $o[1], $o[0]) if $op eq 'sltz';
     return ins('slt', $o[1], 'zero', $o[0]) if $op eq 'sgtz';
     return ins('sltu', $o[1], 'zero', $o[0]) if $op eq 'snez';
+    return ins('sltu', $o[1], $o[2], $o[0]) if $op eq 'sgtu';
+    return ins('slt', $o[1], $o[2], $o[0]) if $op eq 'sgt';
     return ins('xori', -1, $o[1], $o[0]) if $op eq 'not';
     return ins('subw', $o[1], 'zero', $o[0]) if $op eq 'negw';
     return ins('addiw', 0, $o[1], $o[0]) if $op eq 'sext.w';
@@ -499,25 +501,48 @@ finish();
 pop @made while @made > $n && $made[-1]{op} =~ /^c\.(addi|nop)$|^addi$/ && $made[-1]{args} =~ /^zero,(zero,)?0$/;
 fail "GNU as made " . scalar(@made) . " instructions, $src has $n" unless $n == @made;
 { my $b = 0; $b += $_->{bytes} for @made; if ($size) { print "$b\n"; exit } facts("size $b") }
-# A function that jumps to a block label of the function after it (setjmp.S's
-# _setjmp: j __sigsetjmp, which runs on from setjmp): the two are one asm
-# function, the second's name a block label in it, as a block label is
-# known only inside its function.
+# A function that jumps to a block label of another (setjmp.S's _setjmp:
+# j __sigsetjmp, which runs on from setjmp; libgcc's div.S: __divsi3's beq
+# .L20, the end of __moddi3, three functions on; save-restore.S's .Ls10):
+# the functions from the one to the other are one asm function, each
+# later one's name a block label in it, as a block label is known only
+# inside its function (their aliases stay as they are).
 {
-    my $blocks = sub { my ($f) = @_; map { $_->{content} =~ s/:$//r } grep { @{ $_->{children} } && $_->{content} =~ /:$/ && $_->{children}[0]{content} =~ /^(asm|comment)$/ } @{ $f->{children} } };
+    my $isasm = sub { my ($f) = @_; @{ $f->{children} } && $f->{children}[0]{content} eq 'asm' };
+    my $labels = sub { my ($f) = @_; map { $_->{content} =~ s/:$//r } grep { @{ $_->{children} } && $_->{content} =~ /:$/ } @{ $f->{children} } };
     my $targets = sub { my ($f) = @_; my @t; my $w; $w = sub { for (@{ $_[0]{children} }) { push @t, $_->{children}[0]{content} if $_->{content} eq 'rel'; $w->($_) } }; $w->($f); @t };
-    for (my $i = 0; $i + 1 < @fns; $i++) {
-        my ($f, $g) = @fns[$i, $i + 1];
-        next unless @{ $f->{children} } && $f->{children}[0]{content} eq 'asm' && @{ $g->{children} } && $g->{children}[0]{content} eq 'asm';
-        my %in_g = map { $_ => 1 } $blocks->($g);
-        next unless grep { $in_g{$_} } $targets->($f);
-        my (undef, @rest) = @{ $g->{children} };
-        # g's own instructions as a block of its name, then its blocks
-        my (@own, @later);
-        for (@rest) { if (@later || (@{ $_->{children} } && $_->{content} =~ /:$/ && $_ != $rest[0])) { push @later, $_ } else { push @own, $_ } }
-        push @{ $f->{children} }, node($g->{content}, @own), @later;
-        splice @fns, $i + 1, 1;
-        $i--;
+    for (my $i = 0; $i < @fns; $i++) {
+        my $f = $fns[$i];
+        next unless $isasm->($f);
+        my %own = map { $_ => 1 } $labels->($f);
+        my %t = map { $_ => 1 } grep { !$own{$_} } $targets->($f);
+        next unless %t;
+        my ($lo) = grep { $isasm->($fns[$_]) && grep { $t{$_} } $labels->($fns[$_]) } 0 .. $i - 1;
+        my ($hi) = reverse grep { $isasm->($fns[$_]) && grep { $t{$_} } $labels->($fns[$_]) } $i + 1 .. $#fns;
+        my $from = $lo // $i;
+        my $to = $hi // $i;
+        next if $from == $to;
+        my $into = $fns[$from];
+        my @kept;
+        for my $g (@fns[$from + 1 .. $to]) {
+            unless ($isasm->($g)) { push @kept, $g; next }
+            my (undef, @rest) = @{ $g->{children} };
+            # g's own instructions as a block of its name, then its blocks
+            my (@own, @later);
+            for (@rest) { if (@later || (@{ $_->{children} } && $_->{content} =~ /:$/ && $_ != $rest[0])) { push @later, $_ } else { push @own, $_ } }
+            push @{ $into->{children} }, node($g->{content}, node('asm'), @own), @later;
+        }
+        splice @fns, $from + 1, $to - $from, @kept;
+        $i = $from - 1;
+    }
+    # (a branch to an alias of a block label of its own function, div.S's
+    # c.j __hidden___udivdi3, goes to the label: ttpc knows an alias as a
+    # function's name, not as a place in the function it is in)
+    my %alias = map { $_->{content} =~ s/:$//r => $_->{children}[1]{content} } grep { @{ $_->{children} } == 2 && $_->{children}[0]{content} eq 'alias' } @fns;
+    for my $f (grep { $isasm->($_) } @fns) {
+        my %own = map { $_ => 1 } $labels->($f);
+        my $w; $w = sub { for (@{ $_[0]{children} }) { if ($_->{content} eq 'rel' && $alias{ $_->{children}[0]{content} } && $own{ $alias{ $_->{children}[0]{content} } }) { $_->{children}[0]{content} = $alias{ $_->{children}[0]{content} } } $w->($_) } };
+        $w->($f);
     }
 }
 print $items ? write_txt(@fns) : write_txt(node("$page:", license_nodes($src), @fns));

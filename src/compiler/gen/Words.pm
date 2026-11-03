@@ -50,7 +50,7 @@ sub gen_new { my ($w) = @_; my $n = 0; $w = "address void:" if $w eq "address:";
 sub gen_old { my ($w) = @_; my $n = 0; $w =~ s/:$//; $n++ while $w =~ s/(?<=.) \* pointer$//; ('address ' x $n) . $w . ':' }
 
 my %scalarword = map { $_ => 1 } ('char', 'short', 'int', 'long', 'i8', 'i16', 'i32', 'i64',
-    'u8', 'u16', 'u32', 'u64', 'void', 'type', 'va_list', 'float', 'double', 'long double', 'float128');
+    'u8', 'u16', 'u32', 'u64', 'i128', 'u128', 'void', 'type', 'va_list', 'float', 'double', 'long double', 'float128');
 # ttpc's operators (cc_ops), as items() classes them
 my @ops = qw(= += -= || && | ^ & == != < > <= >= << >> + - * / % ++ -- ! ~ *= /= %= &= |= ^= <<= >>= ?);
 my %opix = map { $ops[$_] => $_ } 0 .. $#ops;
@@ -68,7 +68,9 @@ sub typenames {
     for my $n (@n) {
         my @k = kids($n);
         my ($name) = $n->{content} =~ /^(.+):$/;
-        if (defined $name && @k && leaf($k[0]) && $k[0]{content} =~ /^(?:struct|union|enum|function)$/) {
+        # (base pcs before a function type's function: arm's pcs ("aapcs"))
+        if (defined $name && @k > 1 && leaf($k[0]) && $k[0]{content} eq 'base pcs' && leaf($k[1]) && $k[1]{content} eq 'function') { $t->{word}{$name} = 1 }
+        elsif (defined $name && @k && leaf($k[0]) && $k[0]{content} =~ /^(?:struct|union|enum|function)$/) {
             my $kind = $k[0]{content};
             $t->{word}{$name} = 1;
             $t->{rec}{$name} = { kind => $kind, fields => [map { field($t, $_) } grep { $_->{content} =~ /:$/ } @k[1 .. $#k]] }
@@ -422,7 +424,7 @@ sub newlist {
 }
 # a definition: its marks, its type run, then its items (a function's
 # parameters and statements)
-my %mark = map { $_ => 1 } ('thread local', 'weak', 'function', 'ifunc', 'section', 'alias', 'asm', 'struct', 'union', 'enum');
+my %mark = map { $_ => 1 } ('thread local', 'weak', 'base pcs', 'function', 'ifunc', 'section', 'alias', 'asm', 'struct', 'union', 'enum');
 # align n first: C's aligned attribute of a field or a global
 sub is_align { my ($n) = @_; $n && $n->{content} eq 'align' && @{ $n->{children} } == 1 && leaf($n->{children}[0]) }
 # cleanup / f first under a local, after its align: C's cleanup attribute

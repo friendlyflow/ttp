@@ -159,9 +159,13 @@ sub def {
 
 # A32: the condition first, always (1110) and, with $if, a twin name.if
 # with the condition as the first operand. AX gives a form the twin where
-# %IFX names it: the conditional forms glibc's arm asm has (s2ff-arm.pl).
+# %IFX names it: the conditional forms glibc's arm asm has (s2ff-arm.pl),
+# and those of libgcc's (lib1funcs.S's division and shifts, ieee754-df/sf.S).
 my %IFX = map { $_ => 1 } qw(subsi rsbi add.lsr strb.pre strb.post ldrb.pre ldrb.post ldr.post str.post
-    ldrh.post strh.post ldrd.post stmia.wb);
+    ldrh.post strh.post ldrd.post stmia.wb
+    add.lsl ands.lsr andsi sub.lsl sub.lsr subs rsbs rsbsi
+    bic.lsr bici bicsi cmni mov.asr mov.asrr mov.lsl mov.lslr mov.lsrr movs.lsl movs.lsr mvn.asr mvns.asr
+    orr.lsl orr.lslr orr.lsr orr.lsrr orrs orrs.lsl teq teqi tst tsti clz str.pre ldmia.wb stmdb.wb);
 my @CONDS = qw(eq ne cs cc mi pl vs vc hi ls ge lt gt le);
 sub A {
     my ($name, $gnu, $test, @fields) = @_;
@@ -234,7 +238,7 @@ for my $group (["data", qw(and eor sub rsb add adc sbc rsc)], ["data2", qw(orr b
             }
             A("$m.rrx", "$m $ops\{rm}, rrx", undef, "op=000", "opcode=$DP{$op}", "s=$s", @rr, "sh=00000", "type=11", "r=0", "rm");
             for my $t (qw(lsl lsr asr ror)) {
-                A("$m.${t}r", "$m $ops\{rm}, $t {rs}", undef, "op=000", "opcode=$DP{$op}", "s=$s", @rr, "rs", "z=0", "type=$SH{$t}", "r=1", "rm");
+                AX("$m.${t}r", "$m $ops\{rm}, $t {rs}", undef, "op=000", "opcode=$DP{$op}", "s=$s", @rr, "rs", "z=0", "type=$SH{$t}", "r=1", "rm");
             }
         }
     }
@@ -272,7 +276,7 @@ Aif("movw", "movw {rd}, #{imm16}", $IMM16, "op=00110000", "imm16[15:12]", "rd", 
 Aif("movt", "movt {rd}, #{imm16}", $IMM16, "op=00110100", "imm16[15:12]", "rd", "imm16[11:0]");
 
 $isa->group("bits");
-A("clz",   "clz {rd}, {rm}",   undef, "op=00010110", "x=1111", "rd", "y=1111", "z=0001", "rm");
+AX("clz",  "clz {rd}, {rm}",   undef, "op=00010110", "x=1111", "rd", "y=1111", "z=0001", "rm");
 A("rev",   "rev {rd}, {rm}",   undef, "op=01101011", "x=1111", "rd", "y=1111", "z=0011", "rm");
 A("rev16", "rev16 {rd}, {rm}", undef, "op=01101011", "x=1111", "rd", "y=1111", "z=1011", "rm");
 A("revsh", "revsh {rd}, {rm}", undef, "op=01101111", "x=1111", "rd", "y=1111", "z=1011", "rm");
