@@ -1776,7 +1776,7 @@ sub expr {
     # (a 128-bit integer's initializer: ttpc reads a number there, -N all
     # ones above it; C has no 128-bit literal, and one wider than 64 bits has
     # no form in ttpc yet)
-    if ($in_global && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|IntegerLiteral)$/ && "@{[ctype(qt($n))]}" =~ /^[iu]128$/) {
+    if ($in_global && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|IntegerLiteral)$/ && qt($n) =~ /^(?:(?:un)?signed )?(?:__int128(?:_t)?|__uint128_t)$/) {
         my $v = fold128($n);
         stop("a 128-bit integer's initializer that is no constant here", $n) unless defined $v;
         my $m = Math::BigInt->new(1)->blsft(128);
@@ -1788,8 +1788,8 @@ sub expr {
     }
     # (a float16's or bfloat16's initializer: its bits, a number, what ttpc
     # stores of a global; ttpc does no conversion at compile time)
-    if ($in_global && $k =~ /^(UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|FloatingLiteral|IntegerLiteral)$/ && "@{[ctype(qt($n))]}" =~ /^(b?float16)$/) {
-        my $w = $1;
+    if ($in_global && $k =~ /^(UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|FloatingLiteral|IntegerLiteral)$/ && qt($n) =~ /^(?:_Float16|__bf16|__fp16)$/) {
+        my ($w) = ctype(qt($n));
         my $v = foldf($n);
         stop("a ${w}'s initializer that is no constant here", $n) unless defined $v;
         return node(sprintf '0x%x', f16bits($v, $w));
@@ -1832,14 +1832,14 @@ sub expr {
         my ($l) = kids($n);
         return node('-' . fixedlit($l->{value}, qt($l)));
     }
-    if ($k eq 'UnaryOperator' && $n->{opcode} =~ /^(\+\+|--)$/ && "@{[ctype(qt($n))]}" =~ /\b(fract|accum)$/) { stop("++ or -- of fixed point", $n) }
+    if ($k eq 'UnaryOperator' && $n->{opcode} =~ /^(\+\+|--)$/ && qt($n) =~ /_(?:Fract|Accum)$/) { stop("++ or -- of fixed point", $n) }
     # (to and from a 128-bit integer, written: a call through a pointer has
     # no parameter's type in ttpc, and a word is no pair)
-    if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
+    if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast' && (qt($n) . ' ' . qt((kids($n))[0])) =~ /__u?int128/) {
         my ($v) = kids($n);
         my @to = ctype(qt($n));
         my @from = ctype(qt($v));
-        return cast_node([@to], item(expr($v))) if "@to" ne "@from" && "@to @from" =~ /\b[iu]128\b/;
+        return cast_node([@to], item(expr($v))) if "@to" ne "@from";
     }
     if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
         my @to = ctype(qt($n));
@@ -1849,7 +1849,7 @@ sub expr {
     # (arm: a float from a double's literal, that literal as a float's: a
     # double is a type in memory there, which a function that does not name
     # it has no room for: libgcc's __sfp_handle_exceptions)
-    if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingCast' && "@{[ctype(qt($n))]}" eq 'float') {
+    if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingCast' && qt($n) eq 'float') {
         my ($v) = kids($n);
         return node(hexfloat($v->{value}, 'float')) if $v->{kind} eq 'FloatingLiteral';
     }
@@ -1905,7 +1905,7 @@ sub expr {
     # (x86_64's _Float128 literal, clang's Q: binary128's exact hex float with Q)
     return node(ldround($n->{value}, 113, -16494, 16383) =~ s/L$/Q/r) if $k eq 'FloatingLiteral' && tword($n) eq 'float128';
     # (float16's: a double's, cast; ff has no other literal of it)
-    return cast_node([ctype(qt($n))], node(hexfloat($n->{value}, 'double'))) if $k eq 'FloatingLiteral' && "@{[ctype(qt($n))]}" =~ /^b?float16$/;
+    return cast_node([ctype(qt($n))], node(hexfloat($n->{value}, 'double'))) if $k eq 'FloatingLiteral' && qt($n) =~ /^(?:_Float16|__bf16)$/;
     return node(hexfloat($n->{value}, qt($n))) if $k eq 'FloatingLiteral';
     return wide_text($n) if $k eq 'StringLiteral' && $n->{value} =~ /^(L|u|U)"/;
     return string_value($n) if $k eq 'StringLiteral';
