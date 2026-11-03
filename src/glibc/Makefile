@@ -975,10 +975,6 @@ clayer-page-%:
 	    -l $(or $(LICENSE_$*),license.ff.txt) -u $(BUILD)/clayer/$*.page.units -R $(BUILD)/clayer/$*.page.roots \
 	    -f "$(foreach z,$(call with_start,ZEROS,$*),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$*),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$*)),-k)" \
 	    $(CPTOOLS)/csema $(FF)/$*.ff.txt $(BUILD)/clayer/$*.page
-# (arm's gccrt holds fixed point once lane L's words are in, which csema has not yet)
-CLPAGE_SKIP_arm := gccrt
-clayer-pages: $(patsubst %,clayer-page-%,$(filter-out $(CLPAGE_SKIP_$(GTARGET)),$(CHECK_MS)))
-.PHONY: clayer-pages
 # all of glibc's page, from FF/glibc.units and FF/glibc.roots (make FF/glibc.ff
 # first; not in ports-check, which does not build it): its heap in a file
 clayer-glibc:
@@ -1037,6 +1033,11 @@ CHECK_MS_aarch64 := $(LINKED_aarch64)
 CHECK_MS_x86_64 := $(LINKED_x86_64)
 CHECK_MS_arm := $(LINKED_arm)
 CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
+# (clayer-pages, after CHECK_MS, which a prerequisite reads at once; arm's gccrt
+# holds fixed point, which csema has not yet)
+CLPAGE_SKIP_arm := gccrt
+clayer-pages: $(patsubst %,clayer-page-%,$(filter-out $(CLPAGE_SKIP_$(GTARGET)),$(CHECK_MS)))
+.PHONY: clayer-pages
 ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
 ALLCHECKS_aarch64 := $(LINKED_aarch64:%=%-check) $(LINKED_aarch64:%=%-roundtrip)
 ALLCHECKS_x86_64 := $(LINKED_x86_64:%=%-check) $(LINKED_x86_64:%=%-roundtrip)
