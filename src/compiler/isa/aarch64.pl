@@ -339,6 +339,8 @@ for my $t (["s", "00"], ["d", "01"]) {
         def("$op->[0].$p", @f, "opcode=$op->[1]", "x=10000", "rn", "rd");
     }
     def($p eq "s" ? "fcvt.d.s" : "fcvt.s.d", @f, "opcode=" . ($p eq "s" ? "000101" : "000100"), "x=10000", "rn", "rd");
+    # (to and from half precision: rn's type, then the result's opc)
+    def($p eq "s" ? "fcvt.h.s" : "fcvt.h.d", @f, "opcode=000111", "x=10000", "rn", "rd");
     def("fmovi.$p", @f, "imm8", "x=100", "x=00000", "rd");
     for my $op (["fmul", "0000"], ["fdiv", "0001"], ["fadd", "0010"], ["fsub", "0011"],
                 ["fmax", "0100"], ["fmin", "0101"], ["fmaxnm", "0110"], ["fminnm", "0111"], ["fnmul", "1000"]) {
@@ -368,6 +370,14 @@ for my $t (["s", "00"], ["d", "01"]) {
     }
 }
 # fmov between a general register and one of the same size, bits unchanged.
+# (ins v.h[0], v.h[0]: gcc's copy of a float16)
+def("ins.h0", "x=01101110000", "x=00010", "x=0", "x=0000", "x=1", "rn", "rd");
+# (umov w, v.h[0])
+def("umov.h0", "x=00001110000", "x=00010", "x=0", "x=0111", "x=1", "rn", "rd");
+# (dup v.4h, w)
+def("dup.4h", "x=00001110000", "x=00010", "x=0", "x=0001", "x=1", "rn", "rd");
+def("fcvt.s.h", "x=00011110", "type=11", "x=1", "opcode=000100", "x=10000", "rn", "rd");
+def("fcvt.d.h", "x=00011110", "type=11", "x=1", "opcode=000101", "x=10000", "rn", "rd");
 def("fmov.s.w", "sf=0", "x=0011110", "type=00", "x=1", "rmode=00", "opcode=111", "x=000000", "rn", "rd");
 def("fmov.w.s", "sf=0", "x=0011110", "type=00", "x=1", "rmode=00", "opcode=110", "x=000000", "rn", "rd");
 def("fmov.d.x", "sf=1", "x=0011110", "type=01", "x=1", "rmode=00", "opcode=111", "x=000000", "rn", "rd");

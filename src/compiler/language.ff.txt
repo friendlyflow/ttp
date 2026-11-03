@@ -140,6 +140,10 @@ ff, the language ttpc compiles
       a list longer than a node holds (255) comes in groups, each an items word holding at most 255: a declaration's items, a : group's, an enum's constants
       float, double and long double are C's floating types, 4, 8 and 16 bytes on every target; a floating literal is an exact hex float, 0x1.8p+0, f after it for a float
       long double is binary128 (IEEE quad) on riscv64 and aarch64, the x87's 80-bit extended format in its 16 bytes on x86_64 (gcc's: 64 bits of significand), double on arm
+      complex float16 (C's _Complex _Float16) is two float16 parts, real part and imag part, a struct by each ABI
+      float16 is IEEE binary16 (C's _Float16), bfloat16 GNU C's __bf16: 2 bytes, on riscv64, x86_64 and aarch64; on arm storage and the ABI (s0's low half) alone, as gcc has neither there without -mfp16-format=ieee; at compile time for their size alone
+      their arithmetic is float's, the result back to float16 where both operands were float16 or an integer; conversions call libgcc's __extendhfsf2 ... __truncxfbf2 (aarch64's fcvt for float and double), as gcc does: the program has them (libgcc.ff)
+      by each platform's ABI they go as a float does, in the low half of an xmm or v register, on riscv64 in an f register with ones above their 16 bits; no literal of their own: a cast of a float's, a global's a number, its bits
       float128 is binary128 (C's _Float128): x86_64's, beside its long double; long double elsewhere
       a long double literal has L after it, binary128's 113 bits: 0x1.921fb54442d18469898cc51701b8p+1L; a subnormal one is 0x0.<digits>p-16382L, zero 0x0p+0L; on x86_64 it is rounded to nearest even to the x87's 64 bits
       a float128 literal has Q after it: 0x1.921fb54442d18469898cc51701b8p+1Q, binary128 on every target

@@ -231,3 +231,57 @@ i128_t g_r_qs (void);
 i128_t g_r_qsl (void);
 i128_t g_qv (void);
 #endif
+#if defined __x86_64__ || defined __aarch64__ || defined __riscv
+/* float16 and bfloat16: a float's registers, low half (riscv64 boxed); in structs */
+typedef _Float16 h_t;
+typedef __bf16 b_t;
+typedef struct { h_t x; h_t y; } h2;
+typedef struct { h_t x; int i; } hin;
+typedef struct { h_t a, b, c, d, e; } h5;
+/* (by way of memory: gcc's bits of a register have forms ttpc has not) */
+static inline h_t H (unsigned short u) { volatile unsigned short v = u; return *(volatile h_t *) &v; }
+static inline unsigned short HB (h_t f) { volatile h_t v = f; return *(volatile unsigned short *) &v; }
+static inline b_t B (unsigned short u) { volatile unsigned short v = u; return *(volatile b_t *) &v; }
+static inline unsigned short BB (b_t f) { volatile b_t v = f; return *(volatile unsigned short *) &v; }
+h_t f_h2 (h_t a, h_t b);
+b_t f_b2 (int a, b_t b, float c);
+h_t f_h10 (h_t a, h_t b, h_t c, h_t d, h_t e, h_t f, h_t g, h_t h, h_t i, h_t j);
+int f_hsum (h_t a, double b, h_t c, long d, b_t e);
+int f_h2s (h2 a, hin b, h5 c);
+h2 r_h2 (unsigned short a, unsigned short b);
+hin r_hin (unsigned short a, int i);
+h_t cb_h2 (h_t a, h_t b);
+b_t cb_b2 (int a, b_t b, float c);
+h_t cb_h10 (h_t a, h_t b, h_t c, h_t d, h_t e, h_t f, h_t g, h_t h, h_t i, h_t j);
+int cb_hsum (h_t a, double b, h_t c, long d, b_t e);
+int cb_h2s (h2 a, hin b, h5 c);
+h2 cb_r_h2 (unsigned short a, unsigned short b);
+hin cb_r_hin (unsigned short a, int i);
+int g_h2 (void);
+int g_b2 (void);
+int g_h10 (void);
+int g_hsum (void);
+int g_h2s (void);
+int g_r_h2 (void);
+int g_r_hin (void);
+/* complex float16: two float16 by each struct path */
+typedef _Complex _Float16 hc_t;
+h_t f_hci (int n, hc_t z, h_t a);
+hc_t r_hc (h_t a, h_t b);
+h_t cb_hci (int n, hc_t z, h_t a);
+hc_t cb_r_hc (h_t a, h_t b);
+int g_hci (void);
+int g_r_hc (void);
+#endif
+#ifdef __arm__
+/* float16 on arm (gcc's -mfp16-format=ieee): an s register's low half */
+typedef _Float16 ah_t;
+static inline ah_t AH (unsigned short u) { volatile unsigned short v = u; return *(volatile ah_t *) &v; }
+static inline unsigned short AB (ah_t f) { volatile ah_t v = f; return *(volatile unsigned short *) &v; }
+ah_t f_ah2 (ah_t a, ah_t b);
+ah_t f_ah3 (ah_t a, double b, float c, int d, ah_t e);
+ah_t cb_ah2 (ah_t a, ah_t b);
+ah_t cb_ah3 (ah_t a, double b, float c, int d, ah_t e);
+int g_ah2 (void);
+int g_ah3 (void);
+#endif
