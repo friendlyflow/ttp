@@ -7,14 +7,33 @@
 # (x87.pl). After complexty.pl, complexops.pl and x87.pl. Test: ccomplexq.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
-# (its place in the list: tyname takes what is past 18 and not an earlier word to cx_nodes)
-$t =~ /^ *cc_tynames:\n\s*ascii\n\s*(.*?)\\x00\\x00\n/m or die 'cc_tynames';
-my $list = $1;
-my $idx = () = $list =~ /\\x00/g;
-$idx++;
-once(\$t, "$list\\x00\\x00\n", "$list\\x00complex float128\\x00\\x00\n", 'cc_tynames');
+# the word after what cc_tynames has (a node holds 255 bytes: in an ascii of
+# its own), tyname its struct before the checks of the words before it
+$t =~ /^ *cc_tynames:\n(.*?)^  cc_tycodes:/ms or die 'cc_tynames';
+my $tl = $1;
+my $idx = (() = $tl =~ /\\x00/g) - 1;
+$tl =~ /([^\n]*)\\x00\\x00\n\z/ or die 'cc_tynames end';
+my $last = $1;
+once(\$t, "$last\\x00\\x00\n", "$last\\x00\n    ascii\n      complex float128\\x00\\x00\n", 'cc_tynames');
+edit(\$t, 'tyname', asm(8, "
+    call lookup
+    bltz L1 a0
+") => asm(8, "
+    call lookup
+    bltz L1 a0
+    li $idx t0
+    beq rel:LCQ t0 a0
+"));
+{
+    my ($from, $to) = find(\$t, 'tyname');
+    substr($t, $to, 0) = asm(8, "
+LCQ:
+    la cxn_q a0
+    call struct
+    leave1
+");
+}
 
-# (tyname's index past 18 into cx_nodes: float128 and the words before this one never come there)
 my $node = sub {
     my ($label, $text, @kids) = @_;
     my $s = "  $label:\n    reserve\n      32\n    dword\n      " . scalar(@kids) . "\n    dword\n      " . (@kids ? "${label}_k" : 0)
@@ -22,7 +41,6 @@ my $node = sub {
     $s .= "  ${label}_k:\n" . join('', map { "    dword\n      $_\n" } @kids) if @kids;
     $s;
 };
-once(\$t, "    dword\n      cxn_l\n", "    dword\n      cxn_l\n" . "    dword\n      0\n" x ($idx - 21) . "    dword\n      cxn_q\n", 'cx_nodes');
 my %texts = (cxn_q_t => 'complex float128:', cxn_qr_t => 'real part:', cxn_qi_t => 'imag part:', cxn_qty_t => 'float128');
 my $data = $node->('cxn_q', 'complex float128:', 'cxn_struct', 'cxn_qr', 'cxn_qi')
     . $node->('cxn_qr', 'real part:', 'cxn_qty') . $node->('cxn_qi', 'imag part:', 'cxn_qty') . $node->('cxn_qty', 'float128')

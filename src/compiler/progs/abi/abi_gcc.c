@@ -188,3 +188,37 @@ i128_t g_r_qs (void) { si r = cb_r_qs (BIG (1)); return r.x; }
 i128_t g_r_qsl (void) { sli r = cb_r_qsl (5, BIG (1)); return r.a + r.x; }
 i128_t g_qv (void) { return cb_qv (3, 1, BIG (2), 3.0, 4, BIG (5), 6.0, 7, BIG (8), 9.0); }
 #endif
+#if defined __x86_64__ || defined __aarch64__ || defined __riscv
+h_t f_h2 (h_t a, h_t b) { return b; }
+b_t f_b2 (int a, b_t b, float c) { return b; }
+h_t f_h10 (h_t a, h_t b, h_t c, h_t d, h_t e, h_t f, h_t g, h_t h, h_t i, h_t j) { return j; }
+int f_hsum (h_t a, double b, h_t c, long d, b_t e) { return HB (a) + 2 * HB (c) + 3 * d + 4 * BB (e); }
+int f_h2s (h2 a, hin b, h5 c) { return HB (a.x) + 2 * HB (a.y) + 3 * HB (b.x) + 5 * b.i + 7 * HB (c.a) + 11 * HB (c.e); }
+h2 r_h2 (unsigned short a, unsigned short b) { h2 r = { H (a), H (b) }; return r; }
+hin r_hin (unsigned short a, int i) { hin r = { H (a), i }; return r; }
+h_t f_hci (int n, hc_t z, h_t a) { return n == 1 ? __real__ z : n == 2 ? __imag__ z : a; }
+hc_t r_hc (h_t a, h_t b) { hc_t r; __real__ r = a; __imag__ r = b; return r; }
+int g_hci (void) { hc_t z; __real__ z = H (1); __imag__ z = H (2); return HB (cb_hci (1, z, H (3))) == 1 && HB (cb_hci (2, z, H (3))) == 2 && HB (cb_hci (3, z, H (3))) == 3; }
+int g_r_hc (void) { hc_t z = cb_r_hc (H (1), H (2)); return HB (__real__ z) == 1 && HB (__imag__ z) == 2; }
+int g_h2 (void) { return HB (cb_h2 (H (0x3c00), H (0x3e00))) == 0x3e00; }
+int g_b2 (void) { return BB (cb_b2 (1, B (0x3f80), 2.0f)) == 0x3f80; }
+int g_h10 (void) { return HB (cb_h10 (H (1), H (2), H (3), H (4), H (5), H (6), H (7), H (8), H (9), H (10))) == 10; }
+int g_hsum (void) { return cb_hsum (H (1), 2.0, H (3), 4, B (5)) == 1 + 6 + 12 + 20; }
+int g_h2s (void) { h2 a = { H (1), H (2) }; hin b = { H (3), 4 }; h5 c = { H (5), H (0), H (0), H (0), H (6) }; return cb_h2s (a, b, c) == 1 + 4 + 9 + 20 + 35 + 66; }
+int g_r_h2 (void) { h2 r = cb_r_h2 (1, 2); return HB (r.x) == 1 && HB (r.y) == 2; }
+int g_r_hin (void) { hin r = cb_r_hin (1, 2); return HB (r.x) == 1 && r.i == 2; }
+#endif
+#ifdef __arm__
+ah_t f_ah2 (ah_t a, ah_t b) { return b; }
+ah_t f_ah3 (ah_t a, double b, float c, int d, ah_t e) { return e; }
+int g_ah2 (void) { return AB (cb_ah2 (AH (0x3c00), AH (0x3e00))) == 0x3e00; }
+int g_ah3 (void) { return AB (cb_ah3 (AH (1), 2.0, 3.0f, 4, AH (5))) == 5; }
+#endif
+#ifdef __arm__
+long _Accum f_fx (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f) { return d; }
+int f_fxc (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f) { return *(signed char *) &a == 0x40 && *(int *) &c == 0x12000 && *(short *) &e == 0x2000 && *(unsigned *) &f == 0x18000; }
+fxs f_fxs (fxs a, long _Accum b) { a.y = (_Accum) 0; *(int *) &a.y = (int) *(long long *) &b; return a; }
+int g_fx (void) { long _Accum v = cb_fx (0.5hr, 1.5lk, 2.25k, -3.5lk, 0.25r, 1.5uk); return *(long long *) &v == -7516192768LL; }
+int g_fxc (void) { return cb_fxc (0.5hr, 1.5lk, 2.25k, -3.5lk, 0.25r, 1.5uk); }
+int g_fxs (void) { fxs a = { 0.5r, 0.0k }; fxs r = cb_fxs (a, 1.5lk); return *(short *) &r.x == 0x4000 && *(int *) &r.y == (int) 0xc0000000; }
+#endif

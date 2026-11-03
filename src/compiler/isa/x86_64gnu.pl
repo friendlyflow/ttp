@@ -387,6 +387,8 @@ for my $t (["pshufd", 0x0f, 0x70], ["palignr", 0x0f, 0x3a, 0x0f], ["pcmpistri", 
     my ($nm, @op) = @$t;
     legacy(nm => $nm, s => "l", pre => [0x66], op => \@op, kind => "RMI", rk => "x", mk => "x", ik => "u8", isz => 1, osfx => "i", rsfx => "i");
 }
+# (a word into an xmm register: gcc's way of loading a float16)
+legacy(nm => "pinsrw", s => "l", pre => [0x66], op => [0x0f, 0xc4], kind => "RMI", rk => "x", mk => "l", ik => "u8", isz => 1, osfx => "i", rsfx => "i");
 # byte shifts of the whole register, by an immediate
 for my $t (["pslldq", 7], ["psrldq", 3]) {
     legacy(nm => $t->[0], s => "l", pre => [0x66], op => [0x0f, 0x73], kind => "MI", digit => $t->[1], mk => "x", ik => "u8", isz => 1, osfx => "i", mem => 0);
@@ -394,8 +396,8 @@ for my $t (["pslldq", 7], ["psrldq", 3]) {
 # between xmm and the integer registers: pmovmskb r32 <- xmm, movd and
 # movq to and from xmm (.tox .fromx as ttpc's own), cvtsd2si and cvtss2si
 legacy(nm => "pmovmskb", s => "l", pre => [0x66], op => [0x0f, 0xd7], kind => "RM", rk => "l", mk => "x", mem => 0);
-legacy(nm => "movd", s => "l", pre => [0x66], op => [0x0f, 0x6e], kind => "RM", rk => "x", mk => "l", mem => 0, rsfx => "tox", gnu => "movd");
-legacy(nm => "movd", s => "l", pre => [0x66], op => [0x0f, 0x7e], kind => "MR", rk => "x", mk => "l", mem => 0, rsfx => "fromx", gnu => "movd");
+legacy(nm => "movd", s => "l", pre => [0x66], op => [0x0f, 0x6e], kind => "RM", rk => "x", mk => "l", rsfx => "tox", osfx => "tox", gnu => "movd");
+legacy(nm => "movd", s => "l", pre => [0x66], op => [0x0f, 0x7e], kind => "MR", rk => "x", mk => "l", rsfx => "fromx", osfx => "fromx", gnu => "movd");
 legacy(nm => "cvtsd2siq", s => "q", pre => [0xf2], op => [0x0f, 0x2d], kind => "RM", rk => "q", mk => "x", mem => 0, gnu => "cvtsd2si");
 legacy(nm => "cvtss2siq", s => "q", pre => [0xf3], op => [0x0f, 0x2d], kind => "RM", rk => "q", mk => "x", mem => 0, gnu => "cvtss2si");
 # movq: m64 <-> xmm (F3 0F 7E load, 66 0F D6 store)

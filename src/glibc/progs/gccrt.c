@@ -223,6 +223,75 @@ static void l (tf x) { union { tf d; unsigned long long u[2]; } v; v.d = x; w (v
 static void xl (long double x) { union { long double d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & 0xffff); }
 #endif
 
+#ifndef __arm__
+/* float16 and bfloat16 (_Float16, __bf16) */
+typedef _Float16 hf;
+typedef __bf16 bf;
+#ifndef __aarch64__
+float __extendhfsf2 (hf);
+double __extendhfdf2 (hf);
+hf __truncsfhf2 (float);
+hf __truncdfhf2 (double);
+#endif
+tf __extendhftf2 (hf);
+hf __trunctfhf2 (tf);
+float __extendbfsf2 (bf);
+bf __truncsfbf2 (float);
+bf __truncdfbf2 (double);
+bf __trunctfbf2 (tf);
+bf __trunchfbf2 (hf);
+ti __fixhfti (hf);
+uti __fixunshfti (hf);
+hf __floattihf (ti);
+hf __floatuntihf (uti);
+bf __floattibf (ti);
+bf __floatuntibf (uti);
+#ifdef __x86_64__
+long double __extendhfxf2 (hf);
+hf __truncxfhf2 (long double);
+bf __truncxfbf2 (long double);
+int __eqhf2 (hf, hf);
+int __nehf2 (hf, hf);
+#endif
+#ifdef __riscv
+hf __truncbfhf2 (bf);
+int __fixhfsi (hf);
+long __fixhfdi (hf);
+unsigned __fixunshfsi (hf);
+unsigned long __fixunshfdi (hf);
+hf __floatsihf (int);
+hf __floatdihf (long);
+hf __floatunsihf (unsigned);
+hf __floatundihf (unsigned long);
+bf __floatsibf (int);
+bf __floatdibf (long);
+bf __floatunsibf (unsigned);
+bf __floatundibf (unsigned long);
+#endif
+#ifdef __aarch64__
+bf __floatdibf (long);
+bf __floatundibf (unsigned long);
+#endif
+static unsigned short hb (hf x) { union { hf f; unsigned short u; } v; v.f = x; return v.u; }
+static unsigned short bb (bf x) { union { bf f; unsigned short u; } v; v.f = x; return v.u; }
+/* (a NaN as one NaN: of two NaN operands, which one an operation gives is its compiler's order of them) */
+static unsigned short hn (hf x) { unsigned short u = hb (x); return (u & 0x7c00) == 0x7c00 && (u & 0x3ff) ? 0x7e00 : u; }
+static hf hfrom (unsigned short u) { union { hf f; unsigned short u; } v; v.u = u; return v.f; }
+static bf bfrom (unsigned short u) { union { bf f; unsigned short u; } v; v.u = u; return v.f; }
+_Complex _Float16 __mulhc3 (hf, hf, hf, hf);
+_Complex _Float16 __divhc3 (hf, hf, hf, hf);
+hf __floatbitinthf (const unsigned long *, int);
+#if defined __x86_64__ || defined __aarch64__
+bf __floatbitintbf (const unsigned long *, int);
+#endif
+#endif
+#ifdef __arm__
+float __floatbitinthf (const unsigned int *, int);
+#endif
+#ifdef __arm__
+#include "gccrt-fixed.h"
+#include "gccrt-fixedops.h"
+#endif
 static double dv[] = { 0.0, -0.0, 1.0, -2.5, 3.0e300, 1.0e-310, __builtin_inf (), -__builtin_inf (), __builtin_nan ("") };
 #define N (sizeof dv / sizeof dv[0])
 
@@ -282,6 +351,7 @@ int main (void)
         w (__divdi3 (x, x | 1));
       u64 hx = (u64) x >> 1;
       w (__fixdfdi ((double) x / 3)); w (__aeabi_d2lz (-(double) (x >> 1))); w (__fixunsdfdi ((double) hx));
+      { unsigned int lb[2] = { (unsigned int) x, (unsigned int) (x >> 32) }; float (*p) (const unsigned int *, int) = __floatbitinthf; union { float f; unsigned int u; } v; v.f = p (lb, -64); w32 (v.u & 0xffff); }
       w (__aeabi_d2ulz ((double) (u32) x * 7)); w (__fixsfdi ((float) x / 5)); w (__aeabi_f2lz (-(float) (int) x));
       w (__fixunssfdi ((float) (u32) x)); w (__aeabi_f2ulz ((float) hx * 0.5f));
       u32 y = (u32) x, z = (u32) (x >> 32) | 3;
@@ -369,6 +439,54 @@ int main (void)
           t = tt; w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); }
       }
 #endif
+#ifndef __arm__
+      {
+        /* every 16-bit pattern's neighbours: x's bits, NaNs and infinities among them */
+        hf h = hfrom ((unsigned short) x), h2 = hfrom ((unsigned short) (x >> 16));
+        bf b = bfrom ((unsigned short) x);
+        float fv = (float) (int) x / 7.0f; double dv2 = (double) x / 11.0; tf tv = (tf) x / 13;
+        ti a128 = ((ti) x << 64) | (unsigned long long) (x * 0x9e3779b97f4a7c15ULL);
+#ifndef __aarch64__
+        f (__extendhfsf2 (h)); d (__extendhfdf2 (h));
+        w (hb (__truncsfhf2 (fv))); w (hb (__truncdfhf2 (dv2))); w (hb (__truncsfhf2 ((float) x)));
+#endif
+        l (__extendhftf2 (h)); w (hb (__trunctfhf2 (tv)));
+        f (__extendbfsf2 (b));
+        w (bb (__truncsfbf2 (fv))); w (bb (__truncdfbf2 (dv2))); w (bb (__trunctfbf2 (tv)));
+        w (bb (__trunchfbf2 (h)));
+        { ti t = __fixhfti (hfrom ((unsigned short) x & 0x7bff)); uti u = __fixunshfti (hfrom ((unsigned short) x & 0x7bff));
+          w ((unsigned long long) (t >> 64)); w ((unsigned long long) t); w ((unsigned long long) (u >> 64)); w ((unsigned long long) u); }
+        w (hb (__floattihf (a128 >> 100))); w (hb (__floatuntihf ((uti) a128 >> 100))); w (hb (__floattihf (a128)));
+        w (bb (__floattibf (a128))); w (bb (__floatuntibf ((uti) a128 >> 1)));
+#ifdef __x86_64__
+        xl (__extendhfxf2 (h)); w (hb (__truncxfhf2 ((long double) x / 3))); w (bb (__truncxfbf2 ((long double) x / 3)));
+        w (__eqhf2 (h, h2) != 0); w (__nehf2 (h, h) != 0);
+#endif
+#ifdef __riscv
+        w (hb (__truncbfhf2 (b)));
+        { hf s = hfrom ((unsigned short) x & 0x47ff); w (__fixhfsi (s)); w (__fixhfdi (s)); w (__fixunshfsi (s)); w (__fixunshfdi (s)); }
+        w (hb (__floatsihf ((int) x >> 16))); w (hb (__floatdihf (x >> 48))); w (hb (__floatunsihf ((unsigned) x >> 16))); w (hb (__floatundihf ((unsigned long) x >> 48)));
+        w (bb (__floatsibf ((int) x))); w (bb (__floatdibf (x))); w (bb (__floatunsibf ((unsigned) x))); w (bb (__floatundibf ((unsigned long) x)));
+#endif
+#ifdef __aarch64__
+        w (bb (__floatdibf (x))); w (bb (__floatundibf ((unsigned long) x)));
+#endif
+        { unsigned long lb[2] = { (unsigned long) x, (unsigned long) (x >> 63) }; w (hb (__floatbitinthf (lb, -65))); w (hb (__floatbitinthf (lb, 64)));
+#if defined __x86_64__ || defined __aarch64__
+          w (bb (__floatbitintbf (lb, -65)));
+#endif
+        }
+        { _Complex _Float16 z = __mulhc3 (h, h2, hfrom ((unsigned short) (x >> 32)), hfrom ((unsigned short) (x >> 48)));
+          w (hn (__real__ z)); w (hn (__imag__ z));
+          z = __divhc3 (h, h2, hfrom ((unsigned short) (x >> 32)), hfrom ((unsigned short) (x >> 48)));
+          w (hn (__real__ z)); w (hn (__imag__ z)); }
+        /* the operators and casts: ttpc's own calls of these, gcc's */
+        { hf s = hfrom ((unsigned short) x & 0x7bff), s2 = hfrom ((unsigned short) (x >> 16) & 0x7bff);
+          w (hb (s + s2)); w (hb (s - s2)); w (hb (s * s2)); if (s2 != 0) w (hb (s / s2)); w (hb (-s)); w (s < s2); w (s == s);
+          f ((float) s); d ((double) s); l ((tf) s); w (hb ((hf) fv)); w (hb ((hf) dv2)); w (hb ((hf) tv)); w (hb ((hf) (int) (x & 0x3ff))); w ((long) s2);
+          f ((float) bfrom ((unsigned short) x & 0x7f7f)); w (bb ((bf) fv)); w (bb ((bf) dv2)); w (bb ((bf) tv)); }
+      }
+#endif
 #ifdef __riscv
       d (__divdf3 ((double) x, 7.0)); f (__divsf3 ((float) x, -3.0f));
 #endif
@@ -381,6 +499,10 @@ int main (void)
 #ifndef __arm__
   for (i = 0; i < N; i++)
     w (__unordtf2 (dv[i], dv[(i + 7) % N]));
+#endif
+#ifdef __arm__
+  fxall ();
+  fxops ();
 #endif
   static const unsigned char s1[] = "libgcc in ff", s2[] = "libgcc in FF";
   w (__gcc_bcmp (s1, s2, 10)); w (__gcc_bcmp (s1, s2, 12) != 0);

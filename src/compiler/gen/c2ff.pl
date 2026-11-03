@@ -84,6 +84,14 @@ my %scalar = (
     'float' => 'float', 'double' => 'double', 'long double' => 'long double',
     '__float128' => 'long double',      # x86_64's _Float128 for clang (clang-prelude.h): float128 there
     'long long' => 'i64', 'signed long long' => 'i64', 'unsigned long long' => 'u64',
+    '__fp16' => 'float16',      # (clang's type of __builtin_copysignf16)
+    '_Float16' => 'float16', '__bf16' => 'bfloat16', '_Complex _Float16' => 'complex float16', '_Float16 _Complex' => 'complex float16',
+    'short _Fract' => 'short fract', 'unsigned short _Fract' => 'unsigned short fract', '_Sat short _Fract' => 'sat short fract', '_Sat unsigned short _Fract' => 'sat unsigned short fract',
+    '_Fract' => 'fract', 'unsigned _Fract' => 'unsigned fract', '_Sat _Fract' => 'sat fract', '_Sat unsigned _Fract' => 'sat unsigned fract',
+    'long _Fract' => 'long fract', 'unsigned long _Fract' => 'unsigned long fract', '_Sat long _Fract' => 'sat long fract', '_Sat unsigned long _Fract' => 'sat unsigned long fract',
+    'short _Accum' => 'short accum', 'unsigned short _Accum' => 'unsigned short accum', '_Sat short _Accum' => 'sat short accum', '_Sat unsigned short _Accum' => 'sat unsigned short accum',
+    '_Accum' => 'accum', 'unsigned _Accum' => 'unsigned accum', '_Sat _Accum' => 'sat accum', '_Sat unsigned _Accum' => 'sat unsigned accum',
+    'long _Accum' => 'long accum', 'unsigned long _Accum' => 'unsigned long accum', '_Sat long _Accum' => 'sat long accum', '_Sat unsigned long _Accum' => 'sat unsigned long accum',
     '__int128' => 'i128', 'signed __int128' => 'i128', '__int128_t' => 'i128',
     'unsigned __int128' => 'u128', '__uint128_t' => 'u128',
     '_Bool' => 'u8', 'void' => 'void',
@@ -391,7 +399,7 @@ my %reserved = map { $_ => 1 } qw(
     if else while for return break continue comment address content syscall U L UL LL ULL
     array struct union enum function sizeof alignof compile emit fail number
     target include workspace switch case default goto char short int long void
-    type i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 va_list va_start va_arg va_end va_copy
+    type i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 float16 bfloat16 fract accum va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor fs vector line zero ra sp gp tp fp pc
     byte half word dword
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
@@ -460,7 +468,7 @@ my $passonly;              # --pass: only each unit's own pass (unit_pass), made
 our $keep_going;           # --keep-going: what cannot be translated yet is left out (leave_out)
 # (@file: the arguments in a file, one a line: all of glibc's units and
 # roots are past what one command line holds)
-@ARGV = map { /^@(.+)$/ ? do { open my $h, '<', $1 or die "c2ff: cannot open $1: $!\n"; map { chomp; length ? $_ : () } <$h> } : $_ } @ARGV;
+@ARGV = map { /^@(.+)$/ ? do { open my $h, '<', $1 or die "c2ff: cannot open $1: $!\n"; map { chomp; s{^\s+}{}; length ? $_ : () } <$h> } : $_ } @ARGV;
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -1245,11 +1253,13 @@ sub asm_once {
     "${name}_$h";
 }
 # the overflow builtins builtins.ff.txt has, by name and operand types
+my %ovf_armsub;
 my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'i128 i128 i128', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
 $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int', 'long long long';
 $ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long', 'i128 i128 i128', 'int i128 i128', 'int int int', 'int long long', 'u64 u64 u64';
+$ovf_armsub{$_} = 1 for 'i64 i64 i64', 'int i64 i64', 'u32 u32 u32';
 # (and builtins-arm.ff.txt's, of arm's 32-bit size_t)
-my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int';
+my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int', 'i64 i64 i64';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 our $asm_rd_out;
 my @xreg = qw(zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6);
@@ -1780,7 +1790,7 @@ sub expr {
     # (a 128-bit integer's initializer: ttpc reads a number there, -N all
     # ones above it; C has no 128-bit literal, and one wider than 64 bits has
     # no form in ttpc yet)
-    if ($in_global && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|IntegerLiteral)$/ && "@{[ctype(qt($n))]}" =~ /^[iu]128$/) {
+    if ($in_global && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|IntegerLiteral)$/ && qt($n) =~ /^(?:(?:un)?signed )?(?:__int128(?:_t)?|__uint128_t)$/) {
         my $v = fold128($n);
         stop("a 128-bit integer's initializer that is no constant here", $n) unless defined $v;
         my $m = Math::BigInt->new(1)->blsft(128);
@@ -1789,6 +1799,14 @@ sub expr {
         my $n2 = $m - $v;
         return node('-' . $n2->bstr) if $n2 <= Math::BigInt->new(1)->blsft(63);
         stop("a 128-bit constant wider than 64 bits in a global, which ttpc has no form of", $n);
+    }
+    # (a float16's or bfloat16's initializer: its bits, a number, what ttpc
+    # stores of a global; ttpc does no conversion at compile time)
+    if ($in_global && $k =~ /^(UnaryOperator|CStyleCastExpr|ImplicitCastExpr|ParenExpr|FloatingLiteral|IntegerLiteral)$/ && qt($n) =~ /^(?:_Float16|__bf16|__fp16)$/) {
+        my ($w) = ctype(qt($n));
+        my $v = foldf($n);
+        stop("a ${w}'s initializer that is no constant here", $n) unless defined $v;
+        return node(sprintf '0x%x', f16bits($v, $w));
     }
     if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
         && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
@@ -1810,18 +1828,44 @@ sub expr {
     # on arm, where a long long is a pair of registers and a word is not, the
     # conversion of a narrower integer to it too (ttpc keeps a word's value in
     # one register, without the high word a pair needs)
+    # (a fixed point global's initializer: a literal of its type, its value
+    # worked out from clang's literal)
+    if ($in_global && $k =~ /^(CStyleCastExpr|ImplicitCastExpr|ParenExpr)$/ && qt($n) =~ /\b(?:_Fract|_Accum)$/) {
+        my $v = (kids($n))[0];
+        $v = (kids($v))[0] while $v->{kind} =~ /^(CStyleCastExpr|ImplicitCastExpr|ParenExpr)$/;
+        my $neg = '';
+        if ($v->{kind} eq 'UnaryOperator' && $v->{opcode} eq '-') { $neg = '-'; ($v) = kids($v); $v = (kids($v))[0] while $v->{kind} =~ /^(CStyleCastExpr|ImplicitCastExpr|ParenExpr)$/ }
+        return node($neg . fixedlit($v->{value}, qt($n))) if $v->{kind} =~ /^(FixedPointLiteral|IntegerLiteral|FloatingLiteral)$/;
+    }
+    # (fixed point's conversions, written: ttpc converts by the types it is given)
+    if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(FixedPointCast|FixedPointToFloating|FloatingToFixedPoint|FixedPointToIntegral|IntegralToFixedPoint)$/) {
+        return cast_node([ctype(qt($n))], item(expr((kids($n))[0])));
+    }
+    if ($k eq 'FixedPointLiteral') { return node(fixedlit($n->{value}, qt($n))) }
+    if ($k eq 'UnaryOperator' && $n->{opcode} eq '-' && (kids($n))[0]{kind} eq 'FixedPointLiteral') {
+        my ($l) = kids($n);
+        return node('-' . fixedlit($l->{value}, qt($l)));
+    }
+    if ($k eq 'UnaryOperator' && $n->{opcode} =~ /^(\+\+|--)$/ && qt($n) =~ /_(?:Fract|Accum)$/) { stop("++ or -- of fixed point", $n) }
     # (to and from a 128-bit integer, written: a call through a pointer has
     # no parameter's type in ttpc, and a word is no pair)
-    if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
+    if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast' && (qt($n) . ' ' . qt((kids($n))[0])) =~ /__u?int128/) {
         my ($v) = kids($n);
         my @to = ctype(qt($n));
         my @from = ctype(qt($v));
-        return cast_node([@to], item(expr($v))) if "@to" ne "@from" && "@to @from" =~ /\b[iu]128\b/;
+        return cast_node([@to], item(expr($v))) if "@to" ne "@from";
     }
     if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'IntegralCast') {
         my @to = ctype(qt($n));
         my @from = ctype(qt((kids($n))[0]));
         return cast_node(\@to, item(expr((kids($n))[0]))) if "@to" =~ /^[iu]64$/ && "@from" !~ /^[iu]64$/;
+    }
+    # (arm: a float from a double's literal, that literal as a float's: a
+    # double is a type in memory there, which a function that does not name
+    # it has no room for: libgcc's __sfp_handle_exceptions)
+    if ($target eq 'arm' && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FloatingCast' && qt($n) eq 'float') {
+        my ($v) = kids($n);
+        return node(hexfloat($v->{value}, 'float')) if $v->{kind} eq 'FloatingLiteral';
     }
     if ($k eq 'ImplicitCastExpr' && ($n->{castKind} // '') =~ /^(IntegralToFloating|FloatingToIntegral|FloatingCast)$/) {
         # (in a global's value, a float or double literal made long double is
@@ -1874,6 +1918,8 @@ sub expr {
     return node(ldhexfloat($n->{value})) if $k eq 'FloatingLiteral' && isld($n);
     # (x86_64's _Float128 literal, clang's Q: binary128's exact hex float with Q)
     return node(ldround($n->{value}, 113, -16494, 16383) =~ s/L$/Q/r) if $k eq 'FloatingLiteral' && tword($n) eq 'float128';
+    # (float16's: a double's, cast; ff has no other literal of it)
+    return cast_node([ctype(qt($n))], node(hexfloat($n->{value}, 'double'))) if $k eq 'FloatingLiteral' && qt($n) =~ /^(?:_Float16|__bf16)$/;
     return node(hexfloat($n->{value}, qt($n))) if $k eq 'FloatingLiteral';
     return wide_text($n) if $k eq 'StringLiteral' && $n->{value} =~ /^(L|u|U)"/;
     return string_value($n) if $k eq 'StringLiteral';
@@ -2111,7 +2157,7 @@ sub expr {
         if ($name =~ /^__builtin_(add|sub|mul)_overflow$/) {
             my @t = map { tword_int($_) } @args;
             my $sig = "@t" =~ /^(\S+) (\S+) address (\S+)$/ ? "$1 $2 $3" : '';
-            $ovf{"$name $sig"} || ($target eq 'arm' && $ovf_arm{"$name $sig"}) or stop("$name on @t", $n);
+            $ovf{"$name $sig"} || ($target eq 'arm' && ($ovf_arm{"$name $sig"} || ($name eq '__builtin_sub_overflow' && $ovf_armsub{$sig}))) or stop("$name on @t", $n);
             return node("$name $sig", map { arg($_) } @args);
         }
         # gcc's type-generic float classification, in builtins.ff.txt, one
@@ -2120,7 +2166,7 @@ sub expr {
         # of the three types; fpclassify's type is its last argument's)
         if ($name =~ /^__builtin_(isnan|isinf_sign|isinf|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
-            $t =~ /^(float|double|long double|float128)$/ or stop("$name on $t", $n);
+            $t =~ /^(float|double|long double|float128|float16)$/ or stop("$name on $t", $n);
             return node("$name $t", map { arg($_) } @args);
         }
         # C's va_ words, as clang has them
@@ -2169,6 +2215,9 @@ sub expr {
             defined $imm or stop("$name of an immediate that is no constant", $n);
             return node(sprintf('__builtin_ia32_pcmpistr%s128 0x%x', { i => 'i', c => 'ic', z => 'iz' }->{$1}, $imm), map { arg($_) } @args[0, 1]);
         }
+        return node($name) if $name eq '__builtin_arm_get_fpscr';
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(copysign|huge_val)f16$/;
+        return node($name) if $name eq '__builtin_arm_get_fpscr';
         stop("the builtin $name", $n) if $name =~ /^__builtin_/;
         $name = own($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl';
         want($name) if $c->{referencedDecl}{kind} eq 'FunctionDecl' && $name !~ /^__builtin_/;
@@ -2319,6 +2368,53 @@ sub fold128 {
     }
     return;
 }
+# The value of a floating constant expression, as a double.
+sub foldf {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    return $n->{value} + 0 if $k =~ /^(FloatingLiteral|IntegerLiteral)$/;
+    return foldf((kids($n))[0]) if $k =~ /^(ParenExpr|ImplicitCastExpr|CStyleCastExpr|ConstantExpr)$/;
+    if ($k eq 'UnaryOperator' && $n->{opcode} =~ /^[-+]$/) { my $v = foldf((kids($n))[0]) // return; return $n->{opcode} eq '-' ? -$v : $v }
+    return;
+}
+# A double's bits as binary16 (float16) or bfloat16 (float's top half),
+# rounded to nearest, ties to even, from its exact value.
+sub f16bits {
+    my ($v, $w) = @_;
+    my $bits = unpack('Q<', pack('d<', $v));
+    my $sign = $bits >> 63;
+    my $e = ($bits >> 52 & 0x7ff) - 1023;
+    my $f = $bits & ((1 << 52) - 1);
+    my ($eb, $fb, $bias) = $w eq 'float16' ? (5, 10, 15) : (8, 7, 127);
+    my $r;
+    if ($e == 1024) { $r = ((1 << $eb) - 1) << $fb | ($f ? 1 << ($fb - 1) : 0) }
+    elsif ($e == -1023 && !$f) { $r = 0 }
+    else {
+        my $m = $f | 1 << 52;       # 53 bits, value m * 2^(e - 52)
+        my $shift = 52 - $fb;       # to fb + 1 bits
+        my $be = $e + $bias;
+        if ($be <= 0) { $shift += 1 - $be; $be = 0 }
+        $shift = 62 if $shift > 62;
+        my $q = $m >> $shift;
+        my $rest = $m & ((1 << $shift) - 1);
+        my $half = 1 << ($shift - 1);
+        $q++ if $rest > $half || ($rest == $half && $q & 1);
+        # (the hidden bit, carried into the exponent where the rounding overflows)
+        $r = $be ? (($be - 1) << $fb) + $q : $q;
+        $r = ((1 << $eb) - 1) << $fb if $r >= ((1 << $eb) - 1) << $fb;
+    }
+    $r | $sign << ($eb + $fb);
+}
+# A fixed point literal: clang's exact value, C's suffix of the type.
+sub fixedlit {
+    my ($v, $t) = @_;
+    $t =~ s/\b(?:const|volatile|_Sat)\b//g;
+    $t = trim($t);
+    my $s = $t =~ /\bunsigned\b/ ? 'u' : '';
+    $s .= $t =~ /\bshort\b/ ? 'h' : $t =~ /\blong\b/ ? 'l' : '';
+    $s .= $t =~ /_Fract$/ ? 'r' : 'k';
+    "$v$s";
+}
 sub int_const {
     my ($n) = @_;
     my $k = $n->{kind} // '';
@@ -2390,6 +2486,7 @@ sub csize { my ($t) = @_; return 4 if $t =~ /^enum\b/; my ($w) = ctype($t); $wsi
 sub hexfloat {
     my ($v, $type) = @_;
     my ($t) = ctype($type);
+    return hexfloat($v, 'float') if $t =~ /^b?float16$/;
     # a float literal above FLT_MAX by less than half its last place is
     # FLT_MAX, as C rounds it (sfp-machine.h's 3.40282347E+38); Perl's pack
     # makes it inf

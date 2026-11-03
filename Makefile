@@ -146,10 +146,10 @@ PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
 PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
-PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 \
-	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 libgcc-aarch64 \
-	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 \
-	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm \
+PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 clayer-riscv64 clayer-pages-riscv64 \
+	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 libgcc-aarch64 csema-aarch64 clayer-pages-aarch64 \
+	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 clayer-pages-x86_64 \
+	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm clayer-pages-arm \
 	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
 	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
@@ -200,11 +200,31 @@ pc-generic-riscv64: pc-units-riscv64
 pc-libgcc-riscv64: pc-units-riscv64
 	$(call pc_step,libgcc-riscv64,$(call PC_GLIBC) libgcc-licenses libgcc-asm-check)
 # the C parser in ff (T3a) on every unit and milestone program's .i
-pc-cparse-riscv64: $(PC_MS:%=pc-%-check)
+pc-cparse-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 	$(call pc_step,cparse-riscv64,$(call PC_GLIBC) cparse-check)
 # the types and semantics of C in ff (T3b) against clang on the same units
-pc-csema-riscv64: $(PC_MS:%=pc-%-check)
+# (after compiler-check, which makes the tools: not the tools of before)
+pc-csema-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 	$(call pc_step,csema-riscv64,$(call PC_GLIBC) csema-check)
+# the C layer written in ff (T3c) against c2ff.pl on the same units, byte for byte
+pc-clayer-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
+	$(call pc_step,clayer-riscv64,$(call PC_GLIBC) clayer-check)
+# (each milestone's whole page, many units at once)
+pc-clayer-pages-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
+	$(call pc_step,clayer-pages-riscv64,$(call PC_GLIBC) clayer-pages)
+pc-clayer-pages-aarch64: pc-compiler-check $(PC_A64:%=pc-%-aarch64)
+	$(call pc_step,clayer-pages-aarch64,$(call PC_GLIBC,aarch64) clayer-pages)
+pc-clayer-pages-x86_64: pc-compiler-check $(PC_X64:%=pc-%-x86_64)
+	$(call pc_step,clayer-pages-x86_64,$(call PC_GLIBC,x86_64) clayer-pages)
+pc-clayer-pages-arm: pc-compiler-check $(PC_ARM:%=pc-%-arm)
+	$(call pc_step,clayer-pages-arm,$(call PC_GLIBC,arm) clayer-pages)
+# (csema on the other targets' units, a minute or two each)
+pc-csema-aarch64: pc-compiler-check $(PC_A64:%=pc-%-aarch64)
+	$(call pc_step,csema-aarch64,$(call PC_GLIBC,aarch64) csema-check)
+pc-csema-x86_64: pc-compiler-check $(PC_X64:%=pc-%-x86_64)
+	$(call pc_step,csema-x86_64,$(call PC_GLIBC,x86_64) csema-check)
+pc-csema-arm: pc-compiler-check $(PC_ARM:%=pc-%-arm)
+	$(call pc_step,csema-arm,$(call PC_GLIBC,arm) csema-check)
 pc-units-aarch64: pc-bootstrap pc-gbuild
 	$(call pc_step,units-aarch64,$(call PC_GLIBC,aarch64) units-ready)
 define pc_a64

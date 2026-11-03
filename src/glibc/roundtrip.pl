@@ -41,6 +41,7 @@ my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JS
 our $target = '';
 if (@ARGV >= 2 && $ARGV[0] eq '--target') { (undef, $target) = splice @ARGV, 0, 2 }
 FFold::x87() if $target eq 'x86_64';
+@ARGV = map { /^@(.+)$/ ? do { open my $h, "<", $1 or die "roundtrip: cannot open $1: $!\n"; map { chomp; s{^\s+}{}; length ? $_ : () } <$h> } : $_ } @ARGV;
 my ($namesfile, $backjson, @unitjson) = @ARGV;
 die "usage: roundtrip.pl [--target t] names.txt back.json [unit.json ...]\n" unless defined $backjson;
 
@@ -251,7 +252,9 @@ sub E {
         if ($ck eq 'PointerToIntegral' && is_offsetof($c)) { return '(offsetof)' }
         # a double literal cast to long double: the literal
         if ($ck eq 'FloatingCast' && strip($c)->{kind} eq 'FloatingLiteral') { return '(flt ' . flt(strip($c)->{value}) . ')' }
-        return "(cast $ck " . tcls($n) . ' ' . E($c) . ')';
+        # (clang's type of __builtin_copysignf16's parameters, __fp16: as _Float16; c2ff's casts to float16 are there)
+        return E($c) if $ck eq 'FloatingCast' && tcls($n) =~ /__fp16/;
+        return "(cast $ck " . (tcls($n) =~ s/__fp16/_Float16/r) . ' ' . E($c) . ')';
     }
     return '(int ' . ($n->{value} // 0) . ' ' . (small_literal($n) ? 'i32' : tcls($n)) . ')' if $k eq 'IntegerLiteral';
     # (C23's true and false, libgcc's C: c2ff's 1 and 0)

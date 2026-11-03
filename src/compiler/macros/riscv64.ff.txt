@@ -3256,3 +3256,75 @@ pair128:
       0
       t2
       a1
+  comment
+    cc_rv_box16: V's float16 as an f register's: ones above its 16 bits (gen/patches/float16.pl).
+  cc_rv_box16:
+    lui
+      0xffff0000
+      t3
+    or
+      t3
+      a0
+      a0
+  comment
+    In a flattened struct: cc_rv_ldfh r s k: f register r = the 2 bytes at k in the struct whose address is at SP + s, boxed; cc_rv_vfh r k: [V + k] = f register r's; cc_rv_rsth r k: [the room + k] = f register r's; cc_rv_rtfh r k: f register r
+    = [V + k], boxed.
+  cc_rv_ldfh:
+    r
+    s
+    k
+    ld
+      s
+      sp
+      t2
+    lhu
+      k
+      t2
+      t3
+    lui
+      0xffff0000
+      t4
+    or
+      t4
+      t3
+      t3
+    fmv.w.x
+      t3
+      r
+  cc_rv_vfh:
+    r
+    k
+    fmv.x.w
+      r
+      t3
+    sh
+      k
+      t3
+      a0
+  cc_rv_rsth:
+    r
+    k
+    fmv.x.w
+      r
+      t3
+    sh
+      k
+      t3
+      t2
+  cc_rv_rtfh:
+    r
+    k
+    lhu
+      k
+      a0
+      t3
+    lui
+      0xffff0000
+      t4
+    or
+      t4
+      t3
+      t3
+    fmv.w.x
+      t3
+      r

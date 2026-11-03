@@ -460,6 +460,114 @@ comment
 u128:
   value
 comment
+  float16 value: C, a 2-byte floating point number (C's _Float16, IEEE binary16; at compile time for its size alone); called with a value, converts it.
+float16:
+  value
+comment
+  bfloat16 value: C, a 2-byte floating point number (GNU C's __bf16; at compile time for its size alone); called with a value, converts it.
+bfloat16:
+  value
+comment
+  complex float16 value: C, a complex number of two float16 parts, real part and imag part (C's _Complex _Float16); called with a value, converts it.
+complex float16:
+  value
+comment
+  short fract value: C, fixed point, 1 byte, 7 fractional bits (short _Fract); called with a value, converts it.
+short fract:
+  value
+comment
+  unsigned short fract value: C, fixed point, 1 byte, 8 fractional bits (unsigned short _Fract); called with a value, converts it.
+unsigned short fract:
+  value
+comment
+  sat short fract value: C, saturating fixed point, 1 byte, 7 fractional bits (_Sat short _Fract); called with a value, converts it.
+sat short fract:
+  value
+comment
+  sat unsigned short fract value: C, saturating fixed point, 1 byte, 8 fractional bits (_Sat unsigned short _Fract); called with a value, converts it.
+sat unsigned short fract:
+  value
+comment
+  fract value: C, fixed point, 2 bytes, 15 fractional bits (_Fract); called with a value, converts it.
+fract:
+  value
+comment
+  unsigned fract value: C, fixed point, 2 bytes, 16 fractional bits (unsigned _Fract); called with a value, converts it.
+unsigned fract:
+  value
+comment
+  sat fract value: C, saturating fixed point, 2 bytes, 15 fractional bits (_Sat _Fract); called with a value, converts it.
+sat fract:
+  value
+comment
+  sat unsigned fract value: C, saturating fixed point, 2 bytes, 16 fractional bits (_Sat unsigned _Fract); called with a value, converts it.
+sat unsigned fract:
+  value
+comment
+  long fract value: C, fixed point, 4 bytes, 31 fractional bits (long _Fract); called with a value, converts it.
+long fract:
+  value
+comment
+  unsigned long fract value: C, fixed point, 4 bytes, 32 fractional bits (unsigned long _Fract); called with a value, converts it.
+unsigned long fract:
+  value
+comment
+  sat long fract value: C, saturating fixed point, 4 bytes, 31 fractional bits (_Sat long _Fract); called with a value, converts it.
+sat long fract:
+  value
+comment
+  sat unsigned long fract value: C, saturating fixed point, 4 bytes, 32 fractional bits (_Sat unsigned long _Fract); called with a value, converts it.
+sat unsigned long fract:
+  value
+comment
+  short accum value: C, fixed point, 2 bytes, 8 integer and 7 fractional bits (short _Accum); called with a value, converts it.
+short accum:
+  value
+comment
+  unsigned short accum value: C, fixed point, 2 bytes, 8 integer and 8 fractional bits (unsigned short _Accum); called with a value, converts it.
+unsigned short accum:
+  value
+comment
+  sat short accum value: C, saturating fixed point, 2 bytes, 8 integer and 7 fractional bits (_Sat short _Accum); called with a value, converts it.
+sat short accum:
+  value
+comment
+  sat unsigned short accum value: C, saturating fixed point, 2 bytes, 8 integer and 8 fractional bits (_Sat unsigned short _Accum); called with a value, converts it.
+sat unsigned short accum:
+  value
+comment
+  accum value: C, fixed point, 4 bytes, 16 integer and 15 fractional bits (_Accum); called with a value, converts it.
+accum:
+  value
+comment
+  unsigned accum value: C, fixed point, 4 bytes, 16 integer and 16 fractional bits (unsigned _Accum); called with a value, converts it.
+unsigned accum:
+  value
+comment
+  sat accum value: C, saturating fixed point, 4 bytes, 16 integer and 15 fractional bits (_Sat _Accum); called with a value, converts it.
+sat accum:
+  value
+comment
+  sat unsigned accum value: C, saturating fixed point, 4 bytes, 16 integer and 16 fractional bits (_Sat unsigned _Accum); called with a value, converts it.
+sat unsigned accum:
+  value
+comment
+  long accum value: C, fixed point, 8 bytes, 32 integer and 31 fractional bits (long _Accum); called with a value, converts it.
+long accum:
+  value
+comment
+  unsigned long accum value: C, fixed point, 8 bytes, 32 integer and 32 fractional bits (unsigned long _Accum); called with a value, converts it.
+unsigned long accum:
+  value
+comment
+  sat long accum value: C, saturating fixed point, 8 bytes, 32 integer and 31 fractional bits (_Sat long _Accum); called with a value, converts it.
+sat long accum:
+  value
+comment
+  sat unsigned long accum value: C, saturating fixed point, 8 bytes, 32 integer and 32 fractional bits (_Sat unsigned long _Accum); called with a value, converts it.
+sat unsigned long accum:
+  value
+comment
   float128 value: C, binary128 (C's _Float128, GNU C's __float128): x86_64's, beside its long double; long double on riscv64 and aarch64. Its literal is the exact hex float with Q after it.
 float128:
   value

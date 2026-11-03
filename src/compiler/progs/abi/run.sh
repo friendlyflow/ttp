@@ -9,7 +9,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 c=$here/../..
 mkdir -p "$o"
 case $t in
-arm) cc=$GLIBC_CC_arm; ct="armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16"; x=armv7l-unknown-linux-gnueabihf-; s2ff=s2ff-arm.pl; q="qemu-arm"; src=s; asl=; dopt="-r -t"; gf=;;
+arm) cc=$GLIBC_CC_arm; ct="armv7a-linux-gnueabihf -mfloat-abi=hard -mfpu=vfpv3-d16"; x=armv7l-unknown-linux-gnueabihf-; s2ff=s2ff-arm.pl; q="qemu-arm"; src=s; asl=; dopt="-r -t"; gf=-mfp16-format=ieee; cf=-ffixed-point;;
 # (aarch64: the numeric labels named, the .Ls assembled keeping its local labels, as src/glibc does)
 aarch64) cc=$GLIBC_CC_aarch64; ct="aarch64-linux-gnu"; x=aarch64-unknown-linux-gnu-; s2ff=s2ff-aarch64.pl; q="qemu-aarch64"; src=Ls; asl=-Wa,-L; dopt="-r -t -M no-aliases"; gf=-fno-section-anchors;;
 # (x86_64: native; the x87's long doubles, gcc's and ttpc's; GNU's forms, x86_64gnu.ff, for gcc's code)
@@ -26,8 +26,8 @@ test $src = s || perl "$c/gen/$s2ff" --locals "$o/abi_gcc.s" > "$o/abi_gcc.$src"
 ${x}objdump -d $dopt "$o/abi_gcc.o" > "$o/abi_gcc.dump"
 perl "$c/gen/$s2ff" --page 'abi gcc' "$o/abi_gcc.$src" "$o/abi_gcc.dump" > "$o/abi_gcc.ff.txt"
 perl "$c/gen/fftext.pl" ff "$o/abi_gcc.ff.txt" > "$o/abi_gcc.ff"
-timeout 60 "$C2FF_CLANG" -x c -Xclang -ast-dump=json -fsyntax-only --target=$ct -std=gnu11 -w -I"$here" "$here/abi_main.c" > "$o/abi_main.json"
-"$cc" -E -P -I"$here" "$here/abi_main.c" > "$o/abi_main.i"
+timeout 60 "$C2FF_CLANG" -x c $cf -Xclang -ast-dump=json -fsyntax-only --target=$ct -std=gnu11 -w -I"$here" "$here/abi_main.c" > "$o/abi_main.json"
+"$cc" -E -P $gf -I"$here" "$here/abi_main.c" > "$o/abi_main.i"
 # (c2ff's program includes a library folder: here gcc's functions are a tree of their own)
 timeout 120 perl "$c/gen/c2ff.pl" --target $t --program abitest --start "$o/abi_main.json=$here/abi_main.c" -- main $(grep -o "^[a-z0-9_ ]* \(cb_[a-z0-9_]*\) (" "$here/abi_main.c" | sed "s/.* \(cb_[a-z0-9_]*\) (/\1/") 2> "$o/abi_main.c2ff.err" | sed -e '/^include$/,+1d' > "$o/abi_main.ff.txt"
 perl "$c/gen/fftext.pl" ff "$o/abi_main.ff.txt" > "$o/abi_main.ff"
