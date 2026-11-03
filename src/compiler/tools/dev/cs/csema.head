@@ -1,0 +1,8 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+csema [-d] [-t target] file.i > file.ff: the types and semantics of a gcc-preprocessed unit (tools/csem.ff) as an annotated tree, each declaration a
+node of its name and canonical type, each expression a node of its kind, type, value category and cast kind or value, its operands under it, each
+record's layout (offsets, size, align); -d writes the same as lines, as gen/clangsema.pl writes clang's (the check). target: riscv64 (the default),
+x86_64, aarch64, arm.
+csema -l [-t target] [-p page] [-n name.i] -s glibc-src [-g libgcc-src] -S shared.ff [-P program [-I index.ff] [-T]] [-Z name] [-W name] file.i root ...: the C layer of what the roots reach in the unit,
+as text, as gen/c2ff.pl writes it (--page, --program, --index, --start, --zero, --weak).

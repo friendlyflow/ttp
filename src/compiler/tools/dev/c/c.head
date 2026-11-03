@@ -1,0 +1,17 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+The C parser (T3a): GNU C as gcc -E leaves it in a .i, as glibc writes it, parsed into a tree of its own; the printer writes such a tree back as C. Library pages of the tools cparse and cprint.
+Its dev source is C (tools/dev/c, tools/dev/mk.sh), made ff by gen/c2ff.pl; the cp_ functions first are the runtime that C calls (rt.ff, fftree.ff).
+The lexer (C23's bool and constexpr keywords too, for gnu23 units): line markers dropped, other directives (#pragma, #ident) kept as one token; identifiers, pp-numbers, character and string literals with their prefixes,
+punctuators. Typedef names in scopes (blocks, parameters, for), as C's.
+The tree: a token is a leaf of its bytes (a narrow literal's bytes that are not UTF-8 as octal escapes; past 255 bytes a node "token" of pieces);
+adjacent strings a node "str". A kind is a node of children: no identifier contains a space or is a keyword or punctuation.
+Items: decl (specs, then an init decl each: declarator, ": width", asm (name), __attribute__ ..., = initializer), fun def (specs, declarator, asm and attributes, K&R decls, block), directive, _Static_assert, __extension__ (item), asm, ;
+(with attributes).
+specs: keywords and typedef names as leaves, struct / union / enum (attributes, the tag, { members or enumerators }, : base), __attribute__ and [[]] (their tokens), typeof / _Alignas / _BitInt / _Atomic (type or expression).
+Declarators: a name; ? (none); * (inner, then qualifiers and attributes); [] (inner, then static, qualifiers and the size); () (inner, then param (specs, declarator), ... or K&R names); ( ) (attributes, inner).
+Statements: block, expr, if, while, do, for (init: ; or expr or decl; condition; step; body), switch, case (value [, high], item), default, label (name, attributes, item), goto, goto *, return, break, continue, ;, asm (qualifiers, template,
+: sections of operand ([] name, constraint, expression) or strings or labels), __label__.
+Expressions: an operator with its operands (one: prefix; post ++ and post -- postfix), () call, [] index, . and ->, cast (type, value), sizeof / alignof (type or value), ?, ?: , ",", compound literal (type, {}), stmt expr, _Generic (assoc),
+__builtin_offsetof, __builtin_va_arg, __builtin_types_compatible_p, __builtin_convertvector; type is specs then a declarator.
+Initializers: an expression or {} of items, an item designated (. name, [] index, [...] range, then the value).

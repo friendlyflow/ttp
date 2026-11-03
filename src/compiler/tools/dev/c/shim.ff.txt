@@ -1,0 +1,196 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+comment
+  the runtime the C parser's C calls (its dev source declares them): rt.ff's and fftree.ff's
+cp_file:
+  u8
+  * pointer
+  path:
+    char
+    * pointer
+  size:
+    long
+    * pointer
+  return
+    read file
+      path
+      size
+cp_write:
+  long
+  fd:
+    int
+  p:
+    u8
+    * pointer
+  n:
+    long
+  return
+    syscall
+      SYS_write
+      fd
+      p
+      n
+cp_exit:
+  void
+  status:
+    int
+  out flush
+  syscall
+    SYS_exit
+    status
+cp_write_ff:
+  void
+  root:
+    node
+    * pointer
+  check node
+    root
+  hash node
+    root
+  nd_emit
+    root
+  out_flush
+cp_read_ff:
+  node
+  * pointer
+  p:
+    u8
+    * pointer
+  n:
+    long
+  return
+    read ff
+      p
+      n
+cp_readlink:
+  long
+  path:
+    char
+    * pointer
+  buf:
+    u8
+    * pointer
+  room:
+    long
+  sysno:
+    long
+    78
+  probe:
+    char
+    255
+  here:
+    long
+    0
+    -
+    100
+  comment
+    readlinkat by its number: 78 on riscv64 and aarch64, 267 on x86_64 (its char signed), 332 on arm (its long 4 bytes)
+  if
+    probe
+    <
+    0
+    sysno
+    =
+    267
+  if
+    sizeof
+      long
+    ==
+    4
+    sysno
+    =
+    332
+  return
+    syscall
+      sysno
+      here
+      path
+      buf
+      room
+cp_heap_file:
+  void
+  path:
+    char
+    * pointer
+  size:
+    long
+  here:
+    long
+    0
+    -
+    100
+  fd:
+    long
+    syscall
+      SYS_openat
+      here
+      path
+      578
+      384
+  nul:
+    u8
+    0
+  p:
+    long
+    0
+  comment
+    the heap in a file, unlinked at once, when one does not fit in memory: the kernel writes its pages out and reads them back (csema -l of all of glibc on a machine without swap)
+  if
+    fd
+    <
+    0
+    die
+      cast
+        char
+        * pointer
+      cannot open the heap's file
+  syscall
+    SYS_unlinkat
+    here
+    path
+    0
+  syscall
+    SYS_lseek
+    fd
+    :
+      size
+      -
+      1
+    0
+  syscall
+    SYS_write
+    fd
+    nul
+    & address
+    1
+  p
+  =
+  cast
+    long
+  syscall
+    SYS_mmap
+    0
+    size
+    3
+    1
+    fd
+    0
+  if
+    p
+    &
+    4095
+    die
+      cast
+        char
+        * pointer
+      cannot map the heap's file
+  rt
+    heap next
+  =
+  p
+  rt
+    heap end
+  =
+  p
+  +
+  size
