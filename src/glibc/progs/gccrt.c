@@ -288,6 +288,10 @@ bf __floatbitintbf (const unsigned long *, int);
 #ifdef __arm__
 float __floatbitinthf (const unsigned int *, int);
 #endif
+#ifdef __arm__
+#include "gccrt-fixed.h"
+#include "gccrt-fixedops.h"
+#endif
 static double dv[] = { 0.0, -0.0, 1.0, -2.5, 3.0e300, 1.0e-310, __builtin_inf (), -__builtin_inf (), __builtin_nan ("") };
 #define N (sizeof dv / sizeof dv[0])
 
@@ -495,6 +499,10 @@ int main (void)
 #ifndef __arm__
   for (i = 0; i < N; i++)
     w (__unordtf2 (dv[i], dv[(i + 7) % N]));
+#endif
+#ifdef __arm__
+  fxall ();
+  fxops ();
 #endif
   static const unsigned char s1[] = "libgcc in ff", s2[] = "libgcc in FF";
   w (__gcc_bcmp (s1, s2, 10)); w (__gcc_bcmp (s1, s2, 12) != 0);

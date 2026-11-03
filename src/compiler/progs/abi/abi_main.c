@@ -365,6 +365,26 @@ static void af16 (void)
   check (g_ah3 (), "g_ah3");
 }
 #endif
+#ifdef __arm__
+lk_t cb_fx (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f) { return d; }
+int cb_fxc (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f) { return *(signed char *) &a == 0x40 && *(int *) &c == 0x12000 && *(short *) &e == 0x2000 && *(unsigned *) &f == 0x18000; }
+fxs cb_fxs (fxs a, long _Accum b) { *(int *) &a.y = (int) *(long long *) &b; return a; }
+static void afx (void)
+{ long _Accum (*p) (short _Fract, long _Accum, _Accum, long _Accum, _Sat _Fract, unsigned _Accum) = f_fx;
+  int (*pc) (short _Fract, long _Accum, _Accum, long _Accum, _Sat _Fract, unsigned _Accum) = f_fxc;
+  fxs (*q) (fxs, long _Accum) = f_fxs;
+  fxs a, r; long _Accum v;
+  v = p (0.5hr, 1.5lk, 2.25k, -3.5lk, 0.25r, 1.5uk);
+  check (*(long long *) &v == -7516192768LL, "f_fx");
+  check (pc (0.5hr, 1.5lk, 2.25k, -3.5lk, 0.25r, 1.5uk), "f_fxc");
+  check (g_fxc (), "g_fxc");
+  *(short *) &a.x = 0x4000; *(int *) &a.y = 0;
+  r = q (a, 1.5lk);
+  check (*(short *) &r.x == 0x4000 && *(int *) &r.y == (int) 0xc0000000, "f_fxs");
+  check (g_fx (), "g_fx");
+  check (g_fxs (), "g_fxs");
+}
+#endif
 int main (void)
 {
   /* the functions of gcc whose result is not an int: through pointers of
@@ -457,6 +477,7 @@ int main (void)
 #endif
 #ifdef __arm__
   af16 ();
+  afx ();
 #endif
 #if defined __x86_64__ || defined __aarch64__ || defined __riscv
   f16 ();

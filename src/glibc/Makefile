@@ -167,6 +167,8 @@ CPUS_x86_64 := max Nehalem qemu64
 # arm: armv7-a with NEON and VFPv4 at their newest (max) and a Cortex-A15
 CPUS_arm := max cortex-a15
 CPUS := $(CPUS_$(GTARGET))
+# (arm's gccrt: fixed point, which clang reads with this)
+PROGCLANG_arm := -ffixed-point
 PROGFLAGS := $(PROGFLAGS_$(GTARGET))
 # Every heavy step (mki.pl, clang, c2ff, gcc, ttpc, qemu) runs as RUN -t
 # SECONDS command: in one of the machine's shared slots (slot.sh), under a
@@ -177,6 +179,8 @@ PROGFLAGS := $(PROGFLAGS_$(GTARGET))
 CAPKB_arm := 8000000
 CAPKB := $(or $(CAPKB_$(GTARGET)),4000000)
 RUN := sh ../compiler/gen/slot.sh -v $(CAPKB)
+# (a thousand small runs, each a tiny unit of arm's fixed-bit.c: in no slot, as asm-check's)
+RUNN := sh ../compiler/gen/slot.sh -n -v $(CAPKB)
 
 # M1, string: strlen, memcpy, memset, strcmp and strchr, each its ifunc, its
 # generic C and its asm (vector; memcpy also for fast misaligned access),
@@ -382,6 +386,12 @@ CFLAGS_unwind := $(if $(filter arm,$(GTARGET)),-funwind-tables)
 # link.h's, which libgcc's unwinder has; libgcc's then come before stdio's,
 # so its soft-fp is the one of the names glibc's soft-fp defines too, the
 # same code.)
+# (arm's fixed-bit.c: each mode's object; those of the modes T and of TI, which arm has not, are empty)
+LBUILD ?= $(HOME)/.cache/ttp/libgcc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
+LOBJ := $(LBUILD)/build/$(TRIPLE)/libgcc
+LIBGCC_FIXED := $(if $(filter arm,$(GTARGET)),$(shell sed -n 's/.* -o \([^ ]*\)\.o .*fixed-bit\.c.*/\1/p' $(LOBJ)/build.log | sort -u))
+LIBGCC_FIXEDC := $(filter-out %TQ %TA %TI,$(foreach o,$(LIBGCC_FIXED),$(if $(findstring TQ,$(o))$(findstring TA,$(o))$(findstring TI,$(o)),,$(o))))
+LIBGCC_FIXEDE := $(filter-out $(LIBGCC_FIXEDC),$(LIBGCC_FIXED))
 LIBGCC_C_riscv64 := $(addprefix _,negdi2 lshrdi3 ashldi3 ashrdi3 cmpdi2 ucmpdi2 clear_cache trampoline _main absvsi2 absvdi2 addvsi3 \
 	addvdi3 subvsi3 subvdi3 mulvsi3 mulvdi3 negvsi2 negvdi2 ctors ffssi2 ffsdi2 clz clzsi2 clzdi2 ctzsi2 ctzdi2 popcount_tab \
 	popcountsi2 popcountdi2 paritysi2 paritydi2 powisf2 powidf2 powixf2 powitf2 mulhc3 mulsc3 muldc3 mulxc3 multc3 divhc3 \
@@ -441,7 +451,7 @@ LIBGCC_C_arm := _muldi3 _negdi2 _cmpdi2 _ucmpdi2 _trampoline __main _absvsi2 _ab
 	floatunsidf extendsfdf2 truncdfsf2 fixsfbitint floatbitintsf fixdfbitint floatbitintdf floatbitinthf \
 	enable-execute-stack hardcfr fp16 unwind-arm pr-support unwind-c emutls linux-atomic linux-atomic-64bit \
 	_fixdfdi _fixsfdi _fixunsdfdi _fixunssfdi
-LIBGCC_C := $(LIBGCC_C_$(GTARGET))
+LIBGCC_C := $(LIBGCC_C_$(GTARGET)) $(LIBGCC_FIXEDC)
 # (and its asm: riscv64's save-restore and division, x86_64's ms_abi
 # register saves and the split stack's morestack.S)
 LIBGCC_ASM_riscv64 := save-restore muldi3 div
@@ -658,14 +668,21 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # The tree's license (license.ff.txt) is at its root, and each page first
 # has the license of each file it is made of, its header (c2ff, s2ff
 # --header; ../compiler/gen/Header.pm).
+# (long lists in files: arm's gccrt has more than a command takes)
+define nl
+
+
+endef
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
 $$(FF)/$(1).ff: $$(OBJS_all_$(1):%=$$(I)/%.$$(UNITDEP)) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
 	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
-	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS_$(1)) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) $$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i) \
-	    -- $$(ROOTS_$(1)) $$(if $$(call startms,$(1)),$$(ROOTS_start)) $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
+	$$(file >$$(FF)/$(1).units,$$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json=$$(I)/$$(o).i$$(nl)))
+	$$(file >$$(FF)/$(1).rootlist,$$(foreach r,$$(ROOTS_$(1)) $$(if $$(call startms,$(1)),$$(ROOTS_start)),$$(r)$$(nl)))
+	$$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(C2FFFLAGS_$(1)) $$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z)) $$(foreach w,$$(call with_start,WEAKS,$(1)),--weak $$(w)) @$$(FF)/$(1).units \
+	    -- @$$(FF)/$(1).rootlist $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
 	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
@@ -790,10 +807,11 @@ $(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
 	rm -rf $(FF)/$*
 	$(RUN) -t 120 perl ../compiler/gen/ffsplit.pl $(FF)/$*.ff.txt $(FF)/$*
 
+$(FF)/gccrt-prog.ff: progs/gccrt-fixed.h progs/gccrt-fixedops.h
 $(FF)/%-prog.ff: progs/%.c clang-prelude.h ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm
 	mkdir -p $(FF)
 	$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $< -o $(FF)/$*-prog.i
-	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
+	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h $(PROGCLANG_$(GTARGET)) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $(FF)/$*-prog.i > $(FF)/$*-prog.json
 	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(filter $*,$(OWNSTART)),--start,$(if $(call startms,$*),,--start)) \
 	    $(if $(filter $*,$(INDEXED)),--index $(FF)/$*/index.ff) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main $(PROGROOTS_$*) > $(FF)/$*-prog.ff.txt
@@ -861,6 +879,7 @@ $(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl ../compiler/
 
 # (x86_64's with SSE4.2: the builtins of gcc's intrinsics that strcspn-sse4's C calls)
 RTFLAGS_x86_64 := -msse4.2
+RTFLAGS_arm := -ffixed-point
 # (aarch64's with aarch64.h: libgcc's unwinder calls gcc's builtins clang has not)
 RTFLAGS_aarch64 := -include ../libgcc/aarch64.h
 # (arm's libgcc defines the __sync functions, clang's builtins: __Sync_
@@ -874,7 +893,8 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 
 define roundtrip
 $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json)
-	$$(RUN) -t 900 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(OBJS_all_$(1):%=$$(I)/%.json)
+	$$(file >$$(FF)/$(1).jsons,$$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json$$(nl)))
+	$$(RUN) -t 900 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json @$$(FF)/$(1).jsons
 	$$(RUN) -t 300 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
@@ -1191,8 +1211,6 @@ print-%:
 # saves of i386/cygming's stubs and the split stack's morestack.S.
 # the shared reference (the user, 2026-10-28), as glibc-gcc16: built once with
 # make libgcc-ref, then only read by the checks of every lane
-LBUILD ?= $(HOME)/.cache/ttp/libgcc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
-LOBJ := $(LBUILD)/build/$(TRIPLE)/libgcc
 export LIBGCC_SRC := $(LBUILD)/gcc-16.2.0
 LI := $(I)/libgcc
 # The objects of libgcc.a and libgcc_eh.a: its C and asm (LIBGCC_C and
@@ -1219,8 +1237,7 @@ LIBGCC_NOCLANG_aarch64 := strub $(LIBGCC_DFP)
 # which ttpc has no type of: 1602 objects, by their source in build.log)
 # (libgcc2.c's four of AEABI's base procedure call standard, pcs
 # ("aapcs"), are ff's base pcs functions)
-LIBGCC_FIXED = $(shell sed -n 's/.* -o \([^ ]*\)\.o .*fixed-bit\.c.*/\1/p' $(LOBJ)/build.log | sort -u)
-LIBGCC_NOCLANG_arm = $(LIBGCC_ASMWEAK_arm) strub $(LIBGCC_FIXED)
+LIBGCC_NOCLANG_arm = $(LIBGCC_ASMWEAK_arm) strub $(LIBGCC_FIXEDE)
 LIBGCC_NOCLANG = $(LIBGCC_NOCLANG_$(GTARGET))
 
 libgcc-ref: $(LOBJ)/libgcc.a
@@ -1247,14 +1264,14 @@ LCLANG_aarch64 := -include ../libgcc/aarch64.h
 LCLANG_arm := -Wno-invalid-gnu-asm-cast
 $(LI)/%.json: $(LI)/%.i ../libgcc/clangfix.pl ../libgcc/aarch64.h clangvec.pl clang-prelude.h
 	perl ../libgcc/clangfix.pl --target $(GTARGET) $< $(if $(filter $*,$(LCLANGVEC_$(GTARGET))),| perl clangvec.pl) > $(LI)/$*.clang.i
-	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json \
+	$(if $(filter $*,$(LIBGCC_FIXEDC)),$(RUNN),$(RUN)) -t 300 $(C2FF_CLANG) -x c $(if $(filter $*,$(LIBGCC_FIXEDC)),-ffixed-point,-include clang-prelude.h $(LCLANG_$(GTARGET))) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w $(LI)/$*.clang.i > $@
 	$(if $(filter arm,$(GTARGET)),sed -i 's/"__Sync_/"__sync_/g' $@)
 # (x86_64's milestones take a C object's pass, UNITDEP c2ff: libgcc's from
 # its AST, which stays; a static pattern, so that a unit whose AST is not
 # made yet does not take glibc's rule, $(I)/%.c2ff, of the .i alone)
 $(LIBGCC_C:%=$(LI)/%.c2ff): $(LI)/%.c2ff: $(LI)/%.json ../compiler/gen/c2ff.pl
-	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $<=$(LI)/$*.i
+	$(if $(filter $*,$(LIBGCC_FIXEDC)),$(RUNN),$(RUN)) -t 300 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $<=$(LI)/$*.i
 	@touch $@
 
 # (the lists themselves: libgcc.roots checks them against gcc's archives,

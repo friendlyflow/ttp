@@ -285,3 +285,17 @@ ah_t cb_ah3 (ah_t a, double b, float c, int d, ah_t e);
 int g_ah2 (void);
 int g_ah3 (void);
 #endif
+#ifdef __arm__
+/* fixed point on arm: as the integers of their sizes, core registers, a pair for long accum */
+typedef struct { _Fract x; _Accum y; } fxs;
+typedef long _Accum lk_t;
+long _Accum f_fx (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f);
+int f_fxc (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f);
+fxs f_fxs (fxs a, long _Accum b);
+lk_t cb_fx (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f);
+int cb_fxc (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f);
+int g_fxc (void);
+fxs cb_fxs (fxs a, long _Accum b);
+int g_fx (void);
+int g_fxs (void);
+#endif
