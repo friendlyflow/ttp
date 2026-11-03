@@ -210,3 +210,11 @@ ah_t f_ah3 (ah_t a, double b, float c, int d, ah_t e) { return e; }
 int g_ah2 (void) { return AB (cb_ah2 (AH (0x3c00), AH (0x3e00))) == 0x3e00; }
 int g_ah3 (void) { return AB (cb_ah3 (AH (1), 2.0, 3.0f, 4, AH (5))) == 5; }
 #endif
+#ifdef __arm__
+long _Accum f_fx (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f) { return d; }
+int f_fxc (short _Fract a, long _Accum b, _Accum c, long _Accum d, _Sat _Fract e, unsigned _Accum f) { return *(signed char *) &a == 0x40 && *(int *) &c == 0x12000 && *(short *) &e == 0x2000 && *(unsigned *) &f == 0x18000; }
+fxs f_fxs (fxs a, long _Accum b) { a.y = (_Accum) 0; *(int *) &a.y = (int) *(long long *) &b; return a; }
+int g_fx (void) { long _Accum v = cb_fx (0.5hr, 1.5lk, 2.25k, -3.5lk, 0.25r, 1.5uk); return *(long long *) &v == -7516192768LL; }
+int g_fxc (void) { return cb_fxc (0.5hr, 1.5lk, 2.25k, -3.5lk, 0.25r, 1.5uk); }
+int g_fxs (void) { fxs a = { 0.5r, 0.0k }; fxs r = cb_fxs (a, 1.5lk); return *(short *) &r.x == 0x4000 && *(int *) &r.y == (int) 0xc0000000; }
+#endif
