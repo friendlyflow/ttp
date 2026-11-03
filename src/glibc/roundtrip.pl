@@ -649,9 +649,9 @@ sub asm_text {
 sub asm_barrier {
     my ($n) = @_;
     my ($t, $oc) = asm_text($n);
-    # (and on x86_64, as c2ff, one with inputs alone: math_force_eval's,
-    # __pthread_mutex_lock_full's)
-    defined $t && $t !~ /\S/ && ((@$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc) || ($target eq 'x86_64' && !@$oc));
+    # (and on x86_64 and aarch64, as c2ff, one with inputs alone:
+    # math_force_eval's, __pthread_mutex_lock_full's; aarch64's w too)
+    defined $t && $t !~ /\S/ && ((@$oc && !grep { !/\+/ || ($target eq 'aarch64' ? !/^[=+&]*[rxw]+$/ : !/^[=+&]*[rx]+$/) } @$oc) || ($target =~ /^(?:x86_64|aarch64)$/ && !@$oc));
 }
 
 # A declaration's value: a char array set from a text as the text's codes, the
