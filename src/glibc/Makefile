@@ -653,7 +653,7 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # functions (stdbit.ff.txt, from mkstdbit.pl: perl mkstdbit.pl >
 # stdbit.ff.txt) and libatomic's functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
 # atomics.ff.txt; a target with real atomics has its own, ATOMICS:
-# atomics-riscv64.ff.txt, perl mkatomics.pl riscv64). The asm parts share
+# atomics-riscv64.ff.txt, perl mkatomics.pl riscv64, and atomics-x86_64.ff.txt). The asm parts share
 # one page, glibc asm: the trees a
 # program reads have 255 pages in all (c2ff makes a page per directory);
 # past 255 items it is in layers (LAYERS, below: x86_64's string has 283).
