@@ -857,7 +857,10 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # and record layouts (gen/clangsema.pl) line for line (gen/csemacmp.pl);
 # tools-check on src/glibc/progs' and progs/abi's C (riscv64's semantics,
 # each target's build the same lines), src/glibc's csema-check on every unit
-# of the riscv64 milestones.
+# of each target's milestones. csema -l (T3c, same library): the C layer of
+# what a unit's roots reach, gen/c2ff.pl's output; gen/clayercheck.sh and
+# src/glibc's clayer-check compare the two unit by unit, byte for byte;
+# tools-check: each target's build writes the same (the machine's build).
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -1010,6 +1013,10 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	@echo "tools-check-$(1): ffmerge agrees with ffmerge.sh on clean merges, conflicts, a merged text that is not a tree, inputs that are not trees, an empty or missing base and the same tree on both sides"
 	sh gen/cparsecheck.sh -r "$(RUN_$(1))" -w $(CPREF) $(TL)/$(1)/cparse $(TL)/$(1)/cprint $(CPCC) $(TL)/cparse/$(1) $(CPUNITS)
 	CLANG="$(CSCLANG)" sh gen/csemacheck.sh -r "$(RUN_$(1))" -w $(CSREF) $(TL)/$(1)/csema $(TL)/csema/$(1) $(CPUNITS)
+	@for u in $(CPUNITS); do b=$$$$(basename $$$$u .i); for w in $(1) $(TOOLT); do s=0; r="$$$$(test $$$$w = $(1) && echo '$(RUN_$(1))' || echo '$(RUN_$(TOOLT))')"; \
+	    $$$$r $(TL)/$$$$w/csema -l -s ../glibc -S shared.ff $$$$u main > $(TL)/csema/$(1)/$$$$b.l.$$$$w 2>&1 || s=$$$$?; echo "exit $$$$s" >> $(TL)/csema/$(1)/$$$$b.l.$$$$w; done; \
+	    cmp $(TL)/csema/$(1)/$$$$b.l.$(1) $(TL)/csema/$(1)/$$$$b.l.$(TOOLT) || { echo "tools-check-$(1): csema -l on $$$$u: not this machine's build's"; exit 1; }; done
+	@echo "tools-check-$(1): csema -l writes this machine's build's C layer on $(words $(CPUNITS)) units"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
