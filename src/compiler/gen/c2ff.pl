@@ -1463,14 +1463,14 @@ sub asm_ins_other {
         return node('msr', node(sysreg($a[0])), node($a[1])) if $op eq 'msr' && @a == 2 && defined sysreg($a[0]);
         # an immediate (brk #1000: abort's trap), none (yield, isb), a
         # barrier's option (dmb ish)
-        return node($op, node($a[0] =~ /^#?0x/i ? hex $a[0] =~ s/^#//r : $a[0] =~ s/^#//r)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
+        return node($op, node($1 =~ /^0x/i ? hex $1 : $1)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
         return node($op) if $op =~ /^(?:nop|yield|wfe|wfi|sev|sevl|isb|clrex)$/ && !@a;
         # a cache's line cleaned by address (libgcc's __aarch64_sync_cache_range:
         # dc cvau, ic ivau)
         return node(lc("$op.$a[0]"), node($a[1])) if $op =~ /^(?:dc|ic)$/ && @a == 2 && $a[0] =~ /^(?:cvau|ivau)$/i && $a[1] =~ /^x\d+$/;
         # an instruction as its word (libgcc's aarch64_vg: .inst of cntd x0,
         # for an old assembler)
-        return node('word', node($a[0] =~ /^0x/i ? hex $a[0] : $a[0])) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
+        return node('word', node($1 =~ /^0x/i ? hex $1 : $1)) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
         # CALL_LIBC_ARM_ZA_DISABLE's (arch_fork, SME's ZA before a clone):
         # the frame's notes say nothing to an asm function, which has none;
         # x30 kept in a register around a call, by its label (s2ff's form)
@@ -1567,9 +1567,9 @@ sub asm_stmt_other {
     # +w of a float, a double, a long double) changes nothing: no code
     return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || ($target eq 'aarch64' ? !/^[=+&]*[rxw]+$/ : !/^[=+&]*[rx]+$/) } @$oc;
     # and one with inputs alone (math_force_eval's "" : : "f" (x) of a long
-    # double on x86_64, "x" of a float; aarch64's "w"), of values with no
-    # effects: none
-    return () if $target =~ /^(?:x86_64|aarch64)$/ && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops;
+    # double on x86_64, "x" of a float; aarch64's "w" of a long double, in no
+    # register of ttpc's), of values with no effects: none
+    return () if ($target eq 'x86_64' || ($target eq 'aarch64' && @$ops && !grep { tword($_) ne 'long double' } @$ops)) && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops;
     # (x86_64's x87 operands, libm's long double: asm_x87)
     return asm_x87($n, $template, $oc, $ic, $ops, $clob) if $target eq 'x86_64' && grep { /^[=&]*t$/ } @$oc;
     # (rbx too: the C layer keeps nothing in it across a call)
