@@ -914,9 +914,9 @@ $(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
-$(TL)/$(1)/csema: tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
+$(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $(CSLIB) $$< $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $(CSLIB) tools/csema.ff $$< $$@ > $$@.lst
 	chmod +x $$@
 
 tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/result

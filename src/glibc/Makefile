@@ -934,7 +934,7 @@ csema-check:
 # csema -l against c2ff.pl, unit by unit, byte for byte: every unit of this
 # build's milestones from the names its object defines (as all-survey) and
 # each milestone program (../compiler/gen/clayercheck.sh); then how many of each
-# milestone's objects agree. c2ff.pl's own reach over many units is not csema's yet.
+# milestone's objects agree.
 CLUNITS = $(patsubst $(I)/%.i,%,$(sort $(filter-out %.clang.i,$(wildcard $(I)/*/*.i))))
 CLPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
 clayer-check:
@@ -944,6 +944,29 @@ clayer-check:
 	$(foreach m,$(CHECK_MS),echo "clayer-check $(m): $$(n=0; for o in $(OBJS_all_$(m)); do grep -q "^OK $$o$$" $(BUILD)/clayer/result && n=$$((n + 1)); done; echo $$n) of $(words $(OBJS_all_$(m))) objects$$(grep -q '^OK $(m)-prog$$' $(BUILD)/clayer/result && echo ', its program too')";) \
 	exit $$s
 .PHONY: clayer-check
+# and each milestone's whole page, many units at once as c2ff.pl has them, its
+# reach, its --zero, --weak, --keep-going: FF/m.ff.txt, as this build made it
+# with c2ff.pl, begins with it byte for byte (../compiler/gen/clpagecheck.sh).
+clayer-page-%:
+	@mkdir -p $(BUILD)/clayer
+	@printf '%s\n' $(foreach o,$(OBJS_all_$*),$(I)/$(o)) > $(BUILD)/clayer/$*.page.units
+	@{ printf '%s\n' $(ROOTS_$*) $(if $(call startms,$*),$(ROOTS_start)); for a in $(ASMS_all_$*); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done | sort -u; } > $(BUILD)/clayer/$*.page.roots
+	@CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl $(SLOT) -v 9000000 -t 1800 sh ../compiler/gen/clpagecheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" -i $(I) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff \
+	    -l $(or $(LICENSE_$*),license.ff.txt) -u $(BUILD)/clayer/$*.page.units -R $(BUILD)/clayer/$*.page.roots \
+	    -f "$(foreach z,$(call with_start,ZEROS,$*),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$*),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$*)),-k)" \
+	    $(CPTOOLS)/csema $(FF)/$*.ff.txt $(BUILD)/clayer/$*.page
+clayer-pages: $(CHECK_MS:%=clayer-page-%)
+.PHONY: clayer-pages
+# all of glibc's page, from FF/glibc.units and FF/glibc.roots (make FF/glibc.ff
+# first; not in ports-check, which does not build it): its heap in a file
+clayer-glibc:
+	@mkdir -p $(BUILD)/clayer
+	@sed 's/=.*//; s/\.json$$//' $(FF)/glibc.units > $(BUILD)/clayer/glibc.page.units
+	@CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl $(SLOT) -v 70000000 -t 3600 sh ../compiler/gen/clpagecheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" -M 64 -i $(I) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff \
+	    -l $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) -u $(BUILD)/clayer/glibc.page.units -R $(FF)/glibc.roots \
+	    -f "$(foreach z,$(ZEROS_glibc),-Z $(z)) $(foreach w,$(WEAKS_glibc),-W $(w)) -k" \
+	    $(CPTOOLS)/csema $(FF)/glibc.ff.txt $(BUILD)/clayer/glibc.page
+.PHONY: clayer-glibc
 
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
