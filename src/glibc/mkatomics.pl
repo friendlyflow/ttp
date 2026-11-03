@@ -14,6 +14,8 @@
 # loads and stores): glibc's threads and processes that share memory (a
 # process-shared barrier: tst-arc4random-fork lost updates of its out with
 # the plain ones). A result of fewer bits than a word is zero-extended.
+# (aarch64: ldaxr and stlxr around each read-modify-write, ldar and stlr for
+# plain loads and stores, as gcc's without LSE; each CPU has them.)
 #
 # A host tool (core Perl only).
 use strict;
@@ -29,6 +31,7 @@ sub content { (node($_[0]), node('* pointer')) }
 
 my $target = shift // '';
 if ($target eq 'riscv64') { rv64(); exit 0 }
+if ($target eq 'aarch64') { a64(); exit 0 }
 die "mkatomics: no real atomics for $target yet\n" if $target ne '';
 
 my @fns;
@@ -74,6 +77,49 @@ sub asmfn {
         if ($lab) { push @{ $lab->{children} }, $i } else { push @top, $i }
     }
     node("$name:", node('asm'), @top);
+}
+sub a64 {
+    my @f;
+    # the size's suffix, its register for the value, the load and store of a
+    # plain memory operand, the zero extension of a result (ubfm immr imms)
+    my %sf = (1 => 'b', 2 => 'h', 4 => 'w', 8 => '');
+    my %ls = (1 => ['ldrb', 'strb'], 2 => ['ldrh', 'strh'], 4 => ['ldrw', 'strw'], 8 => ['ldr', 'str']);
+    my %zx = (1 => 7, 2 => 15, 4 => 31);
+    # (in ttpc's order, the destination last: op rm rn rd)
+    my %new = (add => "add x1 x10 x11", sub => "sub x1 x10 x11", and => "and x1 x10 x11", or => "orr x1 x10 x11",
+        xor => "eor x1 x10 x11", nand => "and x1 x10 x11\norn x11 xzr x11");
+    for my $n (1, 2, 4, 8) {
+        my $s = $sf{$n};
+        my $r = $n == 8 ? 'x' : 'w';
+        my ($ld, $st) = @{ $ls{$n} };
+        my $rmw = sub { my ($body) = @_; "L1:\nldaxr$s x0 ${r}10\n$body\nstlxr$s w12 x0 ${r}11\ncbnzw rel:L1 w12" };
+        my $res11 = $n == 8 ? "orr x11 xzr x0" : "ubfm 0 $zx{$n} x11 x0";
+        push @f, asmfn("__atomic_load_$n", "ldar$s x0 ${r}0\nret");
+        push @f, asmfn("__atomic_store_$n", "stlr$s x0 ${r}1\nret");
+        push @f, asmfn("__atomic_exchange_$n", "L1:\nldaxr$s x0 ${r}10\nstlxr$s w12 x0 ${r}1\ncbnzw rel:L1 w12\norr x10 xzr x0\nret");
+        # compare-exchange: x1 the expected's address, x2 the desired
+        push @f, asmfn("__atomic_compare_exchange_$n", "
+            $ld 0 x1 ${r}9
+            L1:
+            ldaxr$s x0 ${r}10
+            subs x9 x10 xzr
+            b.ne rel:L2
+            stlxr$s w12 x0 ${r}2
+            cbnzw rel:L1 w12
+            movz 0 1 x0
+            ret
+            L2:
+            clrex
+            $st 0 x1 ${r}10
+            movz 0 0 x0
+            ret");
+        for my $op (qw(add sub and or xor nand)) {
+            push @f, asmfn("__atomic_fetch_${op}_$n", $rmw->($new{$op}) . "\norr x10 xzr x0\nret");
+            push @f, asmfn("__atomic_${op}_fetch_$n", $rmw->($new{$op}) . "\n$res11\nret");
+        }
+    }
+    print write_txt(node('comment', node("libatomic's functions in aarch64's atomics (ldaxr and stlxr, ldar and stlr), written by mkatomics.pl aarch64.")),
+        node('atomics:', ttp_license(), @f));
 }
 sub rv64 {
     my @f;
