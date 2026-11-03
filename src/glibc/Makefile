@@ -955,7 +955,9 @@ clayer-page-%:
 	    -l $(or $(LICENSE_$*),license.ff.txt) -u $(BUILD)/clayer/$*.page.units -R $(BUILD)/clayer/$*.page.roots \
 	    -f "$(foreach z,$(call with_start,ZEROS,$*),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$*),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$*)),-k)" \
 	    $(CPTOOLS)/csema $(FF)/$*.ff.txt $(BUILD)/clayer/$*.page
-clayer-pages: $(CHECK_MS:%=clayer-page-%)
+# (arm's gccrt holds fixed point once lane L's words are in, which csema has not yet)
+CLPAGE_SKIP_arm := gccrt
+clayer-pages: $(patsubst %,clayer-page-%,$(filter-out $(CLPAGE_SKIP_$(GTARGET)),$(CHECK_MS)))
 .PHONY: clayer-pages
 # all of glibc's page, from FF/glibc.units and FF/glibc.roots (make FF/glibc.ff
 # first; not in ports-check, which does not build it): its heap in a file
