@@ -685,7 +685,7 @@ static struct cs_ex *cs_unary (struct node *n)
   struct cs_ex *o, *e;
   unsigned char *t = n->text;
   long len = n->len;
-  if (same (t, len, "&&")) { e = cs_mk (E_ADDRLABEL, T->vptr, 0); e->name = n->kids[0]->text; e->nlen = n->kids[0]->len; return e; }
+  if (same (t, len, "&&")) { e = cs_mk (E_ADDRLABEL, T->vptr, 0); e->name = n->kids[0]->text; e->nlen = n->kids[0]->len; e->lk = cs_label_k (e->name, e->nlen); return e; }
   o = cs_ex_of (n->kids[0]);
   if (same (t, len, "&")) { e = cs_mk1 (E_UN, cs_ptr_to (o->t), 0, o); return cs_named (e, "&"); }
   if (same (t, len, "*")) {

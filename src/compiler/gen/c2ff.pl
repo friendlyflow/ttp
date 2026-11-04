@@ -115,6 +115,9 @@ my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of ta
 my %ownfnrec;              # a function's own definitions of tags its unit defines otherwise
 my %recfn;                 # a tag a function's own definition registered first: that function
 my %ownanon;               # a unit's own anonymous records, where another unit's at the same place differ (places)
+my %anonin;                # a record's own anonymous records, where the first at the same place differs (anon_fields)
+our $reg_unit;             # the unit whose declarations are being registered
+our $cur_tag = '';         # the record whose fields are being written
 my %owntd;                 # a unit's own typedefs, where another unit's came first
 my %constint;              # a unit's const integer globals of a number (tst-random's const int nseq = 3): the counts of arrays
 my %tagname;                # struct, union, enum tags and their ff names
@@ -216,7 +219,7 @@ sub ctype {
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($desugar{$t}) if exists $desugar{$t};
     return ctype($typeof{$1}) if $t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1};
-    if (my $a = own_anon($t) || $anon{ anon_key($t) // '' }) {
+    if (my $a = ($anonin{$cur_tag} // {})->{ anon_key($t) // '' } || own_anon($t) || $anon{ anon_key($t) // '' }) {
         my ($tag, $name) = @$a;
         $wanttag{$tag} = 1;
         return $tagname{$tag} //= $name;
@@ -588,7 +591,7 @@ sub own_name {
     return $own{$u}{$name} = "$name " . unit_name($u) if %treedefs && ($d->{storageClass} // '') eq 'static' && $treedefs{ ffname($name) };
     my $old = $map->{$name} or return $name;
     return $name if $old->[1] == $u || ($d->{storageClass} // '') ne 'static' || ($old->[0]{storageClass} // '') ne 'static';
-    return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]);
+    return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]) && !names_otherwise(def_text($d, $u), $u, $old->[1]);
     $own{$u}{$name} = "$name " . unit_name($u);
 }
 # A record tag's definition (key "struct x"). The first is everyone's; a
@@ -598,12 +601,43 @@ sub own_name {
 sub reg_rec {
     my ($key, $d, $u) = @_;
     if (!$rec{$key}) { $rec{$key} = $d; $recunit{$key} = $u; return 1 }
-    return 0 if !$recunit{$key} || $recunit{$key} == $u || def_text($d, $u) eq def_text($rec{$key}, $recunit{$key});
+    return 0 if !$recunit{$key} || $recunit{$key} == $u;
+    if (def_text($d, $u) eq def_text($rec{$key}, $recunit{$key})) { push @{ $u->{ff_shared} }, [$key, $d]; return 0 }
+    rec_own($key, $d, $u);
+    0;
+}
+sub rec_own {
+    my ($key, $d, $u) = @_;
     my $own = "$key " . unit_name($u);
     $rec{$own} //= $d;
     $recunit{$own} //= $u;
     $ownrec{$u}{$key} = $own;
+}
+# Whether a definition's text names, in unit u, what it does not in unit v: a
+# record either has of its own (struct waitlist in rt/ and in resolv/: the same
+# text of struct async_waitlist held another struct waitlist), or a typedef.
+sub names_otherwise {
+    my ($text, $u, $v) = @_;
+    while ($text =~ /\b(?:(struct|union)\s+)?([A-Za-z_]\w*)/g) {
+        if (defined $1) { my $k = "$1 $2"; return 1 if ($ownrec{$u}{$k} // '') ne ($ownrec{$v}{$k} // '') }
+        elsif (($owntd{$u}{$2} // '') ne ($owntd{$v}{$2} // '')) { return 1 }
+    }
     0;
+}
+# A unit's records of the first's text: its own too where they name otherwise,
+# until there are no more (one may point to one defined after it).
+sub own_by_names {
+    my ($u) = @_;
+    my $more = 1;
+    while ($more) {
+        $more = 0;
+        for (@{ $u->{ff_shared} // [] }) {
+            my ($key, $d) = @$_;
+            next if $ownrec{$u}{$key} || !names_otherwise(def_text($d, $u), $u, $recunit{$key});
+            rec_own($key, $d, $u);
+            $more = 1;
+        }
+    }
 }
 sub own { my ($name) = @_; $cur_unit && $own{$cur_unit} && $own{$cur_unit}{$name} // $name }
 sub inner_tags { my ($n) = @_; (($n->{kind} // '') =~ /^(EnumDecl|RecordDecl)$/ ? $n : ()), map { inner_tags($_) } @{ $n->{inner} || [] } }
@@ -620,6 +654,7 @@ for my $u (@units) {
     $u->{text} = do { local $/; <$h> };
     close $h;
     places($ast->{ff_places}, $u);
+    local $reg_unit = $u;
     my $file = '';
     for my $d (@{ $ast->{inner} }) {
         $file = $d->{loc}{file} if $d->{loc} && $d->{loc}{file};
@@ -786,6 +821,7 @@ for my $u (@units) {
             set_enumd("enum $name", $d);
         }
     }
+    own_by_names($u);
 }
 
 # The anonymous enum, struct or union that is the type of a field gets a name
@@ -808,7 +844,16 @@ sub anon_fields {
         my $key = anon_key($k->{type}{qualType} // '') // next;
         my $kind = $last->{kind} eq 'EnumDecl' ? 'enum' : $last->{tagUsed};
         my $name = "$rname $k->{name}";
-        $anon{$key} = ["$kind $name", $name];
+        # (the same place defined otherwise, a skeleton included for another
+        # type, dynarray-skeleton.c's union u: by the record it is in; the
+        # stride of fork_handler_list's array was the first dynarray's)
+        my $first = $anon{$key} && $rec{ $anon{$key}[0] };
+        if ($kind ne 'enum' && $first && $first != $last && rec_sig($last) ne rec_sig($first)) {
+            $anonin{"$r->{tagUsed} $rname"}{$key} = ["$kind $name", $name];
+        } else {
+            $anon{$key} = ["$kind $name", $name];
+        }
+        $recunit{"$kind $name"} //= $reg_unit if $kind ne 'enum' && $reg_unit;
         if ($kind eq 'enum') { $enumd{"enum $name"} //= $last } else { $rec{"$kind $name"} //= $last; anon_fields($last, $name) }
         undef $last;
     }
@@ -999,6 +1044,16 @@ sub unit_pass {
     write_unit($file, "$s | $t | $hash | " . ikey($u) . "\n", nfreeze($ast));
 }
 sub unplace { my ($n) = @_; delete @$n{qw(loc range)}; unplace($_) for @{ $n->{inner} || [] } }
+# What a record holds, as the pass keeps it: its fields' names and types, with
+# what it defines in it (a record in a record has no place left for def_text).
+sub rec_sig {
+    my ($r) = @_;
+    join ';', map {
+        my $k = $_;
+        $k->{kind} eq 'FieldDecl' ? 'f ' . ($k->{name} // '') . ' ' . ($k->{type}{qualType} // '') . ' ' . ($k->{isBitfield} // '') . ' ' . join(',', map { $_->{value} // '' } grep { $_->{kind} eq 'ConstantExpr' } @{ $k->{inner} || [] })
+        : $k->{kind} eq 'RecordDecl' ? 'r ' . ($k->{tagUsed} // '') . ' ' . ($k->{name} // '') . ' (' . rec_sig($k) . ')' : ()
+    } @{ $r->{inner} || [] };
+}
 sub units_ready {
     my @todo = grep { !unit_fresh($_) } @_;
     # (a unit whose AST is gone and whose pass is not of its .i, or not of
@@ -1054,7 +1109,7 @@ sub places {
             # of FLOAT, a double in strfromd's and a long double in
             # strfroml's): that unit's own, named with it
             my ($r, $ru) = ($rec{ $a->[0] }, $recunit{ $a->[0] });
-            next if !$u || !$r || !$ru || $ru == $u || def_text($n, $u) eq def_text($r, $ru);
+            next if !$u || !$r || !$ru || $ru == $u || def_text($n, $u) eq def_text($r, $ru) && rec_sig($n) eq rec_sig($r);
             my $own = "$name " . unit_name($u);
             $ownanon{$u}{$key} = ["$kind $own", $own];
             $rec{"$kind $own"} //= $n;
@@ -2722,6 +2777,7 @@ sub label_name {
 }
 # The LabelStmts under a node.
 sub labels { my ($n) = @_; (($n->{kind} // '') eq 'LabelStmt' ? $n : ()), map { labels($_) } kids($n) }
+sub label_decls { my ($n) = @_; (($n->{kind} // '') eq 'LabelDecl' ? $n : ()), map { label_decls($_) } kids($n) }
 # Whether a node of that kind is under n.
 sub holds { my ($n, $k) = @_; (($n->{kind} // '') eq $k) || grep { holds($_, $k) } kids($n) }
 # The ParmVarDecls and VarDecls under a node (a function's own).
@@ -3006,8 +3062,9 @@ sub stmt {
         # (a declaration after a label, C23's, libgcc's btree_lookup restart:
         # struct btree_node *iter: the label alone, then the declaration, whose
         # scope is the block's, not the label's)
-        return (node(label_name($n->{name}) . ':'), stmt($s)) if $s && $s->{kind} eq 'DeclStmt';
-        return node(label_name($n->{name}) . ':', stmt($s));
+        my $ln = label_name($label{ $n->{declId} } // $n->{name});
+        return (node("$ln:"), stmt($s)) if $s && $s->{kind} eq 'DeclStmt';
+        return node("$ln:", stmt($s));
     }
     return node('goto', node(label_name($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     # GNU's goto *p: to the address p holds (a label's, &&L)
@@ -3337,6 +3394,10 @@ sub function {
     # (the types of its locals by name, for a typeof of one: typeof_expr)
     local %ltypeof = map { ($_->{name} => qt($_)) } grep { $_->{name} && $_->{type} } locals($d);
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);
+    # (GNU's __label__: a label in ff is the function's, so each local one is a
+    # name of its own, x 1, x 2 in the order they are declared: strptime_l's
+    # do_normal, once in each of its statement expressions, all went to the first)
+    { my %k; $label{ $_->{id} } = "$_->{name} " . ++$k{ $_->{name} } for label_decls($d) }
     my ($ret) = split_fn(expand(qt($d)));
     defined $ret or die "c2ff: not a function type: " . qt($d) . "\n";
     my @p = grep { $_->{kind} eq 'ParmVarDecl' } kids($d);
@@ -3404,7 +3465,8 @@ sub leave_out {
 # them, whatever names the object: tst-putenv's module of a constructor alone)
 want($_) for map { @{ $ctors_of{$_} // [] } } grep { $_->{object} } @units;
 while (defined(my $name = next_name())) {
-    if (my $a = $alias{$name}) { push @out, [$a->[1], node(ffname($name) . ':', node('alias'), node(ffname($a->[0])))]; want($a->[0]); next }
+    # (of what its unit names: a static of its own, nss/fgetgrent's buffer of __libc_fgetgrent_freemem_ptr)
+    if (my $a = $alias{$name}) { local $cur_unit = $a->[1]; my $t = own($a->[0]); push @out, [$a->[1], node(ffname($name) . ':', node('alias'), node(ffname($t)))]; want($t); next }
     if (my $f = $ifunc{$name}) {
         my ($d, $u, $r) = @$f;
         my ($ret, $ps) = split_fn(expand(qt($d)));
@@ -3492,6 +3554,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
         $tdone{$tag} = 1;
         # (its fields' types as its unit has them)
         local $cur_unit = $recunit{$tag} // $cur_unit;
+        local $cur_tag = $tag;
         # a tag C only declares (struct rtld_catch;) is an incomplete type, used
         # through an address: a struct without fields
         my $d = $rec{$tag} // $enumd{$tag} // ($tag =~ /^(struct|union) / ? { kind => 'RecordDecl', tagUsed => $1, inner => [] } : undef)

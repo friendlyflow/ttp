@@ -701,6 +701,14 @@ static char *cl_label_name (unsigned char *p, long n)
   return f;
 }
 
+/* (a local one, GNU's __label__: x 1, x 2, in the order they are declared, c2ff's) */
+static char *cl_label_of (unsigned char *p, long n, long k)
+{
+  char *nm;
+  if (!k) return cl_label_name (p, n);
+  nm = cl_cat3 (cl_copy (p, n), " ", cl_num (k));
+  return cl_label_name ((unsigned char *) nm, cstrlen (nm));
+}
 static void cl_arg (struct cs_ex *a, struct cl_list *o)
 {
   if (a->k == E_ICE && a->op == CK_INTEGRALCAST) {
@@ -1399,7 +1407,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
       if (f) { cl_push (o, f); return; }
     }
   }
-  if (k == E_ADDRLABEL) { cl_push (o, cl_n1 ("address", cl_n (cl_label_name (n->name, n->nlen)))); return; }
+  if (k == E_ADDRLABEL) { cl_push (o, cl_n1 ("address", cl_n (cl_label_of (n->name, n->nlen, n->lk)))); return; }
   if (C->in_global && k == E_ICE && n->op == CK_ARRAYTOPOINTERDECAY) {
     struct cs_ex *s = cl_strip (cl_k (n, 0));
     if (s->k == E_MEM || s->k == E_IDX) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
@@ -2208,7 +2216,7 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
   }
   case S_CASE: case S_DEFAULT: cl_labelled (n, o); return;
   case S_LABEL: {
-    char *l = cl_cat (cl_label_name (n->name, n->nlen), ":");
+    char *l = cl_cat (cl_label_of (n->name, n->nlen, n->lk), ":");
     if (n->a && n->a->k == S_DECL) { cl_push (o, cl_n (l)); cl_stmt (n->a, o); return; }
     {
       struct cl_list *x = cl_l ();
@@ -2217,7 +2225,7 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
     }
     return;
   }
-  case S_GOTO: cl_push (o, cl_n1 ("goto", cl_n (cl_label_name (n->name, n->nlen)))); return;
+  case S_GOTO: cl_push (o, cl_n1 ("goto", cl_n (cl_label_of (n->name, n->nlen, n->lk)))); return;
   case S_IGOTO: cl_push (o, cl_n1 ("goto", cl_nl ("content", cl_ex (cl_p (n->e))))); return;
   case S_BREAK: cl_push (o, cl_n ("break")); return;
   case S_CONTINUE: cl_push (o, cl_n ("continue")); return;

@@ -87,6 +87,9 @@ static void cl_reach (void)
     struct cs_decl *d;
     if (a) {
       struct cl_list *x = cl_l ();
+      /* (of what its unit names: a static of its own) */
+      cl_enter (cl_get (&C->aliasunit, name));
+      a = cl_own (a);
       cl_w (x, "alias");
       cl_w (x, cl_ffname (a));
       cl_out_of (cl_nl (cl_cat (cl_ffname (name), ":"), x), cl_get (&C->aliasunit, name));
@@ -292,6 +295,7 @@ static void cl_types_all (void)
           cl_set (&C->tdone, tag);
           /* (its fields' types as its unit has them) */
           cl_enter (cl_get (&C->recunit, tag));
+          C->cur_tag = tag;
           /* (a record the program only declares and its tree defines: the tree's) */
           if (C->program && !r && (cl_starts (tag, "struct ") || cl_starts (tag, "union "))) {
             char *nm = cl_starts (tag, "struct ") ? tag + 7 : tag + 6;

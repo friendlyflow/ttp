@@ -899,7 +899,20 @@ $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_al
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
-glibc-roundtrip: floats-roundtrip
+# All of glibc: every function and global of its page (make FF/glibc.ff first;
+# in a BUILD of all of glibc), a unit at a time (../compiler/gen/rtall.sh), which
+# keeps no AST on disk: RTDIR gets each file's normal forms, its report the
+# differences. RTPAGE and RTUNITS: another build's page, read only.
+RTPAGE ?= $(FF)/glibc.ff.txt
+RTUNITS ?= $(FF)/glibc.units
+RTDIR ?= $(BUILD)/rt
+RTJOBS ?= 4
+glibc-roundtrip:
+	@CLANGB="$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion" \
+	CLANGU="$(CLANG_AST)" \
+	CLANGL="$(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w" \
+	CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl \
+	$(SLOT) -t $(or $(RTSECS),14400) sh ../compiler/gen/rtall.sh -j $(RTJOBS) -t $(GTARGET) -u $(RTUNITS) $(RTPAGE) $(RTDIR)
 
 .PHONY: strlen-check asm-check glibc-roundtrip
 
@@ -990,6 +1003,26 @@ clayer-glibc:
 	    $(CPTOOLS)/csema $(FF)/glibc.ff.txt $(BUILD)/clayer/glibc.page
 .PHONY: clayer-glibc
 
+# ---- two units at once ---------------------------------------------------
+# progs/units-a.c and -b.c, which define one name otherwise (each file's head):
+# through c2ff.pl and csema -l, byte for byte, and round-tripped.
+UNITS2 := units-a units-b
+units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen/ff2c.pl ../compiler/gen/c2ff.pl clang-prelude.h
+	@mkdir -p $(FF)/units
+	@for u in $(UNITS2); do \
+	    $(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $(abspath progs)/$$u.c -o $(FF)/units/$$u.i && \
+	    $(RUN) -t 120 $(CLANG_AST) $(FF)/units/$$u.i > $(FF)/units/$$u.json || exit 1; \
+	done
+	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(foreach u,$(UNITS2),$(FF)/units/$(u).json=$(FF)/units/$(u).i) -- ua ub > $(FF)/units/page.ff.txt 2> $(FF)/units/page.err
+	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff $(UNITS2:%=$(FF)/units/%.i) -- ua ub > $(FF)/units/cs.ff.txt
+	@cmp $(FF)/units/page.ff.txt $(FF)/units/cs.ff.txt
+	@$(RUN) -t 60 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/units/page.ff.txt $(FF)/units/back.c $(FF)/units/back.names
+	@$(RUN) -t 60 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
+	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/units/back.c > $(FF)/units/back.json
+	@$(RUN) -t 60 perl roundtrip.pl --target $(GTARGET) $(FF)/units/back.names $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)
+	@grep -q 'blist u header' $(FF)/units/page.ff.txt && grep -q 'clist u header' $(FF)/units/page.ff.txt && grep -q '^ *holder .*units-b' $(FF)/units/page.ff.txt
+.PHONY: units-check
+
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
 # in for all of glibc (a path from an expression, a call through a comma's
@@ -1005,7 +1038,7 @@ clayer-glibc:
 # progs/textcount.c, the same way: a string literal's prefix and a
 # variable-length array's count, which c2ff reads from clang's text, on every
 # target, with its round trip.
-OWNSTART := generic stdbit textcount
+OWNSTART := generic stdbit textcount roundnames
 $(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
 	mkdir -p $(FF)
 	{ cat license.ff.txt; $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } > $(FF)/$*.ff.txt
@@ -1013,6 +1046,7 @@ $(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wi
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
 $(eval $(call check,textcount))
+$(eval $(call check,roundnames))
 GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
@@ -1027,6 +1061,7 @@ $(1)-roundtrip: $$(FF)/$(1)-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 endef
 $(eval $(call progrt,generic,$(GENERIC_FNS)))
 $(eval $(call progrt,textcount,main))
+$(eval $(call progrt,roundnames,main))
 
 # ---- every check at once --------------------------------------------------------
 # make -jN all-checks: what the ports branch is checked with on GTARGET, the

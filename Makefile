@@ -151,7 +151,7 @@ PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-che
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 clayer-pages-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm clayer-pages-arm \
 	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
-	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t))
+	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t) roundnames-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
 # with its time and how much of it its commands waited for a slot
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
@@ -292,6 +292,12 @@ pc-textcount-$(1): pc-units-$(1)
 	$$(call pc_step,textcount-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) textcount-check textcount-roundtrip)
 endef
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_textcount,$(t))))
+# where one name or one place stands for two things (progs/roundnames.c, progs/units-a.c and -b.c) on each target
+define pc_roundnames
+pc-roundnames-$(1): pc-units-$(1) pc-compiler-check
+	$$(call pc_step,roundnames-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) roundnames-check roundnames-roundtrip units-check)
+endef
+$(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_roundnames,$(t))))
 .PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
 
 clean:

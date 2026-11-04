@@ -1128,7 +1128,11 @@ static struct cs_st *cs_item (struct node *n)
     }
     return s;
   }
-  if (cs_is (n, "__label__")) return cs_st_new (S_DECL, n);
+  if (cs_is (n, "__label__")) {
+    long i = 0;
+    while (i < n->count) { cs_label_decl (n->kids[i]->text, n->kids[i]->len); i++; }
+    return cs_st_new (S_DECL, n);
+  }
   if (cs_is (n, "directive")) { cs_top_add (TOP_WEAK, 0, 0, n->kids[0], 1); return 0; }
   return cs_stmt (n);
 }
@@ -1204,8 +1208,10 @@ static struct cs_st *cs_stmt1 (struct node *n)
   struct cs_st *s;
   if (cs_is (n, "block")) {
     long m = cs_scope_in (), i = 0;
+    struct cs_lab *labs = T->labels;
     s = cs_st_new (S_BLOCK, n);
     while (i < n->count) { struct cs_st *k = cs_item (n->kids[i]); if (k) cs_st_add (s, k); i++; }
+    T->labels = labs;
     cs_scope_out (m);
     return s;
   }
@@ -1294,6 +1300,7 @@ static struct cs_st *cs_stmt1 (struct node *n)
     s = cs_st_new (S_LABEL, n);
     s->name = n->kids[0]->text;
     s->nlen = n->kids[0]->len;
+    s->lk = cs_label_k (s->name, s->nlen);
     s->a = cs_item (n->kids[n->count - 1]);
     return s;
   }
@@ -1304,7 +1311,7 @@ static struct cs_st *cs_stmt1 (struct node *n)
     return s;
   }
   if (cs_is (n, "asm")) return cs_asm_stmt (n);
-  if (cs_is (n, "goto")) { s = cs_st_new (S_GOTO, n); s->name = n->kids[0]->text; s->nlen = n->kids[0]->len; return s; }
+  if (cs_is (n, "goto")) { s = cs_st_new (S_GOTO, n); s->name = n->kids[0]->text; s->nlen = n->kids[0]->len; s->lk = cs_label_k (s->name, s->nlen); return s; }
   s = cs_item (n);
   return s;
 }
@@ -1327,6 +1334,7 @@ static struct cs_ex *cs_stmt_expr (struct node *blk)
 {
   long mark = T->out.n, sm = cs_scope_in (), i = 0;
   struct cs_ex *e = cs_mk (E_STMTX, cs_basic (TY_VOID), 0), *last = 0;
+  struct cs_lab *labs = T->labels;
   int ed = T->exdepth, dd = T->depth;
   struct cs_st *b = cs_st_new (S_BLOCK, blk);
   T->exdepth = 0;
@@ -1343,6 +1351,7 @@ static struct cs_ex *cs_stmt_expr (struct node *blk)
     } else { struct cs_st *k = cs_item (it); if (k) cs_st_add (b, k); }
     i++;
   }
+  T->labels = labs;
   cs_scope_out (sm);
   T->exdepth = ed;
   T->depth = dd;
@@ -1427,6 +1436,8 @@ static void cs_fundef (struct node *n)
   T->fn = d;
   T->fnret = cs_unqual (f->to);
   T->depth++;
+  T->labels = 0;
+  T->labcount = 0;
   d->body = cs_stmt (body);
   T->depth--;
   T->fn = 0;
