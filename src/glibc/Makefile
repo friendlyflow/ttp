@@ -1144,7 +1144,7 @@ ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(AL
 # and arm_sve.h, __Float32x4_t, __SVFloat32_t and gcc's __builtin_aarch64_*,
 # which clang does not read and ttpc's vector, x86_64's alone, does not take)
 ALLCSKIP_aarch64 := mathvec/advsimd/% mathvec/sve/%
-ALL_C = $(filter-out $(ALLCSKIP_$(GTARGET)),$(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))) $(SOFTFP:%=soft-fp/%) $(filter soft-fp/%,$(OBJS_ldouble_$(GTARGET)))
+ALL_C = $(filter-out $(ALLCSKIP_$(GTARGET)),$(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))) $(filter soft-fp/%,$(OBJS_ldouble))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 # crt1.o's parts, crti.o and crtn.o, which a program links before libc.a:
 # their definitions are the ones of a name libc.a defines too
@@ -1225,7 +1225,7 @@ $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THE
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
-	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
+	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 

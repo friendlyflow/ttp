@@ -1344,7 +1344,7 @@ $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int
 $ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long', 'i128 i128 i128', 'int i128 i128', 'int int int', 'int long long', 'u64 u64 u64';
 $ovf_armsub{$_} = 1 for 'i64 i64 i64', 'int i64 i64', 'u32 u32 u32';
 # (and builtins-arm.ff.txt's, of arm's 32-bit size_t)
-my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int', 'i64 i64 i64';
+my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int', 'i64 i64 i64', 'i64 int i64';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 our $asm_rd_out;
 my @xreg = qw(zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6);
@@ -1594,6 +1594,12 @@ sub asm_ins_other {
         # the FP status and control register (get_rounding_mode, fesetround)
         return node('vmrs', node($a[0])) if $op eq 'vmrs' && @a == 2 && $a[0] =~ /^r\d+$/ && $a[1] eq 'fpscr';
         return node('vmsr', node($a[1])) if $op eq 'vmsr' && @a == 2 && $a[0] eq 'fpscr' && $a[1] =~ /^r\d+$/;
+        # feraiseexcept's VFP by its coprocessor's words, as VFP's names: GNU's bytes.
+        # ldc p10, cr0 is vldr s0, ldcl s1; cdp p10 op1 cr0, cr0, cr0, op2 is
+        # s0 = s0 op s(op2), 8 vdiv, 3 vadd; mrc p10, 7 is vmrs
+        return node('vldr.f32', node(0), node($1), node($op eq 'ldc' ? 's0' : 's1')) if $op =~ m{^ldcl?$} && "@a" =~ m{^p10 cr0 \[(r\d+)\]$};
+        return node($a[1] eq '8' ? 'vdiv.f32' : 'vadd.f32', node("s$a[5]"), node('s0'), node('s0')) if $op eq 'cdp' && "@a" =~ m{^p10 [38] cr0 cr0 cr0 [01]$};
+        return node('vmrs', node($a[2])) if $op eq 'mrc' && "@a" =~ m{^p10 7 r\d+ cr1 cr0 0$};
     } elsif ($target eq 'x86_64') {
         # an instruction as its bytes (libgcc's cpuinfo.h: xgetbv as .byte
         # 0x0f, 0x01, 0xd0, for an old assembler)
