@@ -1085,7 +1085,7 @@ sub orig {
     # a function's static: its own name (of a unit's own function too)
     return $2 =~ s/'$//r if $n =~ /^(\S+ \S+\/\S+) (\S+)$/ && $fn{$1};
     # (a later one of its name: name#k, roundtrip.pl's)
-    if ($n =~ /^(\S+(?: \S+\/\S+)?) (\S+) (\d+)$/ && $fn{$1}) { my ($b, $k) = ($2, $3); return ($b =~ s/'$//r) . "#$k" }
+    if ($n =~ /^(\S+(?: \S+\/\S+)?) (\S+) (\d+)$/ && $fn{$1} && $2 ne 'literal') { my ($b, $k) = ($2, $3); return ($b =~ s/'$//r) . "#$k" }
     return $2 =~ s/'$//r if $n =~ /^(\S+) (\S+)$/ && $fn{$1};
     $n =~ s/'$//r;
 }
