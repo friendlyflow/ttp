@@ -745,7 +745,10 @@ sub flat_items { map { c($_) eq 'items' ? flat_items(kids($_)) : $_ } @_ }
 sub init_list {
     my ($t, $l) = @_;
     # (nothing in braces: gaih_inet's struct gaih_result res = {})
-    return '{}' if @$l == 1 && leaf($l->[0]) && c($l->[0]) eq ':';
+    if ($t->[0] eq 'rec' && @$l == 1 && leaf($l->[0]) && c($l->[0]) eq ':') {
+        my ($f1) = @{ $fieldcache{ $t->[1] } //= [fields($t->[1])] };
+        return '{}' if $f1 && $f1->{type}[0] !~ /^(?:rec|arr)$/;
+    }
     # (items in items: an array past 255 items, asincos.tbl's)
     my @i = flat_items(@$l);
     my @items = items(@i);
@@ -1040,7 +1043,7 @@ for my $v (grep { $var{$_} && $var{$_}{glibc} && !$var{$_}{weak} && $_ !~ /^(?:w
     my $ok = defined $init && eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$sec$init;"; 1 };
     warn $@ if defined $init && !$ok;
     # (where glibc has it: a unit's own static in that unit, a function's static in that function)
-    my $sf = $v =~ /^(\S+(?: \S+\/\S+)?) \S+$/ && $fn{$1} ? $1 : undef;
+    my $sf = $v =~ /^(\S+(?: \S+\/\S+)?) \S+(?: \d+)?$/ && $fn{$1} ? $1 : undef;
     my $hint = defined $sf ? 'in ' . orig($sf) : $v =~ /^\S+ (\S+\/\S+)$/ ? "unit $1" : '-';
     push @gdefline, [$#c, $hint, $sf] if $ok;
     push @gnames, join("\t", $ok ? 'global' : 'gfailed', cid($v), orig($v), $hint);
@@ -1081,6 +1084,8 @@ sub orig {
     return $1 if $n =~ /^(\S+) \S+\/\S+$/;
     # a function's static: its own name (of a unit's own function too)
     return $2 =~ s/'$//r if $n =~ /^(\S+ \S+\/\S+) (\S+)$/ && $fn{$1};
+    # (a later one of its name: name#k, roundtrip.pl's)
+    if ($n =~ /^(\S+(?: \S+\/\S+)?) (\S+) (\d+)$/ && $fn{$1}) { my ($b, $k) = ($2, $3); return ($b =~ s/'$//r) . "#$k" }
     return $2 =~ s/'$//r if $n =~ /^(\S+) (\S+)$/ && $fn{$1};
     $n =~ s/'$//r;
 }

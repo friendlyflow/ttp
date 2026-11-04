@@ -69,6 +69,22 @@ labels (int x)
   return r;
 }
 
+/* (e_acosh's cl, a table of its own in each branch) */
+static int
+tables (int i)
+{
+  if (i)
+    {
+      static const int t[] = { 1, 2, 3 };
+      return t[2];
+    }
+  else
+    {
+      static const int t[] = { 4, 5 };
+      return t[1];
+    }
+}
+
 struct wait { int result; struct wait *next; };
 struct waits { int n; struct wait list[3]; };
 
@@ -94,5 +110,7 @@ main (void)
   fails += labels (1) != 1011 + 100;
   fails += labels (0) != 202;
   fails += paths (&w);
+  fails += tables (1) != 3;
+  fails += tables (0) != 5;
   return fails;
 }

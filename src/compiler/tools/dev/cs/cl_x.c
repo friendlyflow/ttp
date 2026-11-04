@@ -2134,7 +2134,11 @@ static void cl_decl_stmt (struct cs_st *n, struct cl_list *o)
       }
     } else if (d->k == DK_FUNC) cl_fail ("a declaration of a function in a block, not extern", cl_dn (d));
     else if (d->sc == SC_STATIC && !cl_holds_addrlabel (d->init)) {
+      /* (a later one of its name is that name and its number: e_acosh's cl) */
       char *g = cl_cat3 (cl_ffname (C->cur_fn), " ", cl_ffname (cl_dn (d)));
+      long k = (long) cl_get (&C->staticcount, cl_dn (d)) + 1;
+      cl_put (&C->staticcount, cl_dn (d), (char *) k);
+      if (k > 1) g = cl_cat3 (g, " ", cl_num (k));
       d->global = g;
       cl_out (cl_decl (d, 1, g));
     } else cl_push (o, cl_decl (d, 0, 0));
@@ -2856,6 +2860,8 @@ static struct node *cl_function (char *name, struct cs_decl *d)
   struct cl_list *head = cl_l (), *ps = cl_l (), *st = cl_l ();
   struct cs_ty *f = cs_canon (d->t);
   long i = 0;
+  C->staticcount.tab = 0;
+  C->staticcount.count = 0;
   char *saved_fn = C->cur_fn;
   char *file, *comment;
   long nst = 0;

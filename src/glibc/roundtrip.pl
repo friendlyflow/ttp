@@ -206,6 +206,7 @@ sub retcls {
 
 # ---- the normal form ------------------------------------------------------------
 
+our %staticid;
 our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
 sub strip { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub unparen { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
@@ -214,6 +215,7 @@ sub name_of {
     my $n = $d->{name} // '';
     return $orig{$n} // $n if $side eq 'ff';
     return $regvar{$n} if $d->{kind} eq 'VarDecl' && $regvar{$n} && !$local{ $d->{id} };
+    return $staticid{ $d->{id} } if defined $d->{id} && $staticid{ $d->{id} };
     $n =~ s/^__builtin_((?:mem|str|stp)\w+|free|malloc)$/$1/;
     # (a call of copysign or fabs: of its builtin, as c2ff writes it)
     $n = "__builtin_$n" if $n =~ /^(?:copysign|fabs)[fl]?$/ && $d->{kind} eq 'FunctionDecl';
@@ -922,11 +924,28 @@ sub typeof_expr {
     return $1 =~ s/^\s+|\s+$//gr if $e =~ /^\(([^()]*\*)\s*\)\s*\S/;
     undef;
 }
+# A function's statics after the first of a name (as c2ff names them): by id, name#k
+sub static_ids {
+    my ($fn) = @_;
+    my (%k, %r, $w);
+    $w = sub {
+        my ($n) = @_;
+        if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && defined $n->{name} && !holds($n, 'AddrLabelExpr')) {
+            my $c = ++$k{ $n->{name} };
+            $r{ $n->{id} } = "$n->{name}#$c" if $c > 1;
+        }
+        $w->($_) for kids($n);
+    };
+    $w->($fn);
+    undef $w;
+    %r;
+}
 sub local_typedefs { my ($n) = @_; (($n->{kind} // '') eq 'TypedefDecl' ? ($n->{name} => $n->{type}{qualType}) : ()), map { local_typedefs($_) } kids($n) }
 sub fnorm {
     my ($fn) = @_;
     local %ltype = map { ($_->{name} => $_->{type}{qualType}) } grep { defined $_->{name} && $_->{type} } locals_decls($fn);
     local %labels = labels_of($fn);
+    local %staticid = static_ids($fn) if $side eq 'glibc';
     # (a typedef in a function: __nss_hostname_digits_dots_context's host_addr_t)
     local %tdef = (%tdef, local_typedefs($fn));
     local %local = locals_of($fn);
@@ -977,7 +996,7 @@ my @failed = grep { $_->[3] eq 'failed' } @bodies;
 my (%gwant, %gfound);
 for my $g (grep { $_->[3] eq 'global' } @globals) {
     my ($cid, $o, $hint) = @$g;
-    push @{ $gwant{$o} }, $g;
+    push @{ $gwant{ $o =~ s/#\d+$//r } }, $g;
 }
 my %seen;
 my %gextern;
@@ -1022,10 +1041,13 @@ sub unit_norms {
     # and its functions' statics
     for my $d (kids($ast)) {
         next unless $d->{kind} eq 'FunctionDecl' && defined $d->{name} && ($fnunit{ $d->{name} } // '') eq $j && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
+        local %staticid = static_ids($d);
         my @q = kids($d);
         while (my $n = shift @q) {
             if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && $gwant{ $n->{name} // '' }) {
-                for my $g (@{ $gwant{ $n->{name} } }) { $gf{ $g->[0] } //= gnorm($n) if $g->[2] eq "in $d->{name}" && !$gfound{ $g->[0] } }
+                # (name#k, a later one of its name in the function)
+                my $o = name_of($n);
+                for my $g (@{ $gwant{ $n->{name} } }) { $gf{ $g->[0] } //= gnorm($n) if $g->[2] eq "in $d->{name}" && $g->[1] eq $o && !$gfound{ $g->[0] } }
             }
             push @q, kids($n);
         }

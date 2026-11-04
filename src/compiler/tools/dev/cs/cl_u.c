@@ -53,6 +53,7 @@ struct cl_state {
   struct cl_unit **units; long nunits, roomunits;
   struct cl_map recunit, typedef_t, typedef_k, enumunit, aliasunit;
   struct cl_map owntd, ownrec, ownanon;
+  struct cl_map staticcount;   /* how many statics of a name the function at hand has had */
   struct cl_map anonin;        /* a record's own anonymous records, where the first at the same place differs: tag|key */
   char *cur_tag;               /* the record whose fields are being written */
   struct cl_unit **outu; long roomoutu;

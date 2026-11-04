@@ -1176,6 +1176,7 @@ sub want { my ($n) = @_; push @todo, $n unless $done{$n}++ }
 sub where { my ($n) = @_; my $l = $n->{range}{begin} // $n->{loc} // {}; $l = $l->{expansionLoc} // $l; ($l->{file} // '') . ':' . ($l->{line} // '?') }
 our $cur_fn = '';           # the function being translated, for messages
 our %staticname;            # a function's statics, by id: their names as globals
+our %staticcount;           # how many of a name the function at hand has had
 our $cur_global;            # the global whose items are being translated
 our $in_global;             # a global's items are being translated
 our %literals;              # its compound literals so far, by global
@@ -3043,7 +3044,10 @@ sub stmt {
         } elsif (($d->{storageClass} // '') eq 'static' && !holds($d, 'AddrLabelExpr')) {
             # a static of a function lives as long as the program: a global,
             # named for its function (hugepages' mode_always)
-            my $g = ffname($cur_fn) . ' ' . ffname($d->{name});
+            # (a later one of its name is that name and its number: e_acosh's
+            # cl, a table of its own in each branch, were all one global)
+            my $k = ++$staticcount{ $d->{name} };
+            my $g = ffname($cur_fn) . ' ' . ffname($d->{name}) . ($k > 1 ? " $k" : '');
             $staticname{"$cur_unit $d->{id}"} = $g;
             push @out, [$cur_unit, decl($d, 1, $g)];
             ();
@@ -3408,6 +3412,7 @@ sub function {
     local $cur_fn = $name;
     local %local = map { ($_->{id} => 1) } locals($d);
     local %localdecl = map { ($_->{name} // '') => $_ } locals($d);
+    local %staticcount;
     # (the types of its locals by name, for a typeof of one: typeof_expr)
     local %ltypeof = map { ($_->{name} => qt($_)) } grep { $_->{name} && $_->{type} } locals($d);
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);

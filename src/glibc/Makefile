@@ -903,6 +903,9 @@ $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
 # in a BUILD of all of glibc), a unit at a time (../compiler/gen/rtall.sh), which
 # keeps no AST on disk: RTDIR gets each file's normal forms, its report the
 # differences. RTPAGE and RTUNITS: another build's page, read only.
+# The rule (the user, 2026-11-04): run this on every change to c2ff.pl or csema,
+# before that merge goes into ports. It stays a target of its own, not a step of
+# ports-check (about 40 minutes with the slots busy).
 RTPAGE ?= $(FF)/glibc.ff.txt
 RTUNITS ?= $(FF)/glibc.units
 RTDIR ?= $(BUILD)/rt
