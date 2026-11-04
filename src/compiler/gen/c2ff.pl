@@ -1104,6 +1104,7 @@ sub ctor_priority {
 
 my (@out, %done, @todo);
 our %local;                 # the ids of the locals and parameters of the function
+our %localdecl;             # and each by its name (a variable-length array's count has only names)
 our %label;                 # the names of its labels, by id
 sub want { my ($n) = @_; push @todo, $n unless $done{$n}++ }
 
@@ -2557,7 +2558,8 @@ my %esc = (n => "\n", t => "\t", r => "\r", a => "\a", b => "\b", f => "\f", v =
 sub bytes {
     my ($n) = @_;
     my $s = $n->{value};
-    $s =~ s/^"|"$//g;
+    # (u8"..." too: c8rtomb's u8""[0] is 0; L, u and U are wide())
+    $s =~ s/^(?:u8)?"|"$//g;
     $s =~ s/\\(?:([0-7]{1,3})|x([0-9a-fA-F]+)|(.))/defined $1 ? chr(oct $1) : defined $2 ? chr(hex $2) : ($esc{$3} \/\/ stop("the escape \\$3", $n))/ge;
     $s;
 }
@@ -2573,7 +2575,9 @@ sub pieces {
     @p;
 }
 # A wide literal as an address: an array of its elements, a global of its
-# own (as a compiler lays a literal out), wide text 1, 2, ...
+# own (as a compiler lays a literal out), wide text 1, 2, ..., and the address
+# of its first element, as string_value's of a text (the array's own address
+# would count in arrays: L"ab"[1], L"ab" + 1).
 my $nwide = 0;
 sub wide_text {
     my ($n) = @_;
@@ -2582,7 +2586,7 @@ sub wide_text {
     my @e = wide($n);
     pop @e while @e && $e[-1] == 0;
     push @out, [$cur_unit, node("$name:", map({ node($_) } @t), grouped(255 - @t, map { node($_) } @e))];
-    node('address', node($name));
+    node('address', node($name, node('0')));
 }
 sub texts {
     my ($n) = @_;
@@ -3263,21 +3267,80 @@ sub decl {
     unshift @tls, align_node(align_attr($v));
     node(($name // ffname($v->{name})) . ':', @tls, map({ node($_) } @t), grouped(255 - @t - @tls, @i));
 }
-# A variable-length array's count from its text: names (its locals), numbers,
-# + - * / and parentheses, as ff infix.
+# A variable-length array's count from its text, which is all clang's JSON
+# has of it: names, numbers, calls, parentheses and + - * / % < > <= >= == !=
+# ?: (execvpe's argc > 1 ? 2 + argc : 3, tst-unlockedio's strlen (blah) + 1),
+# as ff infix, which reads them as C does. Anything else stops: a token left
+# out is a count that is not C's. (No types here: an argument gets no cast.)
 sub vla_count {
     my ($text, $v) = @_;
     # (sizeof of a string, its bytes and the 0: sysconf's sizeof ("/POSIX_V6_"))
     $text =~ s{\bsizeof\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)}{ (my $b = $1) =~ s/\\./x/g; length($b) + 1 }ge;
-    stop("the count of a variable-length array: $text", $v) if $text =~ /["']|\bsizeof\b/;
-    my @stack = ([]);
-    for my $tok ($text =~ /\s*([A-Za-z_]\w*|\d+|[-+*\/()])/g) {
-        if ($tok eq '(') { push @stack, []; next }
-        if ($tok eq ')') { my $in = pop @stack; push @{ $stack[-1] }, node(':', @$in); next }
-        push @{ $stack[-1] }, node($tok =~ /^[A-Za-z_]/ ? ffname($tok) : $tok);
+    my $bad = sub { stop("the count of a variable-length array: $text", $v) };
+    $bad->() if $text =~ /["']|\bsizeof\b/;
+    my @tok;
+    push @tok, $1 while $text =~ /\G\s*([A-Za-z_]\w*|\d+\b|<=|>=|==|!=|[-+*\/%<>?:(),])/gc;
+    $text =~ /\G\s*$/ or $bad->();
+    my @c = vla_items(\@tok, $bad);
+    @tok and $bad->();
+    @c;
+}
+# operand (operator operand) ..., up to a ) or , or the end, which it leaves.
+# In the middle of a ?: another ?: must be in parentheses: ff has it in a :,
+# as C's text would not say.
+sub vla_items {
+    my ($tok, $bad) = @_;
+    my (@o, $q);
+    $q = 0;
+    while (1) {
+        push @o, vla_operand($tok, $bad);
+        my $op = $tok->[0] // last;
+        last if $op eq ')' || $op eq ',';
+        $op =~ /^(?:[-+*\/%<>?:]|<=|>=|==|!=)$/ or $bad->();
+        $bad->() if $op eq '?' ? $q++ : $op eq ':' ? !$q-- : 0;
+        push @o, node(shift @$tok);
     }
-    @stack == 1 && @{ $stack[0] } or stop("the count of a variable-length array: $text", $v);
-    @{ $stack[0] };
+    $bad->() if $q;
+    @o;
+}
+sub vla_operand {
+    my ($tok, $bad) = @_;
+    my $t = shift(@$tok) // $bad->();
+    if ($t eq '(') {
+        my @in = vla_items($tok, $bad);
+        (shift(@$tok) // '') eq ')' or $bad->();
+        return node(':', @in);
+    }
+    return node($t) if $t =~ /^\d/;
+    $t =~ /^[A-Za-z_]/ or $bad->();
+    return vla_name($t) unless @$tok && $tok->[0] eq '(';
+    # a call, as expr's of a function by its name
+    shift @$tok;
+    my @args;
+    if (($tok->[0] // '') ne ')') {
+        while (1) {
+            my @a = vla_items($tok, $bad);
+            push @args, @a == 1 ? @a : node(':', @a);
+            last if ($tok->[0] // '') ne ',';
+            shift @$tok;
+        }
+    }
+    (shift(@$tok) // '') eq ')' or $bad->();
+    $bad->() if $localdecl{$t};
+    $t = $1 if $t =~ /^__builtin_((?:mem|str|stp)\w+)$/;
+    $bad->() if $t =~ /^__builtin_/;
+    $t = own($t);
+    want($t);
+    node(ffname($t), @args);
+}
+# a name in a count, as expr's of a reference to it: the text says no more
+# than its name, the function's locals say whose it is
+sub vla_name {
+    my ($name) = @_;
+    my $d = $localdecl{$name};
+    expr({ kind => 'DeclRefExpr', referencedDecl => $d ? { kind => $d->{kind}, name => $name, id => $d->{id} }
+        : defined $enumval{$name} || $enumof{$name} ? { kind => 'EnumConstantDecl', name => $name, id => 0 }
+        : { kind => 'VarDecl', name => $name, id => 0 } });
 }
 sub init {
     my ($n) = @_;
@@ -3343,6 +3406,7 @@ sub function {
     my ($name, $d) = @_;
     local $cur_fn = $name;
     local %local = map { ($_->{id} => 1) } locals($d);
+    local %localdecl = map { ($_->{name} // '') => $_ } locals($d);
     # (the types of its locals by name, for a typeof of one: typeof_expr)
     local %ltypeof = map { ($_->{name} => qt($_)) } grep { $_->{name} && $_->{type} } locals($d);
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);

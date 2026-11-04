@@ -1002,22 +1002,31 @@ clayer-glibc:
 # progs/stdbit.c, the same way: C23's bit functions (gcc's type-generic
 # __builtin_stdc_*, stdbit.ff.txt's) on each unsigned type, against plain
 # counts of the bits, on every target (arm too: stdbit-check).
-OWNSTART := generic stdbit
-$(FF)/generic.ff $(FF)/stdbit.ff: $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
+# progs/textcount.c, the same way: a string literal's prefix and a
+# variable-length array's count, which c2ff reads from clang's text, on every
+# target, with its round trip.
+OWNSTART := generic stdbit textcount
+$(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
 	mkdir -p $(FF)
 	{ cat license.ff.txt; $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } > $(FF)/$*.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*.ff.txt > $@
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
+$(eval $(call check,textcount))
 GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
-generic-roundtrip: $(FF)/generic-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
-	$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/generic-prog.json=$(FF)/generic-prog.i -- $(GENERIC_FNS) > $(FF)/generic-unit.ff.txt
-	$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/generic-unit.ff.txt $(FF)/generic.rt.c $(FF)/generic.rt.names
-	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w \
-	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/generic.rt.c > $(FF)/generic.rt.json
-	$(RUN) -t 300 perl roundtrip.pl --target $(GTARGET) $(FF)/generic.rt.names $(FF)/generic.rt.json $(FF)/generic-prog.json
-	$(RUN) -t 120 perl ../compiler/gen/headers.pl $(FF)/generic.rt.c $(FF)/generic.rt.names
-.PHONY: generic-roundtrip
+# (the round trip of a program of its own: progs/textcount.c's on every target)
+define progrt
+$(1)-roundtrip: $$(FF)/$(1)-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
+	$$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $$(GTARGET) $$(FF)/$(1)-prog.json=$$(FF)/$(1)-prog.i -- $(2) > $$(FF)/$(1)-unit.ff.txt
+	$$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $$(GTARGET) $$(FF)/$(1)-unit.ff.txt $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
+	$$(RUN) -t 120 $$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$$(CTARGET) $$(PROGFLAGS) -std=gnu11 -w \
+	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $$(FF)/$(1).rt.c > $$(FF)/$(1).rt.json
+	$$(RUN) -t 300 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(FF)/$(1)-prog.json
+	$$(RUN) -t 120 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
+.PHONY: $(1)-roundtrip
+endef
+$(eval $(call progrt,generic,$(GENERIC_FNS)))
+$(eval $(call progrt,textcount,main))
 
 # ---- every check at once --------------------------------------------------------
 # make -jN all-checks: what the ports branch is checked with on GTARGET, the

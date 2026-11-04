@@ -1,0 +1,9 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+The types and semantics of C (T3b), on cparse's tree (tools/c.ff): the type of every declaration and expression (typedefs and typeof resolved),
+the integer promotions and the usual arithmetic conversions, array and function decay, lvalues, the implicit casts made explicit with clang's kinds,
+sizeof and alignof, struct and union layout as the target's ABI lays them out (riscv64, x86_64, aarch64, arm), integer constant expressions folded,
+string literals and their types, initializers in their semantic form (every field, brace elision, designators), as clang's Sema builds them for C.
+Its dev source is C (tools/dev/cs, tools/dev/mk.sh), made ff by gen/c2ff.pl. Checked against clang (gen/csemacheck.sh): its JSON AST and record layouts.
+T3c, on the same tree: its statements kept, as gen/c2ff.pl's expr and stmt the C layer of what a unit's roots reach, its types (ctype, the tags' names), its asm statements and syscall idiom per target,
+long double's literals rounded and folded, gen/Words.pm's words of now and gen/Header.pm's license nodes: csema -l. Checked against c2ff.pl unit by unit, byte for byte (gen/clayercheck.sh).

@@ -1,0 +1,3 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+cparse file.i > file.ff: the C of a gcc-preprocessed .i parsed (tools/c.ff) into its parse tree, an ff tree; cparse -p file.i writes it back as C at once (cprint's C).

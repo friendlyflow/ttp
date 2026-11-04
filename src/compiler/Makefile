@@ -1040,7 +1040,13 @@ $(SHAV)/want:
 	mv $(SHAV)/want.tmp $@
 
 tools: $(TOOLS:%=$(TL)/$(TOOLT)/%)
-tools-check: $(TOOLTARGETS:%=tools-check-%)
+tools-check: $(TOOLTARGETS:%=tools-check-%) tools-dev-check
+# tools/c.ff, cparse.ff, cprint.ff, csem.ff, csema*.ff against their dev C
+# (tools/dev): made again in build/dev by clang and gen/c2ff.pl they must be
+# the committed ones; sh tools/dev/mk.sh -i if they should be what it makes.
+tools-dev-check:
+	@sh tools/dev/mk.sh
+.PHONY: tools-dev-check
 
 # The committed copies (boot/, tools/old/, see NL above), made again by
 # stage2's tools after a source of theirs changed: shared.ff, a tool.

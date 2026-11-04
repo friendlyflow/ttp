@@ -74,6 +74,53 @@ my %cls = ('char' => 'char', 'signed char' => 'i8', 'unsigned char' => 'u8', 'sh
     'unsigned long long' => 'u64', '_Bool' => 'u8', 'bool' => 'u8', 'float' => 'float', 'double' => 'double',
     'long double' => 'ldouble', '__float128' => 'ldouble', 'void' => 'void', '__builtin_va_list' => 'va', 'va_list' => 'va', '__va_list_tag' => 'va');
 $cls{'unsigned long'} = 'u32' if $target eq 'arm';
+# A variable-length array's count, from the text clang has of it, the same
+# however it is parenthesized: as prefix, each name as glibc has it. Text it
+# cannot read stays as it is, without spaces, and so is still compared.
+sub vla_norm {
+    my ($c) = @_;
+    my $text = $c =~ s/\s+//gr;
+    (my $t = $c) =~ s{\bsizeof\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)}{ (my $b = $1) =~ s/\\./x/g; length($b) + 1 }ge;
+    my @tok;
+    push @tok, $1 while $t =~ /\G\s*([A-Za-z_]\w*|\d+\b|<=|>=|==|!=|[-+*\/%<>?:(),])/gc;
+    return $text unless $t =~ /\G\s*$/;
+    my $r = eval { vla_binary(\@tok, 0) };
+    defined $r && !@tok ? $r : $text;
+}
+my %vlaprec = ('?' => 1, '==' => 2, '!=' => 2, '<' => 3, '>' => 3, '<=' => 3, '>=' => 3, '+' => 4, '-' => 4, '*' => 5, '/' => 5, '%' => 5);
+sub vla_binary {
+    my ($tok, $min) = @_;
+    my $l = vla_primary($tok);
+    while (@$tok && ($vlaprec{ $tok->[0] } // 0) > $min) {
+        my $op = shift @$tok;
+        if ($op eq '?') {
+            my $a = vla_binary($tok, 0);
+            (shift(@$tok) // '') eq ':' or die;
+            my $b = vla_binary($tok, 0);
+            $l = "(? $l $a $b)";
+        } else {
+            $l = "($op $l " . vla_binary($tok, $vlaprec{$op}) . ')';
+        }
+    }
+    $l;
+}
+sub vla_primary {
+    my ($tok) = @_;
+    my $t = shift(@$tok) // die;
+    if ($t eq '(') { my $r = vla_binary($tok, 0); (shift(@$tok) // '') eq ')' or die; return $r }
+    return $t if $t =~ /^\d/;
+    $t =~ /^[A-Za-z_]/ or die;
+    $t = our $side eq 'ff' ? $orig{$t} // $t : $t =~ s/^__builtin_((?:mem|str|stp)\w+)$/$1/r;
+    return $t unless @$tok && $tok->[0] eq '(';
+    shift @$tok;
+    my @a;
+    while (@$tok && $tok->[0] ne ')') {
+        push @a, vla_binary($tok, 0);
+        shift @$tok if @$tok && $tok->[0] eq ',';
+    }
+    (shift(@$tok) // '') eq ')' or die;
+    "(call $t @a)";
+}
 sub tstr {
     my ($s) = @_;
     $s = noattr($s);
@@ -108,7 +155,7 @@ sub tstr {
     return 'fnptr' if $s =~ /\(\*+\)\s*\(/ || $s =~ /\(\*\)$/;
     return 'fn' if $s =~ /\)$/ && $s =~ /^[^(]+\(/ && $s !~ /^(?:struct|union|enum) \(/;
     return 'arr(' . tstr($1) . ",$2)" if $s =~ /^(.*)\[(\d*)\]$/;
-    return 'vla(' . tstr($1) . ')' if $s =~ /^(.*?)\[([^\[\]]*[A-Za-z_(][^\[\]]*)\]$/;
+    if ($s =~ /^(.*?)\[([^\[\]]*[A-Za-z_(][^\[\]]*)\]$/) { my ($e, $c) = ($1, $2); return 'vla(' . tstr($e) . ',' . vla_norm($c) . ')' }
     if ($s =~ /^(.*)\*$/) { my $to = tstr($1); return $to eq 'fn' ? 'fnptr' : "ptr($to)" }
     return $cls{$s} if exists $cls{$s};
     return 'rec' if $s =~ /^(?:struct|union)\b/;
@@ -687,7 +734,8 @@ sub text_codes {
     $elem = 'i32' if $elem =~ /^[iu]32$/;
     my @c = split /,/, $codes;
     pop @c while @c && $c[-1] == 0;
-    @c ? '(init' . join('', map { $_ == 0 ? ' (zero)' : " (int $_ $elem)" } @c) . ')' : '(zero)';
+    # (a u16's, u"xy": an int's number converted, in the C ff2c writes)
+    @c ? '(init' . join('', map { $_ == 0 ? ' (zero)' : $elem eq 'u16' ? " (cast IntegralCast u16 (int $_ i32))" : " (int $_ $elem)" } @c) . ')' : '(zero)';
 }
 sub is_zero_form { $_[0] =~ /^\((?:int 0 \S+|null \S+|init|zero|cast \w+ \S+ \(int 0 \S+\))\)$/ }
 # A global: its type and its value, nothing an empty one

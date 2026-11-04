@@ -5,3 +5,4 @@ src/compiler/progs/cexit
 .claude/worktrees/
 # a lane's handoff note stays in its own worktree
 /HANDOFF.md
+__pycache__/

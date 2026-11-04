@@ -571,7 +571,7 @@ sub operand {
             pop @b if @b && $b[-1] eq '0';
             return (cstring(pack 'C*', @b), [ptr => [scalar => 'char']]);
         }
-        if (@k == 1 && leaf($f) && c($f) =~ /^wide text \d+$/) {
+        if (@k == 1 && c($f) =~ /^wide text \d+$/ && kids($f) == 1 && c((kids($f))[0]) eq '0') {
             my $t = gtype(c($f));
             my @e = map { c($_) } global_items(c($f));
             my $p = { 'u32' => 'U', 'int' => 'L', 'u16' => 'u' }->{ $t->[1][1] } // 'L';
