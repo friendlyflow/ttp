@@ -10,6 +10,7 @@
 #
 #   sh csemacheck.sh [-j N] [-r RUN] [-t TARGET] [-w REFDIR] CSEMA DIR unit.i ...
 #
+# (a unit @file: the units in that file, one to a line.)
 # CLANG (the environment) is the clang command up to the unit, its target
 # TARGET's (riscv64 by default):
 #   $C2FF_CLANG -x c -include clang-prelude.h -Xclang -ast-dump=json
@@ -72,7 +73,7 @@ shift 2
 test -n "${CLANG:-}" || { echo "csemacheck: CLANG is not set (the clang command up to the unit)" >&2; exit 2; }
 export CLANG
 mkdir -p "$d"
-for u in "$@"; do echo "$u"; done | xargs -P "$jobs" -n 1 sh "$0" --one "$run" "$ref" "$tg" "$cs" "$d" > "$d/result"
+for u in "$@"; do case "$u" in @*) cat "${u#@}" ;; *) echo "$u" ;; esac; done | xargs -P "$jobs" -n 1 sh "$0" --one "$run" "$ref" "$tg" "$cs" "$d" > "$d/result"
 n=$(grep -c '^OK' "$d/result")
 s=$(grep -c '^SKIP' "$d/result")
 f=$(grep -vc '^OK\|^SKIP' "$d/result")
