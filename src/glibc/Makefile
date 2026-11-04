@@ -912,7 +912,7 @@ RTDIR ?= $(BUILD)/rt
 RTJOBS ?= 4
 glibc-roundtrip:
 	@CLANGB="$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion" \
-	CLANGU="$(CLANG_AST)" \
+	CLANGU="$(CLANG_AST) $(if $(filter aarch64,$(GTARGET)),$(RTFLAGS_aarch64))" \
 	CLANGL="$(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w" \
 	CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl \
 	$(SLOT) -t $(or $(RTSECS),14400) sh ../compiler/gen/rtall.sh -j $(RTJOBS) -t $(GTARGET) -u $(RTUNITS) $(RTPAGE) $(RTDIR)

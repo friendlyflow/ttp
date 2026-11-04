@@ -538,8 +538,8 @@ sub operand {
         return ($w, [scalar => $w =~ /f$/ ? 'float' : 'double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+f?$/i;
         return ('__builtin_va_arg_pack()', undef) if $w eq 'va_arg_pack';
         return ('__builtin_va_arg_pack_len()', undef) if $w eq 'va_arg_pack_len';
-        return ('tp', [ptr => undef]) if $w eq 'tp';
         if (my $t = local_type($w)) { return (cid_local($w), $t) }
+        return ('tp', [ptr => undef]) if $w eq 'tp';
         return ("$w()", undef) if clang_builtin($w);
         # (a compound literal c2ff made a global of its own: the literal again)
         if ($w =~ / literal \d+$/ && $var{$w}) { my $t = gtype($w); return ('((' . ctype($t) . ')' . init_list($t, [items_of($w)]) . ')', $t) }
