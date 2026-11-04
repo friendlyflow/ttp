@@ -4,12 +4,31 @@
     This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
     It comes with no warranty. See the file LICENSE for the full text.
   comment
-    builtins-aarch64.ff.txt: the builtins of gcc for aarch64 that glibc uses, after builtins.ff.txt on its page (GTARGET=aarch64). __builtin_aarch64_get_fpcr: the FPCR (mrs, s3_3_c4_c4_0), for soft-fp's rounding mode.
+    builtins-aarch64.ff.txt: the builtins of gcc for aarch64 that glibc uses, after builtins.ff.txt on its page (GTARGET=aarch64). __builtin_aarch64_get_fpcr: the FPCR (mrs, s3_3_c4_c4_0), for soft-fp's rounding mode;
+    __builtin_aarch64_set_fpcr writes it, and __builtin_aarch64_get_fpsr and __builtin_aarch64_set_fpsr read and write the FPSR (s3_3_c4_c4_1), for fenv's functions and libm's (fpu_control.h).
     __builtin_thread_pointer: the thread pointer, tpidr_el0 (mrs, s3_3_c13_c0_2: glibc's THREAD_SELF is below it).
   __builtin_aarch64_get_fpcr:
     asm
     mrs
       55840
+      x0
+    ret
+  __builtin_aarch64_set_fpcr:
+    asm
+    msr
+      55840
+      x0
+    ret
+  __builtin_aarch64_get_fpsr:
+    asm
+    mrs
+      55841
+      x0
+    ret
+  __builtin_aarch64_set_fpsr:
+    asm
+    msr
+      55841
       x0
     ret
   __builtin_thread_pointer:
@@ -207,3 +226,932 @@
     __aarch64_sync_cache_range
       b
       e
+  comment
+    gcc's builtins of libm on aarch64, one or two instructions each where it compiles them (-fno-math-errno, as glibc's libm is built): frintm ... of __builtin_floor ..., fmaxnm and fminnm, fsqrt, fmadd,
+    frintx with fcvtzs of lrint and llrint, fcvtas of lround and llround; each a C function that gives the addresses of its operands and of its result (x0 ...) to an asm function of its own, as x86_64's __builtin_sqrt.
+  __ff_floor:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frintm.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_floor:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_floor
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_floorf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frintm.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_floorf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_floorf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_ceil:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frintp.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_ceil:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_ceil
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_ceilf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frintp.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_ceilf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_ceilf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_trunc:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frintz.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_trunc:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_trunc
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_truncf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frintz.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_truncf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_truncf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_round:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frinta.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_round:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_round
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_roundf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frinta.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_roundf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_roundf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_roundeven:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frintn.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_roundeven:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_roundeven
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_roundevenf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frintn.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_roundevenf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_roundevenf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_rint:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frintx.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_rint:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_rint
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_rintf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frintx.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_rintf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_rintf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_nearbyint:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frinti.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_nearbyint:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_nearbyint
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_nearbyintf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frinti.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_nearbyintf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_nearbyintf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_sqrt:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    fsqrt.d
+      d0
+      d0
+    str.d
+      0
+      x1
+      d0
+    ret
+  __builtin_sqrt:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_sqrt
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_sqrtf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    fsqrt.s
+      s0
+      s0
+    str.s
+      0
+      x1
+      s0
+    ret
+  __builtin_sqrtf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_sqrtf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fmax:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    ldr.d
+      0
+      x1
+      d1
+    fmaxnm.d
+      d1
+      d0
+      d0
+    str.d
+      0
+      x2
+      d0
+    ret
+  __builtin_fmax:
+    double
+    x:
+      double
+    y:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_fmax
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fmaxf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    ldr.s
+      0
+      x1
+      s1
+    fmaxnm.s
+      s1
+      s0
+      s0
+    str.s
+      0
+      x2
+      s0
+    ret
+  __builtin_fmaxf:
+    float
+    x:
+      float
+    y:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_fmaxf
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fmin:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    ldr.d
+      0
+      x1
+      d1
+    fminnm.d
+      d1
+      d0
+      d0
+    str.d
+      0
+      x2
+      d0
+    ret
+  __builtin_fmin:
+    double
+    x:
+      double
+    y:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_fmin
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fminf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    ldr.s
+      0
+      x1
+      s1
+    fminnm.s
+      s1
+      s0
+      s0
+    str.s
+      0
+      x2
+      s0
+    ret
+  __builtin_fminf:
+    float
+    x:
+      float
+    y:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_fminf
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fma:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    ldr.d
+      0
+      x1
+      d1
+    ldr.d
+      0
+      x2
+      d2
+    fmadd.d
+      d1
+      d2
+      d0
+      d0
+    str.d
+      0
+      x3
+      d0
+    ret
+  __builtin_fma:
+    double
+    x:
+      double
+    y:
+      double
+    z:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_fma
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        z
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fmaf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    ldr.s
+      0
+      x1
+      s1
+    ldr.s
+      0
+      x2
+      s2
+    fmadd.s
+      s1
+      s2
+      s0
+      s0
+    str.s
+      0
+      x3
+      s0
+    ret
+  __builtin_fmaf:
+    float
+    x:
+      float
+    y:
+      float
+    z:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_fmaf
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        z
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_lrint:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frintx.d
+      d0
+      d0
+    fcvtzs.x.d
+      d0
+      x0
+    ret
+  __builtin_lrint:
+    long
+    x:
+      double
+    return
+      __ff_lrint
+        :
+          x
+          & address
+  __ff_lrintf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frintx.s
+      s0
+      s0
+    fcvtzs.x.s
+      s0
+      x0
+    ret
+  __builtin_lrintf:
+    long
+    x:
+      float
+    return
+      __ff_lrintf
+        :
+          x
+          & address
+  __ff_lround:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    fcvtas.x.d
+      d0
+      x0
+    ret
+  __builtin_lround:
+    long
+    x:
+      double
+    return
+      __ff_lround
+        :
+          x
+          & address
+  __ff_lroundf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    fcvtas.x.s
+      s0
+      x0
+    ret
+  __builtin_lroundf:
+    long
+    x:
+      float
+    return
+      __ff_lroundf
+        :
+          x
+          & address
+  __ff_llrint:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    frintx.d
+      d0
+      d0
+    fcvtzs.x.d
+      d0
+      x0
+    ret
+  __builtin_llrint:
+    long
+    x:
+      double
+    return
+      __ff_llrint
+        :
+          x
+          & address
+  __ff_llrintf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    frintx.s
+      s0
+      s0
+    fcvtzs.x.s
+      s0
+      x0
+    ret
+  __builtin_llrintf:
+    long
+    x:
+      float
+    return
+      __ff_llrintf
+        :
+          x
+          & address
+  __ff_llround:
+    asm
+    ldr.d
+      0
+      x0
+      d0
+    fcvtas.x.d
+      d0
+      x0
+    ret
+  __builtin_llround:
+    long
+    x:
+      double
+    return
+      __ff_llround
+        :
+          x
+          & address
+  __ff_llroundf:
+    asm
+    ldr.s
+      0
+      x0
+      s0
+    fcvtas.x.s
+      s0
+      x0
+    ret
+  __builtin_llroundf:
+    long
+    x:
+      float
+    return
+      __ff_llroundf
+        :
+          x
+          & address

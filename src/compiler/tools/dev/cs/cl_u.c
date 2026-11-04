@@ -21,7 +21,9 @@ struct cl_unit {
   void *s;
   struct cl_map own, constint, ownfn, text_item, owntd, ownrec, ownanon;
   struct cl_list ctors;        /* its constructors and destructors */
+  struct cl_shared *shared;    /* its records of the first's text */
 };
+struct cl_shared { char *key; struct cs_rec *d; struct cl_shared *nxt; };
 struct cl_state {
   int target;                  /* 0 riscv64, 1 x86_64, 2 aarch64, 3 arm */
   char *page;
@@ -44,7 +46,7 @@ struct cl_state {
   struct cs_rec *lastanon;
   int asm_rd_out;
   /* --program, --index, --start, --zero, --weak */
-  char *program, *indexf;
+  char *program, *indexf, *staticsf;
   int start;
   struct cl_map treedefs, treerec, zero, forceweak, constint, recfn, ownfn;
   /* the units */
@@ -52,6 +54,10 @@ struct cl_state {
   struct cl_unit **units; long nunits, roomunits;
   struct cl_map recunit, typedef_t, typedef_k, enumunit, aliasunit;
   struct cl_map owntd, ownrec, ownanon;
+  struct cl_map treestatic;    /* -J file: those of the tree's names that are a static of a unit there */
+  struct cl_map staticcount;   /* how many statics of a name the function at hand has had */
+  struct cl_map anonin;        /* a record's own anonymous records, where the first at the same place differs: tag|key */
+  char *cur_tag;               /* the record whose fields are being written */
   struct cl_unit **outu; long roomoutu;
   struct cl_map empty;
   int began, keep_going;

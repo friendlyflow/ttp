@@ -10,6 +10,14 @@
 # With --pages, only those glibc pages' bodies and globals are written (the
 # rest declared): all of glibc is held against its C a part at a time.
 #
+#   perl ff2c.pl --split DIR tree.ff.txt list.txt names.txt
+#
+# With --split, not one C file but one per unit of glibc (DIR/string_strlen.c),
+# the bodies and the unit's own globals in it, the other globals in files of
+# their own (DIR/g-1.c ...), each with only what it names of the types and the
+# declarations; list.txt lists the files. All of glibc as one file is too much
+# for clang's JSON, and a file clang does not take stops only that file.
+#
 # out.c has every type, a declaration of every global and function, the body
 # of every C function of the glibc pages and the definition of each of their
 # globals with its items; names.txt says, for each such function, its C name
@@ -35,9 +43,10 @@ use Header ();
 
 my %only;      # --pages a,b: only these glibc pages' bodies and globals
 my $target = '';   # --target arm: a long is 4 bytes, u64 and i64 C's long long
-while (@ARGV && $ARGV[0] =~ /^--(pages|target)$/) {
+my $split;     # --split DIR
+while (@ARGV && $ARGV[0] =~ /^--(pages|target|split)$/) {
     my $o = shift @ARGV;
-    if ($o eq '--pages') { $only{$_} = 1 for split /,/, shift @ARGV } else { $target = shift @ARGV }
+    if ($o eq '--pages') { $only{$_} = 1 for split /,/, shift @ARGV } elsif ($o eq '--split') { $split = shift @ARGV } else { $target = shift @ARGV }
 }
 my ($in, $out, $namesout) = @ARGV;
 die "usage: ff2c.pl [--pages page,...] [--target t] tree.ff.txt out.c names.txt\n" unless defined $namesout;
@@ -99,7 +108,7 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
-    float128 => '__float128', i128 => '__int128', u128 => 'unsigned __int128', float16 => '_Float16', bfloat16 => '__bf16', 'complex float16' => '_Complex _Float16',
+    float128 => '__float128', 'complex float128' => '_Complex __float128', i128 => '__int128', u128 => 'unsigned __int128', float16 => '_Float16', bfloat16 => '__bf16', 'complex float16' => '_Complex _Float16',
     'short fract' => 'short _Fract', 'unsigned short fract' => 'unsigned short _Fract', 'sat short fract' => '_Sat short _Fract', 'sat unsigned short fract' => '_Sat unsigned short _Fract',
     'fract' => '_Fract', 'unsigned fract' => 'unsigned _Fract', 'sat fract' => '_Sat _Fract', 'sat unsigned fract' => '_Sat unsigned _Fract',
     'long fract' => 'long _Fract', 'unsigned long fract' => 'unsigned long _Fract', 'sat long fract' => '_Sat long _Fract', 'sat unsigned long fract' => '_Sat unsigned long _Fract',
@@ -111,6 +120,8 @@ my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8
 $scalar{u64} = 'unsigned long long' if $target eq 'arm';
 my (%rec, %enum, %fntype, %fn, %var, %econst, @order);
 my %glibcpage;   # functions of the glibc pages (their bodies are written)
+my %firstdef;
+sub node_text { my ($n) = @_; c($n) . '(' . join(',', map { node_text($_) } kids($n)) . ')' }
 my @headers;    # the license of each file a page is made of: [its name, its lines]
 
 for my $page (@top) {
@@ -130,6 +141,10 @@ for my $page (@top) {
         undef $al;
         next if c($d) eq 'comment' || c($d) eq 'license';
         (my $name = c($d)) =~ s/:$// or fail('not a definition', $d);
+        # (a definition twice over, c2ff's static of one name in a function, as
+        # strfrom's or e_acosh's blocks have: one; if they differ, C says so)
+        if (my $prev = $firstdef{$name}) { next if node_text($prev) eq node_text($d) }
+        $firstdef{$name} = $d;
         my @k = kids($d);
         my $w = @k ? c($k[0]) : '';
         # a global's align n first (C's aligned attribute): the words after it as before
@@ -149,7 +164,7 @@ for my $page (@top) {
         if ($w eq 'asm') {
             $fn{$name} = { kind => 'asm' };
             # (and each entry of it, a block whose first child is asm)
-            for my $b (grep { !leaf($_) && c($_) =~ /^(.+):$/ && c((kids($_))[0]) eq 'asm' } @k) { (my $e = c($b)) =~ s/:$//; $fn{$e} //= { kind => 'asm' }; push @order, $e }
+            for my $b (grep { !leaf($_) && c($_) =~ /^(.+):$/ && c((kids($_))[0]) eq 'asm' } @k) { (my $e = c($b)) =~ s/:$//; $fn{$e} //= { kind => 'asm', entry => 1 }; push @order, $e }
             next;
         }
         if ($w eq 'weak') {
@@ -196,7 +211,7 @@ sub is_function {
     for my $k (kids($d)) {
         next if leaf($k);
         my $w = c($k);
-        next if $w eq ':' || $w eq 'address' || $w eq 'cast:' || $w eq 'items' || $w eq 'align';
+        next if $w eq ':' || $w eq 'address' || $w eq 'cast:' || $w eq 'items' || $w eq 'align' || $w eq 'sizeof' || $w eq 'alignof';
         next if (exists $scalar{$w} || $rec{$w}) && !grep { !leaf($_) } kids($k);
         return 1;
     }
@@ -320,7 +335,8 @@ our (@scope, $cur_fn, $cur_last);   # the locals' scopes; the function; its last
 sub local_type { my ($n) = @_; for my $s (reverse @scope) { return $s->{$n} if exists $s->{$n} } undef }
 sub gtype {
     my ($n) = @_;
-    return gtype($fn{$n}{target}) if $fn{$n} && $fn{$n}{kind} eq 'alias' && !$fn{ $fn{$n}{target} };
+    # (a global of its own first: riscv64's _r_debug_extended, c2ff's --zero, and the asm page's alias of it)
+    return gtype($fn{$n}{target}) if $fn{$n} && $fn{$n}{kind} eq 'alias' && !$fn{ $fn{$n}{target} } && !$var{$n};
     my $v = $var{$n} or return undef;
     return $v->{type} //= [arr => gtype($v->{bound}), { content => '0', children => [] }] if $v->{bound};
     my @l = kids($v->{node});
@@ -452,6 +468,8 @@ sub binary {
         my $right = $p == 1 ? $p : $p + 1;       # = is right to left
         my ($r, $rt) = binary($l, $pos, $right);
         my $nt = $p == 1 ? $t : ($w eq '+' || $w eq '-') ? (is_ptr($t) && !is_ptr($rt) ? $t : $w eq '+' && is_ptr($rt) ? $rt : undef) : undef;
+        # (an array in a sum is a pointer: build_trtable's (dests_node + i)->elems)
+        $nt = [ptr => $nt->[1]] if $p != 1 && $nt && $nt->[0] eq 'arr';
         ($s, $t) = ("($s $w $r)", $nt);
     }
     ($s, $t);
@@ -520,14 +538,16 @@ sub operand {
         return ($w, [scalar => $w =~ /f$/ ? 'float' : 'double']) if $w =~ /^-?0x[0-9a-f.]+p[-+]\d+f?$/i;
         return ('__builtin_va_arg_pack()', undef) if $w eq 'va_arg_pack';
         return ('__builtin_va_arg_pack_len()', undef) if $w eq 'va_arg_pack_len';
-        return ('tp', [ptr => undef]) if $w eq 'tp';
         if (my $t = local_type($w)) { return (cid_local($w), $t) }
+        return ('tp', [ptr => undef]) if $w eq 'tp';
         return ("$w()", undef) if clang_builtin($w);
         # (a compound literal c2ff made a global of its own: the literal again)
         if ($w =~ / literal \d+$/ && $var{$w}) { my $t = gtype($w); return ('((' . ctype($t) . ')' . init_list($t, [items_of($w)]) . ')', $t) }
         if (my $t = gtype($w)) { return (cid($w), $t) }
         return (cid($w), [enum => $econst{$w}]) if $econst{$w};
-        # a function named alone is called
+        # a function named alone is called; a label in an asm function is its
+        # address (as ttpc: pthread_cancel's (uintptr_t) __syscall_cancel_arch_start)
+        if ($fn{$w} && $fn{$w}{kind} eq 'asm' && $fn{$w}{entry}) { return (cid($w), [ptr => undef]) }
         if (my $s = sig($w)) { return (callee($w) . '()', $s->{ret}) }
         fail("an unknown name $w");
     }
@@ -721,9 +741,16 @@ sub path {
 }
 
 # The items of an initializer of type t, as C's braces.
+sub flat_items { map { c($_) eq 'items' ? flat_items(kids($_)) : $_ } @_ }
 sub init_list {
     my ($t, $l) = @_;
-    my @i = map { c($_) eq 'items' ? kids($_) : $_ } @$l;
+    # (nothing in braces: gaih_inet's struct gaih_result res = {})
+    if ($t->[0] eq 'rec' && @$l == 1 && leaf($l->[0]) && c($l->[0]) eq ':') {
+        my ($f1) = @{ $fieldcache{ $t->[1] } //= [fields($t->[1])] };
+        return '{}' if $f1 && $f1->{type}[0] !~ /^(?:rec|arr)$/;
+    }
+    # (items in items: an array past 255 items, asincos.tbl's)
+    my @i = flat_items(@$l);
     my @items = items(@i);
     # a char array set from text
     if ($t->[0] eq 'arr' && $t->[1][0] eq 'scalar' && $t->[1][1] =~ /^(char|u8|i8)$/ && @i && !grep { !leaf($_) || c($_) =~ /^-?(?:0x[0-9a-f]+|\d+)$/i } @i) {
@@ -798,7 +825,8 @@ sub stmt_of {
         return ['stmt', cid_local($name) . ': ' . (@s ? join(' ', map { text($_) } @s) : ';')];
     }
     if (@$e == 1 && $stmtword{$w}) { return ['stmt', control($n)] }
-    if (@$e == 1 && $w eq ':' ) {
+    # (a : with a path after it is an expression: __backtrace's (void) link, f / . args)
+    if (@$e == 1 && $w eq ':' && !grep { leaf($_) && c($_) eq '.' } kids($n)) {
         push @scope, {};
         my @s = map { stmt_of($_) } elements(kids($n));
         pop @scope;
@@ -907,21 +935,23 @@ sub items_head {
 # ---- the unit ---------------------------------------------------------------
 
 my @c;
+my @cdecl;      # (--split) each line of @c that declares: the C names it does
+sub cdeclares { my ($line, @ids) = @_; push @c, $line; $cdecl[$#c] = \@ids }
 push @c, '/* made by ff2c.pl from ' . ($in =~ s{.*/}{}r) . ' */';
 # the header of each file, as the file has it (gen/headers.pl checks them)
 push @c, map { ("/* ff2c: the header of $_->[0] */", Header::header_text(@{ $_->[1] })) } @headers;
 push @c, '/* ff2c: the end of the headers */' if @headers;
-push @c, 'long __ff_syscall(long, ...);', 'extern void *tp;';
+cdeclares('long __ff_syscall(long, ...);', '__ff_syscall'); cdeclares('extern void *tp;', 'tp');
 # (gcc's SSE4.2 compares of an immediate, <smmintrin.h>'s, whose calls c2ff makes builtins)
-push @c, map { "int _mm_cmpistr$_(__attribute__((__vector_size__(2 * sizeof(long long)))) long long, __attribute__((__vector_size__(2 * sizeof(long long)))) long long, const int);" } qw(i c z);
+cdeclares("int _mm_cmpistr$_(__attribute__((__vector_size__(2 * sizeof(long long)))) long long, __attribute__((__vector_size__(2 * sizeof(long long)))) long long, const int);", "_mm_cmpistr$_") for qw(i c z);
 # the records first as names, so that each may point at any
-push @c, map { "$rec{$_}{kind} " . cid($_) . ';' } grep { $rec{$_} } @order;
+cdeclares("$rec{$_}{kind} " . cid($_) . ';', cid($_)) for grep { $rec{$_} } @order;
 # the enums: a constant's value where it has one
 # (a constant two enums of the tree have is the first's: C has one of each)
 for my $e (grep { $enum{$_} } @order) {
     my @k = kids($enum{$e});
     my @cs = grep { c($_) =~ /:$/ && $econst{ c($_) =~ s/:$//r } eq $e } map { c($_) eq 'items' ? kids($_) : $_ } @k[1 .. $#k];
-    push @c, 'enum ' . cid($e) . ' { ' . (@cs ? join(', ', map { my @v = kids($_); cid(c($_) =~ s/:$//r) . (@v ? ' = ' . join('', map { c($_) } @v) : '') } @cs) : cid($e) . '__none') . ' };';
+    cdeclares('enum ' . cid($e) . ' { ' . (@cs ? join(', ', map { my @v = kids($_); cid(c($_) =~ s/:$//r) . (@v ? ' = ' . join('', map { c($_) } @v) : '') } @cs) : cid($e) . '__none') . ' };', cid($e), map { cid(c($_) =~ s/:$//r) } @cs);
 }
 # the function types
 for my $f (grep { $fntype{$_} } @order) {
@@ -937,7 +967,7 @@ for my $f (grep { $fntype{$_} } @order) {
         push @p, ctype(ptype(\@pl, \$j));
     }
     push @p, '...' if $va;
-    push @c, 'typedef ' . cdecl($ret, cid($f) . '(' . (@p ? join(', ', @p) : 'void') . ')') . ($pcs ? ' __attribute__((pcs("aapcs")))' : '') . ';';
+    cdeclares('typedef ' . cdecl($ret, cid($f) . '(' . (@p ? join(', ', @p) : 'void') . ')') . ($pcs ? ' __attribute__((pcs("aapcs")))' : '') . ';', cid($f));
 }
 # the records' fields, each after those it holds by value
 my %rdone;
@@ -973,7 +1003,7 @@ sub emit_rec {
     rec_deps($r);
     # (a record's own align, after struct: C's aligned attribute after its braces)
     my ($al) = map { c((kids($_))[0]) } grep { c($_) eq 'align' && !leaf($_) } kids($rec{$r}{node});
-    push @c, "$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . (defined $al ? " __attribute__((aligned($al)))" : '') . ';';
+    cdeclares("$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . (defined $al ? " __attribute__((aligned($al)))" : '') . ';', cid($r));
 }
 emit_rec($_) for grep { $rec{$_} } @order;
 # the globals
@@ -981,7 +1011,7 @@ emit_rec($_) for grep { $rec{$_} } @order;
     local our $extern_arrays = 1;
     for my $v (grep { $var{$_} && !clang_builtin($_) } @order) {
         my $t = gtype($v);
-        push @c, ($var{$v}{tls} ? 'extern __thread ' : 'extern ') . cdecl($t, cid($v)) . ($var{$v}{weak} ? ' __attribute__((weak))' : '') . ';';
+        cdeclares(($var{$v}{tls} ? 'extern __thread ' : 'extern ') . cdecl($t, cid($v)) . ($var{$v}{weak} ? ' __attribute__((weak))' : '') . ';', cid($v));
     }
 }
 # the functions
@@ -992,30 +1022,34 @@ sub proto {
     cdecl($s->{ret}, cid($name) . "($ps)");
 }
 for my $f (grep { $fn{$_} && $fn{$_}{kind} ne 'alias' && !clang_builtin($_) } @order) {
-    push @c, proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ($fn{$f}{attr} ? " __attribute__(($fn{$f}{attr}))" : '') . ';';
+    cdeclares(proto($f) . ($fn{$f}{kind} eq 'weak' ? ' __attribute__((weak))' : '') . ($fn{$f}{ctor} ? " __attribute__(($fn{$f}{ctor}))" : '') . ($fn{$f}{attr} ? " __attribute__(($fn{$f}{attr}))" : '') . ';', cid($f));
 }
-for my $f (grep { $fn{$_} && $fn{$_}{kind} eq 'alias' } @order) {
+for my $f (grep { $fn{$_} && $fn{$_}{kind} eq 'alias' && !$var{$_} } @order) {
     my $t = $fn{$f}{target};
-    push @c, $var{$t} ? "extern __typeof__(" . cid($t) . ") " . cid($f) . ';' : proto($f) . ';';
+    cdeclares($var{$t} ? "extern __typeof__(" . cid($t) . ") " . cid($f) . ';' : proto($f) . ';', cid($f));
 }
 # the glibc pages' globals, with their items (but those c2ff makes of a
 # text or a compound literal, which come back where they are named)
 my @gnames;
+my @gdefline;    # (--split) each definition's line of @c, where glibc has it, its function
 for my $v (grep { $var{$_} && $var{$_}{glibc} && !$var{$_}{weak} && $_ !~ /^(?:wide )?text \d+$| literal \d+$/ } @order) {
     my $t = gtype($v);
     my @items = items_of($v);
-    my $init = !@items ? '' : ($t->[0] eq 'arr' || $t->[0] eq 'rec') ? ' = ' . init_list($t, \@items) : ' = ' . expr_item([map { c($_) eq 'items' ? kids($_) : $_ } @items]);
     local $cur_fn = $v;
+    my $init = eval { !@items ? '' : ($t->[0] eq 'arr' || $t->[0] eq 'rec') ? ' = ' . init_list($t, \@items) : ' = ' . expr_item([map { c($_) eq 'items' ? kids($_) : $_ } @items]) };
+    warn $@ unless defined $init;
     my $sec = $var{$v}{section} ? " __attribute__((section(\"$var{$v}{section}\")))" : '';
     $sec .= " __attribute__((aligned($var{$v}{align})))" if defined $var{$v}{align};
-    my $ok = eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$sec$init;"; 1 };
-    warn $@ unless $ok;
+    my $ok = defined $init && eval { push @c, ($var{$v}{tls} ? '__thread ' : '') . cdecl($t, cid($v)) . "$sec$init;"; 1 };
+    warn $@ if defined $init && !$ok;
     # (where glibc has it: a unit's own static in that unit, a function's static in that function)
-    my $hint = $v =~ /^\S+ (\S+\/\S+)$/ ? "unit $1" : $v =~ /^(\S+) \S+$/ && $fn{$1} ? 'in ' . orig($1) : '-';
+    my $sf = $v =~ /^(\S+(?: \S+\/\S+)?) \S+(?: \d+)?$/ && $fn{$1} ? $1 : undef;
+    my $hint = defined $sf ? 'in ' . orig($sf) : $v =~ /^\S+ (\S+\/\S+)$/ ? "unit $1" : '-';
+    push @gdefline, [$#c, $hint, $sf] if $ok;
     push @gnames, join("\t", $ok ? 'global' : 'gfailed', cid($v), orig($v), $hint);
 }
 # the bodies
-my (@names, @cbody);
+my (@names, @cbody, @cbodyunit, %fnunit);
 push @names, @gnames;
 for my $f (grep { $glibcpage{$_} } @order) {
     local $cur_fn = $f;
@@ -1029,6 +1063,8 @@ for my $f (grep { $glibcpage{$_} } @order) {
     my $body = eval { block(@l[$s->{body} .. $#l]) };
     if (!defined $body) { warn $@; push @names, join("\t", 'failed', cid($f), orig($f), $unit // '-'); next }
     push @cbody, cdecl($s->{ret}, cid($f) . "($ps)") . " $body";
+    push @cbodyunit, $unit // '-';
+    $fnunit{$f} = $unit // '-';
     push @names, join("\t", 'body', cid($f), orig($f), $unit // '-');
 }
 # clang's own builtins, which C does not declare
@@ -1046,17 +1082,66 @@ sub labels_in {
 sub orig {
     my ($n) = @_;
     return $1 if $n =~ /^(\S+) \S+\/\S+$/;
-    # a function's static: its own name
+    # a function's static: its own name (of a unit's own function too)
+    return $2 =~ s/'$//r if $n =~ /^(\S+ \S+\/\S+) (\S+)$/ && $fn{$1};
+    # (a later one of its name: name#k, roundtrip.pl's)
+    if ($n =~ /^(\S+(?: \S+\/\S+)?) (\S+) (\d+)$/ && $fn{$1} && $2 ne 'literal') { my ($b, $k) = ($2, $3); return ($b =~ s/'$//r) . "#$k" }
     return $2 =~ s/'$//r if $n =~ /^(\S+) (\S+)$/ && $fn{$1};
     $n =~ s/'$//r;
 }
 
 # (the names c2ff left out, found in the bodies, before them)
-push @c, map { 'long ' . cid($_) . '();' } grep { $fn{$_} && $fn{$_}{missing} } @order;
-push @c, @cbody;
-open my $h, '>', $out or die "ff2c: $out: $!\n";
-print $h join("\n", @c), "\n";
-close $h;
+cdeclares('long ' . cid($_) . '();', cid($_)) for grep { $fn{$_} && $fn{$_}{missing} } @order;
+my $h;
+if (defined $split) { write_split() }
+else {
+    push @c, @cbody;
+    open $h, '>', $out or die "ff2c: $out: $!\n";
+    print $h join("\n", @c), "\n";
+    close $h;
+}
+# --split: a file per unit, its name from its .i's path under i/ (or ff/)
+sub split_name { my ($u) = @_; $u =~ s/\.i$//; $u =~ s{^.*/(?:i|ff)/}{}; $u =~ s{^/+}{}; $u =~ s{/}{_}g; $u }
+sub write_split {
+    my (%own, @list, %whose, @tok);
+    for my $i (0 .. $#c) { if ($cdecl[$i]) { push @{ $whose{$_} }, $i for @{ $cdecl[$i] } } }
+    my %isdef = map { ($_->[0] => 1) } @gdefline;
+    # the globals: in their unit's file, a function's static in its function's;
+    # the others a hundred to a file, or a megabyte
+    my ($k, $n, $size) = (1, 0, 0);
+    for my $g (@gdefline) {
+        my ($i, $hint, $f) = @$g;
+        my $name;
+        if ($hint =~ /^unit (.+)$/) { $name = split_name($1) }
+        elsif (defined $f && defined $fnunit{$f} && $fnunit{$f} ne '-') { $name = split_name($fnunit{$f}) }
+        else {
+            if ($n >= 100 || $size + length($c[$i]) > 1_000_000 && $n) { $k++; ($n, $size) = (0, 0) }
+            $n++; $size += length($c[$i]);
+            $name = "g-$k";
+        }
+        push @{ $own{$name}{defs} }, $i;
+    }
+    push @{ $own{ $cbodyunit[$_] eq '-' ? 'nounit' : split_name($cbodyunit[$_]) }{bodies} }, $_ for 0 .. $#cbody;
+    mkdir $split;
+    open my $l, '>', $out or die "ff2c: $out: $!\n";
+    for my $name (sort keys %own) {
+        my $o = $own{$name};
+        my (%line, @todo, %seen);
+        my $want = sub { push @todo, grep { !$seen{$_}++ } $_[0] =~ /[A-Za-z_]\w*/g };
+        $want->($c[$_]) for @{ $o->{defs} // [] };
+        $want->($cbody[$_]) for @{ $o->{bodies} // [] };
+        while (defined(my $id = shift @todo)) {
+            for my $i (@{ $whose{$id} // [] }) { next if $line{$i}++; $want->($c[$i]) }
+        }
+        $line{$_} = 1 for @{ $o->{defs} // [] };
+        open my $f, '>', "$split/$name.c" or die "ff2c: $split/$name.c: $!\n";
+        print $f map { "$c[$_]\n" } sort { $a <=> $b } keys %line;
+        print $f map { "$cbody[$_]\n" } @{ $o->{bodies} // [] };
+        close $f;
+        print $l "$split/$name.c\n";
+    }
+    close $l;
+}
 push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { $var{$_} || $fn{$_} } @order;
 # (and the enum constants c2ff named with their unit: C's name for them)
 push @names, map { join("\t", 'name', cid($_), orig($_)) } grep { /^\S+ \S+\/\S+$/ } sort keys %econst;

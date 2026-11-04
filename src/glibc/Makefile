@@ -903,7 +903,23 @@ $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_al
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
-glibc-roundtrip: floats-roundtrip
+# All of glibc: every function and global of its page (make FF/glibc.ff first;
+# in a BUILD of all of glibc), a unit at a time (../compiler/gen/rtall.sh), which
+# keeps no AST on disk: RTDIR gets each file's normal forms, its report the
+# differences. RTPAGE and RTUNITS: another build's page, read only.
+# The rule (the user, 2026-11-04): run this on every change to c2ff.pl or csema,
+# before that merge goes into ports. It stays a target of its own, not a step of
+# ports-check (about 40 minutes with the slots busy).
+RTPAGE ?= $(FF)/glibc.ff.txt
+RTUNITS ?= $(FF)/glibc.units
+RTDIR ?= $(BUILD)/rt
+RTJOBS ?= 4
+glibc-roundtrip:
+	@CLANGB="$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion" \
+	CLANGU="$(CLANG_AST) $(if $(filter aarch64,$(GTARGET)),$(RTFLAGS_aarch64))" \
+	CLANGL="$(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w" \
+	CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl \
+	$(SLOT) -t $(or $(RTSECS),14400) sh ../compiler/gen/rtall.sh -j $(RTJOBS) -t $(GTARGET) -u $(RTUNITS) $(RTPAGE) $(RTDIR)
 
 .PHONY: strlen-check asm-check glibc-roundtrip
 
@@ -939,9 +955,14 @@ CPRUN := $(if $(filter x86_64,$(shell uname -m)),,qemu-riscv64)
 # take @file)
 sp1 := $(subst x, ,x)
 unitsfile = $(shell mkdir -p $(dir $(1)))$(file >$(1),$(subst $(sp1),$(nl),$(strip $(2))))
+# (the scope of these unit checks: the milestones' units of this build, whatever
+# else its i/ holds, so that a check means one thing in every BUILD; ALLUNITS=1:
+# every unit there, for a BUILD of all of glibc)
+MSUNITS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
+SCOPEI = $(if $(ALLUNITS),$(wildcard $(I)/*/*.i),$(wildcard $(MSUNITS:%=$(I)/%.i)))
 cparse-check:
-	@echo "cparse-check: $(words $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))) units of $(BUILD)"
-	@$(call unitsfile,$(BUILD)/cparse.units,$(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i)))$(RUN) -t 3600 sh ../compiler/gen/cparsecheck.sh -r "$(CPRUN)" $(CPTOOLS)/cparse $(CPTOOLS)/cprint $(GLIBC_CC) $(BUILD)/cparse \
+	@echo "cparse-check: $(words $(sort $(SCOPEI) $(wildcard $(FF)/*-prog.i))) units of $(BUILD)"
+	@$(call unitsfile,$(BUILD)/cparse.units,$(sort $(SCOPEI) $(wildcard $(FF)/*-prog.i)))$(RUN) -t 3600 sh ../compiler/gen/cparsecheck.sh -r "$(CPRUN)" $(CPTOOLS)/cparse $(CPTOOLS)/cprint $(GLIBC_CC) $(BUILD)/cparse \
 	    @$(BUILD)/cparse.units
 .PHONY: cparse-check
 
@@ -951,9 +972,7 @@ cparse-check:
 # build (I, but libgcc's, which clang reads through clangfix.pl) and each
 # milestone program's .i, csema's lines (types, value categories, implicit
 # casts, folded constants, layouts) clang's (clangsema.pl), unit by unit.
-# (of the milestones, not all a folder has: one where all of glibc was built holds
-# libm's units too, which csema does not read yet)
-CSUNITS = $(sort $(filter-out $(I)/libgcc/% %.clang.i,$(wildcard $(foreach m,$(CHECK_MS),$(OBJS_all_$(m):%=$(I)/%.i)))) $(wildcard $(FF)/*-prog.i))
+CSUNITS = $(sort $(filter-out $(I)/libgcc/% %.clang.i,$(SCOPEI)) $(wildcard $(FF)/*-prog.i))
 CSCLANG = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -Xclang -fdump-record-layouts -fsyntax-only \
 	--target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 csema-check:
@@ -966,7 +985,7 @@ csema-check:
 # build's milestones from the names its object defines (as all-survey) and
 # each milestone program (../compiler/gen/clayercheck.sh); then how many of each
 # milestone's objects agree.
-CLUNITS = $(patsubst $(I)/%.i,%,$(sort $(filter-out %.clang.i,$(wildcard $(I)/*/*.i))))
+CLUNITS = $(patsubst $(I)/%.i,%,$(sort $(filter-out %.clang.i,$(SCOPEI))))
 CLPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
 clayer-check:
 	@echo "clayer-check: $(words $(CLUNITS)) units and $(words $(CLPROGS)) programs of $(BUILD)"
@@ -996,6 +1015,34 @@ clayer-glibc:
 	    $(CPTOOLS)/csema $(FF)/glibc.ff.txt $(BUILD)/clayer/glibc.page
 .PHONY: clayer-glibc
 
+# ---- two units at once ---------------------------------------------------
+# progs/units-a.c and -b.c, which define one name otherwise (each file's head):
+# through c2ff.pl and csema -l, byte for byte, and round-tripped.
+UNITS2 := units-a units-b
+units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen/ff2c.pl ../compiler/gen/c2ff.pl clang-prelude.h
+	@mkdir -p $(FF)/units
+	@for u in $(UNITS2); do \
+	    $(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $(abspath progs)/$$u.c -o $(FF)/units/$$u.i && \
+	    $(RUN) -t 120 $(CLANG_AST) $(FF)/units/$$u.i > $(FF)/units/$$u.json || exit 1; \
+	done
+	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --statics-out $(FF)/units/statics $(foreach u,$(UNITS2),$(FF)/units/$(u).json=$(FF)/units/$(u).i) -- ua ub > $(FF)/units/page.ff.txt 2> $(FF)/units/page.err
+	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff $(UNITS2:%=$(FF)/units/%.i) -- ua ub > $(FF)/units/cs.ff.txt
+	@cmp $(FF)/units/page.ff.txt $(FF)/units/cs.ff.txt
+	@$(RUN) -t 60 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/units/page.ff.txt $(FF)/units/back.c $(FF)/units/back.names
+	@$(RUN) -t 60 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
+	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/units/back.c > $(FF)/units/back.json
+	@$(RUN) -t 60 perl roundtrip.pl --target $(GTARGET) $(FF)/units/back.names $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)
+	@grep -q 'blist u header' $(FF)/units/page.ff.txt && grep -q 'clist u header' $(FF)/units/page.ff.txt && grep -q '^ *holder .*units-b' $(FF)/units/page.ff.txt
+	@# (a program's external definition of a name that is a static in its tree: a name of its own)
+	@rm -rf $(FF)/units/tree; perl ../compiler/gen/ffsplit.pl $(FF)/units/page.ff.txt $(FF)/units/tree > /dev/null
+	@$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $(abspath progs)/units-p.c -o $(FF)/units/units-p.i
+	@$(RUN) -t 120 $(CLANG_AST) $(FF)/units/units-p.i > $(FF)/units/units-p.json
+	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program units --index $(FF)/units/tree/index.ff --statics $(FF)/units/statics --start $(FF)/units/units-p.json=$(FF)/units/units-p.i -- main > $(FF)/units/prog.ff.txt 2> $(FF)/units/prog.err
+	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -P units -T -I $(FF)/units/tree/index.ff -J $(FF)/units/statics $(FF)/units/units-p.i main > $(FF)/units/prog.cs.ff.txt
+	@cmp $(FF)/units/prog.ff.txt $(FF)/units/prog.cs.ff.txt
+	@grep -q '^twice units/units-p:' $(FF)/units/prog.ff.txt
+.PHONY: units-check
+
 # ---- glibc's C constructs, on their own -------------------------------------
 # progs/generic.c holds the constructs of glibc's C that c2ff and ttpc took
 # in for all of glibc (a path from an expression, a call through a comma's
@@ -1011,7 +1058,7 @@ clayer-glibc:
 # progs/textcount.c, the same way: a string literal's prefix and a
 # variable-length array's count, which c2ff reads from clang's text, on every
 # target, with its round trip.
-OWNSTART := generic stdbit textcount
+OWNSTART := generic stdbit textcount roundnames
 $(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
 	mkdir -p $(FF)
 	{ cat license.ff.txt; $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } > $(FF)/$*.ff.txt
@@ -1019,6 +1066,7 @@ $(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wi
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
 $(eval $(call check,textcount))
+$(eval $(call check,roundnames))
 GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
@@ -1033,6 +1081,7 @@ $(1)-roundtrip: $$(FF)/$(1)-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
 endef
 $(eval $(call progrt,generic,$(GENERIC_FNS)))
 $(eval $(call progrt,textcount,main))
+$(eval $(call progrt,roundnames,main))
 
 # ---- every check at once --------------------------------------------------------
 # make -jN all-checks: what the ports branch is checked with on GTARGET, the
@@ -1095,7 +1144,11 @@ ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
 ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
 # (and long double's soft-fp, as the ldouble milestone has it: libgcc's on
 # a gcc build, glibc's own code, which ttpc's long double calls)
-ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES))) $(SOFTFP:%=soft-fp/%) $(filter soft-fp/%,$(OBJS_ldouble_$(GTARGET)))
+# (not libmvec's vector functions on aarch64 yet: their C is gcc's arm_neon.h
+# and arm_sve.h, __Float32x4_t, __SVFloat32_t and gcc's __builtin_aarch64_*,
+# which clang does not read and ttpc's vector, x86_64's alone, does not take)
+ALLCSKIP_aarch64 := mathvec/advsimd/% mathvec/sve/%
+ALL_C = $(filter-out $(ALLCSKIP_$(GTARGET)),$(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))) $(SOFTFP:%=soft-fp/%) $(filter soft-fp/%,$(OBJS_ldouble_$(GTARGET)))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 # crt1.o's parts, crti.o and crtn.o, which a program links before libc.a:
 # their definitions are the ones of a name libc.a defines too
@@ -1182,7 +1235,7 @@ $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THE
 
 $(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
 	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
-	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
+	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) --statics-out $(FF)/glibc.statics $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
 	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
@@ -1410,6 +1463,8 @@ TCLANGFIX_riscv64 := sed $(call LITSUF,32x,    ) $(call LITSUF,64x,L   ) \
 # double the x87's as gcc's _Float64x is there)
 TCLANGFIX_x86_64 = $(CLANGFIX) $(call LITSUF,32x,    ) $(call LITSUF,64x,L   ) \
 	$(call LITSUF,32,f  ) $(call LITSUF,64,   )
+# (aarch64: as riscv64's, long double binary128 on both)
+TCLANGFIX_aarch64 := $(TCLANGFIX_riscv64)
 TCLANGFIX = $(or $(TCLANGFIX_$(GTARGET)),$(CLANGFIX))
 # (and on x86_64 a test of gcc's intrinsics headers, <x86intrin.h>: the
 # tst-*-rtm tests' _xbegin and _xend, through clangvec.pl as glibc's
@@ -1445,7 +1500,7 @@ $(TFF)/%.ref: $(OBJ)/libc.a $(TBUILD)/$(AREA).mk
 $(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).c2ff) $(TI)/support.ready $(FF)/glibc/index.ff ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm
 	mkdir -p $(TFF)
 	ln -sfn $(abspath $(FF))/glibc $(TFF)/glibc
-	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program glibc --index $(FF)/glibc/index.ff $(if $(GLIBC_START),,--start) \
+	$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program glibc --index $(FF)/glibc/index.ff --statics $(FF)/glibc.statics $(if $(GLIBC_START),,--start) \
 	    $(foreach o,$(TOBJS_$*),--object $(TI)/$(o).json=$(TI)/$(o).i) $(foreach o,$(SUPPORT),$(TI)/$(o).json=$(TI)/$(o).i) -- main > $(TFF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(TFF)/$*-prog.ff.txt > $@
 

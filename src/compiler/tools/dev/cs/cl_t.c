@@ -78,6 +78,7 @@ static struct cs_rec *cl_anon_in (struct cs_ty *t)
   return 0;
 }
 static void cl_anon_fields (struct cs_rec *r, char *rname);
+static int cl_same_def (struct cs_rec *a, struct cs_rec *b);
 static int cl_enum_more (struct cs_rec *o, struct cs_rec *d);
 static void cl_set_enumd (char *tag, struct cs_rec *d)
 {
@@ -118,13 +119,36 @@ static void cl_anon_fields (struct cs_rec *r, char *rname)
         if (k->k == TY_ENUM) cl_set_enumd (cl_cat ("enum ", nm), k);
         else { cl_put_new (&C->rec, cl_cat3 (cl_rec_kind (k), " ", nm), k); cl_anon_fields (k, nm); }
       }
+    } else if (i->f->anon && last && !last->tag && last->k != TY_ENUM) {
+      /* (C11's anonymous member, named for its place: of the record it is in where the first at the place differs) */
+      struct cs_rec *in = cl_anon_in (i->f->t);
+      if (in) {
+        char *key = cl_anon_key (in), *atag = cl_get (&C->anon_tag, key);
+        struct cs_rec *first = atag ? cl_get (&C->rec, atag) : 0;
+        if (first && first != last && !cl_same_def (last, first)) {
+          char *name = cl_cat (rname, " anon"), *tag = cl_cat3 (cl_rec_kind (last), " ", name);
+          cl_put (&C->anonin, cl_cat3 (cl_cat3 (cl_rec_kind (r), " ", rname), "|", key), tag);
+          if (C->cu) cl_put_new (&C->recunit, tag, C->cu);
+          cl_put_new (&C->rec, tag, last);
+          cl_anon_fields (last, name);
+        }
+        last = 0;
+      }
     } else if (i->f->name && i->f->nlen && last && !last->tag) {
       struct cs_rec *in = cl_anon_in (i->f->t);
       if (in) {
         char *key = cl_anon_key (in), *kind = cl_rec_kind (last);
         char *name = cl_cat3 (rname, " ", cl_copy (i->f->name, i->f->nlen));
-        cl_put (&C->anon_tag, key, cl_cat3 (kind, " ", name));
-        cl_put (&C->anon_name, key, name);
+        /* (the same place defined otherwise, a skeleton included for another type: by the record it is in) */
+        char *atag = cl_get (&C->anon_tag, key);
+        struct cs_rec *first = atag ? cl_get (&C->rec, atag) : 0;
+        if (last->k != TY_ENUM && first && first != last && !cl_same_def (last, first))
+          cl_put (&C->anonin, cl_cat3 (cl_cat3 (cl_rec_kind (r), " ", rname), "|", key), cl_cat3 (kind, " ", name));
+        else {
+          cl_put (&C->anon_tag, key, cl_cat3 (kind, " ", name));
+          cl_put (&C->anon_name, key, name);
+        }
+        if (last->k != TY_ENUM && C->cu) cl_put_new (&C->recunit, cl_cat3 (kind, " ", name), C->cu);
         if (last->k == TY_ENUM) cl_put_new (&C->enumd, cl_cat ("enum ", name), last);
         else { cl_put_new (&C->rec, cl_cat3 (kind, " ", name), last); cl_anon_fields (last, name); }
         last = 0;
@@ -217,6 +241,8 @@ static char *cl_tag (struct cs_rec *r)
     char *key = cl_anon_key (r), *tag = cl_get (&C->anon_tag, key), *ownk = 0;
     /* (a unit's own anonymous record, where another unit's at the same place differs) */
     if (C->cu) { ownk = cl_get (&C->ownanon, key); if (ownk) tag = ownk; }
+    /* (a record's own, first) */
+    if (C->cur_tag) { char *in = cl_get (&C->anonin, cl_cat3 (C->cur_tag, "|", key)); if (in) { ownk = in; tag = in; } }
     if (tag) {
       char *f = cl_get (&C->tagname, tag);
       cl_set (&C->wanttag, tag);
@@ -524,12 +550,47 @@ static void cl_def_text (struct cs_top *t)
   if (b && e && e >= b) { d->dtext = T->src + b - 1; d->dlen = e - b; }
   else { d->dtext = (unsigned char *) ""; d->dlen = 0; }
 }
+static char *cl_td_key (struct cs_ty *t);
+/* whether a definition's text names, in this unit, what it does not in unit v: a record either has of its own, or a typedef (names_otherwise) */
+static int cl_names_otherwise (unsigned char *p, long n, struct cl_unit *v)
+{
+  long i = 0;
+  if (!C->ownrec.count && !C->owntd.count && !v->ownrec.count && !v->owntd.count) return 0;
+  while (i < n) {
+    long b = i;
+    char *w;
+    if (!cl_alpha (p[i]) && !cl_digit (p[i])) { i++; continue; }
+    while (i < n && (cl_alpha (p[i]) || cl_digit (p[i]))) i++;
+    if (cl_digit (p[b])) continue;
+    w = cl_copy (p + b, i - b);
+    if (cl_eq (w, "struct") || cl_eq (w, "union")) {
+      long j = i;
+      while (j < n && (p[j] == ' ' || p[j] == '\n' || p[j] == '\t' || p[j] == '\r' || p[j] == '\f' || p[j] == '\v')) j++;
+      if (j > i && j < n && cl_alpha (p[j])) {
+        long e = j;
+        char *k, *a, *c;
+        while (e < n && (cl_alpha (p[e]) || cl_digit (p[e]))) e++;
+        k = cl_cat3 (w, " ", cl_copy (p + j, e - j));
+        a = cl_get (&C->ownrec, k);
+        c = cl_get (&v->ownrec, k);
+        if (!cl_eq (a ? a : "", c ? c : "")) return 1;
+        i = e;
+        continue;
+      }
+    }
+    {
+      struct cs_ty *a = cl_get (&C->owntd, w), *c = cl_get (&v->owntd, w);
+      if ((a || c) && !(a && c && cl_eq (cl_td_key (a), cl_td_key (c)))) return 1;
+    }
+  }
+  return 0;
+}
 /* the name a static takes that another unit defines otherwise: its own, named with the unit (own_name) */
 static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
 {
   struct cs_decl *old;
   char *k;
-  if (C->treedefs.count && d->sc == SC_STATIC && cl_val (&C->treedefs, cl_ffname (name))) {
+  if (C->treedefs.count && (d->sc == SC_STATIC || cl_val (&C->treestatic, cl_ffname (name))) && cl_val (&C->treedefs, cl_ffname (name))) {
     k = cl_cat3 (name, " ", cl_unit_name ());
     cl_put (&C->own, name, k);
     return k;
@@ -537,25 +598,49 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
   old = cl_get (map, name);
   if (!old) return name;
   if (old->unit == C->cu || d->sc != SC_STATIC || old->sc != SC_STATIC) return name;
-  if (cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen)) return name;
+  if (cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen) && !cl_names_otherwise (d->dtext, d->dlen, old->unit)) return name;
   k = cl_cat3 (name, " ", cl_unit_name ());
   cl_put (&C->own, name, k);
   return k;
+}
+static void cl_rec_own (char *key, struct cs_rec *d)
+{
+  char *ownk = cl_cat3 (key, " ", cl_unit_name ());
+  cl_put_new (&C->rec, ownk, d);
+  cl_put_new (&C->recunit, ownk, C->cu);
+  cl_put (&C->ownrec, key, ownk);
 }
 /* a record tag's definition: the first is everyone's; a unit that defines it otherwise has its own, named with the unit (reg_rec): 1 where it is the first */
 static int cl_reg_rec (char *key, struct cs_rec *d)
 {
   struct cs_rec *o = cl_get (&C->rec, key);
   struct cl_unit *ru;
-  char *ownk;
   if (!o) { cl_put (&C->rec, key, d); cl_put (&C->recunit, key, C->cu); return 1; }
   ru = cl_get (&C->recunit, key);
-  if (!ru || ru == C->cu || cl_same_def (d, o)) return 0;
-  ownk = cl_cat3 (key, " ", cl_unit_name ());
-  cl_put_new (&C->rec, ownk, d);
-  cl_put_new (&C->recunit, ownk, C->cu);
-  cl_put (&C->ownrec, key, ownk);
+  if (!ru || ru == C->cu) return 0;
+  if (cl_same_def (d, o)) {
+    struct cl_shared *s = alloc (sizeof (struct cl_shared));
+    s->key = key; s->d = d; s->nxt = C->cu->shared; C->cu->shared = s;
+    return 0;
+  }
+  cl_rec_own (key, d);
   return 0;
+}
+/* a unit's records of the first's text: its own too where they name otherwise, until there are no more (own_by_names) */
+static void cl_own_by_names (void)
+{
+  int more = 1;
+  while (more) {
+    struct cl_shared *s = C->cu->shared;
+    more = 0;
+    while (s) {
+      if (!cl_get (&C->ownrec, s->key) && cl_names_otherwise (s->d->dtext, s->d->dlen, cl_get (&C->recunit, s->key))) {
+        cl_rec_own (s->key, s->d);
+        more = 1;
+      }
+      s = s->nxt;
+    }
+  }
 }
 static void cl_pass_tags (struct cs_decl *d, char *fk)
 {
@@ -607,7 +692,7 @@ static void cl_pass_typedef (struct cs_decl *d, char *name)
     }
     /* a typedef of an anonymous struct or union: the record is its tag */
     q = cl_cat3 (cl_rec_kind (c->rec), " ", name);
-    cl_put_new (&C->rec, q, c->rec);
+    cl_reg_rec (q, c->rec);
     cl_anon_fields (c->rec, name);
     if (!was || cl_eq (was, "void")) { cl_put (&C->typedef_k, name, q); cl_put (&C->typedef_t, name, d->t); was = q; }
     if (!cl_eq (was, q)) cl_put (&C->owntd, name, d->t);
@@ -781,4 +866,5 @@ static void cl_pass (void)
   while (t) { cl_pass_one (t); t = t->nxt; }
   t = T->ext1;
   while (t) { cl_pass_one (t); t = t->nxt; }
+  cl_own_by_names ();
 }

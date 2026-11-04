@@ -52,7 +52,9 @@ struct cs_spec {
   char *aliasee, *ifunc, *section, *cleanup, *asmlabel;
 };
 
+struct cs_lab { unsigned char *p; long n; long k; struct cs_lab *up; };   /* a __label__ in scope; or (labcount) how many of a name so far */
 struct cs_cst {
+  struct cs_lab *labels, *labcount;
   int target;
   int char_signed, lbytes, pbytes, ldbl, llalign, dalign, wchar_k, size_k, ptrdiff_k;
   long long maxalign;
@@ -184,6 +186,30 @@ static struct cs_bind *cs_lookup_b (unsigned char *p, long n, int ns)
 }
 static void *cs_lookup (unsigned char *p, long n, int ns) { struct cs_bind *b = cs_lookup_b (p, n, ns); return b ? b->v : 0; }
 static long cs_scope_in (void) { T->level++; return T->nundo; }
+/* GNU's __label__: a label of its block, numbered among the function's of its name (a label in ff is the function's) */
+static int cs_lab_is (struct cs_lab *l, unsigned char *p, long n)
+{
+  long i = 0;
+  if (l->n != n) return 0;
+  while (i < n) { if (l->p[i] != p[i]) return 0; i++; }
+  return 1;
+}
+static void cs_label_decl (unsigned char *p, long n)
+{
+  struct cs_lab *c = T->labcount, *l = alloc (sizeof (struct cs_lab));
+  while (c && !cs_lab_is (c, p, n)) c = c->up;
+  if (!c) { c = alloc (sizeof (struct cs_lab)); c->p = p; c->n = n; c->up = T->labcount; T->labcount = c; }
+  c->k++;
+  l->p = p; l->n = n; l->k = c->k; l->up = T->labels;
+  T->labels = l;
+}
+/* its number where one is in scope, or 0 */
+static long cs_label_k (unsigned char *p, long n)
+{
+  struct cs_lab *l = T->labels;
+  while (l && !cs_lab_is (l, p, n)) l = l->up;
+  return l ? l->k : 0;
+}
 static void cs_scope_out (long mark)
 {
   while (T->nundo > mark) {

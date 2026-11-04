@@ -701,6 +701,14 @@ static char *cl_label_name (unsigned char *p, long n)
   return f;
 }
 
+/* (a local one, GNU's __label__: x 1, x 2, in the order they are declared, c2ff's) */
+static char *cl_label_of (unsigned char *p, long n, long k)
+{
+  char *nm;
+  if (!k) return cl_label_name (p, n);
+  nm = cl_cat3 (cl_copy (p, n), " ", cl_num (k));
+  return cl_label_name ((unsigned char *) nm, cstrlen (nm));
+}
 static void cl_arg (struct cs_ex *a, struct cl_list *o)
 {
   if (a->k == E_ICE && a->op == CK_INTEGRALCAST) {
@@ -1144,7 +1152,18 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   if (C->target != 3 && (cl_eq (name, "__builtin_unwind_init") || cl_eq (name, "__builtin_dwarf_cfa") || cl_eq (name, "__builtin_dwarf_sp_column") || cl_eq (name, "__builtin_eh_return") || cl_eq (name, "__builtin_eh_return_data_regno") || cl_eq (name, "__builtin_frob_return_addr") || cl_eq (name, "__builtin_init_dwarf_reg_size_table"))) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 3 && cl_eq (name, "__builtin_frob_return_addr")) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_autia1716") || cl_eq (name, "__builtin_aarch64_autib1716") || cl_eq (name, "__builtin_aarch64_chkfeat") || cl_eq (name, "__builtin_aarch64_gcspr") || cl_eq (name, "__builtin_aarch64_gcspopm") || cl_eq (name, "__builtin___clear_cache"))) { cl_push (o, cl_call_node (name, n)); return; }
-  if (C->target == 2 && cl_eq (name, "__builtin_aarch64_get_fpcr") && !na) { cl_push (o, cl_n (name)); return; }
+  if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_get_fpcr") || cl_eq (name, "__builtin_aarch64_get_fpsr")) && !na) { cl_push (o, cl_n (name)); return; }
+  if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_set_fpcr") || cl_eq (name, "__builtin_aarch64_set_fpsr"))) { cl_push (o, cl_call_node (name, n)); return; }
+  if (C->target == 2) {
+    /* libm's of aarch64 (builtins-aarch64.ff.txt) */
+    static char *w[] = { "floor", "ceil", "trunc", "round", "roundeven", "rint", "nearbyint", "fmax", "fmin", "lrint", "llrint", "lround", "llround", 0 };
+    long i = 0;
+    while (w[i]) {
+      char *b = cl_cat ("__builtin_", w[i]);
+      if (cl_eq (name, b) || cl_eq (name, cl_cat (b, "f"))) { cl_push (o, cl_call_node (name, n)); return; }
+      i++;
+    }
+  }
 
   if (C->target == 1 && !na && cl_eq (name, "__builtin_ia32_rdsspq")) { cl_push (o, cl_n1 (name, cl_n ("0"))); return; }
   if (C->target == 1 && (cl_eq (name, "__builtin_ia32_rdsspq") || cl_eq (name, "__builtin_ia32_incsspq") || cl_eq (name, "__builtin___clear_cache") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_signbitf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_ia32_pmovmskb128") || cl_eq (name, "__builtin_ia32_pshufb128"))) { cl_push (o, cl_call_node (name, n)); return; }
@@ -1511,7 +1530,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
       if (f) { cl_push (o, f); return; }
     }
   }
-  if (k == E_ADDRLABEL) { cl_push (o, cl_n1 ("address", cl_n (cl_label_name (n->name, n->nlen)))); return; }
+  if (k == E_ADDRLABEL) { cl_push (o, cl_n1 ("address", cl_n (cl_label_of (n->name, n->nlen, n->lk)))); return; }
   if (C->in_global && k == E_ICE && n->op == CK_ARRAYTOPOINTERDECAY) {
     struct cs_ex *s = cl_strip (cl_k (n, 0));
     if (s->k == E_MEM || s->k == E_IDX) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
@@ -1670,6 +1689,21 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
   if (k == E_UN) {
     char *op = cl_name_of (n);
     struct cs_ex *e = cl_k (n, 0);
+    /* (the result of a function of no C, an asm function's on aarch64, has no type for ttpc: cast) */
+    if (cl_eq (op, "*") && C->target == 2) {
+      struct cs_ex *c = e;
+      while (c->k == E_ICE || c->k == E_PAREN) c = cl_k (c, 0);
+      if (c->k == E_CALL) {
+        struct cs_ex *f = cl_k (c, 0);
+        while (f->k == E_ICE || f->k == E_PAREN) f = cl_k (f, 0);
+        if (f->k == E_REF && f->d && !cl_has (&C->fn, cl_dn (f->d))) {
+          struct cl_list *v = cl_l ();
+          cl_itemx (e, v);
+          cl_push (o, cl_n1 ("content", cl_cast_node (cl_ct (e->t), v)));
+          return;
+        }
+      }
+    }
     if (cl_eq (op, "*")) { cl_push (o, cl_nl ("content", cl_ex (e))); return; }
     if (cl_eq (op, "-") || cl_eq (op, "!") || cl_eq (op, "~")) { cl_push (o, cl_n (op)); cl_push (o, cl_atom (e)); return; }
     if (cl_eq (op, "++") || cl_eq (op, "--")) { cl_push (o, cl_n (op)); cl_push (o, cl_atom (e)); return; }
@@ -2238,7 +2272,11 @@ static void cl_decl_stmt (struct cs_st *n, struct cl_list *o)
       }
     } else if (d->k == DK_FUNC) cl_fail ("a declaration of a function in a block, not extern", cl_dn (d));
     else if (d->sc == SC_STATIC && !cl_holds_addrlabel (d->init)) {
+      /* (a later one of its name is that name and its number: e_acosh's cl) */
       char *g = cl_cat3 (cl_ffname (C->cur_fn), " ", cl_ffname (cl_dn (d)));
+      long k = (long) cl_get (&C->staticcount, cl_dn (d)) + 1;
+      cl_put (&C->staticcount, cl_dn (d), (char *) k);
+      if (k > 1) g = cl_cat3 (g, " ", cl_num (k));
       d->global = g;
       cl_out (cl_decl (d, 1, g));
     } else cl_push (o, cl_decl (d, 0, 0));
@@ -2320,7 +2358,7 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
   }
   case S_CASE: case S_DEFAULT: cl_labelled (n, o); return;
   case S_LABEL: {
-    char *l = cl_cat (cl_label_name (n->name, n->nlen), ":");
+    char *l = cl_cat (cl_label_of (n->name, n->nlen, n->lk), ":");
     if (n->a && n->a->k == S_DECL) { cl_push (o, cl_n (l)); cl_stmt (n->a, o); return; }
     {
       struct cl_list *x = cl_l ();
@@ -2329,7 +2367,7 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
     }
     return;
   }
-  case S_GOTO: cl_push (o, cl_n1 ("goto", cl_n (cl_label_name (n->name, n->nlen)))); return;
+  case S_GOTO: cl_push (o, cl_n1 ("goto", cl_n (cl_label_of (n->name, n->nlen, n->lk)))); return;
   case S_IGOTO: cl_push (o, cl_n1 ("goto", cl_nl ("content", cl_ex (cl_p (n->e))))); return;
   case S_BREAK: cl_push (o, cl_n ("break")); return;
   case S_CONTINUE: cl_push (o, cl_n ("continue")); return;
@@ -2960,6 +2998,8 @@ static struct node *cl_function (char *name, struct cs_decl *d)
   struct cl_list *head = cl_l (), *ps = cl_l (), *st = cl_l ();
   struct cs_ty *f = cs_canon (d->t);
   long i = 0;
+  C->staticcount.tab = 0;
+  C->staticcount.count = 0;
   char *saved_fn = C->cur_fn;
   char *file, *comment;
   long nst = 0;

@@ -87,6 +87,9 @@ static void cl_reach (void)
     struct cs_decl *d;
     if (a) {
       struct cl_list *x = cl_l ();
+      /* (of what its unit names: a static of its own) */
+      cl_enter (cl_get (&C->aliasunit, name));
+      a = cl_own (a);
       cl_w (x, "alias");
       cl_w (x, cl_ffname (a));
       cl_out_of (cl_nl (cl_cat (cl_ffname (name), ":"), x), cl_get (&C->aliasunit, name));
@@ -292,6 +295,7 @@ static void cl_types_all (void)
           cl_set (&C->tdone, tag);
           /* (its fields' types as its unit has them) */
           cl_enter (cl_get (&C->recunit, tag));
+          C->cur_tag = tag;
           /* (a record the program only declares and its tree defines: the tree's) */
           if (C->program && !r && (cl_starts (tag, "struct ") || cl_starts (tag, "union "))) {
             char *nm = cl_starts (tag, "struct ") ? tag + 7 : tag + 6;
@@ -358,7 +362,7 @@ static void cl_reserve_form (char *s)
   while (i < n - 1) { if (!cl_alpha (s[i]) && !cl_digit (s[i])) return; i++; }
   cl_set (&C->reserved, cl_no_colon (s));
 }
-/* (x86_64gnu.ff's top nodes of a name, as c2ff.pl's reads: not those under them) */
+/* (x86_64gnu.ff's forms, a name: without a name: under it; else what is under it, in c2ff.pl's order) */
 static void cl_reserve_gnu (struct node *root)
 {
   long j = 0;
@@ -366,9 +370,12 @@ static void cl_reserve_gnu (struct node *root)
     struct node *x = root->kids[j];
     char *s = cl_copy (x->text, x->len);
     long i = 0, n = cstrlen (s);
-    int form = n >= 2 && s[n - 1] == ':' && s[0] >= 'a' && s[0] <= 'z' && x->count > 0;
+    int form = n >= 2 && s[n - 1] == ':' && s[0] >= 'a' && s[0] <= 'z';
     while (form && i < n - 1) { if (!cl_alpha (s[i]) && !cl_digit (s[i])) form = 0; i++; }
+    i = 0;
+    while (form && i < x->count) { char *k = cl_copy (x->kids[i]->text, x->kids[i]->len); long m = cstrlen (k); if (m && k[m - 1] == ':') form = 0; i++; }
     if (form) cl_reserve_form (s);
+    else cl_reserve_gnu (x);
     j++;
   }
 }
@@ -458,6 +465,18 @@ static void cl_begin (void)
   C->nfieldrec = 0 - 1;
   if (C->target) cl_reserve_target ();
   if (C->indexf) cl_read_index ();
+  /* (-J file: the tree's statics, a line each) */
+  if (C->staticsf) {
+    long n = 0, i = 0;
+    unsigned char *p = cp_file (C->staticsf, &n);
+    if (!p) cl_fail ("cannot read", C->staticsf);
+    while (i < n) {
+      long b = i;
+      while (i < n && p[i] != '\n') i++;
+      if (i > b) cl_set (&C->treestatic, cl_copy (p + b, i - b));
+      i++;
+    }
+  }
 }
 /* a unit read: its pass */
 static void cl_run (void)
@@ -660,6 +679,7 @@ static void cl_read_index (void)
     i++;
   }
 }
+void cl_statics_file (char *f) { C->staticsf = f; }
 void cl_options2 (char *program, char *indexf, int start, char **zero, long nzero, char **weak, long nweak, int keep_going)
 {
   long i = 0;

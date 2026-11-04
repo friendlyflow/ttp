@@ -651,6 +651,7 @@ static struct cs_ty *cs_enum_spec (struct node *n, struct cs_spec *spc, int alon
     struct cs_ex **inits = alloc ((ne + 1) * sizeof (struct cs_ex *));
     struct cs_decl *last = 0;
     long long negbits = 0, posbits = 0;
+    int allint;
     struct cs_ty *best, *promo;
     if (T->dump && !(T->exdepth && T->fn && !T->inenum)) { cs_o_kind ("enum"); cs_o_name (r->tag, r->tlen); cs_o_str ("\n"); }
     cs_note_rec (r);
@@ -720,12 +721,18 @@ static struct cs_ty *cs_enum_spec (struct node *n, struct cs_spec *spc, int alon
     r->intty = best;
     r->promo = promo;
     r->complete = 1;
+    /* (each an int if all fit one; else each the enum's type, as clang and C23: RT_TABLE_UNSPEC of an enum with RT_TABLE_MAX 0xFFFFFFFF) */
+    {
+      long q = 0;
+      allint = 1;
+      while (q < ne) { long long w = enums[q]->val; if (w < -2147483647LL - 1 || w > 2147483647LL) allint = 0; q++; }
+    }
     j = 0;
     while (j < ne) {
       struct cs_decl *d = enums[j];
       long long v = d->val;
       struct cs_ty *nt;
-      if (v >= -2147483647LL - 1 && v <= 2147483647LL) nt = T->intt;
+      if (allint) nt = T->intt;
       else if (cs_same_ty (d->t, best)) nt = d->t;
       else nt = best;
       if (inits[j] && !cs_same_ty (nt, inits[j]->t)) inits[j] = cs_cast_force (inits[j], nt, CK_INTEGRALCAST);
@@ -1128,7 +1135,11 @@ static struct cs_st *cs_item (struct node *n)
     }
     return s;
   }
-  if (cs_is (n, "__label__")) return cs_st_new (S_DECL, n);
+  if (cs_is (n, "__label__")) {
+    long i = 0;
+    while (i < n->count) { cs_label_decl (n->kids[i]->text, n->kids[i]->len); i++; }
+    return cs_st_new (S_DECL, n);
+  }
   if (cs_is (n, "directive")) { cs_top_add (TOP_WEAK, 0, 0, n->kids[0], 1); return 0; }
   return cs_stmt (n);
 }
@@ -1204,8 +1215,10 @@ static struct cs_st *cs_stmt1 (struct node *n)
   struct cs_st *s;
   if (cs_is (n, "block")) {
     long m = cs_scope_in (), i = 0;
+    struct cs_lab *labs = T->labels;
     s = cs_st_new (S_BLOCK, n);
     while (i < n->count) { struct cs_st *k = cs_item (n->kids[i]); if (k) cs_st_add (s, k); i++; }
+    T->labels = labs;
     cs_scope_out (m);
     return s;
   }
@@ -1294,6 +1307,7 @@ static struct cs_st *cs_stmt1 (struct node *n)
     s = cs_st_new (S_LABEL, n);
     s->name = n->kids[0]->text;
     s->nlen = n->kids[0]->len;
+    s->lk = cs_label_k (s->name, s->nlen);
     s->a = cs_item (n->kids[n->count - 1]);
     return s;
   }
@@ -1304,7 +1318,7 @@ static struct cs_st *cs_stmt1 (struct node *n)
     return s;
   }
   if (cs_is (n, "asm")) return cs_asm_stmt (n);
-  if (cs_is (n, "goto")) { s = cs_st_new (S_GOTO, n); s->name = n->kids[0]->text; s->nlen = n->kids[0]->len; return s; }
+  if (cs_is (n, "goto")) { s = cs_st_new (S_GOTO, n); s->name = n->kids[0]->text; s->nlen = n->kids[0]->len; s->lk = cs_label_k (s->name, s->nlen); return s; }
   s = cs_item (n);
   return s;
 }
@@ -1323,26 +1337,43 @@ static struct cs_st *cs_stmt (struct node *n)
   if (tr) T->depth--;
   return s;
 }
+/* (the last of a statement expression, its value: under its labels too, INLINE_VSYSCALL's out: sc_ret) */
+static struct cs_st *cs_stmtx_last (struct node *it, struct cs_ex **last)
+{
+  if (cs_is (it, "expr")) {
+    struct cs_st *x = cs_st_new (S_EXPR, it);
+    *last = cs_ex_of (it->kids[0]);
+    *last = cs_lval_conv (cs_fa_conv (*last));
+    cs_dump_ex (*last);
+    x->e = *last;
+    return x;
+  }
+  if (cs_is (it, "label")) {
+    struct cs_st *s = cs_st_new (S_LABEL, it);
+    s->name = it->kids[0]->text;
+    s->nlen = it->kids[0]->len;
+    s->lk = cs_label_k (s->name, s->nlen);
+    s->a = cs_stmtx_last (it->kids[it->count - 1], last);
+    return s;
+  }
+  return cs_item (it);
+}
 static struct cs_ex *cs_stmt_expr (struct node *blk)
 {
   long mark = T->out.n, sm = cs_scope_in (), i = 0;
   struct cs_ex *e = cs_mk (E_STMTX, cs_basic (TY_VOID), 0), *last = 0;
+  struct cs_lab *labs = T->labels;
   int ed = T->exdepth, dd = T->depth;
   struct cs_st *b = cs_st_new (S_BLOCK, blk);
   T->exdepth = 0;
   T->depth = 0;
   while (i < blk->count) {
     struct node *it = blk->kids[i];
-    if (i == blk->count - 1 && cs_is (it, "expr")) {
-      struct cs_st *x = cs_st_new (S_EXPR, it);
-      last = cs_ex_of (it->kids[0]);
-      last = cs_lval_conv (cs_fa_conv (last));
-      cs_dump_ex (last);
-      x->e = last;
-      cs_st_add (b, x);
-    } else { struct cs_st *k = cs_item (it); if (k) cs_st_add (b, k); }
+    if (i == blk->count - 1) { struct cs_st *k = cs_stmtx_last (it, &last); if (k) cs_st_add (b, k); }
+    else { struct cs_st *k = cs_item (it); if (k) cs_st_add (b, k); }
     i++;
   }
+  T->labels = labs;
   cs_scope_out (sm);
   T->exdepth = ed;
   T->depth = dd;
@@ -1427,6 +1458,8 @@ static void cs_fundef (struct node *n)
   T->fn = d;
   T->fnret = cs_unqual (f->to);
   T->depth++;
+  T->labels = 0;
+  T->labcount = 0;
   d->body = cs_stmt (body);
   T->depth--;
   T->fn = 0;

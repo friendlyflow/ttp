@@ -55,6 +55,13 @@ static char *builtins[] = {
   "void __builtin_prefetch (const void *, ...);", "SZ __builtin_object_size (const void *, int);",
   "SZ __builtin_dynamic_object_size (const void *, int);", "void *__builtin_assume_aligned (const void *, SZ, ...);",
   "int __builtin_classify_type ();", "void __builtin___clear_cache (char *, char *);",
+  "float __builtin_floorf (float);", "double __builtin_floor (double);", "float __builtin_ceilf (float);", "double __builtin_ceil (double);",
+  "float __builtin_truncf (float);", "double __builtin_trunc (double);", "float __builtin_roundf (float);", "double __builtin_round (double);",
+  "float __builtin_roundevenf (float);", "double __builtin_roundeven (double);", "float __builtin_rintf (float);", "double __builtin_rint (double);",
+  "float __builtin_nearbyintf (float);", "double __builtin_nearbyint (double);",
+  "float __builtin_fmaxf (float, float);", "double __builtin_fmax (double, double);", "float __builtin_fminf (float, float);", "double __builtin_fmin (double, double);",
+  "long __builtin_lrintf (float);", "long __builtin_lrint (double);", "long long __builtin_llrintf (float);", "long long __builtin_llrint (double);",
+  "long __builtin_lroundf (float);", "long __builtin_lround (double);", "long long __builtin_llroundf (float);", "long long __builtin_llround (double);",
   "typedef int __csema_mid;",
   "extern int __builtin_va_arg_pack_len (void);", "extern int __builtin_va_arg_pack (void);",
   "extern double __builtin_tgmath ();",
@@ -121,7 +128,7 @@ static void one_unit (char *file, char *name, int target, int mode)
     }
     i++;
   }
-  if (target == 2) put (buf, &n, "extern unsigned int __builtin_aarch64_get_fpcr (void);\n", 0);
+  if (target == 2) put (buf, &n, "extern unsigned int __builtin_aarch64_get_fpcr (void);\nextern void __builtin_aarch64_set_fpcr (unsigned int);\nextern unsigned int __builtin_aarch64_get_fpsr (void);\nextern void __builtin_aarch64_set_fpsr (unsigned int);\n", 0);
   put (buf, &n, "typedef int __csema_end;\n", 0);
   i = 0;
   while (i < bytes) { buf[n + i] = src[i]; i++; }
@@ -175,7 +182,7 @@ int csema_main (int argc0, char **argv0)
   long a = 1, argc;
   char **argv = expand_args (argc0, argv0, &argc);
   int target = 0, mode = 0;
-  char *page = "glibc", *gsrc = 0, *lsrc = 0, *shared = 0, *iname = 0, *program = 0, *indexf = 0;
+  char *page = "glibc", *gsrc = 0, *lsrc = 0, *shared = 0, *iname = 0, *program = 0, *indexf = 0, *staticsf = 0;
   char **zero = alloc (argc * sizeof (char *)), **weak = alloc (argc * sizeof (char *));
   long nzero = 0, nweak = 0;
   int start = 0, keep_going = 0;
@@ -189,6 +196,7 @@ int csema_main (int argc0, char **argv0)
     else if (same ((unsigned char *) argv[a], 2, "-n") && a + 1 < argc) iname = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-P") && a + 1 < argc) program = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-I") && a + 1 < argc) indexf = argv[++a];
+    else if (same ((unsigned char *) argv[a], 2, "-J") && a + 1 < argc) staticsf = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-T")) start = 1;
     else if (same ((unsigned char *) argv[a], 2, "-k")) keep_going = 1;
     else if (same ((unsigned char *) argv[a], 2, "-M") && a + 2 < argc) {
@@ -220,6 +228,7 @@ int csema_main (int argc0, char **argv0)
     if (dd == argc) {
       cl_options (page, gsrc, lsrc, shared, argv + a + 1, argc - a - 1);
       cl_options2 (program, indexf, start, zero, nzero, weak, nweak, keep_going);
+      cl_statics_file (staticsf);
       if (!iname) iname = argv[a];
       cl_new_unit (iname, 0);
       one_unit (argv[a], iname, target, mode);
@@ -227,6 +236,7 @@ int csema_main (int argc0, char **argv0)
       int object = 0;
       cl_options (page, gsrc, lsrc, shared, argv + dd + 1, argc - dd - 1);
       cl_options2 (program, indexf, start, zero, nzero, weak, nweak, keep_going);
+      cl_statics_file (staticsf);
       i = a;
       while (i < dd) {
         char *f = argv[i], *nm = f;

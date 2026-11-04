@@ -93,6 +93,7 @@ struct cs_ex {
   struct node *src;
   int paren;            /* the parentheses around it */
   struct cs_st *st;     /* a statement expression's block */
+  long lk;              /* && of a label: as cs_st's */
   struct cs_ty **tys;   /* _Generic: each association's type, 0 for its default; val the one selected, its kids x and then their values */
 };
 /* a statement (T3c) */
@@ -104,6 +105,7 @@ struct cs_st {
   struct cs_ex *e, *e2, *e3;
   struct cs_st *a, *b;
   struct cs_st **kid; long nk, room;
+  long lk;              /* a label's, a goto's: GNU's __label__, its number among the function's of that name, or 0 */
   unsigned char *name; long nlen;
   struct cs_dl *dl, *dlast;
   struct cs_ex **ops; long nops;   /* an asm statement's operands, the outputs first */
@@ -116,4 +118,5 @@ void cl_options (char *page, char *glibc_src, char *libgcc_src, char *shared, ch
 void cl_new_unit (char *name, int object);
 void cl_finish (void);
 void cl_options2 (char *program, char *indexf, int start, char **zero, long nzero, char **weak, long nweak, int keep_going);
+void cl_statics_file (char *f);
 void cs_run (struct node *root, unsigned char *src, long n, long skip, int target, int mode, char *name);

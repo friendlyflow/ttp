@@ -14,6 +14,16 @@
 # Each .i's AST is the .json beside it. It prints each function that differs,
 # where, and a count; it exits 1 if any differs.
 #
+# All of glibc, a part at a time (../compiler/gen/rtall.sh): each part's normal
+# forms are kept in a file of their own, no AST need stay on disk, and then
+#   perl roundtrip.pl [--target t] --norm-back OUT names.txt back.json
+#   perl roundtrip.pl [--target t] --norm-unit OUT names.txt unit.json file
+#   perl roundtrip.pl [--target t] --join names.txt back.norm ... -- unit.norm ...
+# back.json is clang's AST of one of ff2c --split's files, unit.json the name
+# of a unit as names.txt has it (its .i's, with .json) and file its AST (- is
+# the standard input). --join compares as above, units in the order given:
+# the first unit's global, as above; a @file argument holds a list.
+#
 # Normalized away, on both sides: parentheses, the casts that change nothing
 # (lvalue to value, decay, no-op, one between types of one class: long and
 # long long), a[i] (as *(a + i)), braces around one statement, the layout of
@@ -36,11 +46,16 @@ use warnings;
 use FindBin;
 use lib "$FindBin::Bin/../compiler/gen";
 use FFold;
+use Storable qw(nstore retrieve);
 my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 
 our $target = '';
 if (@ARGV >= 2 && $ARGV[0] eq '--target') { (undef, $target) = splice @ARGV, 0, 2 }
 FFold::x87() if $target eq 'x86_64';
+my ($norm_back, $norm_unit, $join);
+if (@ARGV >= 2 && $ARGV[0] eq '--norm-back') { (undef, $norm_back) = splice @ARGV, 0, 2 }
+elsif (@ARGV >= 2 && $ARGV[0] eq '--norm-unit') { (undef, $norm_unit) = splice @ARGV, 0, 2 }
+elsif (@ARGV && $ARGV[0] eq '--join') { shift @ARGV; $join = 1 }
 @ARGV = map { /^@(.+)$/ ? do { open my $h, "<", $1 or die "roundtrip: cannot open $1: $!\n"; map { chomp; s{^\s+}{}; length ? $_ : () } <$h> } : $_ } @ARGV;
 my ($namesfile, $backjson, @unitjson) = @ARGV;
 die "usage: roundtrip.pl [--target t] names.txt back.json [unit.json ...]\n" unless defined $backjson;
@@ -58,7 +73,7 @@ while (<$h>) {
 }
 close $h;
 
-sub load { my ($f) = @_; open my $h, '<', $f or die "roundtrip: $f: $!\n"; local $/; $json->decode(<$h>) }
+sub load { my ($f) = @_; my $h = \*STDIN; if ($f ne '-') { open $h, '<', $f or die "roundtrip: $f: $!\n" } local $/; $json->decode(<$h>) }
 sub kids { @{ $_[0]{inner} || [] } }
 
 # ---- types --------------------------------------------------------------------
@@ -152,9 +167,14 @@ sub tstr {
     # (an anonymous record's spelling, union __mbstate_t::(unnamed at f.h:3:5), is a record)
     return 'rec' if $s =~ /^(?:struct|union)\b[^*\[]*\((?:unnamed|anonymous)\b[^()]*\)$/;
     return 'enum' if $s =~ /^enum\b[^*\[]*\((?:unnamed|anonymous)\b[^()]*\)$/;
+    # (a pointer to an array, an array of function pointers, as C spells them)
+    if ($s =~ /^(.*)\(\*\)((?:\[\d*\])+)$/) { my ($e, $r) = ($1, $2); $e =~ s/ $//; return 'ptr(' . tstr("$e$r") . ')' }
+    if ($s =~ /\(\*\[(\d*)\]\)\s*\(/) { my $c = $1; return "arr(fnptr,$c)" }
     return 'fnptr' if $s =~ /\(\*+\)\s*\(/ || $s =~ /\(\*\)$/;
     return 'fn' if $s =~ /\)$/ && $s =~ /^[^(]+\(/ && $s !~ /^(?:struct|union|enum) \(/;
-    return 'arr(' . tstr($1) . ",$2)" if $s =~ /^(.*)\[(\d*)\]$/;
+    # (T[n][m] is n of T[m]: the first count is the array's)
+    if ($s =~ /^([^\[\]()]*)\[(\d*)\]((?:\[\d*\])*)$/) { my ($e, $c, $r) = ($1, $2, $3); return 'arr(' . tstr("$e$r") . ",$c)" }
+    if ($s =~ /^(.*)\[(\d*)\]$/) { my ($e, $c) = ($1, $2); return 'arr(' . tstr($e) . ",$c)" }
     if ($s =~ /^(.*?)\[([^\[\]]*[A-Za-z_(][^\[\]]*)\]$/) { my ($e, $c) = ($1, $2); return 'vla(' . tstr($e) . ',' . vla_norm($c) . ')' }
     if ($s =~ /^(.*)\*$/) { my $to = tstr($1); return $to eq 'fn' ? 'fnptr' : "ptr($to)" }
     return $cls{$s} if exists $cls{$s};
@@ -186,6 +206,7 @@ sub retcls {
 
 # ---- the normal form ------------------------------------------------------------
 
+our %staticid;
 our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
 sub strip { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub unparen { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
@@ -194,6 +215,7 @@ sub name_of {
     my $n = $d->{name} // '';
     return $orig{$n} // $n if $side eq 'ff';
     return $regvar{$n} if $d->{kind} eq 'VarDecl' && $regvar{$n} && !$local{ $d->{id} };
+    return $staticid{ $d->{id} } if defined $d->{id} && $staticid{ $d->{id} };
     $n =~ s/^__builtin_((?:mem|str|stp)\w+|free|malloc)$/$1/;
     # (a call of copysign or fabs: of its builtin, as c2ff writes it)
     $n = "__builtin_$n" if $n =~ /^(?:copysign|fabs)(?:[fl]|f128)?$/ && $d->{kind} eq 'FunctionDecl';
@@ -250,7 +272,7 @@ sub E {
         # (C23's true and false, a bool's own, are c2ff's 1 and 0, a u8 there:
         # a 1 or 0 converted to a u8 is that literal, on both sides)
         if ($ck eq 'IntegralCast' && tcls($n) eq 'u8' && !$in_global && (unparen($c)->{kind} // '') eq 'IntegerLiteral' && (unparen($c)->{value} // '') =~ /^[01]$/) { return E(unparen($c)) }
-        if ($ck eq 'IntegralCast' && tcls($n) eq 'u8' && $side eq 'ff') {
+        if ($ck eq 'IntegralCast' && tcls($n) eq 'u8' && ($side eq 'ff' || $k eq 'ImplicitCastExpr')) {
             my $b = unparen($c);
             if ($b->{kind} eq 'BinaryOperator' && $b->{opcode} eq '!=' && is_zero((kids($b))[1])) { return '(tobool ' . E(unimplicit((kids($b))[0])) . ')' }
         }
@@ -709,8 +731,10 @@ sub asm_barrier {
     my ($n) = @_;
     my ($t, $oc) = asm_text($n);
     # (and on x86_64, as c2ff, one with inputs alone: math_force_eval's,
-    # __pthread_mutex_lock_full's)
-    defined $t && $t !~ /\S/ && ((@$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc) || ($target eq 'x86_64' && !@$oc));
+    # __pthread_mutex_lock_full's; aarch64's +w too)
+    defined $t && $t !~ /\S/ && ((@$oc && !grep { !/\+/ || ($target eq 'aarch64' ? !/^[=+&]*[rxw]+$/ : !/^[=+&]*[rx]+$/) } @$oc) || ($target eq 'x86_64' && !@$oc)
+        # (aarch64's with inputs alone, of long doubles: math_force_eval's, as c2ff)
+        || ($target eq 'aarch64' && !@$oc && (my @in = grep { $_->{kind} !~ /Attr$/ } kids($n)) && !grep { tcls($_) ne 'ldouble' } grep { $_->{kind} !~ /Attr$/ } kids($n)));
 }
 
 # A declaration's value: a char array set from a text as the text's codes, the
@@ -744,6 +768,10 @@ sub gnorm {
     local $in_global = 1;
     my $i = var_init($d);
     $i = '(zero)' if !defined $i || is_zero_form($i);
+    # (what c2ff works out: a constant sum, randtbl's &randtbl[SEP_3 + 1]; a scalar's items in braces)
+    1 while $i =~ s/\(\+ \(int (\d+) i32\) \(int (\d+) i32\)\)/'(int ' . ($1 + $2) . ' i32)'/e;
+    $i =~ s/\(\/ \(sizeof arr\(([^()]*(?:\([^()]*\))?[^()]*),(\d+)\)\) \(sizeof \1\)\)/(int $2 i32)/g;
+    $i = $1 if $i =~ /^\(init (.*)\)$/s && balanced($1) && tcls($d) !~ /^(?:arr|rec|vla)/;
     # (an anonymous enum is an int in ff)
     '(global ' . (tcls($d) =~ s/^enum$/i32/r) . " $i)";
 }
@@ -827,7 +855,7 @@ sub S {
         if ($k eq 'CaseStmt') { my @k = kids($n); my $sub = pop @k; push @out, '(case ' . join(' ', map { E($_) } @k) . ')', S($sub); next }
         if ($k eq 'DefaultStmt') { push @out, '(default)', S(kids($n)); next }
         # (a label's attribute, ret0: __attribute__ ((unused)), says nothing of the code: c2ff leaves it)
-        if ($k eq 'LabelStmt') { push @out, "(label $n->{name})", S(grep { $_->{kind} !~ /Attr$/ } kids($n)); next }
+        if ($k eq 'LabelStmt') { push @out, '(label ' . ($labels{ $n->{declId} } // $n->{name}) . ')', S(grep { $_->{kind} !~ /Attr$/ } kids($n)); next }
         if ($k eq 'AttributedStmt') { push @out, S(grep { $_->{kind} !~ /Attr$/ } kids($n)); next }
         next if $k eq 'NullStmt';
         if ($k eq 'ReturnStmt') { push @out, '(return' . ($n->{inner} ? ' ' . E((kids($n))[0]) : '') . ')'; next }
@@ -885,7 +913,17 @@ sub effect {
     E($n);
 }
 
-sub labels_of { my ($n) = @_; (($n->{kind} // '') eq 'LabelStmt' ? ($n->{declId} => $n->{name}) : ()), map { labels_of($_) } kids($n) }
+# (each label by its place among them: ff's local label x 1 is C's __label__ x)
+sub labels_of {
+    my ($n) = @_;
+    my $i = 0;
+    my @l;
+    my $w;
+    $w = sub { my ($m) = @_; push @l, $m->{declId}, ($m->{name} =~ s/_\d+$//r) . '#' . ++$i if ($m->{kind} // '') eq 'LabelStmt'; $w->($_) for kids($m) };
+    $w->($n);
+    undef $w;
+    @l;
+}
 sub locals_decls { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? $n : ()), map { locals_decls($_) } kids($n) }
 sub locals_of { my ($n) = @_; (($n->{kind} // '') =~ /^(ParmVarDecl|VarDecl)$/ ? ($n->{id} => 1) : ()), map { locals_of($_) } kids($n) }
 our %ltype;
@@ -906,14 +944,37 @@ sub typeof_expr {
     return $1 =~ s/^\s+|\s+$//gr if $e =~ /^\(([^()]*\*)\s*\)\s*\S/;
     undef;
 }
+# A function's statics after the first of a name (as c2ff names them): by id, name#k
+sub static_ids {
+    my ($fn) = @_;
+    my (%k, %r, $w);
+    $w = sub {
+        my ($n) = @_;
+        if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && defined $n->{name} && !holds($n, 'AddrLabelExpr')) {
+            my $c = ++$k{ $n->{name} };
+            $r{ $n->{id} } = "$n->{name}#$c" if $c > 1;
+        }
+        $w->($_) for kids($n);
+    };
+    $w->($fn);
+    undef $w;
+    %r;
+}
+sub local_typedefs { my ($n) = @_; (($n->{kind} // '') eq 'TypedefDecl' ? ($n->{name} => $n->{type}{qualType}) : ()), map { local_typedefs($_) } kids($n) }
 sub fnorm {
     my ($fn) = @_;
     local %ltype = map { ($_->{name} => $_->{type}{qualType}) } grep { defined $_->{name} && $_->{type} } locals_decls($fn);
     local %labels = labels_of($fn);
+    local %staticid = static_ids($fn) if $side eq 'glibc';
+    # (a typedef in a function: __nss_hostname_digits_dots_context's host_addr_t)
+    local %tdef = (%tdef, local_typedefs($fn));
     local %local = locals_of($fn);
     my @p = map { tcls($_) } grep { $_->{kind} eq 'ParmVarDecl' } kids($fn);
     my ($cs) = grep { $_->{kind} eq 'CompoundStmt' } kids($fn);
-    join ' ', '(fn', retcls($fn), '(' . join(' ', @p) . ($fn->{variadic} ? ' ...' : '') . ')', S(kids($cs)), ')';
+    my $f = join ' ', '(fn', retcls($fn), '(' . join(' ', @p) . ($fn->{variadic} ? ' ...' : '') . ')', S(kids($cs)), ')';
+    # (a constant as a condition, ff's 1 != 0)
+    $f =~ s/\(!= \(int (-?\d+) i32\) \(int 0 i32\)\)/(tobool (int $1 i32))/g;
+    $f;
 }
 
 # The typedefs of a unit: name, the type it stands for
@@ -933,8 +994,8 @@ sub typeofs {
 # ---- the comparison -----------------------------------------------------------
 
 my (%back, %backg);
-{
-    my $ast = load($backjson);
+sub back_norms {
+    my ($ast) = @_;
     local $side = 'ff';
     local %tdef = typedefs($ast);
     local %typeof = typeofs($ast);
@@ -955,12 +1016,16 @@ my @failed = grep { $_->[3] eq 'failed' } @bodies;
 my (%gwant, %gfound);
 for my $g (grep { $_->[3] eq 'global' } @globals) {
     my ($cid, $o, $hint) = @$g;
-    push @{ $gwant{$o} }, $g;
+    push @{ $gwant{ $o =~ s/#\d+$//r } }, $g;
 }
 my %seen;
 my %gextern;
-for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
-    my $ast = load($j);
+# one unit's normal forms: its functions wanted (by their C name here), its
+# globals wanted, what it only declares
+sub unit_norms {
+    my ($ast, $j) = @_;
+    my %want;
+    my (%gf, %ge);
     local %enumval = enumvals($ast);
     local $side = 'glibc';
     local $unit_i = $j =~ s/\.json$/.i/r;
@@ -986,32 +1051,70 @@ for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
     for my $d (kids($ast)) {
         next unless $d->{kind} eq 'VarDecl' && defined $d->{name} && $gwant{ $d->{name} };
         # (one glibc's asm only reserves, zero, c2ff --zero: its declaration)
-        if (($d->{storageClass} // '') eq 'extern') { $gextern{ $d->{name} } //= '(global ' . tcls($d) . ' (zero))'; next }
+        if (($d->{storageClass} // '') eq 'extern') { $ge{ $d->{name} } //= '(global ' . tcls($d) . ' (zero))'; next }
         for my $g (@{ $gwant{ $d->{name} } }) {
-            next if $g->[2] =~ /^in / || $gfound{ $g->[0] };
+            next if $g->[2] =~ /^in / || $gfound{ $g->[0] } || $gf{ $g->[0] };
             next if $g->[2] =~ /^unit (.+)$/ && $j !~ /\/\Q$1\E\.json$/;
-            $gfound{ $g->[0] } = gnorm($d);
+            $gf{ $g->[0] } = gnorm($d);
         }
     }
     # and its functions' statics
     for my $d (kids($ast)) {
         next unless $d->{kind} eq 'FunctionDecl' && defined $d->{name} && ($fnunit{ $d->{name} } // '') eq $j && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
+        local %staticid = static_ids($d);
         my @q = kids($d);
         while (my $n = shift @q) {
             if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && $gwant{ $n->{name} // '' }) {
-                for my $g (@{ $gwant{ $n->{name} } }) { $gfound{ $g->[0] } //= gnorm($n) if $g->[2] eq "in $d->{name}" }
+                # (name#k, a later one of its name in the function)
+                my $o = name_of($n);
+                for my $g (@{ $gwant{ $n->{name} } }) { $gf{ $g->[0] } //= gnorm($n) if $g->[2] eq "in $d->{name}" && $g->[1] eq $o && !$gfound{ $g->[0] } }
             }
             push @q, kids($n);
         }
     }
     for my $b (@{ $byunit{$j} // [] }) {
         my ($cid, $o) = @$b;
-        my $d = $def{$o} or do { push @diff, [$cid, "no function $o in $j"]; next };
-        my $want = fnorm($d);
+        my $d = $def{$o} or next;
+        $want{$cid} = fnorm($d);
+    }
+    { j => $j, want => \%want, gf => \%gf, ge => \%ge };
+}
+# and held against the C written back
+sub unit_compare {
+    my ($u) = @_;
+    my $j = $u->{j};
+    $gfound{$_} //= $u->{gf}{$_} for keys %{ $u->{gf} };
+    $gextern{$_} //= $u->{ge}{$_} for keys %{ $u->{ge} };
+    for my $b (@{ $byunit{$j} // [] }) {
+        my ($cid, $o) = @$b;
+        my $want = $u->{want}{$cid} // do { push @diff, [$cid, "no function $o in $j"]; next };
         my $got = $back{$cid} // do { push @diff, [$cid, 'not in the C written back']; next };
         if ($want eq $got) { $same++; next }
         push @diff, [$cid, where($want, $got)];
     }
+}
+if (defined $norm_back) {
+    back_norms(load($backjson));
+    nstore({ back => \%back, backg => \%backg }, $norm_back);
+    exit 0;
+}
+if (defined $norm_unit) {
+    my ($j, $file) = ($backjson, $unitjson[0] // $backjson);
+    nstore(unit_norms(load($file), $j), $norm_unit);
+    exit 0;
+}
+if ($join) {
+    my @l = ($backjson, @unitjson);
+    my ($b) = grep { $l[$_] eq '--' } 0 .. $#l;
+    die "roundtrip: --join names back.norm ... -- unit.norm ...\n" unless defined $b;
+    for my $f (@l[0 .. $b - 1]) { my $r = retrieve($f); %back = (%back, %{ $r->{back} }); %backg = (%backg, %{ $r->{backg} }) }
+    for (@l[$b + 1 .. $#l]) { my $u = retrieve($_); $seen{ $u->{j} } = 1; unit_compare($u) }
+    # (a function of a unit that is not there)
+    for my $j (grep { !$seen{$_} } sort keys %byunit) { push @diff, [$_->[0], "its unit $j was not read"] for @{ $byunit{$j} } }
+}
+else {
+    back_norms(load($backjson));
+    for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) { unit_compare(unit_norms(load($j), $j)) }
 }
 # where two normal forms part
 sub where {

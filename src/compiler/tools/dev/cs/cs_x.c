@@ -395,6 +395,8 @@ static struct cs_ex *cs_atomic_call (struct node *n, int form)
   else if (f == 2 || f == 3 || f == 4 || f == 5) { if (na > 2) cs_add (e, a[2]); cs_add (e, a[1]); }
   else if (f == 6) { if (na > 3) cs_add (e, a[3]); cs_add (e, a[1]); cs_add (e, a[2]); }
   else if (f == 7) { if (na > 5) { cs_add (e, a[4]); cs_add (e, a[1]); cs_add (e, a[5]); cs_add (e, a[2]); cs_add (e, a[3]); } }
+  /* (of a volatile of a typedef's, which clang does not take off: pthread_spin_lock's; a no-op cast does) */
+  if ((f == 1 || f == 5) && !(cs_canon (a[0]->t)->to->q & Q_VOLATILE) && (cs_canon (cs_canon (a[0]->t)->to)->q & Q_VOLATILE)) { e->t = cs_qual (res, Q_VOLATILE); return cs_ice (e, res, CK_NOOP); }
   return e;
 }
 /* a transparent union parameter: the argument as the member it fits, in a compound literal */
@@ -685,7 +687,7 @@ static struct cs_ex *cs_unary (struct node *n)
   struct cs_ex *o, *e;
   unsigned char *t = n->text;
   long len = n->len;
-  if (same (t, len, "&&")) { e = cs_mk (E_ADDRLABEL, T->vptr, 0); e->name = n->kids[0]->text; e->nlen = n->kids[0]->len; return e; }
+  if (same (t, len, "&&")) { e = cs_mk (E_ADDRLABEL, T->vptr, 0); e->name = n->kids[0]->text; e->nlen = n->kids[0]->len; e->lk = cs_label_k (e->name, e->nlen); return e; }
   o = cs_ex_of (n->kids[0]);
   if (same (t, len, "&")) { e = cs_mk1 (E_UN, cs_ptr_to (o->t), 0, o); return cs_named (e, "&"); }
   if (same (t, len, "*")) {

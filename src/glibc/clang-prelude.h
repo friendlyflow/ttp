@@ -64,7 +64,11 @@ extern _Bool __builtin_add_overflow_p (unsigned long, unsigned long, unsigned lo
    product of two sizes fits a ptrdiff_t. */
 extern _Bool __builtin_mul_overflow_p (unsigned long, unsigned long, long);
 #ifdef __aarch64__
-/* gcc's FPCR read, which soft-fp's sfp-machine.h uses for the rounding mode;
-   glibc in ff has it in builtins-aarch64.ff.txt. */
+/* gcc's FPCR read, which soft-fp's sfp-machine.h uses for the rounding mode,
+   and FPCR's write and FPSR's read and write, fenv's and libm's (fpu_control.h);
+   glibc in ff has them in builtins-aarch64.ff.txt. */
 extern unsigned int __builtin_aarch64_get_fpcr (void);
+extern void __builtin_aarch64_set_fpcr (unsigned int);
+extern unsigned int __builtin_aarch64_get_fpsr (void);
+extern void __builtin_aarch64_set_fpsr (unsigned int);
 #endif

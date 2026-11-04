@@ -546,18 +546,26 @@ sub oldnode1 { my ($t, $n) = @_; my @r = oldnode($t, $n); @r == 1 ? $r[0] : die 
 # One unit of a run now at $i: its prefixes, a node (or a compound
 # literal) and its postfixes; its nodes before and the index after it. A :
 # that holds one expression as the operand of * pointer gives its
-# children (C's parentheses), of & address stays.
+# children (C's parentheses), of & address stays. Only one of the two is made
+# (both, at each : in a : ..., doubled the work at each depth): $flat if the
+# caller says it would take it ($want, oldprefix) and no postfix follows, or
+# * pointer does.
 sub oldunit {
-    my ($t, $l, $i) = @_;
+    my ($t, $l, $i, $want) = @_;
     die "words: a prefix without its operand\n" if $i >= @$l;
     my $n = $l->[$i];
     if (is_prefix($n)) { my ($v, $j) = oldprefix($t, $l, $i); return ([$v], $j) }
     my ($j, @cur, $flat);
-    if (defined lit_count($t, $n)) { my ($v, $e) = oldlit($t, $l, $i); @cur = ($v); $j = $e }
+    # (a record's name last of its list, with no items after it, is no literal:
+    # a char array's text, passwd in nss_database_name_array)
+    my $k = lit_count($t, $n);
+    if (defined $k && !($k && $i == $#$l && leaf($n))) { my ($v, $e) = oldlit($t, $l, $i); @cur = ($v); $j = $e }
     else {
-        @cur = oldnode($t, $n);
-        $flat = [oldvals($t, [kids($n)])] if $n->{content} eq ':' && !leaf($n) && one_item($t, [kids($n)]);
         $j = $i + 1;
+        my $p = $l->[$j];
+        my $post = $p && (is_post($p) || is($p, '++') || is($p, '--'));
+        if (($post ? is($p, '* pointer') : $want) && $n->{content} eq ':' && !leaf($n) && one_item($t, [kids($n)])) { $flat = [oldvals($t, [kids($n)])] }
+        else { @cur = oldnode($t, $n) }
     }
     while ($j < @$l && (is_post($l->[$j]) || is($l->[$j], '++') || is($l->[$j], '--'))) {
         my $w = $l->[$j]{content};
@@ -577,7 +585,8 @@ sub oldunit {
 sub one_item {
     my ($t, $l) = @_;
     return 0 unless @$l;
-    return 0 if grep { $_->{content} =~ /.:$/ || $_->{content} eq 'compile time' } @$l;
+    # (a statement is no item: (void) ({ if ...; }) of wcsrchr)
+    return 0 if grep { $_->{content} =~ /.:$|^(?:if|while|for|do|do while|switch|return|goto|break|continue|compile time)$/ } @$l;
     item_end($l, 0, $t, 1) == @$l;
 }
 # a prefix and its operand at $i: the node before
@@ -590,7 +599,7 @@ sub oldprefix {
         return (node($n->{content}), $i + 1) unless $x && leaf($x) && $x->{content} =~ $num;
         return (node($suffix{ $n->{content} }, node($x->{content})), $i + 2) unless is_post($l->[$i + 2]);
     }
-    my ($v, $j, $flat) = oldunit($t, $l, $i + 1);
+    my ($v, $j, $flat) = oldunit($t, $l, $i + 1, 1);
     $v = $flat if $flat;
     return (node($suffix{ $n->{content} }, @$v), $j) if leaf($n);
     my @c = kids($n);
@@ -635,7 +644,8 @@ sub old_fields {
 # an item of a literal: a literal in its place is a : of its items before
 sub old_place {
     my ($t, $it) = @_;
-    if (@$it && defined lit_count($t, $it->[0]) && lit_end($t, $it, 0) == @$it) {
+    my $k = @$it ? lit_count($t, $it->[0]) : undef;
+    if (defined $k && lit_end($t, $it, 0) == @$it && !($k && @$it == 1 && leaf($it->[0]))) {
         my ($v) = oldlit($t, $it, 0);
         my @c = kids($v);
         if ($v->{content} =~ /^(?:array|vector)$/) { my ($r) = oldrun($t, [$it->[0]], 0); splice @c, 0, @$r - 1 }

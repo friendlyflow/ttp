@@ -112,6 +112,8 @@ my %scalar = (
 my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
+my %treestatic;            # --statics file: those that are a static of a unit there
+my $statics_out;
 my %treerec;               # --index file: the records its tree's types page defines
 my $treedir;              # --index file: its folder
 my %protos;               # a unit's declarations of a function without a body: their offsets
@@ -119,6 +121,9 @@ my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of ta
 my %ownfnrec;              # a function's own definitions of tags its unit defines otherwise
 my %recfn;                 # a tag a function's own definition registered first: that function
 my %ownanon;               # a unit's own anonymous records, where another unit's at the same place differ (places)
+my %anonin;                # a record's own anonymous records, where the first at the same place differs (anon_fields)
+our $reg_unit;             # the unit whose declarations are being registered
+our $cur_tag = '';         # the record whose fields are being written
 my %owntd;                 # a unit's own typedefs, where another unit's came first
 my %constint;              # a unit's const integer globals of a number (tst-random's const int nseq = 3): the counts of arrays
 my %tagname;                # struct, union, enum tags and their ff names
@@ -220,7 +225,7 @@ sub ctype {
     return ctype($typedef{$t}) if exists $typedef{$t};
     return ctype($desugar{$t}) if exists $desugar{$t};
     return ctype($typeof{$1}) if $t =~ /^(?:typeof|__typeof__) \(\s*(\S+?)\s*\)$/ && exists $typeof{$1};
-    if (my $a = own_anon($t) || $anon{ anon_key($t) // '' }) {
+    if (my $a = ($anonin{$cur_tag} // {})->{ anon_key($t) // '' } || own_anon($t) || $anon{ anon_key($t) // '' }) {
         my ($tag, $name) = @$a;
         $wanttag{$tag} = 1;
         return $tagname{$tag} //= $name;
@@ -424,7 +429,12 @@ sub reserve_target {
         my @forms = map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s/:$//r } } @{ $sec->{children} };
         if (open my $g, '<:raw', "$FindBin::Bin/../x86_64gnu.ff") {
             my @todo = @{ read_ff(do { local $/; <$g> })->{children} };
-            while (my $x = shift @todo) { $x->{content} =~ /^[a-z]\w*:$/ && !grep { $_->{content} =~ /:$/ } @{ $x->{children} } ? push @forms, $x : push @todo, @{ $x->{children} } }
+            # (!grep ... ? : took the ?: as grep's list: only top nodes were looked
+            # at, and x86_64 gnu: is none of a name, so none was reserved)
+            while (my $x = shift @todo) {
+                if ($x->{content} =~ /^[a-z]\w*:$/ && !grep({ $_->{content} =~ /:$/ } @{ $x->{children} })) { push @forms, $x }
+                else { push @todo, @{ $x->{children} } }
+            }
         }
         for (@forms) { $reserved{$1} = 1 if $_->{content} =~ /^([A-Za-z_]\w*):$/ }
     }
@@ -476,6 +486,17 @@ while (@ARGV) {
     if ($a eq '--start') { $start = 1; next }
     if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
+    # (--statics-out f: the statics of the tree that keep their plain names,
+    # written with it; --statics f, a program's: its external definition of one
+    # is a name of its own, as C keeps them apart: tst-random's fail replaced
+    # dl-gcs.c's static fail)
+    if ($a eq '--statics-out') { $statics_out = shift @ARGV; next }
+    if ($a eq '--statics') {
+        my $f = shift @ARGV;
+        open my $h, '<', $f or die "c2ff: cannot open $f: $!\n";
+        while (<$h>) { chomp; $treestatic{$_} = 1 }
+        next;
+    }
     if ($a eq '--index') {
         my $f = shift @ARGV;
         open my $h, '<:raw', $f or die "c2ff: cannot open $f: $!\n";
@@ -591,10 +612,10 @@ sub own_name {
     # (a program's static whose name its tree (--index) defines: a name of
     # the program's own, as C keeps it apart, so that neither takes the
     # other's; tst-strerror_l-strings' loc, strptime_l's enum constant loc)
-    return $own{$u}{$name} = "$name " . unit_name($u) if %treedefs && ($d->{storageClass} // '') eq 'static' && $treedefs{ ffname($name) };
+    return $own{$u}{$name} = "$name " . unit_name($u) if %treedefs && (($d->{storageClass} // '') eq 'static' || $treestatic{ ffname($name) }) && $treedefs{ ffname($name) };
     my $old = $map->{$name} or return $name;
     return $name if $old->[1] == $u || ($d->{storageClass} // '') ne 'static' || ($old->[0]{storageClass} // '') ne 'static';
-    return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]);
+    return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]) && !names_otherwise(def_text($d, $u), $u, $old->[1]);
     $own{$u}{$name} = "$name " . unit_name($u);
 }
 # A record tag's definition (key "struct x"). The first is everyone's; a
@@ -604,12 +625,43 @@ sub own_name {
 sub reg_rec {
     my ($key, $d, $u) = @_;
     if (!$rec{$key}) { $rec{$key} = $d; $recunit{$key} = $u; return 1 }
-    return 0 if !$recunit{$key} || $recunit{$key} == $u || def_text($d, $u) eq def_text($rec{$key}, $recunit{$key});
+    return 0 if !$recunit{$key} || $recunit{$key} == $u;
+    if (def_text($d, $u) eq def_text($rec{$key}, $recunit{$key})) { push @{ $u->{ff_shared} }, [$key, $d]; return 0 }
+    rec_own($key, $d, $u);
+    0;
+}
+sub rec_own {
+    my ($key, $d, $u) = @_;
     my $own = "$key " . unit_name($u);
     $rec{$own} //= $d;
     $recunit{$own} //= $u;
     $ownrec{$u}{$key} = $own;
+}
+# Whether a definition's text names, in unit u, what it does not in unit v: a
+# record either has of its own (struct waitlist in rt/ and in resolv/: the same
+# text of struct async_waitlist held another struct waitlist), or a typedef.
+sub names_otherwise {
+    my ($text, $u, $v) = @_;
+    while ($text =~ /\b(?:(struct|union)\s+)?([A-Za-z_]\w*)/g) {
+        if (defined $1) { my $k = "$1 $2"; return 1 if ($ownrec{$u}{$k} // '') ne ($ownrec{$v}{$k} // '') }
+        elsif (($owntd{$u}{$2} // '') ne ($owntd{$v}{$2} // '')) { return 1 }
+    }
     0;
+}
+# A unit's records of the first's text: its own too where they name otherwise,
+# until there are no more (one may point to one defined after it).
+sub own_by_names {
+    my ($u) = @_;
+    my $more = 1;
+    while ($more) {
+        $more = 0;
+        for (@{ $u->{ff_shared} // [] }) {
+            my ($key, $d) = @$_;
+            next if $ownrec{$u}{$key} || !names_otherwise(def_text($d, $u), $u, $recunit{$key});
+            rec_own($key, $d, $u);
+            $more = 1;
+        }
+    }
 }
 sub own { my ($name) = @_; $cur_unit && $own{$cur_unit} && $own{$cur_unit}{$name} // $name }
 sub inner_tags { my ($n) = @_; (($n->{kind} // '') =~ /^(EnumDecl|RecordDecl)$/ ? $n : ()), map { inner_tags($_) } @{ $n->{inner} || [] } }
@@ -626,6 +678,7 @@ for my $u (@units) {
     $u->{text} = do { local $/; <$h> };
     close $h;
     places($ast->{ff_places}, $u);
+    local $reg_unit = $u;
     my $file = '';
     for my $d (@{ $ast->{inner} }) {
         $file = $d->{loc}{file} if $d->{loc} && $d->{loc}{file};
@@ -695,7 +748,9 @@ for my $u (@units) {
                 $enumof{ $_->{name} } = "enum $name" for grep { $_->{kind} eq 'EnumConstantDecl' } @{ $e->{inner} || [] };
             } elsif ($own && ($own->{name} // '') eq '' && $recid{ $own->{id} }) {
                 # a typedef of an anonymous struct or union: the record is its tag
-                $rec{ $d->{type}{qualType} } //= $recid{ $own->{id} };
+                # (as a tag: wcscoll_l.c's coll_seq, of strcoll_l.c's text with
+                # another USTRING_TYPE, read wide strings as bytes)
+                reg_rec($d->{type}{qualType}, $recid{ $own->{id} }, $u);
                 anon_fields($recid{ $own->{id} }, $name);
                 # (a typedef that other units leave void, opaque behind an address,
                 # takes the struct: _IO_lock_t outside and inside libio's lock)
@@ -793,6 +848,7 @@ for my $u (@units) {
             set_enumd("enum $name", $d);
         }
     }
+    own_by_names($u);
 }
 
 # The anonymous enum, struct or union that is the type of a field gets a name
@@ -811,11 +867,35 @@ sub anon_fields {
             }
             next;
         }
+        # (C11's anonymous member, named for its place: of the record it is in
+        # where the first at the place differs, psiginfo-define.h's, a struct of
+        # strings included for each list of them: codes_8's offsets were of the first)
+        if ($k->{kind} eq 'FieldDecl' && ($k->{name} // '') eq '' && !$k->{isBitfield} && $last && $last->{kind} eq 'RecordDecl' && ($last->{name} // '') eq '' && (my $mk = anon_key($k->{type}{qualType} // ''))) {
+            my $first = $anon{$mk} && $rec{ $anon{$mk}[0] };
+            if ($first && $first != $last && rec_sig($last) ne rec_sig($first)) {
+                my $name = "$rname anon";
+                $anonin{"$r->{tagUsed} $rname"}{$mk} = ["$last->{tagUsed} $name", $name];
+                $recunit{"$last->{tagUsed} $name"} //= $reg_unit if $reg_unit;
+                $rec{"$last->{tagUsed} $name"} //= $last;
+                anon_fields($last, $name);
+            }
+            undef $last;
+            next;
+        }
         next unless $k->{kind} eq 'FieldDecl' && defined $k->{name} && $last && ($last->{name} // '') eq '';
         my $key = anon_key($k->{type}{qualType} // '') // next;
         my $kind = $last->{kind} eq 'EnumDecl' ? 'enum' : $last->{tagUsed};
         my $name = "$rname $k->{name}";
-        $anon{$key} = ["$kind $name", $name];
+        # (the same place defined otherwise, a skeleton included for another
+        # type, dynarray-skeleton.c's union u: by the record it is in; the
+        # stride of fork_handler_list's array was the first dynarray's)
+        my $first = $anon{$key} && $rec{ $anon{$key}[0] };
+        if ($kind ne 'enum' && $first && $first != $last && rec_sig($last) ne rec_sig($first)) {
+            $anonin{"$r->{tagUsed} $rname"}{$key} = ["$kind $name", $name];
+        } else {
+            $anon{$key} = ["$kind $name", $name];
+        }
+        $recunit{"$kind $name"} //= $reg_unit if $kind ne 'enum' && $reg_unit;
         if ($kind eq 'enum') { $enumd{"enum $name"} //= $last } else { $rec{"$kind $name"} //= $last; anon_fields($last, $name) }
         undef $last;
     }
@@ -1006,6 +1086,16 @@ sub unit_pass {
     write_unit($file, "$s | $t | $hash | " . ikey($u) . "\n", nfreeze($ast));
 }
 sub unplace { my ($n) = @_; delete @$n{qw(loc range)}; unplace($_) for @{ $n->{inner} || [] } }
+# What a record holds, as the pass keeps it: its fields' names and types, with
+# what it defines in it (a record in a record has no place left for def_text).
+sub rec_sig {
+    my ($r) = @_;
+    join ';', map {
+        my $k = $_;
+        $k->{kind} eq 'FieldDecl' ? 'f ' . ($k->{name} // '') . ' ' . ($k->{type}{qualType} // '') . ' ' . ($k->{isBitfield} // '') . ' ' . join(',', map { $_->{value} // '' } grep { $_->{kind} eq 'ConstantExpr' } @{ $k->{inner} || [] })
+        : $k->{kind} eq 'RecordDecl' ? 'r ' . ($k->{tagUsed} // '') . ' ' . ($k->{name} // '') . ' (' . rec_sig($k) . ')' : ()
+    } @{ $r->{inner} || [] };
+}
 sub units_ready {
     my @todo = grep { !unit_fresh($_) } @_;
     # (a unit whose AST is gone and whose pass is not of its .i, or not of
@@ -1061,7 +1151,7 @@ sub places {
             # of FLOAT, a double in strfromd's and a long double in
             # strfroml's): that unit's own, named with it
             my ($r, $ru) = ($rec{ $a->[0] }, $recunit{ $a->[0] });
-            next if !$u || !$r || !$ru || $ru == $u || def_text($n, $u) eq def_text($r, $ru);
+            next if !$u || !$r || !$ru || $ru == $u || def_text($n, $u) eq def_text($r, $ru) && rec_sig($n) eq rec_sig($r);
             my $own = "$name " . unit_name($u);
             $ownanon{$u}{$key} = ["$kind $own", $own];
             $rec{"$kind $own"} //= $n;
@@ -1111,6 +1201,7 @@ sub want { my ($n) = @_; push @todo, $n unless $done{$n}++ }
 sub where { my ($n) = @_; my $l = $n->{range}{begin} // $n->{loc} // {}; $l = $l->{expansionLoc} // $l; ($l->{file} // '') . ':' . ($l->{line} // '?') }
 our $cur_fn = '';           # the function being translated, for messages
 our %staticname;            # a function's statics, by id: their names as globals
+our %staticcount;           # how many of a name the function at hand has had
 our $cur_global;            # the global whose items are being translated
 our $in_global;             # a global's items are being translated
 our %literals;              # its compound literals so far, by global
@@ -1471,14 +1562,23 @@ sub asm_ins_other {
         return node('msr', node(sysreg($a[0])), node($a[1])) if $op eq 'msr' && @a == 2 && defined sysreg($a[0]);
         # an immediate (brk #1000: abort's trap), none (yield, isb), a
         # barrier's option (dmb ish)
-        return node($op, node($1 =~ /^0x/i ? hex $1 : $1)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
+        return node($op, node($a[0] =~ /^#?0x/i ? hex($a[0] =~ s/^#//r) : $a[0] =~ s/^#//r)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
         return node($op) if $op =~ /^(?:nop|yield|wfe|wfi|sev|sevl|isb|clrex)$/ && !@a;
         # a cache's line cleaned by address (libgcc's __aarch64_sync_cache_range:
         # dc cvau, ic ivau)
         return node(lc("$op.$a[0]"), node($a[1])) if $op =~ /^(?:dc|ic)$/ && @a == 2 && $a[0] =~ /^(?:cvau|ivau)$/i && $a[1] =~ /^x\d+$/;
         # an instruction as its word (libgcc's aarch64_vg: .inst of cntd x0,
         # for an old assembler)
-        return node('word', node($1 =~ /^0x/i ? hex $1 : $1)) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
+        return node('word', node($a[0] =~ /^0x/i ? hex $a[0] : $a[0])) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
+        # CALL_LIBC_ARM_ZA_DISABLE's (arch_fork, SME's ZA before a clone):
+        # the frame's notes say nothing to an asm function, which has none;
+        # x30 kept in a register around a call, by its label (s2ff's form)
+        return () if $op =~ /^\.cfi_/;
+        return node('orr', node($a[1]), node('xzr'), node($a[0])) if $op eq 'mov' && @a == 2 && !grep { !/^x\d+$/ } @a;
+        return node('bl', node('rel', node($a[0]))) if $op eq 'bl' && @a == 1 && $a[0] =~ /^\w+$/;
+        # a float or a double loaded from a memory operand (feraiseexcept's
+        # ldr s0, %1: the operand's address in its argument's register)
+        return node("ldr.$1", node(0), node($2), node($a[0])) if $op eq 'ldr' && "@a" =~ /^([sd])\d+ \[(x\d+)\]$/;
         # a hint by its number: ttpc names the ones it has (hint 40 is chkfeat)
         my %hint = (0 => 'nop', 1 => 'yield', 25 => 'paciasp', 29 => 'autiasp', 32 => 'bti', 34 => 'bti.c', 36 => 'bti.j', 38 => 'bti.jc', 40 => 'chkfeat');
         return node($hint{$1}) if $op eq 'hint' && @a == 1 && $a[0] =~ /^#?(\d+)$/ && $hint{$1};
@@ -1564,15 +1664,17 @@ sub asm_stmt_other {
     my $regs = $argregs{$target} or stop("an asm statement on $target", $n);
     my ($template, $oc, $ic, $ops, $clob) = asm_parts($n);
     # an empty template whose outputs are all read and written (+r: the
-    # optimization barriers of dl-new-hash.h) changes nothing: no code
-    return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || !/^[=+&]*[rx]+$/ } @$oc;
+    # optimization barriers of dl-new-hash.h, aarch64's math_opt_barrier's
+    # +w of a float, a double, a long double) changes nothing: no code
+    return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || ($target eq 'aarch64' ? !/^[=+&]*[rxw]+$/ : !/^[=+&]*[rx]+$/) } @$oc;
     # and one with inputs alone (math_force_eval's "" : : "f" (x) of a long
-    # double on x86_64, "x" of a float), of values with no effects: none, but
-    # for what its input computes in floating point, whose flags are what it
-    # is there for (sfp-exceptions' asm ("" : : "x" (f / g)), libm's
+    # double on x86_64, "x" of a float; aarch64's "w" of a long double, in no
+    # register of ttpc's), of values with no effects: none, but on x86_64 for
+    # what its input computes in floating point, whose flags are what it is
+    # there for (sfp-exceptions' asm ("" : : "x" (f / g)), libm's
     # math_force_eval (tiny * tiny)): that, its value unused
-    if ($target eq 'x86_64' && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops) {
-        return map { cast_node(['void'], expr($_)) } grep { fp_computes($_) } @$ops;
+    if (($target eq 'x86_64' || ($target eq 'aarch64' && @$ops && !grep { tword($_) ne 'long double' } @$ops)) && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops) {
+        return $target eq 'x86_64' ? map { cast_node(['void'], expr($_)) } grep { fp_computes($_) } @$ops : ();
     }
     # (x86_64's x87 operands, libm's long double: asm_x87)
     return asm_x87($n, $template, $oc, $ic, $ops, $clob) if $target eq 'x86_64' && grep { /^[=&]*t$/ } @$oc;
@@ -1975,6 +2077,18 @@ sub expr {
     if ($k eq 'UnaryOperator') {
         my $op = $n->{opcode};
         my ($e) = kids($n);
+        # (the result of a function of no C, an asm function's on aarch64, has
+        # no type for ttpc: *__strchrnul (buf, 10) = 0 of res_hconf.c, cast)
+        if ($op eq '*' && $target eq 'aarch64') {
+            my $c = $e;
+            $c = (kids($c))[0] while $c->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
+            if ($c->{kind} eq 'CallExpr') {
+                my $f = (kids($c))[0];
+                $f = (kids($f))[0] while $f->{kind} =~ /^(ImplicitCastExpr|ParenExpr)$/;
+                my $name = $f->{kind} eq 'DeclRefExpr' ? $f->{referencedDecl}{name} : undef;
+                return node('content', cast_node([ctype(qt($e))], item(expr($e)))) if defined $name && !$fn{$name};
+            }
+        }
         return node('content', expr($e)) if $op eq '*';
         # in a global's items, the address of an element of a global array is
         # the array and that many elements on, as C has it (&a[i] is a + i),
@@ -2203,7 +2317,11 @@ sub expr {
         return node($name, map { arg($_) } @args) if $name eq '__builtin___clear_cache' && $target eq 'aarch64';
         # (arm's EHABI unwinder: the address itself, builtins-arm.ff.txt)
         return node($name, map { arg($_) } @args) if $name eq '__builtin_frob_return_addr' && $target eq 'arm';
-        return node($name) if $name eq '__builtin_aarch64_get_fpcr' && $target eq 'aarch64' && !@args;
+        return node($name) if $name =~ /^__builtin_aarch64_get_fp[cs]r$/ && $target eq 'aarch64' && !@args;
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_aarch64_set_fp[cs]r$/ && $target eq 'aarch64';
+        # (and libm's of aarch64, one instruction each in gcc's code:
+        # builtins-aarch64.ff.txt)
+        return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(?:floor|ceil|trunc|round|roundeven|rint|nearbyint|fmax|fmin|lrint|llrint|lround|llround)f?$/ && $target eq 'aarch64';
         # (x86_64's float128 ones, x87builtins.pl's)
         return node($name, map { arg($_) } @args) if $name =~ /^__builtin_(fabs|copysign|signbit|huge_val|nan)f128$/ && $target eq 'x86_64';
         return node($name) if $name =~ /^__builtin_ia32_(rdtsc|pause|xbegin|xend|xtest)$/ && $target eq 'x86_64' && !@args;
@@ -2754,6 +2872,7 @@ sub label_name {
 }
 # The LabelStmts under a node.
 sub labels { my ($n) = @_; (($n->{kind} // '') eq 'LabelStmt' ? $n : ()), map { labels($_) } kids($n) }
+sub label_decls { my ($n) = @_; (($n->{kind} // '') eq 'LabelDecl' ? $n : ()), map { label_decls($_) } kids($n) }
 # Whether a node of that kind is under n.
 sub holds { my ($n, $k) = @_; (($n->{kind} // '') eq $k) || grep { holds($_, $k) } kids($n) }
 # The ParmVarDecls and VarDecls under a node (a function's own).
@@ -3043,7 +3162,10 @@ sub stmt {
         } elsif (($d->{storageClass} // '') eq 'static' && !holds($d, 'AddrLabelExpr')) {
             # a static of a function lives as long as the program: a global,
             # named for its function (hugepages' mode_always)
-            my $g = ffname($cur_fn) . ' ' . ffname($d->{name});
+            # (a later one of its name is that name and its number: e_acosh's
+            # cl, a table of its own in each branch, were all one global)
+            my $k = ++$staticcount{ $d->{name} };
+            my $g = ffname($cur_fn) . ' ' . ffname($d->{name}) . ($k > 1 ? " $k" : '');
             $staticname{"$cur_unit $d->{id}"} = $g;
             push @out, [$cur_unit, decl($d, 1, $g)];
             ();
@@ -3079,8 +3201,9 @@ sub stmt {
         # (a declaration after a label, C23's, libgcc's btree_lookup restart:
         # struct btree_node *iter: the label alone, then the declaration, whose
         # scope is the block's, not the label's)
-        return (node(label_name($n->{name}) . ':'), stmt($s)) if $s && $s->{kind} eq 'DeclStmt';
-        return node(label_name($n->{name}) . ':', stmt($s));
+        my $ln = label_name($label{ $n->{declId} } // $n->{name});
+        return (node("$ln:"), stmt($s)) if $s && $s->{kind} eq 'DeclStmt';
+        return node("$ln:", stmt($s));
     }
     return node('goto', node(label_name($label{ $n->{targetLabelDeclId} } // stop('a goto to no label', $n)))) if $k eq 'GotoStmt';
     # GNU's goto *p: to the address p holds (a label's, &&L)
@@ -3407,9 +3530,14 @@ sub function {
     local $cur_fn = $name;
     local %local = map { ($_->{id} => 1) } locals($d);
     local %localdecl = map { ($_->{name} // '') => $_ } locals($d);
+    local %staticcount;
     # (the types of its locals by name, for a typeof of one: typeof_expr)
     local %ltypeof = map { ($_->{name} => qt($_)) } grep { $_->{name} && $_->{type} } locals($d);
     local %label = map { ($_->{declId} => $_->{name}) } labels($d);
+    # (GNU's __label__: a label in ff is the function's, so each local one is a
+    # name of its own, x 1, x 2 in the order they are declared: strptime_l's
+    # do_normal, once in each of its statement expressions, all went to the first)
+    { my %k; $label{ $_->{id} } = "$_->{name} " . ++$k{ $_->{name} } for label_decls($d) }
     my ($ret) = split_fn(expand(qt($d)));
     defined $ret or die "c2ff: not a function type: " . qt($d) . "\n";
     my @p = grep { $_->{kind} eq 'ParmVarDecl' } kids($d);
@@ -3477,7 +3605,8 @@ sub leave_out {
 # them, whatever names the object: tst-putenv's module of a constructor alone)
 want($_) for map { @{ $ctors_of{$_} // [] } } grep { $_->{object} } @units;
 while (defined(my $name = next_name())) {
-    if (my $a = $alias{$name}) { push @out, [$a->[1], node(ffname($name) . ':', node('alias'), node(ffname($a->[0])))]; want($a->[0]); next }
+    # (of what its unit names: a static of its own, nss/fgetgrent's buffer of __libc_fgetgrent_freemem_ptr)
+    if (my $a = $alias{$name}) { local $cur_unit = $a->[1]; my $t = own($a->[0]); push @out, [$a->[1], node(ffname($name) . ':', node('alias'), node(ffname($t)))]; want($t); next }
     if (my $f = $ifunc{$name}) {
         my ($d, $u, $r) = @$f;
         my ($ret, $ps) = split_fn(expand(qt($d)));
@@ -3565,6 +3694,7 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
         $tdone{$tag} = 1;
         # (its fields' types as its unit has them)
         local $cur_unit = $recunit{$tag} // $cur_unit;
+        local $cur_tag = $tag;
         # a tag C only declares (struct rtld_catch;) is an incomplete type, used
         # through an address: a struct without fields
         my $d = $rec{$tag} // $enumd{$tag} // ($tag =~ /^(struct|union) / ? { kind => 'RecordDecl', tagUsed => $1, inner => [] } : undef)
@@ -3619,6 +3749,12 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 # overflow of a node, see FF.pm layers).
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
 sub groups { my ($name, @n) = @_; node("$name:", layers(@n)) }
+if (defined $statics_out) {
+    open my $h, '>', $statics_out or die "c2ff: cannot write $statics_out: $!\n";
+    my %st = map { ($_ => 1) } grep { !/ / && $done{$_} && (($fn{$_} // $var{$_})->[0]{storageClass} // '') eq 'static' } keys %fn, keys %var;
+    print $h map { ffname($_) . "\n" } sort keys %st;
+    close $h;
+}
 # the words now (Words.pm): what was made in the words of before, written in
 # them; the types the shared page's and the output's own
 {
