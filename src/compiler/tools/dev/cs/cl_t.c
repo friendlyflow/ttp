@@ -589,7 +589,7 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
 {
   struct cs_decl *old;
   char *k;
-  if (C->treedefs.count && d->sc == SC_STATIC && cl_val (&C->treedefs, cl_ffname (name))) {
+  if (C->treedefs.count && (d->sc == SC_STATIC || cl_val (&C->treestatic, cl_ffname (name))) && cl_val (&C->treedefs, cl_ffname (name))) {
     k = cl_cat3 (name, " ", cl_unit_name ());
     cl_put (&C->own, name, k);
     return k;

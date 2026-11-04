@@ -182,7 +182,7 @@ int csema_main (int argc0, char **argv0)
   long a = 1, argc;
   char **argv = expand_args (argc0, argv0, &argc);
   int target = 0, mode = 0;
-  char *page = "glibc", *gsrc = 0, *lsrc = 0, *shared = 0, *iname = 0, *program = 0, *indexf = 0;
+  char *page = "glibc", *gsrc = 0, *lsrc = 0, *shared = 0, *iname = 0, *program = 0, *indexf = 0, *staticsf = 0;
   char **zero = alloc (argc * sizeof (char *)), **weak = alloc (argc * sizeof (char *));
   long nzero = 0, nweak = 0;
   int start = 0, keep_going = 0;
@@ -196,6 +196,7 @@ int csema_main (int argc0, char **argv0)
     else if (same ((unsigned char *) argv[a], 2, "-n") && a + 1 < argc) iname = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-P") && a + 1 < argc) program = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-I") && a + 1 < argc) indexf = argv[++a];
+    else if (same ((unsigned char *) argv[a], 2, "-J") && a + 1 < argc) staticsf = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-T")) start = 1;
     else if (same ((unsigned char *) argv[a], 2, "-k")) keep_going = 1;
     else if (same ((unsigned char *) argv[a], 2, "-M") && a + 2 < argc) {
@@ -227,6 +228,7 @@ int csema_main (int argc0, char **argv0)
     if (dd == argc) {
       cl_options (page, gsrc, lsrc, shared, argv + a + 1, argc - a - 1);
       cl_options2 (program, indexf, start, zero, nzero, weak, nweak, keep_going);
+      cl_statics_file (staticsf);
       if (!iname) iname = argv[a];
       cl_new_unit (iname, 0);
       one_unit (argv[a], iname, target, mode);
@@ -234,6 +236,7 @@ int csema_main (int argc0, char **argv0)
       int object = 0;
       cl_options (page, gsrc, lsrc, shared, argv + dd + 1, argc - dd - 1);
       cl_options2 (program, indexf, start, zero, nzero, weak, nweak, keep_going);
+      cl_statics_file (staticsf);
       i = a;
       while (i < dd) {
         char *f = argv[i], *nm = f;

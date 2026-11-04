@@ -85,6 +85,19 @@ tables (int i)
     }
 }
 
+/* (a C name of an instruction of x86_64gnu.ff: c2ff renames them) */
+static int ds_global = 7;
+static int
+fsub_like (int a)
+{
+  int cs = 1, ds = 2, gs = 3;
+  cs += ds;
+  return a + cs + gs + ds_global;
+}
+static int fsub (int a, int b) { return a - b; }
+static int gs = 4;
+static int fld (void) { return gs + 1; }
+
 struct wait { int result; struct wait *next; };
 struct waits { int n; struct wait list[3]; };
 
@@ -112,5 +125,8 @@ main (void)
   fails += paths (&w);
   fails += tables (1) != 3;
   fails += tables (0) != 5;
+  fails += fsub_like (1) != 14;
+  fails += fsub (5, 3) != 2;
+  fails += fld () != 5;
   return fails;
 }

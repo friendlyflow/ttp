@@ -395,6 +395,8 @@ static struct cs_ex *cs_atomic_call (struct node *n, int form)
   else if (f == 2 || f == 3 || f == 4 || f == 5) { if (na > 2) cs_add (e, a[2]); cs_add (e, a[1]); }
   else if (f == 6) { if (na > 3) cs_add (e, a[3]); cs_add (e, a[1]); cs_add (e, a[2]); }
   else if (f == 7) { if (na > 5) { cs_add (e, a[4]); cs_add (e, a[1]); cs_add (e, a[5]); cs_add (e, a[2]); cs_add (e, a[3]); } }
+  /* (of a volatile: clang's type is the object's, a no-op cast takes it off: pthread_spin_lock's) */
+  if ((f == 1 || f == 5) && (cs_canon (cs_canon (a[0]->t)->to)->q & Q_VOLATILE)) { e->t = cs_qual (res, Q_VOLATILE); return cs_ice (e, res, CK_NOOP); }
   return e;
 }
 /* a transparent union parameter: the argument as the member it fits, in a compound literal */

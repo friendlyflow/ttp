@@ -110,6 +110,8 @@ my %scalar = (
 my %scalar_word = map { $_ => 1 } (values %scalar, 'address', 'array');
 my (%fntype, @fntypes);     # function types for pointers to functions
 my %treedefs;              # --index file: the names the program's tree defines
+my %treestatic;            # --statics file: those that are a static of a unit there
+my $statics_out;
 my %treerec;               # --index file: the records its tree's types page defines
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
 my %ownfnrec;              # a function's own definitions of tags its unit defines otherwise
@@ -422,7 +424,12 @@ sub reserve_target {
         my @forms = map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s/:$//r } } @{ $sec->{children} };
         if (open my $g, '<:raw', "$FindBin::Bin/../x86_64gnu.ff") {
             my @todo = @{ read_ff(do { local $/; <$g> })->{children} };
-            while (my $x = shift @todo) { $x->{content} =~ /^[a-z]\w*:$/ && !grep { $_->{content} =~ /:$/ } @{ $x->{children} } ? push @forms, $x : push @todo, @{ $x->{children} } }
+            # (!grep ... ? : took the ?: as grep's list: only top nodes were looked
+            # at, and x86_64 gnu: is none of a name, so none was reserved)
+            while (my $x = shift @todo) {
+                if ($x->{content} =~ /^[a-z]\w*:$/ && !grep({ $_->{content} =~ /:$/ } @{ $x->{children} })) { push @forms, $x }
+                else { push @todo, @{ $x->{children} } }
+            }
         }
         for (@forms) { $reserved{$1} = 1 if $_->{content} =~ /^([A-Za-z_]\w*):$/ }
     }
@@ -474,6 +481,17 @@ while (@ARGV) {
     if ($a eq '--start') { $start = 1; next }
     if ($a eq '--zero') { $zero{ shift @ARGV } = 1; next }
     if ($a eq '--weak') { $forceweak{ shift @ARGV } = 1; next }
+    # (--statics-out f: the statics of the tree that keep their plain names,
+    # written with it; --statics f, a program's: its external definition of one
+    # is a name of its own, as C keeps them apart: tst-random's fail replaced
+    # dl-gcs.c's static fail)
+    if ($a eq '--statics-out') { $statics_out = shift @ARGV; next }
+    if ($a eq '--statics') {
+        my $f = shift @ARGV;
+        open my $h, '<', $f or die "c2ff: cannot open $f: $!\n";
+        while (<$h>) { chomp; $treestatic{$_} = 1 }
+        next;
+    }
     if ($a eq '--index') {
         my $f = shift @ARGV;
         open my $h, '<:raw', $f or die "c2ff: cannot open $f: $!\n";
@@ -588,7 +606,7 @@ sub own_name {
     # (a program's static whose name its tree (--index) defines: a name of
     # the program's own, as C keeps it apart, so that neither takes the
     # other's; tst-strerror_l-strings' loc, strptime_l's enum constant loc)
-    return $own{$u}{$name} = "$name " . unit_name($u) if %treedefs && ($d->{storageClass} // '') eq 'static' && $treedefs{ ffname($name) };
+    return $own{$u}{$name} = "$name " . unit_name($u) if %treedefs && (($d->{storageClass} // '') eq 'static' || $treestatic{ ffname($name) }) && $treedefs{ ffname($name) };
     my $old = $map->{$name} or return $name;
     return $name if $old->[1] == $u || ($d->{storageClass} // '') ne 'static' || ($old->[0]{storageClass} // '') ne 'static';
     return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]) && !names_otherwise(def_text($d, $u), $u, $old->[1]);
@@ -3658,6 +3676,12 @@ while (my @t = grep { !$tdone{$_} } sort keys %wanttag) {
 # overflow of a node, see FF.pm layers).
 sub unit_name { my ($u) = @_; return 'weak' unless $u; (my $n = $u->{i}) =~ s{^.*/([^/]+/[^/]+)\.i$}{$1}; $n }
 sub groups { my ($name, @n) = @_; node("$name:", layers(@n)) }
+if (defined $statics_out) {
+    open my $h, '>', $statics_out or die "c2ff: cannot write $statics_out: $!\n";
+    my %st = map { ($_ => 1) } grep { !/ / && $done{$_} && (($fn{$_} // $var{$_})->[0]{storageClass} // '') eq 'static' } keys %fn, keys %var;
+    print $h map { ffname($_) . "\n" } sort keys %st;
+    close $h;
+}
 # the words now (Words.pm): what was made in the words of before, written in
 # them; the types the shared page's and the output's own
 {

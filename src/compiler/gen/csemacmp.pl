@@ -22,6 +22,10 @@ sub parts {
         chomp $l;
         if ($l =~ /^layout /) { $cur = $l; push @order, $l unless exists $lay{$l}; $lay{$l} = [] ; next }
         if (defined $cur) { push @{ $lay{$cur} }, $l; $cur = undef if $l =~ /^size /; next }
+        # (noreturn in a function's type is no code: an attribute after a *, gai_misc's
+        # handle_requests, and clang's bit cast of it to a plain function pointer)
+        my $nr = $l =~ s/ __attribute__\(\(noreturn\)\)//g;
+        pop @body if $nr && $l =~ /^(\s*)ICE FunctionToPointerDecay (.*)$/ && @body && $body[-1] eq "$1ICE BitCast $2";
         push @body, $l;
     }
     (\@body, \%lay, \@order);
