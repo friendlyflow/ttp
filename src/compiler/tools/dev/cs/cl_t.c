@@ -464,6 +464,7 @@ static long cl_csize (struct cs_ty *t)
   struct cl_list *l;
   if (cs_kind (t) == TY_ENUM && cs_kind (t) == TY_ENUM) { return 4; }
   l = cl_ct (t);
+  if (C->target == 3 && (cl_eq ((char *) l->v[0]->text, "long") || cl_eq ((char *) l->v[0]->text, "address"))) return 4;
   return cl_wsize ((char *) l->v[0]->text);
 }
 /* the C name a floating type has, as c2ff's tword: "" for none */

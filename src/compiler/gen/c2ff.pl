@@ -2581,7 +2581,7 @@ sub atomic_call {
 # The bytes of a scalar or an address: what the atomics need
 my %wsize = (char => 1, i8 => 1, u8 => 1, short => 2, i16 => 2, u16 => 2, int => 4, i32 => 4, u32 => 4,
     long => 8, i64 => 8, u64 => 8, address => 8);
-sub csize { my ($t) = @_; return 4 if $t =~ /^enum\b/; my ($w) = ctype($t); $wsize{$w} // die "c2ff: no size for $t\n" }
+sub csize { my ($t) = @_; return 4 if $t =~ /^enum\b/; my ($w) = ctype($t); return 4 if $target eq 'arm' && $w =~ /^(?:long|address)$/; $wsize{$w} // die "c2ff: no size for $t\n" }
 
 # A floating constant as an exact hex float, from its bits (f after a
 # float's): what ttpc reads without rounding
