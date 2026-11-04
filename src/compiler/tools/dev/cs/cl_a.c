@@ -93,8 +93,7 @@ static void cl_ins_other (char *line, struct cl_list *o)
     if ((cl_eq (op, "brk") || cl_eq (op, "hlt") || cl_eq (op, "svc")) && na == 1) {
       char *x = a[0];
       if (x[0] == '#') x = x + 1;
-      /* (hex: c2ff's $1 is gone by then, 0) */
-      if (cl_is_hexnum (x)) { cl_push (o, cl_n1 (op, cl_n ("0"))); return; }
+      if (cl_is_hexnum (x)) { cl_push (o, cl_n1 (op, cl_num_node (cl_parse_num (x)))); return; }
       if (cl_all_digits (x)) { cl_push (o, cl_n1 (op, cl_n (x))); return; }
     }
     { static char *w[] = { "nop", "yield", "wfe", "wfi", "sev", "sevl", "isb", "clrex", 0 }; if (!na && cl_in_words (op, w)) { cl_push (o, cl_n (op)); return; } }
@@ -105,8 +104,29 @@ static void cl_ins_other (char *line, struct cl_list *o)
       if (cl_eq (z, "cvau") || cl_eq (z, "ivau")) { cl_push (o, cl_n1 (cl_cat3 (op, ".", z), cl_n (a[1]))); return; }
     }
     if (cl_eq (op, ".inst") && na == 1) {
-      if (cl_is_hexnum (a[0])) { cl_push (o, cl_n1 ("word", cl_n ("0"))); return; }
+      if (cl_is_hexnum (a[0])) { cl_push (o, cl_n1 ("word", cl_num_node (cl_parse_num (a[0])))); return; }
       if (cl_all_digits (a[0])) { cl_push (o, cl_n1 ("word", cl_n (a[0]))); return; }
+    }
+    /* CALL_LIBC_ARM_ZA_DISABLE's: no frame notes in an asm function, x30 kept around a call */
+    if (cl_starts (op, ".cfi_")) return;
+    if (cl_eq (op, "mov") && na == 2 && a[0][0] == 'x' && a[0][1] && cl_all_digits (a[0] + 1) && a[1][0] == 'x' && a[1][1] && cl_all_digits (a[1] + 1)) { cl_push (o, cl_ins ("orr", a[1], "xzr", a[0])); return; }
+    if (cl_eq (op, "bl") && na == 1) {
+      long i = 0;
+      while (a[0][i] && (cl_alpha (a[0][i]) || cl_digit (a[0][i]) || a[0][i] == '_')) i++;
+      if (i && !a[0][i]) { cl_push (o, cl_n1 ("bl", cl_n1 ("rel", cl_n (a[0])))); return; }
+    }
+    /* a float or a double loaded from a memory operand (feraiseexcept's ldr s0, %1) */
+    if (cl_eq (op, "ldr") && na == 2 && (a[0][0] == 's' || a[0][0] == 'd') && a[0][1] && cl_all_digits (a[0] + 1) && a[1][0] == '[' && a[1][1] == 'x') {
+      long e = 2;
+      while (cl_digit (a[1][e])) e++;
+      if (e > 2 && a[1][e] == ']' && !a[1][e + 1]) {
+        struct node *l = cl_n (a[0][0] == 's' ? "ldr.s" : "ldr.d");
+        nd_add (l, cl_n ("0"));
+        nd_add (l, cl_n (cl_copy ((unsigned char *) a[1] + 1, e - 1)));
+        nd_add (l, cl_n (a[0]));
+        cl_push (o, l);
+        return;
+      }
     }
     if (cl_eq (op, "hint") && na == 1) {
       char *x = a[0];
@@ -427,15 +447,15 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
       if (!cl_has_plus (c)) all = 0;
       while (c[q] == '=' || c[q] == '+' || c[q] == '&') q++;
       if (!c[q]) all = 0;
-      while (c[q]) { if (c[q] != 'r' && c[q] != 'x') all = 0; q++; }
+      while (c[q]) { if (c[q] != 'r' && c[q] != 'x' && !(C->target == 2 && c[q] == 'w')) all = 0; q++; }
       i++;
     }
     if (all) return;
   }
-  if (x86 && blank && !p.noc) {
+  if ((x86 || (C->target == 2 && nops)) && blank && !p.noc) {
     int all = 1;
     i = 0;
-    while (i < nops) { if (!cl_pure (ops[i])) all = 0; i++; }
+    while (i < nops) { if (!cl_pure (ops[i]) || (!x86 && !cl_eq (cl_tword (ops[i]), "long double"))) all = 0; i++; }
     if (all) return;
   }
   if (x86) {

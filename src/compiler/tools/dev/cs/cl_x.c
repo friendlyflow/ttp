@@ -1032,7 +1032,18 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   if (C->target != 3 && (cl_eq (name, "__builtin_unwind_init") || cl_eq (name, "__builtin_dwarf_cfa") || cl_eq (name, "__builtin_dwarf_sp_column") || cl_eq (name, "__builtin_eh_return") || cl_eq (name, "__builtin_eh_return_data_regno") || cl_eq (name, "__builtin_frob_return_addr") || cl_eq (name, "__builtin_init_dwarf_reg_size_table"))) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 3 && cl_eq (name, "__builtin_frob_return_addr")) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_autia1716") || cl_eq (name, "__builtin_aarch64_autib1716") || cl_eq (name, "__builtin_aarch64_chkfeat") || cl_eq (name, "__builtin_aarch64_gcspr") || cl_eq (name, "__builtin_aarch64_gcspopm") || cl_eq (name, "__builtin___clear_cache"))) { cl_push (o, cl_call_node (name, n)); return; }
-  if (C->target == 2 && cl_eq (name, "__builtin_aarch64_get_fpcr") && !na) { cl_push (o, cl_n (name)); return; }
+  if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_get_fpcr") || cl_eq (name, "__builtin_aarch64_get_fpsr")) && !na) { cl_push (o, cl_n (name)); return; }
+  if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_set_fpcr") || cl_eq (name, "__builtin_aarch64_set_fpsr"))) { cl_push (o, cl_call_node (name, n)); return; }
+  if (C->target == 2) {
+    /* libm's of aarch64 (builtins-aarch64.ff.txt) */
+    static char *w[] = { "floor", "ceil", "trunc", "round", "roundeven", "rint", "nearbyint", "fmax", "fmin", "lrint", "llrint", "lround", "llround", 0 };
+    long i = 0;
+    while (w[i]) {
+      char *b = cl_cat ("__builtin_", w[i]);
+      if (cl_eq (name, b) || cl_eq (name, cl_cat (b, "f"))) { cl_push (o, cl_call_node (name, n)); return; }
+      i++;
+    }
+  }
 
   if (C->target == 1 && !na && cl_eq (name, "__builtin_ia32_rdsspq")) { cl_push (o, cl_n1 (name, cl_n ("0"))); return; }
   if (C->target == 1 && (cl_eq (name, "__builtin_ia32_rdsspq") || cl_eq (name, "__builtin_ia32_incsspq") || cl_eq (name, "__builtin___clear_cache") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_signbitf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_ia32_pmovmskb128") || cl_eq (name, "__builtin_ia32_pshufb128"))) { cl_push (o, cl_call_node (name, n)); return; }
@@ -1558,6 +1569,21 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
   if (k == E_UN) {
     char *op = cl_name_of (n);
     struct cs_ex *e = cl_k (n, 0);
+    /* (the result of a function of no C, an asm function's on aarch64, has no type for ttpc: cast) */
+    if (cl_eq (op, "*") && C->target == 2) {
+      struct cs_ex *c = e;
+      while (c->k == E_ICE || c->k == E_PAREN) c = cl_k (c, 0);
+      if (c->k == E_CALL) {
+        struct cs_ex *f = cl_k (c, 0);
+        while (f->k == E_ICE || f->k == E_PAREN) f = cl_k (f, 0);
+        if (f->k == E_REF && f->d && !cl_has (&C->fn, cl_dn (f->d))) {
+          struct cl_list *v = cl_l ();
+          cl_itemx (e, v);
+          cl_push (o, cl_n1 ("content", cl_cast_node (cl_ct (e->t), v)));
+          return;
+        }
+      }
+    }
     if (cl_eq (op, "*")) { cl_push (o, cl_nl ("content", cl_ex (e))); return; }
     if (cl_eq (op, "-") || cl_eq (op, "!") || cl_eq (op, "~")) { cl_push (o, cl_n (op)); cl_push (o, cl_atom (e)); return; }
     if (cl_eq (op, "++") || cl_eq (op, "--")) { cl_push (o, cl_n (op)); cl_push (o, cl_atom (e)); return; }

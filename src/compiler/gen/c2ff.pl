@@ -1464,14 +1464,14 @@ sub asm_ins_other {
         return node('msr', node(sysreg($a[0])), node($a[1])) if $op eq 'msr' && @a == 2 && defined sysreg($a[0]);
         # an immediate (brk #1000: abort's trap), none (yield, isb), a
         # barrier's option (dmb ish)
-        return node($op, node($1 =~ /^0x/i ? hex $1 : $1)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
+        return node($op, node($a[0] =~ /^#?0x/i ? hex($a[0] =~ s/^#//r) : $a[0] =~ s/^#//r)) if $op =~ /^(?:brk|hlt|svc)$/ && @a == 1 && $a[0] =~ /^#?(0x[0-9a-f]+|\d+)$/i;
         return node($op) if $op =~ /^(?:nop|yield|wfe|wfi|sev|sevl|isb|clrex)$/ && !@a;
         # a cache's line cleaned by address (libgcc's __aarch64_sync_cache_range:
         # dc cvau, ic ivau)
         return node(lc("$op.$a[0]"), node($a[1])) if $op =~ /^(?:dc|ic)$/ && @a == 2 && $a[0] =~ /^(?:cvau|ivau)$/i && $a[1] =~ /^x\d+$/;
         # an instruction as its word (libgcc's aarch64_vg: .inst of cntd x0,
         # for an old assembler)
-        return node('word', node($1 =~ /^0x/i ? hex $1 : $1)) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
+        return node('word', node($a[0] =~ /^0x/i ? hex $a[0] : $a[0])) if $op eq '.inst' && @a == 1 && $a[0] =~ /^(0x[0-9a-f]+|\d+)$/i;
         # CALL_LIBC_ARM_ZA_DISABLE's (arch_fork, SME's ZA before a clone):
         # the frame's notes say nothing to an asm function, which has none;
         # x30 kept in a register around a call, by its label (s2ff's form)
