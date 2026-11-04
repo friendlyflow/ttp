@@ -585,7 +585,8 @@ sub oldunit {
 sub one_item {
     my ($t, $l) = @_;
     return 0 unless @$l;
-    return 0 if grep { $_->{content} =~ /.:$/ || $_->{content} eq 'compile time' } @$l;
+    # (a statement is no item: (void) ({ if ...; }) of wcsrchr)
+    return 0 if grep { $_->{content} =~ /.:$|^(?:if|while|for|do|do while|switch|return|goto|break|continue|compile time)$/ } @$l;
     item_end($l, 0, $t, 1) == @$l;
 }
 # a prefix and its operand at $i: the node before

@@ -16,6 +16,9 @@ struct big { long a, b, c; };
 struct item { int x; struct item *next; };
 struct holder { int n; struct item list[2]; };
 
+#define ANON banon
+#define FIELD one
+#define ANONAT banon_at
 #define LIST blist
 #define ELEM struct big
 #define AT blist_at
@@ -36,5 +39,6 @@ ua (struct blist *l, struct holder *h)
 {
   blist_put (l, *blist_at (l, 0));
   h->list[1].x = twice (&h->list[0]) + a_store[0];
+  h->n = (int) banon_at;
   return blist_at (l, 1);
 }

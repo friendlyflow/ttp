@@ -757,6 +757,7 @@ sub gnorm {
     $i = '(zero)' if !defined $i || is_zero_form($i);
     # (what c2ff works out: a constant sum, randtbl's &randtbl[SEP_3 + 1]; a scalar's items in braces)
     1 while $i =~ s/\(\+ \(int (\d+) i32\) \(int (\d+) i32\)\)/'(int ' . ($1 + $2) . ' i32)'/e;
+    $i =~ s/\(\/ \(sizeof arr\(([^()]*(?:\([^()]*\))?[^()]*),(\d+)\)\) \(sizeof \1\)\)/(int $2 i32)/g;
     $i = $1 if $i =~ /^\(init (.*)\)$/s && balanced($1) && tcls($d) !~ /^(?:arr|rec|vla)/;
     # (an anonymous enum is an int in ff)
     '(global ' . (tcls($d) =~ s/^enum$/i32/r) . " $i)";
@@ -921,10 +922,13 @@ sub typeof_expr {
     return $1 =~ s/^\s+|\s+$//gr if $e =~ /^\(([^()]*\*)\s*\)\s*\S/;
     undef;
 }
+sub local_typedefs { my ($n) = @_; (($n->{kind} // '') eq 'TypedefDecl' ? ($n->{name} => $n->{type}{qualType}) : ()), map { local_typedefs($_) } kids($n) }
 sub fnorm {
     my ($fn) = @_;
     local %ltype = map { ($_->{name} => $_->{type}{qualType}) } grep { defined $_->{name} && $_->{type} } locals_decls($fn);
     local %labels = labels_of($fn);
+    # (a typedef in a function: __nss_hostname_digits_dots_context's host_addr_t)
+    local %tdef = (%tdef, local_typedefs($fn));
     local %local = locals_of($fn);
     my @p = map { tcls($_) } grep { $_->{kind} eq 'ParmVarDecl' } kids($fn);
     my ($cs) = grep { $_->{kind} eq 'CompoundStmt' } kids($fn);

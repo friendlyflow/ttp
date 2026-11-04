@@ -27,6 +27,13 @@ PUT (struct LIST *l, ELEM e)
 {
   l->u.header.array[l->u.header.used++] = e;
 }
+
+/* (C11's anonymous member, as psiginfo-define.h: its fields differ too) */
+union ANON { struct { char FIELD[4]; }; char s[1]; };
+static long ANONAT = (long) &((union ANON *) 0)->FIELD;
+#undef ANON
+#undef FIELD
+#undef ANONAT
 #undef LIST
 #undef ELEM
 #undef AT

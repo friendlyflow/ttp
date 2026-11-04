@@ -119,6 +119,21 @@ static void cl_anon_fields (struct cs_rec *r, char *rname)
         if (k->k == TY_ENUM) cl_set_enumd (cl_cat ("enum ", nm), k);
         else { cl_put_new (&C->rec, cl_cat3 (cl_rec_kind (k), " ", nm), k); cl_anon_fields (k, nm); }
       }
+    } else if (i->f->anon && last && !last->tag && last->k != TY_ENUM) {
+      /* (C11's anonymous member, named for its place: of the record it is in where the first at the place differs) */
+      struct cs_rec *in = cl_anon_in (i->f->t);
+      if (in) {
+        char *key = cl_anon_key (in), *atag = cl_get (&C->anon_tag, key);
+        struct cs_rec *first = atag ? cl_get (&C->rec, atag) : 0;
+        if (first && first != last && !cl_same_def (last, first)) {
+          char *name = cl_cat (rname, " anon"), *tag = cl_cat3 (cl_rec_kind (last), " ", name);
+          cl_put (&C->anonin, cl_cat3 (cl_cat3 (cl_rec_kind (r), " ", rname), "|", key), tag);
+          if (C->cu) cl_put_new (&C->recunit, tag, C->cu);
+          cl_put_new (&C->rec, tag, last);
+          cl_anon_fields (last, name);
+        }
+        last = 0;
+      }
     } else if (i->f->name && i->f->nlen && last && !last->tag) {
       struct cs_rec *in = cl_anon_in (i->f->t);
       if (in) {
@@ -676,7 +691,7 @@ static void cl_pass_typedef (struct cs_decl *d, char *name)
     }
     /* a typedef of an anonymous struct or union: the record is its tag */
     q = cl_cat3 (cl_rec_kind (c->rec), " ", name);
-    cl_put_new (&C->rec, q, c->rec);
+    cl_reg_rec (q, c->rec);
     cl_anon_fields (c->rec, name);
     if (!was || cl_eq (was, "void")) { cl_put (&C->typedef_k, name, q); cl_put (&C->typedef_t, name, d->t); was = q; }
     if (!cl_eq (was, q)) cl_put (&C->owntd, name, d->t);

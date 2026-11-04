@@ -164,7 +164,7 @@ for my $page (@top) {
         if ($w eq 'asm') {
             $fn{$name} = { kind => 'asm' };
             # (and each entry of it, a block whose first child is asm)
-            for my $b (grep { !leaf($_) && c($_) =~ /^(.+):$/ && c((kids($_))[0]) eq 'asm' } @k) { (my $e = c($b)) =~ s/:$//; $fn{$e} //= { kind => 'asm' }; push @order, $e }
+            for my $b (grep { !leaf($_) && c($_) =~ /^(.+):$/ && c((kids($_))[0]) eq 'asm' } @k) { (my $e = c($b)) =~ s/:$//; $fn{$e} //= { kind => 'asm', entry => 1 }; push @order, $e }
             next;
         }
         if ($w eq 'weak') {
@@ -468,6 +468,8 @@ sub binary {
         my $right = $p == 1 ? $p : $p + 1;       # = is right to left
         my ($r, $rt) = binary($l, $pos, $right);
         my $nt = $p == 1 ? $t : ($w eq '+' || $w eq '-') ? (is_ptr($t) && !is_ptr($rt) ? $t : $w eq '+' && is_ptr($rt) ? $rt : undef) : undef;
+        # (an array in a sum is a pointer: build_trtable's (dests_node + i)->elems)
+        $nt = [ptr => $nt->[1]] if $p != 1 && $nt && $nt->[0] eq 'arr';
         ($s, $t) = ("($s $w $r)", $nt);
     }
     ($s, $t);
@@ -543,9 +545,9 @@ sub operand {
         if ($w =~ / literal \d+$/ && $var{$w}) { my $t = gtype($w); return ('((' . ctype($t) . ')' . init_list($t, [items_of($w)]) . ')', $t) }
         if (my $t = gtype($w)) { return (cid($w), $t) }
         return (cid($w), [enum => $econst{$w}]) if $econst{$w};
-        # a function named alone is called; an asm label is its address (as
-        # ttpc: pthread_cancel's (uintptr_t) __syscall_cancel_arch_start)
-        if ($fn{$w} && $fn{$w}{kind} eq 'asm' && !$fn{$w}{node}) { return (cid($w), [ptr => undef]) }
+        # a function named alone is called; a label in an asm function is its
+        # address (as ttpc: pthread_cancel's (uintptr_t) __syscall_cancel_arch_start)
+        if ($fn{$w} && $fn{$w}{kind} eq 'asm' && $fn{$w}{entry}) { return (cid($w), [ptr => undef]) }
         if (my $s = sig($w)) { return (callee($w) . '()', $s->{ret}) }
         fail("an unknown name $w");
     }
@@ -742,6 +744,8 @@ sub path {
 sub flat_items { map { c($_) eq 'items' ? flat_items(kids($_)) : $_ } @_ }
 sub init_list {
     my ($t, $l) = @_;
+    # (nothing in braces: gaih_inet's struct gaih_result res = {})
+    return '{}' if @$l == 1 && leaf($l->[0]) && c($l->[0]) eq ':';
     # (items in items: an array past 255 items, asincos.tbl's)
     my @i = flat_items(@$l);
     my @items = items(@i);
@@ -818,7 +822,8 @@ sub stmt_of {
         return ['stmt', cid_local($name) . ': ' . (@s ? join(' ', map { text($_) } @s) : ';')];
     }
     if (@$e == 1 && $stmtword{$w}) { return ['stmt', control($n)] }
-    if (@$e == 1 && $w eq ':' ) {
+    # (a : with a path after it is an expression: __backtrace's (void) link, f / . args)
+    if (@$e == 1 && $w eq ':' && !grep { leaf($_) && c($_) eq '.' } kids($n)) {
         push @scope, {};
         my @s = map { stmt_of($_) } elements(kids($n));
         pop @scope;

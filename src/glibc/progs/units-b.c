@@ -9,6 +9,9 @@
 struct item { long pad; struct item *next; int *result; int x; };
 struct holder { int n; struct item list[2]; };
 
+#define ANON canon
+#define FIELD two
+#define ANONAT canon_at
 #define LIST clist
 #define ELEM char
 #define AT clist_at
@@ -30,5 +33,6 @@ ub (struct clist *l, struct holder *h, int *result)
   clist_put (l, *clist_at (l, 0));
   h->list[1].result = result;
   h->list[1].x = twice (&h->list[0]) + (int) b_store[1];
+  h->n = (int) canon_at;
   return clist_at (l, 1);
 }

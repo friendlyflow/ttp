@@ -16,12 +16,18 @@
 
 struct big { long a, b, c; };
 
+#define ANON banon
+#define FIELD one
+#define ANONAT banon_at
 #define LIST blist
 #define ELEM struct big
 #define AT blist_at
 #define PUT blist_put
 #include "skeleton.h"
 
+#define ANON canon
+#define FIELD two
+#define ANONAT canon_at
 #define LIST clist
 #define ELEM char
 #define AT clist_at
@@ -50,6 +56,7 @@ places (void)
   fails += clist_at (&c, 1) != &cs[1];
   fails += bs[1].b != 5 || bs[0].c != 3;
   fails += cs[1] != 'y';
+  fails += banon_at != 0 || canon_at != 0;
   return fails;
 }
 

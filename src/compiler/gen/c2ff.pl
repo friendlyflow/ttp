@@ -724,7 +724,9 @@ for my $u (@units) {
                 $enumof{ $_->{name} } = "enum $name" for grep { $_->{kind} eq 'EnumConstantDecl' } @{ $e->{inner} || [] };
             } elsif ($own && ($own->{name} // '') eq '' && $recid{ $own->{id} }) {
                 # a typedef of an anonymous struct or union: the record is its tag
-                $rec{ $d->{type}{qualType} } //= $recid{ $own->{id} };
+                # (as a tag: wcscoll_l.c's coll_seq, of strcoll_l.c's text with
+                # another USTRING_TYPE, read wide strings as bytes)
+                reg_rec($d->{type}{qualType}, $recid{ $own->{id} }, $u);
                 anon_fields($recid{ $own->{id} }, $name);
                 # (a typedef that other units leave void, opaque behind an address,
                 # takes the struct: _IO_lock_t outside and inside libio's lock)
@@ -838,6 +840,21 @@ sub anon_fields {
                 if ($k->{kind} eq 'EnumDecl') { set_enumd("enum $k->{name}", $k) }
                 elsif ($k->{completeDefinition}) { $rec{"$k->{tagUsed} $k->{name}"} //= $k; anon_fields($k, $k->{name}) }
             }
+            next;
+        }
+        # (C11's anonymous member, named for its place: of the record it is in
+        # where the first at the place differs, psiginfo-define.h's, a struct of
+        # strings included for each list of them: codes_8's offsets were of the first)
+        if ($k->{kind} eq 'FieldDecl' && ($k->{name} // '') eq '' && !$k->{isBitfield} && $last && $last->{kind} eq 'RecordDecl' && ($last->{name} // '') eq '' && (my $mk = anon_key($k->{type}{qualType} // ''))) {
+            my $first = $anon{$mk} && $rec{ $anon{$mk}[0] };
+            if ($first && $first != $last && rec_sig($last) ne rec_sig($first)) {
+                my $name = "$rname anon";
+                $anonin{"$r->{tagUsed} $rname"}{$mk} = ["$last->{tagUsed} $name", $name];
+                $recunit{"$last->{tagUsed} $name"} //= $reg_unit if $reg_unit;
+                $rec{"$last->{tagUsed} $name"} //= $last;
+                anon_fields($last, $name);
+            }
+            undef $last;
             next;
         }
         next unless $k->{kind} eq 'FieldDecl' && defined $k->{name} && $last && ($last->{name} // '') eq '';
