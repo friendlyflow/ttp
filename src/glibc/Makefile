@@ -951,7 +951,9 @@ cparse-check:
 # build (I, but libgcc's, which clang reads through clangfix.pl) and each
 # milestone program's .i, csema's lines (types, value categories, implicit
 # casts, folded constants, layouts) clang's (clangsema.pl), unit by unit.
-CSUNITS = $(sort $(filter-out $(I)/libgcc/% %.clang.i,$(wildcard $(I)/*/*.i)) $(wildcard $(FF)/*-prog.i))
+# (of the milestones, not all a folder has: one where all of glibc was built holds
+# libm's units too, which csema does not read yet)
+CSUNITS = $(sort $(filter-out $(I)/libgcc/% %.clang.i,$(wildcard $(foreach m,$(CHECK_MS),$(OBJS_all_$(m):%=$(I)/%.i)))) $(wildcard $(FF)/*-prog.i))
 CSCLANG = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -Xclang -fdump-record-layouts -fsyntax-only \
 	--target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 csema-check:
