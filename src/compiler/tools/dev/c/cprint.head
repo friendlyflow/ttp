@@ -1,0 +1,3 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+cprint file.ff > file.c: a parse tree of cparse's written back as C, each operator's operation in parentheses, so that gcc compiles it to the same code as the .i only if the tree is right.

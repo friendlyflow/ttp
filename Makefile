@@ -121,7 +121,7 @@ patch:
 # (units-ready, its milestones of LINKED_x86_64 as aarch64's, then the
 # generic program's; its asm check; libgcc's tree's licenses and asm check,
 # as each target's) and arm's (units-ready, LINKED_arm's
-# milestones, its asm check), and on each the stdbit program's check. Each step
+# milestones, its asm check), and on each the stdbit program's check and textcount's check and round trip. Each step
 # prints PASS or FAIL and its time as it ends, its output in
 # CHECKLOG/<step>.log, and at the end all of them in order; make fails if
 # one did. Each heavy command takes a slot of its own
@@ -151,7 +151,7 @@ PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-che
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 clayer-pages-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm clayer-pages-arm \
 	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
-	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t))
+	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
 # with its time and how much of it its commands waited for a slot
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
@@ -286,6 +286,12 @@ pc-stdbit-$(1): pc-units-$(1)
 	$$(call pc_step,stdbit-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) stdbit-check)
 endef
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_stdbit,$(t))))
+# what c2ff reads from clang's text (progs/textcount.c) on each target, its round trip too
+define pc_textcount
+pc-textcount-$(1): pc-units-$(1)
+	$$(call pc_step,textcount-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) textcount-check textcount-roundtrip)
+endef
+$(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_textcount,$(t))))
 .PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
 
 clean:
