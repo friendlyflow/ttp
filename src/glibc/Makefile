@@ -930,10 +930,15 @@ glibc-licenses: licenses $(MILESTONES:%=%-licenses)
 # are this machine's build of the compiler's (make compiler-check makes them).
 CPTOOLS ?= ../../build/compiler/tools/$(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 CPRUN := $(if $(filter x86_64,$(shell uname -m)),,qemu-riscv64)
+# (a list of units through a file: a recipe's line is one argument of sh -c,
+# at most 128 KiB, which a BUILD with all of glibc passes; the check scripts
+# take @file)
+sp1 := $(subst x, ,x)
+unitsfile = $(shell mkdir -p $(dir $(1)))$(file >$(1),$(subst $(sp1),$(nl),$(strip $(2))))
 cparse-check:
 	@echo "cparse-check: $(words $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))) units of $(BUILD)"
-	@$(RUN) -t 3600 sh ../compiler/gen/cparsecheck.sh -r "$(CPRUN)" $(CPTOOLS)/cparse $(CPTOOLS)/cprint $(GLIBC_CC) $(BUILD)/cparse \
-	    $(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i))
+	@$(call unitsfile,$(BUILD)/cparse.units,$(sort $(wildcard $(I)/*/*.i $(FF)/*-prog.i)))$(RUN) -t 3600 sh ../compiler/gen/cparsecheck.sh -r "$(CPRUN)" $(CPTOOLS)/cparse $(CPTOOLS)/cprint $(GLIBC_CC) $(BUILD)/cparse \
+	    @$(BUILD)/cparse.units
 .PHONY: cparse-check
 
 # ---- the types and semantics of C in ff (T3b) -------------------------------
@@ -947,7 +952,7 @@ CSCLANG = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -Xc
 	--target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
 csema-check:
 	@echo "csema-check: $(words $(CSUNITS)) units of $(BUILD)"
-	@CLANG="$(CSCLANG)" CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema $(CSUNITS)
+	@$(call unitsfile,$(BUILD)/csema.units,$(CSUNITS))CLANG="$(CSCLANG)" CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema @$(BUILD)/csema.units
 .PHONY: csema-check
 
 # ---- the C layer written in ff (T3c) ----------------------------------------
@@ -959,17 +964,16 @@ CLUNITS = $(patsubst $(I)/%.i,%,$(sort $(filter-out %.clang.i,$(wildcard $(I)/*/
 CLPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
 clayer-check:
 	@echo "clayer-check: $(words $(CLUNITS)) units and $(words $(CLPROGS)) programs of $(BUILD)"
-	@s=0; NM=$(XPRE)nm LOBJ=$(LOBJ) CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl PROGROOTS_unwind="$(PROGROOTS_unwind)" $(RUN) -t 3600 sh ../compiler/gen/clayercheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" \
-	    -f $(FF) -p "$(CLPROGS)" -x "$(INDEXED)" -i $(I) -o $(OBJ) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff $(CPTOOLS)/csema $(BUILD)/clayer $(CLUNITS) || s=$$?; \
-	$(foreach m,$(CHECK_MS),echo "clayer-check $(m): $$(n=0; for o in $(OBJS_all_$(m)); do grep -q "^OK $$o$$" $(BUILD)/clayer/result && n=$$((n + 1)); done; echo $$n) of $(words $(OBJS_all_$(m))) objects$$(grep -q '^OK $(m)-prog$$' $(BUILD)/clayer/result && echo ', its program too')";) \
+	@$(call unitsfile,$(BUILD)/clayer/units,$(CLUNITS))$(foreach m,$(CHECK_MS),$(call unitsfile,$(BUILD)/clayer/$(m).objs,$(OBJS_all_$(m))))s=0; NM=$(XPRE)nm LOBJ=$(LOBJ) CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl PROGROOTS_unwind="$(PROGROOTS_unwind)" $(RUN) -t 3600 sh ../compiler/gen/clayercheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" \
+	    -f $(FF) -p "$(CLPROGS)" -x "$(INDEXED)" -i $(I) -o $(OBJ) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff $(CPTOOLS)/csema $(BUILD)/clayer @$(BUILD)/clayer/units || s=$$?; \
+	$(foreach m,$(CHECK_MS),echo "clayer-check $(m): $$(sed 's/^/OK /' $(BUILD)/clayer/$(m).objs | grep -Fxc -f $(BUILD)/clayer/result) of $(words $(OBJS_all_$(m))) objects$$(grep -q '^OK $(m)-prog$$' $(BUILD)/clayer/result && echo ', its program too')";) \
 	exit $$s
 .PHONY: clayer-check
 # and each milestone's whole page, many units at once as c2ff.pl has them, its
 # reach, its --zero, --weak, --keep-going: FF/m.ff.txt, as this build made it
 # with c2ff.pl, begins with it byte for byte (../compiler/gen/clpagecheck.sh).
 clayer-page-%:
-	@mkdir -p $(BUILD)/clayer
-	@printf '%s\n' $(foreach o,$(OBJS_all_$*),$(I)/$(o)) > $(BUILD)/clayer/$*.page.units
+	@$(call unitsfile,$(BUILD)/clayer/$*.page.units,$(foreach o,$(OBJS_all_$*),$(I)/$(o))):
 	@{ printf '%s\n' $(ROOTS_$*) $(if $(call startms,$*),$(ROOTS_start)); for a in $(ASMS_all_$*); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done | sort -u; } > $(BUILD)/clayer/$*.page.roots
 	@CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl $(SLOT) -v 9000000 -t 1800 sh ../compiler/gen/clpagecheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" -i $(I) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff \
 	    -l $(or $(LICENSE_$*),license.ff.txt) -u $(BUILD)/clayer/$*.page.units -R $(BUILD)/clayer/$*.page.roots \

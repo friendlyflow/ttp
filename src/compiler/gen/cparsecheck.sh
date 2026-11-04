@@ -11,6 +11,7 @@
 #
 #   sh cparsecheck.sh [-j N] [-r RUN] [-w REFDIR] CPARSE CPRINT CC DIR unit.i ...
 #
+# (a unit @file: the units in that file, one to a line.)
 # RUN runs the tools (qemu-riscv64 for riscv64's elsewhere); N units at once
 # (4). DIR gets each unit's tree (name.ff) and C (name.c), kept where it
 # fails: a line PARSE, PRINT, GCC (gcc took the .i but not the C), DIFF
@@ -63,7 +64,7 @@ test $# -ge 5 || { echo "usage: cparsecheck.sh [-j N] [-r RUN] [-w REFDIR] CPARS
 p=$1 q=$2 cc=$3 d=$4
 shift 4
 mkdir -p "$d"
-for u in "$@"; do echo "$u"; done | xargs -P "$jobs" -n 1 sh "$0" --one "$run" "$ref" "$p" "$q" "$cc" "$d" > "$d/result"
+for u in "$@"; do case "$u" in @*) cat "${u#@}" ;; *) echo "$u" ;; esac; done | xargs -P "$jobs" -n 1 sh "$0" --one "$run" "$ref" "$p" "$q" "$cc" "$d" > "$d/result"
 n=$(grep -c '^OK' "$d/result")
 s=$(grep -c '^SKIP' "$d/result")
 f=$(grep -vc '^OK\|^SKIP' "$d/result")
