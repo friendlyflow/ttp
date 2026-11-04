@@ -108,7 +108,7 @@ sub cid {
 my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8 => 'signed char', i16 => 'short',
     i32 => 'int', i64 => 'long long', u8 => 'unsigned char', u16 => 'unsigned short', u32 => 'unsigned int',
     u64 => 'unsigned long', void => 'void', float => 'float', double => 'double', 'long double' => 'long double',
-    float128 => '__float128', i128 => '__int128', u128 => 'unsigned __int128', float16 => '_Float16', bfloat16 => '__bf16', 'complex float16' => '_Complex _Float16',
+    float128 => '__float128', 'complex float128' => '_Complex __float128', i128 => '__int128', u128 => 'unsigned __int128', float16 => '_Float16', bfloat16 => '__bf16', 'complex float16' => '_Complex _Float16',
     'short fract' => 'short _Fract', 'unsigned short fract' => 'unsigned short _Fract', 'sat short fract' => '_Sat short _Fract', 'sat unsigned short fract' => '_Sat unsigned short _Fract',
     'fract' => '_Fract', 'unsigned fract' => 'unsigned _Fract', 'sat fract' => '_Sat _Fract', 'sat unsigned fract' => '_Sat unsigned _Fract',
     'long fract' => 'long _Fract', 'unsigned long fract' => 'unsigned long _Fract', 'sat long fract' => '_Sat long _Fract', 'sat unsigned long fract' => '_Sat unsigned long _Fract',
