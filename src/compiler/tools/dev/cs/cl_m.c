@@ -634,6 +634,7 @@ static void cl_read_index (void)
     char *s = cl_txt (d->v[i]);
     if (cl_ends_colon (s)) s = cl_no_colon (s);
     cl_set (&C->treedefs, s);
+    if (d->v[i]->count) cl_put (&C->treefile, s, cl_txt (d->v[i]->kids[0]));
     i++;
   }
   cs_b_init (&b);

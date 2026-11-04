@@ -55,7 +55,7 @@ static int cl_scalar_word (char *s)
   static char *w[] = { "char", "i8", "u8", "short", "u16", "int", "u32", "long", "u64", "float", "double", "long double", "i64", "i128", "u128", "float16", "bfloat16", "complex float16", "void", "va_list", "complex float", "complex double", "complex long double", "address", "array", 0 };
   long i = 0;
   while (w[i]) { if (cl_eq (s, w[i])) return 1; i++; }
-  return C->target == 1 && cl_eq (s, "float128");
+  return C->target == 1 && (cl_eq (s, "float128") || cl_eq (s, "complex float128"));
 }
 
 static void cl_item (struct cl_list *l, struct cl_list *o)
@@ -761,6 +761,18 @@ static int cl_pure (struct cs_ex *n)
   while (i < n->nk) { if (!cl_pure (n->kid[i])) return 0; i++; }
   return 1;
 }
+/* does a value compute in floating point: an operator or a conversion of a float, not a variable's value alone? */
+static int cl_fp_computes (struct cs_ex *n)
+{
+  long i = 0;
+  if (n->k == E_BIN || n->k == E_UN) {
+    int k = n->t ? cs_kind (n->t) : 0;
+    if (k == TY_FLOAT || k == TY_DOUBLE || k == TY_LDOUBLE || k == TY_FLOAT128 || k == TY_FLOAT16) return 1;
+  }
+  if ((n->k == E_CAST || n->k == E_ICE) && (n->op == CK_FLOATINGCAST || n->op == CK_INTEGRALTOFLOATING || n->op == CK_FLOATINGTOINTEGRAL || n->op == CK_FLOATINGTOBOOLEAN)) return 1;
+  while (i < n->nk) { if (cl_fp_computes (n->kid[i])) return 1; i++; }
+  return 0;
+}
 static void cl_init (struct cs_ex *n, struct cl_list *o);
 static int cl_anon_union_init (struct cs_ex *n)
 {
@@ -923,6 +935,89 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
   return e;
 }
 static void cl_expr (struct cs_ex *n, struct cl_list *o);
+static void cl_place (long off, char **file, long *line, int *found);
+static void cl_flat_layers (struct node *n, struct cl_list *o);
+static struct node *cl_copy_tree (struct node *n);
+static char *cl_txt (struct node *n);
+static int cl_ends_colon (char *s);
+static char *cl_no_colon (char *s);
+/* the count of parameters of a function of the tree (--index), -1 if it has none to compare: variadic, asm, not found */
+static long cl_tree_nparams (char *name)
+{
+  int hop = 0;
+  while (hop < 8) {
+    char *f = cl_get (&C->treefile, name);
+    struct cl_map *pg;
+    struct node *d;
+    struct cl_list *k;
+    long i = 0, c = 0;
+    if (!f) return -1;
+    pg = cl_get (&C->treepage, f);
+    if (!pg) {
+      struct cs_buf b;
+      long n, at = cstrlen (C->indexf), r = 0;
+      unsigned char *p;
+      struct node *root;
+      cs_b_init (&b);
+      while (at > 0 && C->indexf[at - 1] != '/') at--;
+      cs_b_bytes (&b, (unsigned char *) C->indexf, at);
+      cs_b_str (&b, f);
+      p = cp_file (cl_copy (b.p, b.n), &n);
+      root = cl_copy_tree (cp_read_ff (p, n));
+      pg = alloc (sizeof *pg);
+      pg->tab = 0;
+      pg->count = 0;
+      while (r < root->count) {
+        if (cl_ends_colon (cl_txt (root->kids[r]))) {
+          struct cl_list *y = cl_l ();
+          long j = 0;
+          cl_flat_layers (root->kids[r], y);
+          while (j < y->n) { cl_put (pg, cl_no_colon (cl_txt (y->v[j])), y->v[j]); j++; }
+        }
+        r++;
+      }
+      cl_put (&C->treepage, f, pg);
+    }
+    d = cl_get (pg, name);
+    if (!d) return -1;
+    k = cl_l ();
+    cl_flat_layers (d, k);
+    if (k->n && cl_is (k->v[0], "asm")) return -1;
+    if (k->n == 2 && cl_is (k->v[0], "alias")) { name = cl_txt (k->v[1]); hop++; continue; }
+    while (i < k->n && !cl_ends_colon (cl_txt (k->v[i]))) i++;
+    while (i < k->n) {
+      if (cl_is (k->v[i], "...")) return -1;
+      if (!cl_ends_colon (cl_txt (k->v[i]))) break;
+      c++;
+      i++;
+    }
+    return c;
+  }
+  return -1;
+}
+/* does this unit's own declaration of a function of the tree, in a .c (glibc's
+   headers agree with glibc's definitions), pass another count of arguments
+   than the tree's definition takes? Reads the definition's file only then */
+static int cl_own_proto_differs (struct cs_decl *d, char *name, long nargs)
+{
+  struct cs_decl *x = d;
+  int own = 0;
+  long np;
+  if (!C->treedefs.count || !cl_val (&C->treedefs, name) || cl_has (&C->fn, name)) return 0;
+  while (x) {
+    if (!x->hasbody && !x->local) {
+      char *f;
+      long ln, m;
+      int found;
+      cl_place (x->off, &f, &ln, &found);
+      if (found) { m = cstrlen (f); if (m > 2 && f[m - 2] == '.' && f[m - 1] == 'c') own = 1; }
+    }
+    x = x->prev;
+  }
+  if (!own) return 0;
+  np = cl_tree_nparams (name);
+  return np >= 0 && np != nargs;
+}
 static void cl_call (struct cs_ex *n, struct cl_list *o)
 {
   struct cs_ex *callee = cl_k (n, 0), *c = cl_strip (callee);
@@ -952,6 +1047,23 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   if (c->k != E_REF) cl_fail ("a call through what is no name", 0);
   if (c->d && c->d->errfn) { struct cl_list *v = cl_l (); cl_push (v, cl_n ("0")); cl_push (o, cl_cast_w ("void", v)); return; }
   name = cl_dn (c->d);
+  /* a function of the tree the unit declares itself, with another count of
+     parameters than the tree's definition (tst-bz20544's __cxa_at_quick_exit
+     of 3, glibc's of 2): C calls what the unit declared, and gcc passes them
+     all, so through a pointer of the unit's type, which ttpc counts nothing of */
+  if (cl_own_proto_differs (c->d, name, na)) {
+    struct cs_ex *to = cs_mk (E_CAST, callee->t, 0);
+    struct cl_list *p;
+    struct node *h;
+    to->op = CK_BITCAST;
+    cs_add (to, callee);
+    p = cl_ex (to);
+    h = cl_one (p);
+    nd_add (h, cl_n ("."));
+    cl_add_all (h, cl_args (n, 1));
+    cl_push (o, h);
+    return;
+  }
   if (cl_eq (name, "__builtin_expect")) {
     struct cl_list *v = cl_l ();
     cl_itemx (cl_k (n, 1), v);
