@@ -7,6 +7,7 @@
 #
 #   sh clayercheck.sh [-j N] [-r RUN] [-t TARGET] [-v "UNITS"] [-f FF -p "PROGRAMS" [-x "INDEXED"]] -i I -o OBJ -s GLIBC_SRC -S shared.ff CSEMA DIR unit ...
 #
+# (a unit @file: the units in that file, one to a line.)
 # unit is its path under I, without its .i (string/strlen); soft-fp's, whose
 # objects are libgcc's here, from the name each defines (__addtf3). -p: the
 # milestones' programs too, FF/m-prog.i against the FF/m-prog.ff.txt c2ff.pl
@@ -84,7 +85,7 @@ test $# -ge 3 || { echo "usage: clayercheck.sh [-j N] [-r RUN] [-t TARGET] [-v U
 cs=$1 d=$2
 shift 2
 mkdir -p "$d"
-for u in "$@"; do echo "$u"; done | xargs -P "$jobs" -n 1 sh "$0" --one "$run" "$tg" "$vec" "$I" "$obj" "$gsrc" "$shared" "$cs" "$d" > "$d/result"
+for u in "$@"; do case "$u" in @*) cat "${u#@}" ;; *) echo "$u" ;; esac; done | xargs -P "$jobs" -n 1 sh "$0" --one "$run" "$tg" "$vec" "$I" "$obj" "$gsrc" "$shared" "$cs" "$d" > "$d/result"
 for m in $progs; do prog_one "$m" >> "$d/result"; done
 n=$(grep -c '^OK' "$d/result")
 s=$(grep -c '^NONE' "$d/result")
