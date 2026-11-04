@@ -129,7 +129,7 @@ for my $o (@want) {
           . "mki: and keep the toolchain alive with `make gcroots`.\n";
     }
     # (libg.a's dummy.o, at the top of the build, is made in misc)
-    my $dir = "$src/" . ($o =~ m{^soft-fp/} ? "math" : $o !~ m{/} ? "misc" : dirname($o));
+    my $dir = "$src/" . ($o =~ m{^soft-fp/} ? "math" : $o !~ m{/} ? "misc" : $o =~ s{/.*}{}r);
     if (system('sh', '-c', "cd '$dir' && $c") != 0) { warn "mki: $o: the compiler failed\n"; $bad = 1; next }
     if ($ext eq 'i' && $c !~ / -U__SIZEOF_INT128__ / && do { open my $h, '<', $i; local $/; <$h> =~ /^typedef unsigned (?:__int128|_BitInt\(128\)) u128;$/m }) {
         $c =~ s/ -o / -U__SIZEOF_INT128__ -U__BITINT_MAXWIDTH__ -o /;

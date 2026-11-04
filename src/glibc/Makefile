@@ -1127,7 +1127,11 @@ ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
 ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
 # (and long double's soft-fp, as the ldouble milestone has it: libgcc's on
 # a gcc build, glibc's own code, which ttpc's long double calls)
-ALL_C = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES))) $(SOFTFP:%=soft-fp/%) $(filter soft-fp/%,$(OBJS_ldouble_$(GTARGET)))
+# (not libmvec's vector functions on aarch64 yet: their C is gcc's arm_neon.h
+# and arm_sve.h, __Float32x4_t, __SVFloat32_t and gcc's __builtin_aarch64_*,
+# which clang does not read and ttpc's vector, x86_64's alone, does not take)
+ALLCSKIP_aarch64 := mathvec/advsimd/% mathvec/sve/%
+ALL_C = $(filter-out $(ALLCSKIP_$(GTARGET)),$(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))) $(SOFTFP:%=soft-fp/%) $(filter soft-fp/%,$(OBJS_ldouble_$(GTARGET)))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 # crt1.o's parts, crti.o and crtn.o, which a program links before libc.a:
 # their definitions are the ones of a name libc.a defines too
@@ -1442,6 +1446,8 @@ TCLANGFIX_riscv64 := sed -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\
 # double the x87's as gcc's _Float64x is there)
 TCLANGFIX_x86_64 = $(CLANGFIX) -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\?\)[fF]64x\b/\1L   /g' \
 	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g'
+# (aarch64: as riscv64's, long double binary128 on both)
+TCLANGFIX_aarch64 := $(TCLANGFIX_riscv64)
 TCLANGFIX = $(or $(TCLANGFIX_$(GTARGET)),$(CLANGFIX))
 # (and on x86_64 a test of gcc's intrinsics headers, <x86intrin.h>: the
 # tst-*-rtm tests' _xbegin and _xend, through clangvec.pl as glibc's

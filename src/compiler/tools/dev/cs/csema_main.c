@@ -55,6 +55,13 @@ static char *builtins[] = {
   "void __builtin_prefetch (const void *, ...);", "SZ __builtin_object_size (const void *, int);",
   "SZ __builtin_dynamic_object_size (const void *, int);", "void *__builtin_assume_aligned (const void *, SZ, ...);",
   "int __builtin_classify_type ();", "void __builtin___clear_cache (char *, char *);",
+  "float __builtin_floorf (float);", "double __builtin_floor (double);", "float __builtin_ceilf (float);", "double __builtin_ceil (double);",
+  "float __builtin_truncf (float);", "double __builtin_trunc (double);", "float __builtin_roundf (float);", "double __builtin_round (double);",
+  "float __builtin_roundevenf (float);", "double __builtin_roundeven (double);", "float __builtin_rintf (float);", "double __builtin_rint (double);",
+  "float __builtin_nearbyintf (float);", "double __builtin_nearbyint (double);",
+  "float __builtin_fmaxf (float, float);", "double __builtin_fmax (double, double);", "float __builtin_fminf (float, float);", "double __builtin_fmin (double, double);",
+  "long __builtin_lrintf (float);", "long __builtin_lrint (double);", "long long __builtin_llrintf (float);", "long long __builtin_llrint (double);",
+  "long __builtin_lroundf (float);", "long __builtin_lround (double);", "long long __builtin_llroundf (float);", "long long __builtin_llround (double);",
   "typedef int __csema_mid;",
   "extern int __builtin_va_arg_pack_len (void);", "extern int __builtin_va_arg_pack (void);",
   "extern double __builtin_tgmath ();",
@@ -121,7 +128,7 @@ static void one_unit (char *file, char *name, int target, int mode)
     }
     i++;
   }
-  if (target == 2) put (buf, &n, "extern unsigned int __builtin_aarch64_get_fpcr (void);\n", 0);
+  if (target == 2) put (buf, &n, "extern unsigned int __builtin_aarch64_get_fpcr (void);\nextern void __builtin_aarch64_set_fpcr (unsigned int);\nextern unsigned int __builtin_aarch64_get_fpsr (void);\nextern void __builtin_aarch64_set_fpsr (unsigned int);\n", 0);
   put (buf, &n, "typedef int __csema_end;\n", 0);
   i = 0;
   while (i < bytes) { buf[n + i] = src[i]; i++; }
