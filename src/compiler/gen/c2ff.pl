@@ -1342,7 +1342,7 @@ my %ovf_armsub;
 my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'i128 i128 i128', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
 $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int', 'long long long';
 $ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long', 'i128 i128 i128', 'int i128 i128', 'int int int', 'int long long', 'u64 u64 u64';
-$ovf_armsub{$_} = 1 for 'i64 i64 i64', 'int i64 i64', 'u32 u32 u32';
+$ovf_armsub{$_} = 1 for 'i64 i64 i64', 'int i64 i64', 'u32 u32 u32', 'i64 i64 long';
 # (and builtins-arm.ff.txt's, of arm's 32-bit size_t)
 my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int', 'i64 i64 i64', 'i64 int i64';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);

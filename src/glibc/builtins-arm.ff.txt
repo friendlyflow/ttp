@@ -320,6 +320,48 @@
         a
         b
         r
+  comment
+    __builtin_sub_overflow of two long longs into a long (mktime's offset): the difference wrapped to a long, and whether that is not the exact difference.
+  __builtin_sub_overflow i64 i64 long:
+    int
+    a:
+      i64
+    b:
+      i64
+    r:
+      long
+      * pointer
+    t:
+      i64
+      0
+    v:
+      int
+      __builtin_sub_overflow i64 i64 i64
+        a
+        b
+        t
+        & address
+    n:
+      long
+      cast
+        long
+      t
+    w:
+      i64
+      cast
+        i64
+      n
+    r
+    * pointer
+    =
+    n
+    return
+      v
+      |
+      :
+        w
+        !=
+        t
   __builtin_sub_overflow u32 u32 u32:
     int
     a:
