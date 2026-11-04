@@ -905,17 +905,23 @@ $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
 # differences. RTPAGE and RTUNITS: another build's page, read only.
 # The rule (the user, 2026-11-04): run this on every change to c2ff.pl or csema,
 # before that merge goes into ports. It stays a target of its own, not a step of
-# ports-check (about 40 minutes with the slots busy).
+# ports-check (5 to 6 minutes once it has a slot).
+# It passes when the differences are exactly its list, rtknown-$(GTARGET).txt
+# (a judged name, its digest, kind and reason: ../compiler/gen/rtknown.pl), and
+# fails naming each new one and each listed one that no longer differs. riscv64's
+# and aarch64's lists are here; x86_64's and arm's come from A-x86 and A-arm:
+# without a list every difference is new.
 RTPAGE ?= $(FF)/glibc.ff.txt
 RTUNITS ?= $(FF)/glibc.units
 RTDIR ?= $(BUILD)/rt
 RTJOBS ?= 4
+RTKNOWN ?= rtknown-$(GTARGET).txt
 glibc-roundtrip:
 	@CLANGB="$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion" \
 	CLANGU="$(CLANG_AST) $(if $(filter aarch64,$(GTARGET)),$(RTFLAGS_aarch64))" \
 	CLANGL="$(C2FF_CLANG) -x c -include clang-prelude.h $(LCLANG_$(GTARGET)) -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w" \
 	CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl \
-	$(SLOT) -t $(or $(RTSECS),14400) sh ../compiler/gen/rtall.sh -j $(RTJOBS) -t $(GTARGET) -u $(RTUNITS) $(RTPAGE) $(RTDIR)
+	$(SLOT) -t $(or $(RTSECS),14400) sh ../compiler/gen/rtall.sh -j $(RTJOBS) -t $(GTARGET) -k $(RTKNOWN) -u $(RTUNITS) $(RTPAGE) $(RTDIR)
 
 .PHONY: strlen-check asm-check glibc-roundtrip
 
@@ -1028,7 +1034,7 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen
 	@$(RUN) -t 60 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/units/back.c > $(FF)/units/back.json
 	@$(RUN) -t 60 perl roundtrip.pl --target $(GTARGET) $(FF)/units/back.names $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)
-	@grep -q 'blist u header' $(FF)/units/page.ff.txt && grep -q 'clist u header' $(FF)/units/page.ff.txt && grep -q '^ *holder .*units-b' $(FF)/units/page.ff.txt
+	@grep -q 'blist u header' $(FF)/units/page.ff.txt && grep -q 'clist u header' $(FF)/units/page.ff.txt && grep -q '^ *holder .*units-b' $(FF)/units/page.ff.txt && grep -q '^ *both .*units-a:' $(FF)/units/page.ff.txt && grep -q '^ *both:' $(FF)/units/page.ff.txt
 	@# (a program's external definition of a name that is a static in its tree: a name of its own)
 	@rm -rf $(FF)/units/tree; perl ../compiler/gen/ffsplit.pl $(FF)/units/page.ff.txt $(FF)/units/tree > /dev/null
 	@$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $(abspath progs)/units-p.c -o $(FF)/units/units-p.i
