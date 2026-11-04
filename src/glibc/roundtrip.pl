@@ -218,7 +218,7 @@ sub name_of {
     return $staticid{ $d->{id} } if defined $d->{id} && $staticid{ $d->{id} };
     $n =~ s/^__builtin_((?:mem|str|stp)\w+|free|malloc)$/$1/;
     # (a call of copysign or fabs: of its builtin, as c2ff writes it)
-    $n = "__builtin_$n" if $n =~ /^(?:copysign|fabs)[fl]?$/ && $d->{kind} eq 'FunctionDecl';
+    $n = "__builtin_$n" if $n =~ /^(?:copysign|fabs)(?:[fl]|f128)?$/ && $d->{kind} eq 'FunctionDecl';
     $n = '__builtin_va_start' if $n eq '__builtin_c23_va_start';
     # (a unit's asm ("memset = __memset_generic"): its calls of memset are
     # of __memset_generic, as c2ff writes them)
