@@ -173,11 +173,11 @@ sub arm {
     }
     # 8 bytes: r0 the pointer, r2 and r3 the value (AAPCS: an even pair), the
     # result in r0 and r1. A load is ldrexd alone, one copy on armv7-a.
-    push @f, asmfn("__atomic_load_8", "$dmb\nldrexd r0 r0\nclrex\n$dmb\nret");
+    push @f, asmfn("__ff_atomic_load_8", "$dmb\nldrexd r0 r0\nclrex\n$dmb\nret");
     my $xchg = "mov r0 r12\n$dmb\nL1:\nldrexd r12 r0\nstrexd r12 r2 r1\ncmpi 0 0 r1\nbne arel:L1\n$dmb";
-    push @f, asmfn("__atomic_store_8", "$xchg\nret");
+    push @f, asmfn("__ff_atomic_store_8", "$xchg\nret");
     # (the old in r4 and r5, strexd's status in r0, which ends as the result)
-    push @f, asmfn("__atomic_exchange_8", "
+    push @f, asmfn("__ff_atomic_exchange_8", "
         push 48
         mov r0 r12
         $dmb
@@ -197,12 +197,12 @@ sub arm {
         xor => "eor r2 r0 r4\neor r3 r1 r5", nand => "and r2 r0 r4\nand r3 r1 r5\nmvn r4 r4\nmvn r5 r5");
     for my $op (qw(add sub and or xor nand)) {
         my $body = "push 112\nmov r0 r12\n$dmb\nL1:\nldrexd r12 r0\n$new8{$op}\nstrexd r12 r4 r6\ncmpi 0 0 r6\nbne arel:L1\n$dmb\n";
-        push @f, asmfn("__atomic_fetch_${op}_8", $body . "pop 112\nret");
-        push @f, asmfn("__atomic_${op}_fetch_8", $body . "mov r4 r0\nmov r5 r1\npop 112\nret");
+        push @f, asmfn("__ff_atomic_fetch_${op}_8", $body . "pop 112\nret");
+        push @f, asmfn("__ff_atomic_${op}_fetch_8", $body . "mov r4 r0\nmov r5 r1\npop 112\nret");
     }
     # compare-exchange: r1 the expected's address, r2 and r3 the desired, r6
     # and r7 the expected, r4 and r5 the old, r12 strexd's status
-    push @f, asmfn("__atomic_compare_exchange_8", "
+    push @f, asmfn("__ff_atomic_compare_exchange_8", "
         push 240
         ldrd 0 r1 r6
         $dmb
@@ -225,6 +225,28 @@ sub arm {
         movi 0 0 r0
         pop 240
         ret");
+    # The C types of the 8-byte ones: an asm function's value is a word, and an
+    # int given for a u64 is no pair. libatomic's names are C functions of
+    # these types, which call them through pointers of their function types.
+    my @pv = (param('p', 'u64', '* pointer'));
+    push @f, node('__ff_atomic8_load:', leaf('function', 'u64'), @pv);
+    push @f, node('__ff_atomic8_store:', leaf('function', 'void'), @pv, param('v', 'u64'));
+    push @f, node('__ff_atomic8_op:', leaf('function', 'u64'), @pv, param('v', 'u64'));
+    push @f, node('__ff_atomic8_cas:', leaf('function', 'int'), @pv, param('e', 'u64', '* pointer'), param('d', 'u64'));
+    my $wrap = sub {
+        my ($name, $type, $ret, $params, @args) = @_;
+        my @call = (node('f', map { node($_) } @args));
+        push @f, node("__atomic_$name:", leaf($ret), @$params,
+            node('f:', leaf("__ff_atomic8_$type", '* pointer', "__ff_atomic_$name", '& address')),
+            $ret eq 'void' ? @call : node('return', @call));
+    };
+    $wrap->('load_8', 'load', 'u64', [@pv, param('order', 'int')], 'p');
+    $wrap->('store_8', 'store', 'void', [@pv, param('v', 'u64'), param('order', 'int')], 'p', 'v');
+    $wrap->('exchange_8', 'op', 'u64', [@pv, param('v', 'u64'), param('order', 'int')], 'p', 'v');
+    $wrap->('compare_exchange_8', 'cas', 'int', [@pv, param('e', 'u64', '* pointer'), param('d', 'u64'), param('success', 'int'), param('failure', 'int')], 'p', 'e', 'd');
+    for my $op (qw(add sub and or xor nand)) {
+        $wrap->("${_}_8", 'op', 'u64', [@pv, param('v', 'u64'), param('order', 'int')], 'p', 'v') for "fetch_$op", "${op}_fetch";
+    }
     print write_txt(node('comment', node("libatomic's functions in arm's atomics (ldrex and strex, dmb ish), written by mkatomics.pl arm.")),
         node('atomics:', ttp_license(), @f));
 }

@@ -1413,7 +1413,7 @@ atomics:
         r3
         r0
       ret
-  __atomic_load_8:
+  __ff_atomic_load_8:
     asm
     dmb
       11
@@ -1424,7 +1424,7 @@ atomics:
     dmb
       11
     ret
-  __atomic_store_8:
+  __ff_atomic_store_8:
     asm
     mov
       r0
@@ -1449,7 +1449,7 @@ atomics:
       dmb
         11
       ret
-  __atomic_exchange_8:
+  __ff_atomic_exchange_8:
     asm
     push
       48
@@ -1484,7 +1484,7 @@ atomics:
       pop
         48
       ret
-  __atomic_fetch_add_8:
+  __ff_atomic_fetch_add_8:
     asm
     push
       112
@@ -1521,7 +1521,7 @@ atomics:
       pop
         112
       ret
-  __atomic_add_fetch_8:
+  __ff_atomic_add_fetch_8:
     asm
     push
       112
@@ -1564,7 +1564,7 @@ atomics:
       pop
         112
       ret
-  __atomic_fetch_sub_8:
+  __ff_atomic_fetch_sub_8:
     asm
     push
       112
@@ -1601,7 +1601,7 @@ atomics:
       pop
         112
       ret
-  __atomic_sub_fetch_8:
+  __ff_atomic_sub_fetch_8:
     asm
     push
       112
@@ -1644,7 +1644,7 @@ atomics:
       pop
         112
       ret
-  __atomic_fetch_and_8:
+  __ff_atomic_fetch_and_8:
     asm
     push
       112
@@ -1681,7 +1681,7 @@ atomics:
       pop
         112
       ret
-  __atomic_and_fetch_8:
+  __ff_atomic_and_fetch_8:
     asm
     push
       112
@@ -1724,7 +1724,7 @@ atomics:
       pop
         112
       ret
-  __atomic_fetch_or_8:
+  __ff_atomic_fetch_or_8:
     asm
     push
       112
@@ -1761,7 +1761,7 @@ atomics:
       pop
         112
       ret
-  __atomic_or_fetch_8:
+  __ff_atomic_or_fetch_8:
     asm
     push
       112
@@ -1804,7 +1804,7 @@ atomics:
       pop
         112
       ret
-  __atomic_fetch_xor_8:
+  __ff_atomic_fetch_xor_8:
     asm
     push
       112
@@ -1841,7 +1841,7 @@ atomics:
       pop
         112
       ret
-  __atomic_xor_fetch_8:
+  __ff_atomic_xor_fetch_8:
     asm
     push
       112
@@ -1884,7 +1884,7 @@ atomics:
       pop
         112
       ret
-  __atomic_fetch_nand_8:
+  __ff_atomic_fetch_nand_8:
     asm
     push
       112
@@ -1927,7 +1927,7 @@ atomics:
       pop
         112
       ret
-  __atomic_nand_fetch_8:
+  __ff_atomic_nand_fetch_8:
     asm
     push
       112
@@ -1976,7 +1976,7 @@ atomics:
       pop
         112
       ret
-  __atomic_compare_exchange_8:
+  __ff_atomic_compare_exchange_8:
     asm
     push
       240
@@ -2035,3 +2035,326 @@ atomics:
       pop
         240
       ret
+  __ff_atomic8_load:
+    function
+    u64
+    p:
+      u64
+      * pointer
+  __ff_atomic8_store:
+    function
+    void
+    p:
+      u64
+      * pointer
+    v:
+      u64
+  __ff_atomic8_op:
+    function
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+  __ff_atomic8_cas:
+    function
+    int
+    p:
+      u64
+      * pointer
+    e:
+      u64
+      * pointer
+    d:
+      u64
+  __atomic_load_8:
+    u64
+    p:
+      u64
+      * pointer
+    order:
+      int
+    f:
+      __ff_atomic8_load
+      * pointer
+      __ff_atomic_load_8
+      & address
+    return
+      f
+        p
+  __atomic_store_8:
+    void
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_store
+      * pointer
+      __ff_atomic_store_8
+      & address
+    f
+      p
+      v
+  __atomic_exchange_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_exchange_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_compare_exchange_8:
+    int
+    p:
+      u64
+      * pointer
+    e:
+      u64
+      * pointer
+    d:
+      u64
+    success:
+      int
+    failure:
+      int
+    f:
+      __ff_atomic8_cas
+      * pointer
+      __ff_atomic_compare_exchange_8
+      & address
+    return
+      f
+        p
+        e
+        d
+  __atomic_fetch_add_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_fetch_add_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_add_fetch_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_add_fetch_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_fetch_sub_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_fetch_sub_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_sub_fetch_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_sub_fetch_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_fetch_and_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_fetch_and_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_and_fetch_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_and_fetch_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_fetch_or_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_fetch_or_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_or_fetch_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_or_fetch_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_fetch_xor_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_fetch_xor_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_xor_fetch_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_xor_fetch_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_fetch_nand_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_fetch_nand_8
+      & address
+    return
+      f
+        p
+        v
+  __atomic_nand_fetch_8:
+    u64
+    p:
+      u64
+      * pointer
+    v:
+      u64
+    order:
+      int
+    f:
+      __ff_atomic8_op
+      * pointer
+      __ff_atomic_nand_fetch_8
+      & address
+    return
+      f
+        p
+        v
