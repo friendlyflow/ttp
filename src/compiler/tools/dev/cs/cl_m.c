@@ -426,6 +426,21 @@ static void cl_reserve_target (void)
     while (e < m) { cl_set (&C->reserved, v[e]); e++; }
     i++;
   }
+  if (C->target == 3) {
+    static char *g[] = { "data:", "data2:", "shifts:", "multiply:", "bits:", "memory:", "atomic:", "branch:", "system:", "vfp:", "a32x:", 0 };
+    long q = 0;
+    while (q < sec->count) {
+      long w = 0;
+      struct node *x = sec->kids[q];
+      int yes = 0;
+      while (g[w]) { if (same (x->text, x->len, g[w])) yes = 1; w++; }
+      if (yes) {
+        long u = 0;
+        while (u < x->count) { char *s = cl_copy (x->kids[u]->text, x->kids[u]->len); cl_reserve_form (s); u++; }
+      }
+      q++;
+    }
+  }
   if (C->target == 1) {
     static char *g[] = { "alu1:", "alu2:", "move:", "unary:", "shift1:", "shift2:", "bit:", "branch:", "set:", "cmov:", "stack:", "atomic:", "system:", "sse:", 0 };
     long q = 0;

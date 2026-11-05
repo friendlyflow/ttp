@@ -419,6 +419,13 @@ sub reserve_target {
     # nothing of: ttpc found the lock prefix for localealias.c's lock, so
     # __libc_lock_lock (lock) took 0's address; pause, setns, fadd ... too;
     # its groups of instructions, isa/x86_64.pl's, and x86_64gnu.ff's)
+    # (and on arm its A32 and VFP instructions': ttpc found the pop of A32 for
+    # l10nflist.c's static pop, an empty pop, an illegal instruction: any
+    # program that opens a locale's messages)
+    if ($t eq 'arm') {
+        my %insgroup = map { $_ => 1 } qw(data data2 shifts multiply bits memory atomic branch system vfp a32x);
+        for (map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s{:$}{}r } } @{ $sec->{children} }) { $reserved{$1} = 1 if $_->{content} =~ /^([A-Za-z_]\w*):$/ }
+    }
     if ($t eq 'x86_64') {
         my %insgroup = map { $_ => 1 } qw(alu1 alu2 move unary shift1 shift2 bit branch set cmov stack atomic system sse);
         my @forms = map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s/:$//r } } @{ $sec->{children} };
