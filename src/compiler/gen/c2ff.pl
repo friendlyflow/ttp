@@ -1956,7 +1956,7 @@ sub expr {
             my $r = strip((kids($i))[0]);
             my $d = $r->{kind} eq 'DeclRefExpr' ? $r->{referencedDecl} : {};
             return cast_node([ctype(qt($n))], node('address', expr($r)))
-                if ($d->{kind} // '') eq 'VarDecl' && !$local{ $d->{id} } && !$staticname{"$cur_unit $d->{id}"} && !$var{ own($d->{name}) };
+                if ($d->{kind} // '') eq 'VarDecl' && (!$local{ $d->{id} } || (($localdecl{ $d->{name} } // {})->{storageClass} // '') eq 'extern') && !$staticname{"$cur_unit $d->{id}"} && !$var{ own($d->{name}) };
         }
     }
     # the conversions C makes between integers and floating types, and

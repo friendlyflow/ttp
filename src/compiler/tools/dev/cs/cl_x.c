@@ -1430,7 +1430,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     while (i->k == E_PAREN) i = cl_k (i, 0);
     if (i->k == E_ICE && i->op == CK_ARRAYTOPOINTERDECAY) {
       struct cs_ex *r = cl_strip (cl_k (i, 0));
-      if (r->k == E_REF && r->d && r->d->k == DK_VAR && !r->d->local && !r->d->global && !cl_has (&C->var, cl_own (cl_dn (r->d)))) {
+      if (r->k == E_REF && r->d && r->d->k == DK_VAR && (!r->d->local || (r->d->sp && r->d->sp->sc == SC_EXTERN)) && !r->d->global && !cl_has (&C->var, cl_own (cl_dn (r->d)))) {
         struct cl_list *v = cl_l ();
         cl_push (v, cl_nl ("address", cl_ex (r)));
         cl_push (o, cl_cast_node (cl_ct (n->t), v));
