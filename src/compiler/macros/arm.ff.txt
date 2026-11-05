@@ -1071,7 +1071,7 @@ c:
         i
   cc_syscall:
     push
-      0xF0
+      0xf0
     mov
       r8
       r4
@@ -1088,7 +1088,7 @@ c:
     svc
       0
     pop
-      0xF0
+      0xf0
     addi
       0
       4
