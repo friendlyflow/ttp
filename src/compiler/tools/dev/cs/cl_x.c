@@ -1512,6 +1512,14 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
   }
   cl_softfp (n);
   /* (a 128-bit integer's initializer: ttpc reads a number there, -N all ones above it) */
+  /* (a global's items read no global: a const integer of a number is that number, statx_generic's supported_flags of clear_flags) */
+  if (C->in_global && k == E_ICE && n->op == CK_LVALUETORVALUE) {
+    struct cs_ex *r = cl_p (cl_k (n, 0));
+    if (r->k == E_REF && r->d && r->d->k == DK_VAR && (cs_quals (r->d->t) & Q_CONST) && r->d->init) {
+      long long v;
+      if (cl_int_const (cl_p (r->d->init), &v)) { cl_push (o, cl_n (cl_num (v))); return; }
+    }
+  }
   if (C->in_global && (k == E_BIN || k == E_UN || k == E_CAST || k == E_ICE || k == E_PAREN || k == E_INT) && (cs_kind (n->t) == TY_INT128 || cs_kind (n->t) == TY_UINT128) && !cs_quals (n->t)) {
     struct cl_v128 *v = cl_fold128 (n);
     if (!v) cl_fail ("a 128-bit integer's initializer that is no constant here", 0);

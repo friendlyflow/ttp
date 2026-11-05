@@ -471,7 +471,7 @@ my $start;                 # --start: a _start of the program's own, SYS_exit (m
 my %zero;                  # --zero name: glibc's asm only reserves it (zeroed, in .bss)
 my %forceweak;             # --weak name: nothing defines it for a static program
 my %section;               # a named section: its globals (their keys in %var), in their order
-my (%ctor, %ctors_of);      # a constructor or destructor (by key): its word and priority; a unit's
+# (%ctor, %ctors_of: above, at own_name)
 my (@units, @roots);
 my $object = 0;          # --object: the next unit is an object, linked whole (its constructors are roots)
 my $passonly;              # --pass: only each unit's own pass (unit_pass), made where it is not
@@ -602,6 +602,8 @@ sub index_enum {
 # elf/dl-init; the unit's references take that name. The same text twice
 # (a header's static inline) is one function.
 my %own;
+my %plainstatic;           # the units sharing the first's static of a name, the same text
+my (%ctor, %ctors_of);     # a constructor or destructor (by key): its word and priority; a unit's
 sub def_text {
     my ($d, $u) = @_;
     my ($b, $e) = map { $_->{offset} // ($_->{expansionLoc} // {})->{offset} } $d->{range}{begin}, $d->{range}{end};
@@ -614,8 +616,30 @@ sub own_name {
     # other's; tst-strerror_l-strings' loc, strptime_l's enum constant loc)
     return $own{$u}{$name} = "$name " . unit_name($u) if %treedefs && (($d->{storageClass} // '') eq 'static' || $treestatic{ ffname($name) }) && $treedefs{ ffname($name) };
     my $old = $map->{$name} or return $name;
-    return $name if $old->[1] == $u || ($d->{storageClass} // '') ne 'static' || ($old->[0]{storageClass} // '') ne 'static';
-    return $name if def_text($d, $u) eq def_text($old->[0], $old->[1]) && !names_otherwise(def_text($d, $u), $u, $old->[1]);
+    return $name if $old->[1] == $u;
+    my ($ds, $os) = map { ($_->{storageClass} // '') eq 'static' } $d, $old->[0];
+    return $name if !$ds && !$os;
+    # (a static and another unit's external of one name are two things: the
+    # external has the name, the static its unit's; elf/dl-gcs.c's static warn
+    # took misc/err.c's, and ruserpass's warn ("%s", buf) called it)
+    if ($ds && !$os) { return $own{$u}{$name} = "$name " . unit_name($u) }
+    if (!$ds) {
+        # (the units that share it, the same text: all the first's, one function)
+        my $o = "$name " . unit_name($old->[1]);
+        $map->{$o} //= $old;
+        for my $v ($old->[1], @{ $plainstatic{$name} // [] }) {
+            $own{$v}{$name} = $o;
+            for my $c ($ctors_of{$v} ? @{ $ctors_of{$v} } : ()) { $c = $o if $c eq $name }
+        }
+        $ctor{$o} = delete $ctor{$name} if $ctor{$name};
+        delete $map->{$name};
+        delete $plainstatic{$name};
+        return $name;
+    }
+    if (def_text($d, $u) eq def_text($old->[0], $old->[1]) && !names_otherwise(def_text($d, $u), $u, $old->[1])) {
+        push @{ $plainstatic{$name} }, $u;
+        return $name;
+    }
     $own{$u}{$name} = "$name " . unit_name($u);
 }
 # A record tag's definition (key "struct x"). The first is everyone's; a
@@ -1894,6 +1918,17 @@ sub expr {
     my ($n) = @_;
     my $k = $n->{kind};
     softfp($n);
+    # (a global's items read no global: a const integer of a number is that
+    # number, statx_generic's supported_flags of clear_flags; ttpc stopped)
+    if ($in_global && $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'LValueToRValue') {
+        my $r = strip($n);
+        my $d = ($r->{kind} // '') eq 'DeclRefExpr' ? $r->{referencedDecl} : undef;
+        if ($d && $d->{kind} eq 'VarDecl' && ($d->{type}{qualType} // '') =~ /\bconst\b/) {
+            my $v = $constint{$cur_unit}{ $d->{name} };
+            if (!defined $v && (my $l = $localdecl{ $d->{name} })) { my ($i) = grep { $_->{kind} !~ /Attr$/ } kids($l); $v = int_const($i) if $i }
+            return node($v) if defined $v;
+        }
+    }
     # (a 128-bit integer's initializer: ttpc reads a number there, -N all
     # ones above it; C has no 128-bit literal, and one wider than 64 bits has
     # no form in ttpc yet)

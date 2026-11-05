@@ -54,6 +54,7 @@ struct cl_state {
   struct cl_unit **units; long nunits, roomunits;
   struct cl_map recunit, typedef_t, typedef_k, enumunit, aliasunit;
   struct cl_map owntd, ownrec, ownanon;
+  struct cl_map plainstatic;   /* the units sharing the first's static of a name, the same text */
   struct cl_map treestatic;    /* -J file: those of the tree's names that are a static of a unit there */
   struct cl_map staticcount;   /* how many statics of a name the function at hand has had */
   struct cl_map anonin;        /* a record's own anonymous records, where the first at the same place differs: tag|key */
@@ -178,6 +179,16 @@ static struct cl_ent *cl_make (struct cl_map *m, char *key)
 static void *cl_get (struct cl_map *m, char *key) { struct cl_ent *e = cl_find (m, key); if (e) return e->val; return 0; }
 static int cl_has (struct cl_map *m, char *key) { return cl_find (m, key) != 0; }
 static void cl_put (struct cl_map *m, char *key, void *v) { cl_make (m, key)->val = v; }
+static void cl_del (struct cl_map *m, char *key)
+{
+  struct cl_ent **p;
+  if (!m->tab) return;
+  p = &m->tab[cl_hash (key)];
+  while (*p) {
+    if (cl_eq ((*p)->key, key)) { *p = (*p)->nxt; m->count = m->count - 1; return; }
+    p = &(*p)->nxt;
+  }
+}
 /* //= */
 static void cl_put_new (struct cl_map *m, char *key, void *v) { if (!cl_has (m, key)) cl_put (m, key, v); }
 static void cl_set (struct cl_map *m, char *key) { cl_make (m, key)->num = 1; }

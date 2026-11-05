@@ -18,6 +18,12 @@ struct holder { int n; struct item list[2]; };
 #define PUT clist_put
 #include "skeleton.h"
 
+int
+both (int a, int b)
+{
+  return a + b;
+}
+
 static long store[4];
 extern __typeof (store) b_store __attribute__ ((weak, alias ("store")));
 
@@ -32,6 +38,7 @@ ub (struct clist *l, struct holder *h, int *result)
 {
   clist_put (l, *clist_at (l, 0));
   h->list[1].result = result;
+  h->n = both (1, 2);
   h->list[1].x = twice (&h->list[0]) + (int) b_store[1];
   h->n = (int) canon_at;
   return clist_at (l, 1);

@@ -47,6 +47,7 @@ use FindBin;
 use lib "$FindBin::Bin/../compiler/gen";
 use FFold;
 use Storable qw(nstore retrieve);
+use Digest::MD5 qw(md5_hex);
 my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 
 our $target = '';
@@ -207,6 +208,7 @@ sub retcls {
 # ---- the normal form ------------------------------------------------------------
 
 our %staticid;
+our %constid;              # a function's static consts of a literal, by id: their values
 our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
 sub strip { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub unparen { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
@@ -266,6 +268,11 @@ sub E {
     if ($k eq 'ImplicitCastExpr' || $k eq 'CStyleCastExpr') {
         my ($c) = kids($n);
         my $ck = $n->{castKind} // '';
+        # (a const integer of a number read in a global's items: the number, as c2ff)
+        if ($in_global && $ck eq 'LValueToRValue' && (my $rd = (strip($n) // {})->{referencedDecl})) {
+            my $v = $constid{ $rd->{id} // '' } // ($rd->{kind} eq 'VarDecl' && ($rd->{type}{qualType} // '') =~ /\bconst\b/ ? $constint{ $rd->{name} // '' } : undef);
+            return "(int $v i32)" if defined $v;
+        }
         # a conversion to _Bool: in ff (where it is a u8) a compare with 0
         # (what the operand is converted to first does not matter then)
         return '(tobool ' . E(unimplicit($c)) . ')' if $ck =~ /ToBoolean$/;
@@ -960,6 +967,16 @@ sub static_ids {
     undef $w;
     %r;
 }
+sub const_ids {
+    my ($n) = @_;
+    my %r;
+    if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && ($n->{type}{qualType} // '') =~ /\bconst\b/) {
+        my ($i) = grep { $_->{kind} !~ /Attr$/ } kids($n);
+        $i = (kids($i))[0] while $i && $i->{kind} =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr)$/;
+        $r{ $n->{id} } = $i->{value} if $i && $i->{kind} eq 'IntegerLiteral';
+    }
+    (%r, map { const_ids($_) } kids($n));
+}
 sub local_typedefs { my ($n) = @_; (($n->{kind} // '') eq 'TypedefDecl' ? ($n->{name} => $n->{type}{qualType}) : ()), map { local_typedefs($_) } kids($n) }
 sub fnorm {
     my ($fn) = @_;
@@ -1062,6 +1079,7 @@ sub unit_norms {
     for my $d (kids($ast)) {
         next unless $d->{kind} eq 'FunctionDecl' && defined $d->{name} && ($fnunit{ $d->{name} } // '') eq $j && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
         local %staticid = static_ids($d);
+        local %constid = const_ids($d);
         my @q = kids($d);
         while (my $n = shift @q) {
             if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && $gwant{ $n->{name} // '' }) {
@@ -1122,7 +1140,8 @@ sub where {
     my $i = 0;
     $i++ while $i < length($a) && $i < length($b) && substr($a, $i, 1) eq substr($b, $i, 1);
     my $from = $i > 80 ? $i - 80 : 0;
-    "\n    glibc: ..." . substr($a, $from, 200) . "\n    ff:    ..." . substr($b, $from, 200);
+    # (the digest of both whole: rtknown.pl's, a new difference in a listed function is new)
+    "\n    glibc: ..." . substr($a, $from, 200) . "\n    ff:    ..." . substr($b, $from, 200) . "\n    digest: " . substr(md5_hex(do { my $s = "$a\0$b"; utf8::encode($s) if utf8::is_utf8($s); $s }), 0, 12);
 }
 my ($gsame, @gdiff) = (0);
 for my $g (@globals) {

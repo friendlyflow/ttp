@@ -25,6 +25,13 @@ struct holder { int n; struct item list[2]; };
 #define PUT blist_put
 #include "skeleton.h"
 
+/* (a static here, an external in units-b.c: elf/dl-gcs.c's warn and misc/err.c's) */
+static int
+both (struct item *p)
+{
+  return p->x;
+}
+
 static char store[8];
 extern __typeof (store) a_store __attribute__ ((weak, alias ("store")));
 
@@ -38,7 +45,7 @@ struct big *
 ua (struct blist *l, struct holder *h)
 {
   blist_put (l, *blist_at (l, 0));
-  h->list[1].x = twice (&h->list[0]) + a_store[0];
+  h->list[1].x = twice (&h->list[0]) + a_store[0] + both (&h->list[0]);
   h->n = (int) banon_at;
   return blist_at (l, 1);
 }
