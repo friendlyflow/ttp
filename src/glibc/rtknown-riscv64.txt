@@ -1,0 +1,28 @@
+# What make glibc-roundtrip knows of on riscv64, each judged: name, digest, kind, reason (tabs).
+# ../compiler/gen/rtknown.pl: the differences must be exactly these. Judged on the dev page of 2026-11-04.
+__backtrace	-	clang refuses	in file debug_backtrace, see it
+__fts64_read	097c993fd7c0	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__fchdir in a ?:)
+__getgrgid_r	-	clang refuses	in file nss_getgrgid_r, see it
+__getgrnam_r	-	clang refuses	in file nss_getgrnam_r, see it
+__libc_unwind_link_after_fork	-	clang refuses	in file debug_backtrace, see it
+__libc_unwind_link_get	-	clang refuses	in file debug_backtrace, see it
+__minimal_malloc	f4f08a173148	false alarm	&_end written as _end, an array of unknown size: the same address, under a cast to void *
+__newlocale	-	clang refuses	in file locale_newlocale, see it
+__newlocale_1	-	clang refuses	in file locale_newlocale, see it
+__pthread_unwind	-	ff2c cannot write	this page has no _Unwind_ForcedUnwind (a-rv's page, no libgcc units): goes away on a page with them
+__spawni	39b582e7fdad	false alarm	the addresses of asm __execve and C __execvpex in a ?: go through void * in the C written back: the same address
+__spawni_child	c19a55eca75a	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpgid in a ?:)
+__times	5f834ce86e56	false alarm	asm ("" : "+r" (temp)): c2ff's riscv64 path keeps it, an empty asm function, roundtrip.pl drops it; no code that matters
+__uselocale	7c2fed5b9b29	false alarm	records of one layout with two names (__locale_struct and its unit's own): a ?: of their addresses goes through void *: the same address
+__vfscanf_internal	31c8578416a5	false alarm	a[(u8) c] in C, a + c written back: the promotion of c to int changes no value
+backtrace_helper	-	clang refuses	in file debug_backtrace, see it
+bindresvport	19475625ee9a	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpid () % 600)
+file debug_backtrace	-	clang refuses	this page has no _Unwind_GetIP (a-rv's page): the comma's function pointer has no type, so its call is written as an index; goes away on a page with them
+file locale_newlocale	-	clang refuses	assigns __locale_struct and its unit's own, one layout by value; ttpc takes that (tested)
+file nss_getgrgid_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
+file nss_getgrnam_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
+fts_compar	-	ff2c cannot write	offsetof's . inside a :, then the path and the call after a . of its own: ff2c stops on the second .
+restore_initial_cwd	259990701802	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__fchdir in a ?:)
+unwind_arch_adjustment	-	clang refuses	in file debug_backtrace, see it
+unwind_stop	-	ff2c cannot write	this page has no _Unwind_GetCFA (a-rv's page, no libgcc units): goes away on a page with them
+wctob	-	ff2c cannot write	c2ff takes a header's extern inline wctob (argp-fmtstream.i first), which calls __wctob_alias, left out; ttpc stops if a program reaches it: not silent, to fix

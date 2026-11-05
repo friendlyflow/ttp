@@ -585,6 +585,12 @@ static int cl_names_otherwise (unsigned char *p, long n, struct cl_unit *v)
   }
   return 0;
 }
+/* (a unit's constructor list, where its static takes another name) */
+static void cl_static_ctor (struct cl_unit *v, char *name, char *ok)
+{
+  long i = 0;
+  while (i < v->ctors.n) { if (cl_eq ((char *) v->ctors.v[i]->text, name)) v->ctors.v[i] = cl_n (ok); i++; }
+}
 /* the name a static takes that another unit defines otherwise: its own, named with the unit (own_name) */
 static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
 {
@@ -597,8 +603,39 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
   }
   old = cl_get (map, name);
   if (!old) return name;
-  if (old->unit == C->cu || d->sc != SC_STATIC || old->sc != SC_STATIC) return name;
-  if (cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen) && !cl_names_otherwise (d->dtext, d->dlen, old->unit)) return name;
+  if (old->unit == C->cu || (d->sc != SC_STATIC && old->sc != SC_STATIC)) return name;
+  /* (a static and another unit's external of one name are two things: the external has the name, the static its unit's: elf/dl-gcs.c's warn) */
+  if (d->sc != SC_STATIC) {
+    struct cl_shared *s = cl_get (&C->plainstatic, name);
+    struct cl_unit *v = old->unit;
+    char *ok = cl_cat3 (name, " ", cl_unit_name_of (v));
+    cl_put (&v->own, name, ok);
+    cl_put_new (map, ok, old);
+    cl_static_ctor (v, name, ok);
+    if (cl_has (&C->ctor, name)) { cl_put (&C->ctor, ok, cl_get (&C->ctor, name)); cl_del (&C->ctor, name); }
+    while (s) {
+      /* (the units that share it, the same text: all the first's, one function) */
+      v = (struct cl_unit *) s->key;
+      cl_put (&v->own, name, ok);
+      cl_static_ctor (v, name, ok);
+      s = s->nxt;
+    }
+    cl_del (&C->plainstatic, name);
+    cl_del (map, name);
+    return name;
+  }
+  if (old->sc != SC_STATIC) {
+    k = cl_cat3 (name, " ", cl_unit_name ());
+    cl_put (&C->own, name, k);
+    return k;
+  }
+  if (cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen) && !cl_names_otherwise (d->dtext, d->dlen, old->unit)) {
+    struct cl_shared *s = alloc (sizeof (struct cl_shared));
+    s->key = (char *) C->cu;
+    s->nxt = cl_get (&C->plainstatic, name);
+    cl_put (&C->plainstatic, name, s);
+    return name;
+  }
   k = cl_cat3 (name, " ", cl_unit_name ());
   cl_put (&C->own, name, k);
   return k;

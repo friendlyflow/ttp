@@ -98,6 +98,15 @@ static int fsub (int a, int b) { return a - b; }
 static int gs = 4;
 static int fld (void) { return gs + 1; }
 
+/* (statx_generic's supported_flags, of another static const) */
+static int
+consts (int a)
+{
+  static const int c0 = 4;
+  static const int c1 = 1 | c0;
+  return a & ~c1;
+}
+
 struct wait { int result; struct wait *next; };
 struct waits { int n; struct wait list[3]; };
 
@@ -128,5 +137,6 @@ main (void)
   fails += fsub_like (1) != 14;
   fails += fsub (5, 3) != 2;
   fails += fld () != 5;
+  fails += consts (7) != 2;
   return fails;
 }

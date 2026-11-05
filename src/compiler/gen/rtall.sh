@@ -6,15 +6,16 @@
 # forms (DIR/back/name.norm, DIR/unit/name.norm), kept while what they come from
 # has not changed, and at the end --join compares them.
 #
-#   sh rtall.sh [-j N] [-t TARGET] -u UNITS FF.ff.txt DIR
+#   sh rtall.sh [-j N] [-t TARGET] [-k LIST] -u UNITS FF.ff.txt DIR
 #
+# LIST: what is known and judged (gen/rtknown.pl): the differences must be it.
 # UNITS is FF/glibc.units (a unit's json=i to a line). The environment:
 # CLANGB, the clang command up to a file written back (as the milestones' .rt.c);
 # CLANGU, up to a unit (as their .json), and CLANGL up to a unit of libgcc;
 # CLANGFIX, CLANGVEC, CLANGVECPL as src/glibc has them. N files at once (4).
 # DIR/result has a line for each file: OK, or BACK name / UNIT name: why;
 # DIR/report roundtrip.pl's differences and count. Exit 1 if anything differs
-# or any file failed.
+# from the list (or, without one, differs at all, or any file failed).
 #
 # A host tool (POSIX sh, Perl, clang).
 set -u
@@ -60,12 +61,13 @@ if test "${1:-}" = --unit; then
     echo "OK unit $b"
     exit 0
 fi
-jobs=4 tg=riscv64 units=
+jobs=4 tg=riscv64 units= known=
 while :; do
     case "${1:-}" in
     -j) jobs=$2; shift 2 ;;
     -t) tg=$2; shift 2 ;;
     -u) units=$2; shift 2 ;;
+    -k) known=$2; shift 2 ;;
     *) break ;;
     esac
 done
@@ -88,7 +90,11 @@ sed 's|^.*=||; s|\.i$||; s|^.*/i/||; s|^.*/ff/||; s|^/*||; s|/|_|g; s|^|'"$d"'/u
 s=0
 perl "$RT" --target "$tg" --join "$d/names" "@$d/back.have" -- "@$d/unit.have" > "$d/report" || s=$?
 f=$(grep -vc '^OK' "$d/result")
-grep -v '^OK' "$d/result" | head -40
 tail -n 1 "$d/report"
 echo "rtall ($tg): $(grep -c '^OK back' "$d/result") files written back and $(grep -c '^OK unit' "$d/result") units read, $f failed; differences in $d/report"
-test "$f" -eq 0 && test "$s" -eq 0
+if test -n "$known"; then
+    perl "$G/rtknown.pl" "$known" "$d/report" "$d/result"
+else
+    grep -v '^OK' "$d/result" | head -40
+    test "$f" -eq 0 && test "$s" -eq 0
+fi
