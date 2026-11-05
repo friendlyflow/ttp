@@ -200,6 +200,17 @@
     return
       a
   comment
+    __ff_plt_memcpy: what an asm branch to the ifunc memcpy reaches (s2ff-arm --plt), as ld's stub in gcc's static program: the function in its slot, whose label memcpy is.
+  __ff_plt_memcpy:
+    asm
+    la
+      memcpy
+      r12
+    ldr
+      0
+      r12
+      pc
+  comment
     __builtin_arm_get_fpscr: VFP's status and control register (soft-fp's rounding mode in arm's _BitInt functions). The overflow builtins on long long, for libgcc's traps.
   __builtin_arm_get_fpscr:
     asm
