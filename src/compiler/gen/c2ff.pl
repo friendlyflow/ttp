@@ -777,6 +777,10 @@ for my $u (@units) {
             my $fk;
             if (!$inline_only && grep { $_->{kind} eq 'CompoundStmt' } @in) {
                 my $k = $fk = own_name(\%fn, $name, $d, $u);
+                # (a gnu89 extern inline gives way to the function's real
+                # definition, which is what gcc emits: math_private.h's
+                # __trunc_c, called trunc, and s_trunc-c's)
+                delete $fn{$k} if $fn{$k} && $fn{$k}[0]{inline} && ($fn{$k}[0]{storageClass} // '') eq 'extern' && !($d->{inline} && ($d->{storageClass} // '') eq 'extern');
                 $fn{$k} //= [$d, $u];
                 # a constructor or destructor: run by the start code, so a
                 # root wherever its unit is linked (as an archive member is)

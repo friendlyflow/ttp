@@ -793,6 +793,9 @@ static void cl_pass_one (struct cs_top *t)
     if (d->sp && d->sp->ifunc) { cl_put (&C->ifunc, name, d); return; }
     if (d->body && !(C->treedefs.count && (d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN && cl_val (&C->treedefs, cl_ffname (name)))) {
       char *k = cl_own_name (&C->fn, name, d);
+      /* (a gnu89 extern inline gives way to the function's real definition, which is what gcc emits: math_private.h's __trunc_c, s_trunc-c's) */
+      struct cs_decl *was = cl_get (&C->fn, k);
+      if (was && (was->inl || (was->sp && was->sp->inl)) && was->sc == SC_EXTERN && !((d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN)) cl_put (&C->fn, k, d);
       fkey = k;
       cl_put_new (&C->fn, k, d);
       if (d->sp && d->sp->ctor) { cl_put (&C->ctor, k, d); cl_push (&C->cu->ctors, cl_n (k)); }

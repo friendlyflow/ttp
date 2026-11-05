@@ -1235,7 +1235,7 @@ $(FF)/glibc.roots: $(ALL_C:%=$(I)/%.c2ff) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THE
 
 $(FF)/glibc.ff: $(FF)/glibc.roots $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/c2ff.pl ../compiler/gen/Words.pm ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
 	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
-	$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) --statics-out $(FF)/glibc.statics $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
+	$(SLOT) -v 7500000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) --statics-out $(FF)/glibc.statics $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.c2ff.err \
 	    || { tail -5 $(FF)/glibc.c2ff.err; exit 1; }
 	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
