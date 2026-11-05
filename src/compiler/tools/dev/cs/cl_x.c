@@ -304,7 +304,7 @@ static char *cl_special_float (struct cs_ex *n, struct cs_ex *t)
 static char *cl_narrowlit (struct cs_ex *n, struct cs_ex *e)
 {
   char *to, *l;
-  if (e->k != E_FLT || !(cl_isld (e) || cl_eq (cl_tword (e), "float128")) || C->target == 3) return 0;
+  if (e->k != E_FLT || !(cl_isld (e) || cl_eq (cl_tword (e), "float128"))) return 0;
   to = cl_tword (n);
   if (cl_eq (to, "double")) l = cl_ldround (cl_lit_text (e), 53, -1074, 1023);
   else if (cl_eq (to, "float")) l = cl_ldround (cl_lit_text (e), 24, -149, 127);
@@ -998,6 +998,8 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   }
 
   if (cl_eq (name, "copysign") || cl_eq (name, "copysignf") || cl_eq (name, "copysignl") || cl_eq (name, "fabs") || cl_eq (name, "fabsf") || cl_eq (name, "fabsl")) name = cl_cat ("__builtin_", name);
+  /* (where long double is double, arm's EABI: the double's) */
+  if (C->target == 3 && (cl_eq (name, "__builtin_copysignl") || cl_eq (name, "__builtin_fabsl") || cl_eq (name, "__builtin_signbitl") || cl_eq (name, "__builtin_huge_vall") || cl_eq (name, "__builtin_infl") || cl_eq (name, "__builtin_nanl") || cl_eq (name, "__builtin_nansl"))) name = cl_copy ((unsigned char *) name, cstrlen (name) - 1);
   if (cl_eq (name, "copysignf128") || cl_eq (name, "fabsf128")) name = cl_cat ("__builtin_", name);
   if (C->target != 1 && cl_ends (name, "f128") && (cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_inff128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_nansf128") || cl_eq (name, "__builtin_signbitf128")))
     name = cl_cat (cl_copy ((unsigned char *) name, cstrlen (name) - 4), "l");
@@ -1016,6 +1018,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     char *t;
     if (cl_eq (name, "__builtin_fpclassify")) t = cl_tword_int (cl_k (n, n->nk - 1)); else t = cl_tword_int (cl_k (n, 1));
     if (!(cl_eq (t, "float") || cl_eq (t, "double") || cl_eq (t, "long double") || cl_eq (t, "float128") || cl_eq (t, "float16"))) cl_fail (name, t);
+    if (C->target == 3 && cl_eq (t, "long double")) t = "double";
     cl_push (o, cl_call_node (cl_cat3 (name, " ", t), n));
     return;
   }

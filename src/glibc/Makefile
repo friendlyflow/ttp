@@ -1464,6 +1464,8 @@ TCLANGFIX_x86_64 = $(CLANGFIX) -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0
 	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g'
 # (aarch64: as riscv64's, long double binary128 on both)
 TCLANGFIX_aarch64 := $(TCLANGFIX_riscv64)
+# (arm: the same, its _Float32x and _Float64 double)
+TCLANGFIX_arm := $(TCLANGFIX_riscv64)
 TCLANGFIX = $(or $(TCLANGFIX_$(GTARGET)),$(CLANGFIX))
 # (and on x86_64 a test of gcc's intrinsics headers, <x86intrin.h>: the
 # tst-*-rtm tests' _xbegin and _xend, through clangvec.pl as glibc's

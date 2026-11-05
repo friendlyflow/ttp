@@ -2280,6 +2280,9 @@ sub expr {
         # and the other way: a libm function gcc always expands, as its
         # builtin (s_scalbn's copysign, which libc.a has no function of)
         $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
+        # (where long double is double, arm's EABI: the double's; builtins.ff.txt's
+        # long double ones read binary128's bits: isnan of a NaN was 0, strtold's tests)
+        $name =~ s{^(__builtin_(?:copysign|fabs|signbit|huge_val|inf|nan|nans))l$}{$1} if $target eq 'arm';
         # (x86_64's _Float128 builtins and copysignf128 / fabsf128: there
         # float128's, builtins.ff.txt's binary128 ones as x87builtins.pl names
         # them, __builtin_fabsf128 ...; elsewhere _Float128 is long double,
@@ -2306,6 +2309,7 @@ sub expr {
         if ($name =~ /^__builtin_(isnan|isinf_sign|isinf|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
             $t =~ /^(float|double|long double|float128|float16)$/ or stop("$name on $t", $n);
+            $t = 'double' if $target eq 'arm' && $t eq 'long double';
             return node("$name $t", map { arg($_) } @args);
         }
         # C's va_ words, as clang has them
@@ -2671,7 +2675,7 @@ sub ldhexfloat {
 # __trunctfdf2, which compile time has no code of)
 sub narrowlit {
     my ($n, $e) = @_;
-    return undef unless $e->{kind} eq 'FloatingLiteral' && (isld($e) || tword($e) eq 'float128') && $target ne 'arm';
+    return undef unless $e->{kind} eq 'FloatingLiteral' && (isld($e) || tword($e) eq 'float128');
     my $to = tword($n);
     my $l = $to eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : $to eq 'float' ? ldround($e->{value}, 24, -149, 127) : undef;
     return undef unless defined $l;
