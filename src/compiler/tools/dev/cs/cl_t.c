@@ -613,9 +613,10 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
     cl_static_ctor (v, name, ok);
     if (cl_has (&C->ctor, name)) { cl_put (&C->ctor, ok, cl_get (&C->ctor, name)); cl_del (&C->ctor, name); }
     while (s) {
+      /* (the units that share it, the same text: all the first's, one function) */
       v = (struct cl_unit *) s->key;
-      cl_put (&v->own, name, cl_cat3 (name, " ", cl_unit_name_of (v)));
-      cl_static_ctor (v, name, cl_cat3 (name, " ", cl_unit_name_of (v)));
+      cl_put (&v->own, name, ok);
+      cl_static_ctor (v, name, ok);
       s = s->nxt;
     }
     cl_del (&C->plainstatic, name);

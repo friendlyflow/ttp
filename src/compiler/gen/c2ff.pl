@@ -618,13 +618,14 @@ sub own_name {
     # took misc/err.c's, and ruserpass's warn ("%s", buf) called it)
     if ($ds && !$os) { return $own{$u}{$name} = "$name " . unit_name($u) }
     if (!$ds) {
+        # (the units that share it, the same text: all the first's, one function)
+        my $o = "$name " . unit_name($old->[1]);
+        $map->{$o} //= $old;
         for my $v ($old->[1], @{ $plainstatic{$name} // [] }) {
-            my $o = "$name " . unit_name($v);
             $own{$v}{$name} = $o;
-            $map->{$o} //= $old if $v == $old->[1];
             for my $c ($ctors_of{$v} ? @{ $ctors_of{$v} } : ()) { $c = $o if $c eq $name }
         }
-        $ctor{"$name " . unit_name($old->[1])} = delete $ctor{$name} if $ctor{$name};
+        $ctor{$o} = delete $ctor{$name} if $ctor{$name};
         delete $map->{$name};
         delete $plainstatic{$name};
         return $name;
