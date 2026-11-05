@@ -1945,6 +1945,20 @@ sub expr {
     }
     # a function as a value is its address (a function name alone is a call in ff)
     return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
+    # (an extern array that no C defines, cast to an integer: its address. It
+    # may be a label of asm, and a name of asm alone is a call in ff:
+    # cancellation_pc_check's (uintptr_t) __syscall_cancel_arch_start called it,
+    # with what its registers held, on every target; a segfault on arm)
+    if ($k eq 'CStyleCastExpr' && ($n->{castKind} // '') eq 'PointerToIntegral') {
+        my ($i) = kids($n);
+        ($i) = kids($i) while $i->{kind} eq 'ParenExpr';
+        if ($i->{kind} eq 'ImplicitCastExpr' && ($i->{castKind} // '') eq 'ArrayToPointerDecay') {
+            my $r = strip((kids($i))[0]);
+            my $d = $r->{kind} eq 'DeclRefExpr' ? $r->{referencedDecl} : {};
+            return cast_node([ctype(qt($n))], node('address', expr($r)))
+                if ($d->{kind} // '') eq 'VarDecl' && !$local{ $d->{id} } && !$staticname{"$cur_unit $d->{id}"} && !$var{ own($d->{name}) };
+        }
+    }
     # the conversions C makes between integers and floating types, and
     # between those, are written out, as a cast is
     # on arm, where a long long is a pair of registers and a word is not, the

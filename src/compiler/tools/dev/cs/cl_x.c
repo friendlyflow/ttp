@@ -1424,6 +1424,20 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     if (s->k == E_MEM || s->k == E_IDX) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
   }
   if (k == E_ICE && n->op == CK_FUNCTIONTOPOINTERDECAY) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
+  /* (an extern array that no C defines, cast to an integer: its address; it may be a label of asm, and a name of asm alone is a call in ff) */
+  if (k == E_CAST && n->op == CK_POINTERTOINTEGRAL) {
+    struct cs_ex *i = cl_k (n, 0);
+    while (i->k == E_PAREN) i = cl_k (i, 0);
+    if (i->k == E_ICE && i->op == CK_ARRAYTOPOINTERDECAY) {
+      struct cs_ex *r = cl_strip (cl_k (i, 0));
+      if (r->k == E_REF && r->d && r->d->k == DK_VAR && !r->d->local && !r->d->global && !cl_has (&C->var, cl_own (cl_dn (r->d)))) {
+        struct cl_list *v = cl_l ();
+        cl_push (v, cl_nl ("address", cl_ex (r)));
+        cl_push (o, cl_cast_node (cl_ct (n->t), v));
+        return;
+      }
+    }
+  }
   /* (to and from a 128-bit integer, written: a word is no pair) */
   if (k == E_ICE && n->op == CK_INTEGRALCAST && (cs_kind (n->t) == TY_INT128 || cs_kind (n->t) == TY_UINT128 || cs_kind (cl_k (n, 0)->t) == TY_INT128 || cs_kind (cl_k (n, 0)->t) == TY_UINT128)) {
     struct cl_list *to = cl_ct (n->t), *from = cl_ct (cl_k (n, 0)->t);

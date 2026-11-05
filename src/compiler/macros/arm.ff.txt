@@ -1047,21 +1047,53 @@ c:
       sp
       cc_argreg
         i
+  cc_sysreg:
+    i
+    srli
+      2
+      i
+      a0
+    slli
+      2
+      a0
+      a0
+    add
+      a0
+      i
+      a0
   cc_sysarg:
     i
     off
     ldr
       off
       sp
-      cc_argreg
+      cc_sysreg
         i
   cc_syscall:
-    ldr.post
-      4
+    push
+      0xF0
+    mov
+      r8
+      r4
+    mov
+      r9
+      r5
+    mov
+      r10
+      r6
+    ldr
+      16
       sp
       r7
     svc
       0
+    pop
+      0xF0
+    addi
+      0
+      4
+      sp
+      sp
   cc_addfp:
     add
       r0
@@ -2653,6 +2685,8 @@ c:
     / and % of pairs, as libgcc's __aeabi_uldivmod computes them: N (r2:r3) and R (r4:r5) shift left as one 128-bit number, 64 times (lr counts); where R, with the bit it shifted out, is D (V) or more, R -= D and N's low bit is 1.
     N ends as the quotient, R as the remainder. The signed ones divide the magnitudes; the quotient is negative where the signs differ, the remainder has L's sign (r6).
   cc_divu_p:
+    push
+      0x70
     mov
       r12
       r2
@@ -2724,7 +2758,11 @@ c:
     mov
       r3
       r1
+    pop
+      0x70
   cc_remu_p:
+    push
+      0x70
     mov
       r12
       r2
@@ -2796,7 +2834,11 @@ c:
     mov
       r5
       r1
+    pop
+      0x70
   cc_div_p:
+    push
+      0x70
     eor
       r1
       r9
@@ -2920,7 +2962,11 @@ c:
       0
       r1
       r1
+    pop
+      0x70
   cc_rem_p:
+    push
+      0x70
     mov
       r9
       r6
@@ -3043,6 +3089,8 @@ c:
       0
       r1
       r1
+    pop
+      0x70
   comment
     Conversions of pairs (d0..d3, s8..s10 and r2, r3, r6 their scratch). To a double, kept in memory as a struct is: hi * 2^32 + lo, both exact, rounded once by the add; X is the place in the frame, V its address.
     To a float: the same sum rounded to odd (toward zero, its low bit set when it was inexact: FPSCR as it was afterwards), then to the float, rounded once.
@@ -3095,11 +3143,11 @@ c:
       r0
   cc_cvt_s_p:
     vmrs
-      r6
+      lr
     bici
       0
       16
-      r6
+      lr
       r2
     orri
       10
@@ -3164,7 +3212,7 @@ c:
       r2
       d0
     vmsr
-      r6
+      lr
     vcvt.f32.f64
       d0
       s8
@@ -3373,11 +3421,11 @@ c:
       r0
   cc_cvt_s_pu:
     vmrs
-      r6
+      lr
     bici
       0
       16
-      r6
+      lr
       r2
     orri
       10
@@ -3442,7 +3490,7 @@ c:
       r2
       d0
     vmsr
-      r6
+      lr
     vcvt.f32.f64
       d0
       s8
