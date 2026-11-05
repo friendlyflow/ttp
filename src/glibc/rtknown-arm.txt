@@ -1,0 +1,104 @@
+# What make glibc-roundtrip knows of on arm, each judged: name, digest, kind, reason (tabs).
+# ../compiler/gen/rtknown.pl: the differences must be exactly these. Judged on the page of 2026-11-05 (whole normal forms: nothing but casts of a value and float literals' digits differs).
+R04	50a8731c63d1	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+S01	59eb5b43cab6	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+S02	dc9d057cbb3b	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+S03	36be85a2a5fc	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+S04	a6ce0437fd1b	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+U0_math_e_j1f	c10de31fb6f6	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+V0_math_e_j1f	92d30f0110f8	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+__backtrace	51156575b689	false alarm	a function pointer's argument: &arg written through void * or not: the same address
+__backtrace_symbols	ea126c94c8a7	false alarm	an asm function's value is a long in ff, so C converts the literals of its sum to long; same value (strlen)
+__fts64_read	5048e28f1e96	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: to long; same value (__fchdir in a ?:)
+__fts64_read_time64	5048e28f1e96	false alarm	the same as __fts64_read
+__ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+__getgrgid_r	-	clang refuses	in file nss_getgrgid_r, see it
+__getgrnam_r	-	clang refuses	in file nss_getgrnam_r, see it
+__minimal_malloc	65bb221fb8bf	false alarm	&_end written as _end, an array of unknown size: the same address, under a cast to void *
+__newlocale	-	clang refuses	in file locale_newlocale, see it
+__newlocale_1	-	clang refuses	in file locale_newlocale, see it
+__nftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+__spawni	39b582e7fdad	false alarm	the addresses of asm __execve and C __execvpex in a ?: go through void * in the C written back: the same address
+__spawni_child	1e6fac6bf48a	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: to long; same value (__getpgid in a ?:)
+__strftime_internal_time_wcsftime_l	fc9fc6770dcf	false alarm	== of an int pad and wide literals of an unsigned wchar_t, int in ff, no conversion written: equality, the same; no relational comparison differs (read all)
+__uselocale	7c2fed5b9b29	false alarm	records of one layout with two names (__locale_struct and its unit's own): a ?: of their addresses goes through void *: the same address
+__vfscanf_internal	3e84fb421421	false alarm	L'0' + n of an unsigned wchar_t: int + int converted to u32, not u32 + u32: the same bits
+__vfwscanf_internal	63e1fbaf6986	false alarm	L'0' + n of an unsigned wchar_t: int + int converted to u32, not u32 + u32: the same bits
+add_object_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+bindresvport	179e3afc649b	false alarm	an asm function's value is a long in ff, so C converts the literal of its % to long; same value (__getpid)
+dirname	6d2bcde21dd2	false alarm	a ?: of an asm function's value and NULL: NULL as void * or char *: the same address
+do_xfrm_cached_wcsmbs_wcsxfrm_l	fd45b54825ac	false alarm	a ?: of small ints stored as a wchar_t: converted at the ?: or at the store: the same bits
+do_xfrm_wcsmbs_wcsxfrm_l	6cf8285042cc	false alarm	a ?: of small ints stored as a wchar_t: converted at the ?: or at the store: the same bits
+file io_ftw64-time64	-	clang refuses	the unit's own union func_callback_t assigned to the shared ftw_data's field: one layout (pointers to functions), two names in C; ttpc takes that (tested by tst-ftw on the other targets)
+file locale_newlocale	-	clang refuses	struct __locale_struct of two units assigned: one layout, two names in C
+file nss_getgrgid_r	-	clang refuses	struct group of two units passed by value to __copy_grp: one layout, two names in C
+file nss_getgrnam_r	-	clang refuses	struct group of two units passed by value to __copy_grp: one layout, two names in C
+find_object_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+frame_closedir_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+frame_stack_add_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+frame_stack_get_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+frame_stack_init_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+frame_stack_reset_top_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+fts_compar	-	ff2c cannot write	offsetof's . inside a :, then the path and the call after a . of its own: ff2c stops on the second .
+fts_read	5048e28f1e96	false alarm	the same as __fts64_read
+ftw_dir_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+ftw_startup	091e308d7ea0	false alarm	2 * strlen, an asm function's long in ff, against 4096 and given as a u32: a signed comparison, C's unsigned, differs only past 1 GiB of path; same value otherwise
+ftw_startup_io_ftw64	324fd306f1bd	false alarm	the same as ftw_startup
+ftw_startup_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+huge_math_e_j0f	88fdf4808504	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+huge_math_e_j1f	88fdf4808504	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+huge_math_s_scalblnf	88fdf4808504	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+huge_math_s_scalbnf	88fdf4808504	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+internal_fnwmatch	daf61f606595	false alarm	the int of a ?: (a wide literal) given to __wmemchr's u32: converted at the ?: or at the call: the same bits
+invsqrtpi_math_e_j0f	304574065092	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+invsqrtpi_math_e_j1f	304574065092	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+object_compare_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+pS2_math_e_j0f	594bef95923d	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+pS3_math_e_j0f	839d4f0b8b06	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+pS5_math_e_j0f	93d7956772f2	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+pS8_math_e_j0f	d2ddf5d5cf8c	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+pr2_math_e_j1f	764b740a7bd2	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+pr3_math_e_j1f	a5a2f06648b5	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+pr5_math_e_j1f	4fc14ce5f2ae	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+pr8_math_e_j1f	2ad2c0cadd25	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+printf_positional_stdio_common_vfwprintf_internal	81f7a9945aa6	false alarm	== of a char pad and the wide literal L' ': converted to i32 or u32: equality on a small value, the same
+process_entry_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
+ps2_math_e_j1f	4cc837224fee	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+ps3_math_e_j1f	8dd6473b69e2	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+ps5_math_e_j1f	98f6162013d3	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+ps8_math_e_j1f	bfafae3608f9	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qR2_math_e_j0f	32be3ca219f4	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qR3_math_e_j0f	cb87c265ccbd	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qR5_math_e_j0f	4bdf35b169f0	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qR8_math_e_j0f	f6854649ed67	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qS2_math_e_j0f	2289eb12bc41	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qS3_math_e_j0f	ad7dbc7eb217	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qS5_math_e_j0f	b7fea7c1514e	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qS8_math_e_j0f	84f414b467e1	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qs2_math_e_j1f	4ae65d9347c9	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qs3_math_e_j1f	441eb26c655f	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qs5_math_e_j1f	5fb8b9ff6175	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+qs8_math_e_j1f	e62abb684e17	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+r01	013f12493f1a	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+r03	3b8251c9927b	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+restore_initial_cwd	259990701802	false alarm	the same as __fts64_read
+restore_initial_cwd_io_fts64	259990701802	false alarm	the same as __fts64_read
+restore_initial_cwd_io_fts64_time64	259990701802	false alarm	the same as __fts64_read
+s01	7c45cdec2c99	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+s02	c7d8d06b2e41	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+s03	ea9e4e13c3eb	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+s04	2549fae25cd4	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+s05	d01dd1daf3a3	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+tiny_math_s_scalblnf	fe8d622a91de	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+tiny_math_s_scalbnf	fe8d622a91de	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+tpi_math_e_j0f	afd253e38b44	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+tpi_math_e_j1f	afd253e38b44	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+twom25	fbd193e2e054	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+u01	36aae792eaae	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+u03	a432748e3de1	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+u05	2beee6720222	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+v01	9c6d95f20a84	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+v02	82c932094ee1	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+v03	bc8139bddc67	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+v04	785d917fa330	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
+wctob	-	ff2c cannot write	c2ff takes a header's extern inline wctob (argp-fmtstream.i first), which calls __wctob_alias, left out; ttpc stops if a program reaches it: not silent, to fix
