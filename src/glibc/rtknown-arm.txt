@@ -29,7 +29,7 @@ bindresvport	179e3afc649b	false alarm	an asm function's value is a long in ff, s
 dirname	6d2bcde21dd2	false alarm	a ?: of an asm function's value and NULL: NULL as void * or char *: the same address
 do_xfrm_cached_wcsmbs_wcsxfrm_l	fd45b54825ac	false alarm	a ?: of small ints stored as a wchar_t: converted at the ?: or at the store: the same bits
 do_xfrm_wcsmbs_wcsxfrm_l	6cf8285042cc	false alarm	a ?: of small ints stored as a wchar_t: converted at the ?: or at the store: the same bits
-file io_ftw64-time64	-	clang refuses	the unit's own union func_callback_t assigned to the shared ftw_data's field: one layout (pointers to functions), two names in C; ttpc takes that (tested by tst-ftw on the other targets)
+file io_ftw64-time64	-	clang refuses	the unit's own union func_callback_t assigned to the shared ftw_data's field: one layout (pointers to functions), two names in C; ttpc takes that (a copy of the same bytes)
 file locale_newlocale	-	clang refuses	struct __locale_struct of two units assigned: one layout, two names in C
 file nss_getgrgid_r	-	clang refuses	struct group of two units passed by value to __copy_grp: one layout, two names in C
 file nss_getgrnam_r	-	clang refuses	struct group of two units passed by value to __copy_grp: one layout, two names in C
