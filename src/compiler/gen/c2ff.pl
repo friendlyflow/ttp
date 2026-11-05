@@ -649,6 +649,25 @@ sub names_otherwise {
     }
     0;
 }
+# The anonymous records of the fields of a record that is a unit's own by the
+# names in its text are that unit's too: they hold those names (arm's fts64:
+# FTS64's union fts_cycle, the first's, pointed to fts.c's cycle_check_state,
+# whose dev_ino has a 32-bit st_ino, so that fts-cycle.c cut an inode).
+sub own_anon_fields {
+    my ($r, $rname, $u) = @_;
+    my $last;
+    for my $k (@{ $r->{inner} || [] }) {
+        if ($k->{kind} =~ /^(RecordDecl|EnumDecl)$/) { $last = $k; next }
+        next unless $k->{kind} eq 'FieldDecl' && defined $k->{name} && $k->{name} ne '' && $last && ($last->{name} // '') eq '' && $last->{kind} eq 'RecordDecl';
+        my $key = anon_key($k->{type}{qualType} // '') // next;
+        my $name = "$rname $k->{name}";
+        $ownanon{$u}{$key} = ["$last->{tagUsed} $name", $name];
+        $rec{"$last->{tagUsed} $name"} //= $last;
+        $recunit{"$last->{tagUsed} $name"} //= $u;
+        own_anon_fields($last, $name, $u);
+        undef $last;
+    }
+}
 # A unit's records of the first's text: its own too where they name otherwise,
 # until there are no more (one may point to one defined after it).
 sub own_by_names {
@@ -660,6 +679,7 @@ sub own_by_names {
             my ($key, $d) = @$_;
             next if $ownrec{$u}{$key} || !names_otherwise(def_text($d, $u), $u, $recunit{$key});
             rec_own($key, $d, $u);
+            own_anon_fields($d, $key =~ s{^\w+ }{}r . ' ' . unit_name($u), $u);
             $more = 1;
         }
     }
