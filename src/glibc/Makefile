@@ -1028,8 +1028,9 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen
 	    $(RUN) -t 120 $(CLANG_AST) $(FF)/units/$$u.i > $(FF)/units/$$u.json || exit 1; \
 	done
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --statics-out $(FF)/units/statics $(foreach u,$(UNITS2),$(FF)/units/$(u).json=$(FF)/units/$(u).i) -- ua ub uc > $(FF)/units/page.ff.txt 2> $(FF)/units/page.err
-	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff $(UNITS2:%=$(FF)/units/%.i) -- ua ub uc > $(FF)/units/cs.ff.txt
+	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -K $(FF)/units/statics.cs $(UNITS2:%=$(FF)/units/%.i) -- ua ub uc > $(FF)/units/cs.ff.txt
 	@cmp $(FF)/units/page.ff.txt $(FF)/units/cs.ff.txt
+	@cmp $(FF)/units/statics $(FF)/units/statics.cs
 	@$(RUN) -t 60 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/units/page.ff.txt $(FF)/units/back.c $(FF)/units/back.names
 	@$(RUN) -t 60 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/units/back.c > $(FF)/units/back.json

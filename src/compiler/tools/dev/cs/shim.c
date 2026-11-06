@@ -40,6 +40,7 @@ unsigned char *cp_file (char *path, long *size)
   p = malloc (n + 1); if (fread (p, 1, n, f) != (size_t) n) exit (2); fclose (f); p[n] = 0; *size = n; return p;
 }
 long cp_write (int fd, unsigned char *p, long n) { return write (fd, p, n); }
+long cp_create (char *path) { return open (path, O_WRONLY | O_CREAT | O_TRUNC, 0666); }
 long cp_readlink (char *path, unsigned char *buf, long room) { return readlink (path, (char *) buf, room); }
 void cp_exit (int s) { exit (s); }
 /* sha256 */

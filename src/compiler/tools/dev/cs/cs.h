@@ -119,4 +119,5 @@ void cl_new_unit (char *name, int object);
 void cl_finish (void);
 void cl_options2 (char *program, char *indexf, int start, char **zero, long nzero, char **weak, long nweak, int keep_going);
 void cl_statics_file (char *f);
+void cl_statics_out (char *f);
 void cs_run (struct node *root, unsigned char *src, long n, long skip, int target, int mode, char *name);

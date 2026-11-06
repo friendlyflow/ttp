@@ -30,6 +30,25 @@ cp_write:
       fd
       p
       n
+cp_create:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  comment
+    a file to write, empty (O_WRONLY, O_CREAT, O_TRUNC; 0666)
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      577
+      438
 cp_exit:
   void
   status:
