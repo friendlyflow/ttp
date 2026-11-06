@@ -3,7 +3,7 @@
 # against gen/c2ff.pl: each unit of a build, from its object's defined names
 # (nm, as src/glibc's all-survey has them), written by both; their .ff.txt
 # must be one byte for byte. Unit by unit: a milestone's whole page, many units
-# at once, is gen/clpagecheck.sh's; c2ff.pl's --pass cache is not csema's.
+# at once, is src/glibc's c2ff-pages; c2ff.pl's --pass cache is not csema's.
 #
 #   sh clayercheck.sh [-j N] [-r RUN] [-t TARGET] [-v "UNITS"] [-f FF -p "PROGRAMS" [-x "INDEXED"]] -i I -o OBJ -s GLIBC_SRC -S shared.ff CSEMA DIR unit ...
 #

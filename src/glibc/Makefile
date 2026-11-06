@@ -1044,16 +1044,15 @@ clayer-check:
 # (each its own target): c2ff-glibc (a BUILD of all of glibc), c2ff-libgcc,
 # clayer-tests (a tests build). Some 15 minutes a target, the most of it
 # clang's ASTs and c2ff.pl's passes.
+# (c2ff-passes, c2ff-pages, c2ff-progs and c2ff-crosscheck themselves: after
+# CHECK_MS and OWNSTART, which their prerequisites read at once)
 C2FFOUT = $(BUILD)/c2ff
-c2ff-passes: $(CHECK_OBJS:%=$(I)/%.json)
-	$(RUN) -t 1800 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i)
 c2ff-page-%: c2ff-passes $(FF)/%.ff
 	@mkdir -p $(C2FFOUT)
-	$(file >$(C2FFOUT)/$*.units,$(foreach o,$(OBJS_all_$*),$(I)/$(o).json=$(I)/$(o).i$(nl)))
-	@$(RUN) -t 600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS_$*) $(foreach z,$(call with_start,ZEROS,$*),--zero $(z)) $(foreach w,$(call with_start,WEAKS,$*),--weak $(w)) @$(C2FFOUT)/$*.units \
+	$(file >$(FF)/$*.units,$(foreach o,$(OBJS_all_$*),$(I)/$(o).json=$(I)/$(o).i$(nl)))
+	@$(RUN) -t 600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS_$*) $(foreach z,$(call with_start,ZEROS,$*),--zero $(z)) $(foreach w,$(call with_start,WEAKS,$*),--weak $(w)) @$(FF)/$*.units \
 	    -- @$(FF)/$*.rootlist $$(for a in $(ASMS_all_$*); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done | sort -u) > $(C2FFOUT)/$*.page 2> $(C2FFOUT)/$*.err
 	@sh ../compiler/gen/pageprefix.sh "c2ff-page $* ($(GTARGET))" $(or $(LICENSE_$*),license.ff.txt) $(C2FFOUT)/$*.page $(FF)/$*.ff.txt
-c2ff-pages: $(CHECK_MS:%=c2ff-page-%)
 c2ff-prog-%: $(FF)/%-prog.json $(FF)/%-prog.ff
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(call progstart,$*),--start) \
@@ -1063,11 +1062,6 @@ c2ff-unit-%: $(FF)/%-prog.json %-roundtrip
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- $(PROGRT_$*) > $(C2FFOUT)/$*-unit.ff.txt
 	@cmp $(C2FFOUT)/$*-unit.ff.txt $(FF)/$*-unit.ff.txt && echo "c2ff-unit $* ($(GTARGET)): c2ff.pl's page and csema's the same"
-C2FF_OWN = $(filter-out $(if $(filter arm,$(GTARGET)),generic),$(OWNSTART))
-c2ff-progs: $(CHECK_MS:%=c2ff-prog-%) $(C2FF_OWN:%=c2ff-prog-%) $(patsubst %,c2ff-unit-%,$(filter generic textcount roundnames,$(C2FF_OWN)))
-c2ff-crosscheck: c2ff-pages c2ff-progs clayer-check units-crosscheck
-	@echo "c2ff-crosscheck ($(GTARGET)): c2ff.pl and csema -l give the same pages: $(words $(CHECK_MS)) milestones, their programs and units"
-.PHONY: c2ff-passes c2ff-pages c2ff-progs c2ff-crosscheck
 # and every test program of glibc that a tests build has (make tests-ref AREA=x
 # first, for each of TAREAS), through both, byte for byte: 45 minutes for
 # 508 programs at -j3, so not in ports-check (../compiler/gen/cltests.sh).
@@ -1182,6 +1176,15 @@ ALLCHECKS_arm := $(LINKED_arm:%=%-check) $(LINKED_arm:%=%-roundtrip)
 ALLCHECKS := $(or $(ALLCHECKS_$(GTARGET)),ldouble-check) $(if $(filter arm,$(GTARGET)),,generic-check generic-roundtrip)
 CHECK_OBJS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
 CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
+# (c2ff-crosscheck's targets of CHECK_MS, above)
+c2ff-passes: $(CHECK_OBJS:%=$(I)/%.json)
+	$(RUN) -t 1800 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i)
+c2ff-pages: $(CHECK_MS:%=c2ff-page-%)
+C2FF_OWN = $(filter-out $(if $(filter arm,$(GTARGET)),generic),$(OWNSTART))
+c2ff-progs: $(CHECK_MS:%=c2ff-prog-%) $(C2FF_OWN:%=c2ff-prog-%) $(patsubst %,c2ff-unit-%,$(filter generic textcount roundnames,$(C2FF_OWN)))
+c2ff-crosscheck: c2ff-pages c2ff-progs clayer-check units-crosscheck
+	@echo "c2ff-crosscheck ($(GTARGET)): c2ff.pl and csema -l give the same pages: $(words $(CHECK_MS)) milestones, their programs and units"
+.PHONY: c2ff-passes c2ff-pages c2ff-progs c2ff-crosscheck
 units-ready: $(call csdeps,$(CHECK_OBJS)) $(CHECK_OBJS:%=$(I)/%.json) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter csu/crti,$(CHECK_ASMS)),$(I)/csu/crtn.dump)
 	$(if $(filter riscv64 aarch64,$(GTARGET)),@$(MAKE) --no-print-directory asm-check)
 all-checks:
