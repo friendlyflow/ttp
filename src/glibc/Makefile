@@ -298,9 +298,9 @@ WEAKS_floats := $(WEAKS_stdio)
 
 # args: a program of argc, argv and an environment variable, through
 # glibc's startup (below), with what stdio has
-OBJS_args := $(OBJS_stdio)
+OBJS_args := $(OBJS_stdio) wcsmbs/wctob
 ASMS_args := $(ASMS_stdio)
-ROOTS_args := $(ROOTS_stdio) getenv
+ROOTS_args := $(ROOTS_stdio) getenv wctob
 ZEROS_args := $(ZEROS_stdio)
 WEAKS_args := $(WEAKS_stdio)
 RUN_args := one two three

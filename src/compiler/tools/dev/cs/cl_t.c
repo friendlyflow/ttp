@@ -590,6 +590,7 @@ static void cl_static_ctor (struct cl_unit *v, char *name, char *ok)
   long i = 0;
   while (i < v->ctors.n) { if (cl_eq ((char *) v->ctors.v[i]->text, name)) v->ctors.v[i] = cl_n (ok); i++; }
 }
+static int cl_extern_inline (struct cs_decl *d) { return (d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN; }
 /* the name a static takes that another unit defines otherwise: its own, named with the unit (own_name) */
 static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
 {
@@ -827,10 +828,13 @@ static void cl_pass_one (struct cs_top *t)
   if (t->k == TOP_FN) {
     if (d->sp && d->sp->aliasee) { cl_put (&C->alias, name, d->sp->aliasee); cl_put (&C->aliasunit, name, C->cu); return; }
     if (d->sp && d->sp->ifunc) { cl_put (&C->ifunc, name, d); return; }
-    if (d->body && !(C->treedefs.count && (d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN && cl_val (&C->treedefs, cl_ffname (name)))) {
+    if (d->body && !(C->treedefs.count && cl_extern_inline (d) && cl_val (&C->treedefs, cl_ffname (name)))) {
       char *k = cl_own_name (&C->fn, name, d);
+      struct cs_decl *first;
       fkey = k;
-      cl_put_new (&C->fn, k, d);
+      /* (gnu89's extern inline is no definition where a plain one exists: wctob of wchar.h calls __wctob_alias) */
+      first = cl_get (&C->fn, k);
+      if (!first || (cl_extern_inline (first) && !cl_extern_inline (d))) cl_put (&C->fn, k, d);
       if (d->sp && d->sp->ctor) { cl_put (&C->ctor, k, d); cl_push (&C->cu->ctors, cl_n (k)); }
     }
     cl_ps_names (d);
