@@ -187,6 +187,8 @@ int csema_main (int argc0, char **argv0)
   long nzero = 0, nweak = 0;
   int start = 0, keep_going = 0;
   while (a < argc && argv[a][0] == '-') {
+    /* (-O belongs to the file after it: tst-printf-format-*'s first object lost it, its destructor no root) */
+    if (same ((unsigned char *) argv[a], 2, "-O")) break;
     if (same ((unsigned char *) argv[a], 2, "-d")) mode = 1;
     else if (same ((unsigned char *) argv[a], 2, "-l")) mode = 2;
     else if (same ((unsigned char *) argv[a], 2, "-p") && a + 1 < argc) page = argv[++a];
