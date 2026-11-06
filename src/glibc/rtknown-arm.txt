@@ -39,7 +39,6 @@ frame_stack_add_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
 frame_stack_get_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
 frame_stack_init_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
 frame_stack_reset_top_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
-fts_compar	-	ff2c cannot write	offsetof's . inside a :, then the path and the call after a . of its own: ff2c stops on the second .
 fts_read	5048e28f1e96	false alarm	the same as __fts64_read
 ftw_dir_io_ftw64_time64	-	clang refuses	in file io_ftw64-time64, see it
 ftw_startup	091e308d7ea0	false alarm	2 * strlen, an asm function's long in ff, against 4096 and given as a u32: a signed comparison, C's unsigned, differs only past 1 GiB of path; same value otherwise
@@ -101,4 +100,3 @@ v01	9c6d95f20a84	false alarm	a float's literal in the source's digits and the ex
 v02	82c932094ee1	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
 v03	bc8139bddc67	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
 v04	785d917fa330	false alarm	a float's literal in the source's digits and the exact float: the same float, checked of each literal
-wctob	-	ff2c cannot write	c2ff takes a header's extern inline wctob (argp-fmtstream.i first), which calls __wctob_alias, left out; ttpc stops if a program reaches it: not silent, to fix
