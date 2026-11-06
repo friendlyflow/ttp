@@ -315,17 +315,17 @@ static struct cs_ty *cs_uac (struct cs_ex **l, struct cs_ex **r, int comp)
      rank, an unsigned one signed beside a signed, saturating if either is) */
   if (cs_is_fix (lt) || cs_is_fix (rty)) {
     struct cs_ty *res;
-    int lr = 0, rr = 0;
+    int rkl = 0, rkr = 0;
     if (cs_is_flt (lt)) { *r = cs_ice (*r, lt, CK_FIXEDPOINTTOFLOATING); return lt; }
     if (cs_is_flt (rty)) { if (!comp) *l = cs_ice (*l, rty, CK_FIXEDPOINTTOFLOATING); return rty; }
     if (cs_is_fix (lt) && cs_is_fix (rty)) {
       if (!cs_fix_uns (rty) && cs_fix_uns (lt)) lt = cs_fix_ty (cs_fix_code (lt) - 6);
       else if (cs_fix_uns (rty) && !cs_fix_uns (lt)) rty = cs_fix_ty (cs_fix_code (rty) - 6);
     }
-    if (cs_is_fix (lt)) lr = cs_fix_rank (lt);
-    if (cs_is_fix (rty)) rr = cs_fix_rank (rty);
+    if (cs_is_fix (lt)) rkl = cs_fix_rank (lt);
+    if (cs_is_fix (rty)) rkr = cs_fix_rank (rty);
     res = rty;
-    if (lr > rr) res = lt;
+    if (rkl > rkr) res = lt;
     if (((cs_is_fix (lt) && cs_fix_sat (lt)) || (cs_is_fix (rty) && cs_fix_sat (rty))) && !cs_fix_sat (res)) res = cs_fix_ty (cs_fix_code (res) + 12);
     return res;
   }

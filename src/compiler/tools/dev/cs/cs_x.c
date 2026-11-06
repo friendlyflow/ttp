@@ -47,7 +47,7 @@ static int cs_fits (unsigned long long v, int k)
 static unsigned long long cs_fix_bits (unsigned char *p, long len, struct cs_ty *t)
 {
   unsigned char *dg = alloc (len + 8), *f;
-  long nd = 0, i = 0, ip, m = 0, j;
+  long nd = 0, i = 0, nint, m = 0, j;
   long long e = 0;
   int pt = 0, scale = cs_fix_scale (t), b = 0;
   unsigned long long ipart = 0, bits = 0, width = cs_ty_size (t) * 8, max;
@@ -68,11 +68,11 @@ static unsigned long long cs_fix_bits (unsigned char *p, long len, struct cs_ty 
     e = e + x;
   }
   /* (the value: digits dg times 10^e; its integer digits, then its fraction's) */
-  ip = nd + e;
-  f = alloc (nd + (ip < 0 ? 0 - ip : 0) + 8);
+  nint = nd + e;
+  f = alloc (nd + (nint < 0 ? 0 - nint : 0) + 8);
   j = 0;
-  while (j < ip) { ipart = ipart * 10; if (j < nd) ipart = ipart + dg[j]; j++; }
-  j = ip;
+  while (j < nint) { ipart = ipart * 10; if (j < nd) ipart = ipart + dg[j]; j++; }
+  j = nint;
   while (j < 0) { f[m++] = 0; j++; }
   while (j < nd) { f[m++] = dg[j]; j++; }
   while (b < scale) {
