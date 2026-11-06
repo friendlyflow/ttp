@@ -248,7 +248,7 @@ sub special_float {
 sub fconst {
     my ($v, $t) = @_;
     my $x = $v->{k} ne 'num' ? "(fspecial $v->{k} " . tstr($t) . ')'
-        : $t eq 'long double' ? '(fltl ' . FFold::qlit($v->{q}, $v->{e}, 16383) . ')'
+        : $t eq 'long double' || $t eq 'float128' ? '(fltl ' . FFold::qlit($v->{q}, $v->{e}, 16383) . ')'
         : '(flt ' . sprintf('%.17g', $v->{q}->numify * 2**$v->{e}) . ')';
     $v->{neg} ? "(u- $x)" : $x;
 }
@@ -327,6 +327,7 @@ sub E {
         # offsetof as ff has it: the field's address in a T at 0
         if ($ck eq 'PointerToIntegral' && is_offsetof($c)) { return '(offsetof)' }
         # a double literal cast to long double: the literal
+
         if ($ck eq 'FloatingCast' && strip($c)->{kind} eq 'FloatingLiteral') { return '(flt ' . flt(strip($c)->{value}) . ')' }
         # (clang's type of __builtin_copysignf16's parameters, __fp16: as _Float16; c2ff's casts to float16 are there)
         return E($c) if $ck eq 'FloatingCast' && tcls($n) =~ /__fp16/;
@@ -871,6 +872,15 @@ sub S {
         if ($k eq 'GotoStmt') { push @out, '(goto ' . ($labels{ $n->{targetLabelDeclId} } // '?') . ')'; next }
         if ($k eq 'IndirectGotoStmt') { push @out, '(goto* ' . E((kids($n))[0]) . ')'; next }
         if ($k eq 'GCCAsmStmt') {
+            # (x86_64's math_opt_barrier of a long double, asm ("" : "=t" (y) : "0" (x)): as c2ff, y = x)
+            if ($side eq 'glibc' && $target eq 'x86_64') {
+                my ($t, $oc, $ic) = asm_text($n);
+                if (defined $t && $t !~ /\S/ && @$oc == 1 && $oc->[0] =~ /^=&?t$/ && @$ic == 1 && $ic->[0] eq '0') {
+                    my ($y, $x) = kids($n);
+                    push @out, '(= ' . E($y) . ' ' . E($x) . ')';
+                    next;
+                }
+            }
             if ($side eq 'glibc' && asm_barrier($n)) {
                 # (what an input computes in floating point stays, its value
                 # unused: c2ff's)

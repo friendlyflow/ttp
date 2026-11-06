@@ -1,0 +1,122 @@
+# What make glibc-roundtrip knows of on x86_64, each judged: name, digest, kind, reason (tabs).
+# ../compiler/gen/rtknown.pl: the differences must be exactly these. Judged on lane A-x86's page of all of glibc, 2026-11-06.
+_Unwind_Backtrace	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_DebugHook	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_ForcedUnwind	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_ForcedUnwind_Phase2	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GRByValue	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetCFA	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetDataRelBase	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetGR	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetGRPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetIP	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetRegionStart	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetTextRelBase	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_Get_Unwind_Context_Reg_Val	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_Get_Unwind_Word	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_IsExtendedContext	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_IsSignalFrame	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetGRPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetGRValue	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetSignalFrame	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetSpColumn	-	clang refuses	in file libgcc_unwind-dw2, see it
+__allocate_shadow_stack	a173326a60b8	false alarm	a parameter of __typeof (...) * is written as u64 *, the type it names: the same type
+__ccoshl	4a09260bd2f0	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__ceill	-	ff2c cannot write	calls libc_fetestexcept_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__cexpl	d6e9b39b6a71	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__clogl	d7f196c149de	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__csinhl	09edf796c575	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__csinl	6b7cb379fb6b	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__ctanhl	f8577aaee721	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__ctanl	75e1607dc98c	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__daddl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__ddivl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__dfmal	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__dmull	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__dsqrtl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__dsubl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__erfcl	f37cd5af58b7	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__erfl	9316074c8e47	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__exp10	-	ff2c cannot write	calls its static special_case, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__exp2	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__faddl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__fdivl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__ffmal	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__floorl	-	ff2c cannot write	calls libc_fetestexcept_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__fmull	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__fsqrtl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__fsubl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__fts64_read	097c993fd7c0	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__fchdir in a ?:)
+__getgrgid_r	-	clang refuses	in file nss_getgrgid_r, see it
+__getgrnam_r	-	clang refuses	in file nss_getgrnam_r, see it
+__gthread_active_p	-	clang refuses	in file libgcc_unwind-dw2, see it
+__gthread_cond_broadcast	-	clang refuses	in file libgcc_unwind-dw2, see it
+__gthread_cond_wait	-	clang refuses	in file libgcc_unwind-dw2, see it
+__gthread_mutex_lock	-	clang refuses	in file libgcc_unwind-dw2, see it
+__gthread_mutex_unlock	-	clang refuses	in file libgcc_unwind-dw2, see it
+__gthread_once	-	clang refuses	in file libgcc_unwind-dw2, see it
+__ieee754_exp_avx	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__ieee754_exp_fma	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__ieee754_exp_fma4	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__ieee754_exp_sse2	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__ieee754_lgammal_r	81292b0bb701	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__kernel_casinhl	bc25485cb3cb	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__lgamma_negl	bdc62271abb3	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__minimal_malloc	f4f08a173148	false alarm	&_end written as _end, an array of unknown size: the same address, under a cast to void *
+__newlocale	-	clang refuses	in file locale_newlocale, see it
+__newlocale_1	-	clang refuses	in file locale_newlocale, see it
+__pownl	101d42395d39	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__rootnl	8ec4a0765557	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__sincosf_table	c9aa6b45fcd7	false alarm	a v2df_t vector's two items in a : group: ff2c writes them as (a, b), C's comma; the tree has the two items
+__spawni	39b582e7fdad	false alarm	the addresses of asm __execve and C __execvpex in a ?: go through void * in the C written back: the same address
+__spawni_child	d040fa4d45ac	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpgid in a ?:)
+__sqrtl	-	ff2c cannot write	calls __ieee754_sqrtl, left out of glibc in ff (c2ff: the builtin __builtin_sqrtl, not yet)
+__truncl	-	ff2c cannot write	calls libc_fetestexcept_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__uselocale	7c2fed5b9b29	false alarm	records of one layout with two names (__locale_struct and its unit's own): a ?: of their addresses goes through void *: the same address
+__vfscanf_internal	0c743db8cb98	false alarm	an index of unsigned char (fc) is converted to int in ff as C promotes it; the same value
+_get_ssp	-	clang refuses	in file libgcc_unwind-dw2, see it
+_inc_ssp	-	clang refuses	in file libgcc_unwind-dw2, see it
+base_of_encoded_value	-	clang refuses	in file libgcc_unwind-dw2, see it
+bindresvport	5d613f7656cd	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpid () % 600)
+dwarf_reg_size_table	-	clang refuses	in file libgcc_unwind-dw2, see it
+execute_cfa_program	-	clang refuses	in file libgcc_unwind-dw2, see it
+execute_cfa_program_generic	-	clang refuses	in file libgcc_unwind-dw2, see it
+execute_cfa_program_specialized	-	clang refuses	in file libgcc_unwind-dw2, see it
+execute_stack_op	-	clang refuses	in file libgcc_unwind-dw2, see it
+exp_inline	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+extract_cie_info	-	clang refuses	in file libgcc_unwind-dw2, see it
+file libgcc_unwind-dw2	-	clang refuses	gcc's ia32intrin.h (__builtin_ia32_* that clang lacks) in libgcc's unwind-dw2.i, which CLANGL reads: no AST of the unit, so none of its functions is compared
+file locale_newlocale	-	clang refuses	assigns __locale_struct and its unit's own, one layout by value; ttpc takes that (tested)
+file nss_getgrgid_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
+file nss_getgrnam_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
+fts_compar	-	ff2c cannot write	offsetof's . inside a :, then the path and the call after a . of its own: ff2c stops on the second .
+gammal_positive_math_e_gammal_r	23ed4a681497	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+get_cie	-	clang refuses	in file libgcc_unwind-dw2, see it
+init_dwarf_reg_size_table	-	clang refuses	in file libgcc_unwind-dw2, see it
+last_fde	-	clang refuses	in file libgcc_unwind-dw2, see it
+next_fde	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_1s	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_1u	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_2s	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_2u	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_4s	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_4u	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_8s	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_8u	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_encoded_value	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_encoded_value_with_base	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_pointer	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_sleb128	-	clang refuses	in file libgcc_unwind-dw2, see it
+read_uleb128	-	clang refuses	in file libgcc_unwind-dw2, see it
+restore_initial_cwd	259990701802	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__fchdir in a ?:)
+sincosf_poly	-	ff2c cannot write	v2df_t vector arithmetic (sincosf_poly's x2 * p->s1c2 ...): ff2c does not write it; ttpc stops on it too (cannot compile: p), not yet
+size_of_encoded_value	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_advance_context	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_frame_state_for	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_init_context_1	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_init_context_1_once_regsizes	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_install_context_1	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_update_context	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_update_context_1	-	clang refuses	in file libgcc_unwind-dw2, see it
+x86_64_fallback_frame_state	-	clang refuses	in file libgcc_unwind-dw2, see it
