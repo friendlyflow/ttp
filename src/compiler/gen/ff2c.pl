@@ -721,6 +721,15 @@ sub path {
         $t = nofs($t);
         my $pt = $t && $t->[0] eq 'ptr' ? nofs($t->[1]) : undef;
         my $rt = $t && $t->[0] eq 'rec' ? $t->[1] : $pt && $pt->[0] eq 'rec' ? $pt->[1] : undef;
+        # (another . in a path: what came before it is the value, the rest a
+        # path from it; fts_compar's (WRAPPER (p)->fts_fts)->fts_compar (pa, pb);
+        # last, after a function's address, the call without arguments)
+        if (leaf($n) && c($n) eq '.') {
+            shift @l;
+            if (!@l && (my $f = fnptr_sig($t))) { return ("($s)()", $f->{ret}) }
+            $s = "($s)";
+            next;
+        }
         if (defined $rt && leaf($n) && (my $ft = field($rt, c($n)))) {
             $s = "($s" . ($t->[0] eq 'ptr' ? '->' : '.') . cid_local(c($n)) . ")";
             $t = $ft;

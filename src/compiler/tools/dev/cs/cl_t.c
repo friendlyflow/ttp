@@ -10,7 +10,7 @@ static char *cl_reserved_words[] = {
   "array", "struct", "union", "enum", "function", "sizeof", "alignof", "compile", "emit", "fail", "number",
   "target", "include", "workspace", "switch", "case", "default", "goto", "char", "short", "int", "long", "void",
   "type", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "float16", "bfloat16", "fract", "accum", "va_list", "va_start", "va_arg", "va_end", "va_copy",
-  "alias", "ifunc", "asm", "items", "cast", "weak", "va_arg_pack", "va_arg_pack_len", "real", "imag", "generic", "section", "constructor", "destructor", "fs", "vector", "line", "byte", "half", "word", "dword", 0
+  "alias", "ifunc", "asm", "items", "cast", "weak", "va_arg_pack", "va_arg_pack_len", "real", "imag", "generic", "section", "constructor", "destructor", "fs", "vector", "line", 0
 };
 static char *cl_reg_words[] = { "zero", "ra", "sp", "gp", "tp", "fp", "pc", 0 };
 static char *cl_reg_pre[] = { "x", "a", "s", "t", "f", "fa", "fs", "ft", "v", 0 };
@@ -413,7 +413,6 @@ static void cl_ctype (struct cs_ty *t, struct cl_list *o)
     else if (k == TY_DOUBLE) cl_w (o, "complex double");
     else if (k == TY_LDOUBLE) cl_w (o, "complex long double");
     else if (k == TY_FLOAT16) cl_w (o, "complex float16");
-    else if (k == TY_FLOAT128) cl_w (o, "complex float128");
     else cl_fail ("no ff type for a complex of that type", 0);
     return;
   }
@@ -591,6 +590,7 @@ static void cl_static_ctor (struct cl_unit *v, char *name, char *ok)
   long i = 0;
   while (i < v->ctors.n) { if (cl_eq ((char *) v->ctors.v[i]->text, name)) v->ctors.v[i] = cl_n (ok); i++; }
 }
+static int cl_extern_inline (struct cs_decl *d) { return (d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN; }
 /* the name a static takes that another unit defines otherwise: its own, named with the unit (own_name) */
 static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
 {
@@ -828,13 +828,13 @@ static void cl_pass_one (struct cs_top *t)
   if (t->k == TOP_FN) {
     if (d->sp && d->sp->aliasee) { cl_put (&C->alias, name, d->sp->aliasee); cl_put (&C->aliasunit, name, C->cu); return; }
     if (d->sp && d->sp->ifunc) { cl_put (&C->ifunc, name, d); return; }
-    if (d->body && !(C->treedefs.count && (d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN && cl_val (&C->treedefs, cl_ffname (name)))) {
+    if (d->body && !(C->treedefs.count && cl_extern_inline (d) && cl_val (&C->treedefs, cl_ffname (name)))) {
       char *k = cl_own_name (&C->fn, name, d);
-      /* (a gnu89 extern inline gives way to the function's real definition, which is what gcc emits: math_private.h's __trunc_c, s_trunc-c's) */
-      struct cs_decl *was = cl_get (&C->fn, k);
-      if (was && (was->inl || (was->sp && was->sp->inl)) && was->sc == SC_EXTERN && !((d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN)) cl_put (&C->fn, k, d);
+      struct cs_decl *first;
       fkey = k;
-      cl_put_new (&C->fn, k, d);
+      /* (gnu89's extern inline is no definition where a plain one exists: wctob of wchar.h calls __wctob_alias) */
+      first = cl_get (&C->fn, k);
+      if (!first || (cl_extern_inline (first) && !cl_extern_inline (d))) cl_put (&C->fn, k, d);
       if (d->sp && d->sp->ctor) { cl_put (&C->ctor, k, d); cl_push (&C->cu->ctors, cl_n (k)); }
     }
     cl_ps_names (d);

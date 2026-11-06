@@ -8,8 +8,12 @@
    the kernel made, which runs main with argc and argv and sets __environ;
    main's status goes to exit, which flushes stdout. The check runs both
    builds as `args one two three` with FF_ARGS=hello in the environment.
-   argv[0] (its path) is left out: the two builds have their own. No
-   headers, as in stdlib.c. */
+   argv[0] (its path) is left out: the two builds have their own. And
+   wctob, through wchar.h: where gcc optimizes the header's extern inline
+   wctob calls __wctob_alias, whose asm name is the real one, and glibc's
+   own wcsmbs/wctob is the function, not the header's first copy. */
+
+#include <wchar.h>
 
 int printf (const char *, ...);
 char *getenv (const char *);
@@ -23,5 +27,8 @@ main (int argc, char **argv)
   char *v = getenv ("FF_ARGS");
   printf ("FF_ARGS %s\n", v ? v : "(none)");
   printf ("FF_NOT_SET %s\n", getenv ("FF_NOT_SET") ? "set" : "not set");
+  volatile wint_t wa = L'a', wd = 0x7f, we = 0xe9, wl = 0x20ac, wo = WEOF;
+  printf ("wctob %d %d %d %d %d\n", wctob (wa), wctob (wd), wctob (we), wctob (wl), wctob (wo));
+  printf ("wctob literal %d %d\n", wctob (L'z'), wctob (0xe9));
   return 40 + argc;
 }

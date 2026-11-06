@@ -299,9 +299,9 @@ WEAKS_floats := $(WEAKS_stdio)
 
 # args: a program of argc, argv and an environment variable, through
 # glibc's startup (below), with what stdio has
-OBJS_args := $(OBJS_stdio)
+OBJS_args := $(OBJS_stdio) wcsmbs/wctob
 ASMS_args := $(ASMS_stdio)
-ROOTS_args := $(ROOTS_stdio) getenv
+ROOTS_args := $(ROOTS_stdio) getenv wctob
 ZEROS_args := $(ZEROS_stdio)
 WEAKS_args := $(WEAKS_stdio)
 RUN_args := one two three
@@ -1010,6 +1010,14 @@ clayer-page-%:
 	    -l $(or $(LICENSE_$*),license.ff.txt) -u $(BUILD)/clayer/$*.page.units -R $(BUILD)/clayer/$*.page.roots \
 	    -f "$(foreach z,$(call with_start,ZEROS,$*),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$*),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$*)),-k)" \
 	    $(CPTOOLS)/csema $(FF)/$*.ff.txt $(BUILD)/clayer/$*.page
+# and every test program of glibc that a tests build has (make tests-ref AREA=x
+# first, for each of TAREAS), through both, byte for byte: 45 minutes for
+# 508 programs at -j3, so not in ports-check (../compiler/gen/cltests.sh).
+TAREAS ?= stdlib string stdio-common
+clayer-tests:
+	@$(SLOT) -v 8000000 -t 14400 sh ../compiler/gen/cltests.sh -r "$(CPRUN)" -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff \
+	    -T $(TBUILD) -x $(FF)/glibc/index.ff -J $(FF)/glibc.statics $(if $(GLIBC_START),,-I) -a "$(TAREAS)" $(CPTOOLS)/csema $(BUILD)/clayer/tests
+.PHONY: clayer-tests
 # all of glibc's page, from FF/glibc.units and FF/glibc.roots (make FF/glibc.ff
 # first; not in ports-check, which does not build it): its heap in a file
 clayer-glibc:
@@ -1032,8 +1040,9 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen
 	    $(RUN) -t 120 $(CLANG_AST) $(FF)/units/$$u.i > $(FF)/units/$$u.json || exit 1; \
 	done
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --statics-out $(FF)/units/statics $(foreach u,$(UNITS2),$(FF)/units/$(u).json=$(FF)/units/$(u).i) -- ua ub uc > $(FF)/units/page.ff.txt 2> $(FF)/units/page.err
-	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff $(UNITS2:%=$(FF)/units/%.i) -- ua ub uc > $(FF)/units/cs.ff.txt
+	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -K $(FF)/units/statics.cs $(UNITS2:%=$(FF)/units/%.i) -- ua ub uc > $(FF)/units/cs.ff.txt
 	@cmp $(FF)/units/page.ff.txt $(FF)/units/cs.ff.txt
+	@cmp $(FF)/units/statics $(FF)/units/statics.cs
 	@$(RUN) -t 60 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/units/page.ff.txt $(FF)/units/back.c $(FF)/units/back.names
 	@$(RUN) -t 60 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/units/back.c > $(FF)/units/back.json
@@ -1073,7 +1082,7 @@ $(eval $(call check,generic))
 $(eval $(call check,stdbit))
 $(eval $(call check,textcount))
 $(eval $(call check,roundnames))
-GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
+GENERIC_FNS := main levels second add2 via_comma two_paths vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
 $(1)-roundtrip: $$(FF)/$(1)-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl

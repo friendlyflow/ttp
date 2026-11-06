@@ -46,7 +46,7 @@ struct cl_state {
   struct cs_rec *lastanon;
   int asm_rd_out;
   /* --program, --index, --start, --zero, --weak */
-  char *program, *indexf, *staticsf;
+  char *program, *indexf, *staticsf, *staticsout;
   int start;
   struct cl_map treedefs, treerec, zero, forceweak, constint, recfn, ownfn;
   /* the units */

@@ -5,3 +5,5 @@ argv 2 two
 argv 3 three
 FF_ARGS hello
 FF_NOT_SET not set
+wctob 97 127 -1 -1 -1
+wctob literal 122 -1

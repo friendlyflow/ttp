@@ -104,8 +104,6 @@ my %scalar = (
     # C's complex types: the shared page's (real / z and imag / z its parts)
     '_Complex float' => 'complex float', '_Complex double' => 'complex double', '_Complex long double' => 'complex long double',
     'float _Complex' => 'complex float', 'double _Complex' => 'complex double', 'long double _Complex' => 'complex long double',
-    # (x86_64's __float128, whose long double is the x87's; elsewhere the long double one)
-    '_Complex __float128' => 'complex float128', '__float128 _Complex' => 'complex float128',
 );
 
 # The words a type run can be made of, besides the names of types.
@@ -115,8 +113,6 @@ my %treedefs;              # --index file: the names the program's tree defines
 my %treestatic;            # --statics file: those that are a static of a unit there
 my $statics_out;
 my %treerec;               # --index file: the records its tree's types page defines
-my $treedir;              # --index file: its folder
-my %protos;               # a unit's declarations of a function without a body: their offsets
 my (%recunit, %ownrec);    # a record tag's unit; a unit's own definitions of tags (reg_rec)
 my %ownfnrec;              # a function's own definitions of tags its unit defines otherwise
 my %recfn;                 # a tag a function's own definition registered first: that function
@@ -406,7 +402,6 @@ my %reserved = map { $_ => 1 } qw(
     target include workspace switch case default goto char short int long void
     type i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 float16 bfloat16 fract accum va_list va_start va_arg va_end va_copy
     alias ifunc asm items cast weak va_arg_pack va_arg_pack_len real imag generic section constructor destructor fs vector line zero ra sp gp tp fp pc
-    byte half word dword
 ), map({ ("x$_", "a$_", "s$_", "t$_", "f$_", "fa$_", "fs$_", "ft$_", "v$_") } 0 .. 31);
 # --target T: the target the .i were made for, riscv64 if not given. On
 # another the registers reserved are its own: the names of the registers
@@ -500,9 +495,8 @@ while (@ARGV) {
     if ($a eq '--index') {
         my $f = shift @ARGV;
         open my $h, '<:raw', $f or die "c2ff: cannot open $f: $!\n";
-        ($treedir = $f) =~ s{[^/]*$}{};
         my ($index) = grep { $_->{content} eq 'index:' } @{ read_ff(do { local $/; <$h> })->{children} } or die "c2ff: $f has no index\n";
-        $treedefs{ $_->{content} =~ s/:$//r } = (FF::kids($_))[0]{content} for FF::kids($index);
+        $treedefs{ $_->{content} =~ s/:$//r } = 1 for FF::kids($index);
         # (and the records its types page defines, types.ff next to it: one
         # the program only declares is the tree's, not an empty one of the
         # program's, which ttpc would take for the tree's too: libgcc's
@@ -609,6 +603,7 @@ sub def_text {
     my ($b, $e) = map { $_->{offset} // ($_->{expansionLoc} // {})->{offset} } $d->{range}{begin}, $d->{range}{end};
     defined $b && defined $e ? substr($u->{text}, $b, $e - $b) : '';
 }
+sub extern_inline { my ($d) = @_; $d->{inline} && ($d->{storageClass} // '') eq 'extern' }
 sub own_name {
     my ($map, $name, $d, $u) = @_;
     # (a program's static whose name its tree (--index) defines: a name of
@@ -792,20 +787,19 @@ for my $u (@units) {
         if ($d->{kind} eq 'FunctionDecl') {
             if (my ($a) = grep { $_->{kind} eq 'AliasAttr' } @in) { $alias{$name} = [$a->{aliasee}, $u]; next }
             if (my ($r) = grep { $_->{kind} eq 'IFuncAttr' } @in) { $ifunc{$name} = [$d, $u, resolver($u, $r)]; next }
-            push @{ $protos{$u}{$name} }, offset_of($d->{loc}) if %treedefs && !grep { $_->{kind} eq 'CompoundStmt' } @in;
             # (a program's gnu89 extern inline function, a header's, is no
             # definition where its tree has the function: gcc never emits it,
             # and its body may only inline, error.h's error with
             # __builtin_va_arg_pack)
-            my $inline_only = %treedefs && $d->{inline} && ($d->{storageClass} // '') eq 'extern' && $treedefs{ ffname($name) };
+            my $inline_only = %treedefs && extern_inline($d) && $treedefs{ ffname($name) };
             my $fk;
             if (!$inline_only && grep { $_->{kind} eq 'CompoundStmt' } @in) {
                 my $k = $fk = own_name(\%fn, $name, $d, $u);
-                # (a gnu89 extern inline gives way to the function's real
-                # definition, which is what gcc emits: math_private.h's
-                # __trunc_c, called trunc, and s_trunc-c's)
-                delete $fn{$k} if $fn{$k} && $fn{$k}[0]{inline} && ($fn{$k}[0]{storageClass} // '') eq 'extern' && !($d->{inline} && ($d->{storageClass} // '') eq 'extern');
-                $fn{$k} //= [$d, $u];
+                # (gnu89's extern inline is no definition where a plain one
+                # exists: gcc never emits it, so the plain one of any unit is
+                # the function, not the first header's copy: wctob of wchar.h
+                # calls __wctob_alias, asm "wctob", which nothing else names)
+                $fn{$k} = [$d, $u] if !$fn{$k} || (extern_inline($fn{$k}[0]) && !extern_inline($d));
                 # a constructor or destructor: run by the start code, so a
                 # root wherever its unit is linked (as an archive member is)
                 if (my ($c) = grep { $_->{kind} =~ /^(?:Con|De)structorAttr$/ } @in) {
@@ -1679,8 +1673,6 @@ sub asm_ins_other {
         if ((($op =~ /^vfmadd213s[sd]$/ && @a == 3) || ($op =~ /^vfmadds[sd]$/ && @a == 4)) && !grep { !/^%xmm\d+$/ } @a) {
             return node("$op.vex3", map { node(s/^%//r) } @a);
         }
-        # (fraiseexcpt's divss_inline_asm)
-        return node('divss', map { node(s/^%//r) } @a) if $op eq 'divss' && @a == 2 && !grep { !/^%xmm\d+$/ } @a;
         if ($op =~ /^(?:ldmxcsr|stmxcsr|fldenv|fnstenv)$/ && @a == 1 && $a[0] =~ /^(-?\d*)\(%(\w+)\)$/) {
             return node("$op.m", node($1 eq '' ? 0 : $1), node($2));
         }
@@ -1697,13 +1689,8 @@ sub asm_stmt_other {
     return () if $template !~ /\S/ && @$oc && !grep { !/\+/ || ($target eq 'aarch64' ? !/^[=+&]*[rxw]+$/ : !/^[=+&]*[rx]+$/) } @$oc;
     # and one with inputs alone (math_force_eval's "" : : "f" (x) of a long
     # double on x86_64, "x" of a float; aarch64's "w" of a long double, in no
-    # register of ttpc's), of values with no effects: none, but on x86_64 for
-    # what its input computes in floating point, whose flags are what it is
-    # there for (sfp-exceptions' asm ("" : : "x" (f / g)), libm's
-    # math_force_eval (tiny * tiny)): that, its value unused
-    if (($target eq 'x86_64' || ($target eq 'aarch64' && @$ops && !grep { tword($_) ne 'long double' } @$ops)) && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops) {
-        return $target eq 'x86_64' ? map { cast_node(['void'], expr($_)) } grep { fp_computes($_) } @$ops : ();
-    }
+    # register of ttpc's), of values with no effects: none
+    return () if ($target eq 'x86_64' || ($target eq 'aarch64' && @$ops && !grep { tword($_) ne 'long double' } @$ops)) && $template !~ /\S/ && !@$oc && !grep { !pure($_) } @$ops;
     # (x86_64's x87 operands, libm's long double: asm_x87)
     return asm_x87($n, $template, $oc, $ic, $ops, $clob) if $target eq 'x86_64' && grep { /^[=&]*t$/ } @$oc;
     # (rbx too: the C layer keeps nothing in it across a call)
@@ -1731,12 +1718,12 @@ sub asm_stmt_other {
         $k =~ s/%//g if $target eq 'x86_64';
         $k = 'r' if ($k eq 'rm' || $k eq 'g' || $k eq 'rme' || $k eq 're' || $k eq 'rmi' || $k eq 'ri') && $target eq 'x86_64';
         if ($target eq 'x86_64' && $template =~ /\S/ && ($k =~ /^xm?$/ || ($k =~ /^\d$/ && !$out && $xreg{$k}))) {
-            # (+x, read and written: fraiseexcpt's divss_inline_asm: loaded and stored)
+            stop("the asm constraint $c", $n) if $c =~ /\+/;
             my $t = tword($ops->[$i]);
             my $w = $t eq 'float' ? 's' : $t eq 'double' ? 'd' : stop("the asm operand $c of a $t", $n);
             $xreg{$i} = $k =~ /^\d$/ ? $xreg{$k} : ['xmm' . ($xn++ // 0), $w];
             $text{$i} = $xreg{$i}[0];
-            push @want, [$i, $c =~ /\+/ ? 'xio' : $out ? 'xout' : 'xin'];
+            push @want, [$i, $out ? 'xout' : 'xin'];
             next;
         }
         if ($out && $fixed{$k}) {
@@ -1792,10 +1779,10 @@ sub asm_stmt_other {
         my ($i, $how, $r, $j) = @$w;
         my $a = $j < 100 ? $regs->[$j] : undef;
         $arg[$j] = [$i, $how eq 'value' ? 'value' : 'address'];
-        if ($how =~ /^x(in|out|io)$/) {
+        if ($how =~ /^x(in|out)$/) {
             my ($x, $w) = @{ $xreg{$i} };
-            push @code, node("movs$w.n.m0", node(0), node($a), node($x)) if $how =~ /^xi/;
-            push @after, node("movs$w.n.m0r", node($x), node(0), node($a)) if $how =~ /^xo|^xio/;
+            push @code, node("movs$w.n.m0", node(0), node($a), node($x)) if $how eq 'xin';
+            push @after, node("movs$w.n.m0r", node($x), node(0), node($a)) if $how eq 'xout';
         } elsif ($how eq 'address') {
             stop("the asm output $oc->[$i]", $n) unless $target eq 'x86_64';
             # stored by its C type's size (cpuid's are 32 bits); an address
@@ -1840,7 +1827,7 @@ sub asm_stmt_other {
         my ($m, $i) = ($1, $2);
         my $r = $text{$i} // stop("the asm operand %$m$i", $n);
         if ($m eq 'w' && $r =~ /^x(\d+)$/) { $r = "w$1" }
-        elsif ($m ne '' && !($target eq 'x86_64' && $m eq 'd' && $r =~ /^xmm/) && !($m eq 's' && $r =~ /^s\d/) && !($m eq 'd' && $r =~ /^d\d/) && !($m eq 'x' && $r =~ /^x\d/)) { stop("the asm operand %$m$i", $n) }
+        elsif ($m ne '' && !($m eq 's' && $r =~ /^s\d/) && !($m eq 'd' && $r =~ /^d\d/) && !($m eq 'x' && $r =~ /^x\d/)) { stop("the asm operand %$m$i", $n) }
         $target eq 'x86_64' && $r !~ /\(/ ? "%$r" : $r;
     }ge;
     # (gcc's %% for a register or segment's own %: x86's %%fs)
@@ -2257,15 +2244,6 @@ sub expr {
         $c->{kind} eq 'DeclRefExpr' or stop('a call through ' . $c->{kind}, $n);
         return cast_node(['void'], node('0')) if $errorfn{"$cur_unit $c->{referencedDecl}{id}"};
         my $name = $c->{referencedDecl}{name};
-        # a function of the tree the unit declares itself, with another count
-        # of parameters than the tree's definition (tst-bz20544's
-        # __cxa_at_quick_exit of 3, glibc's of 2): C calls what the unit declared,
-        # and gcc passes them all, so through a pointer of the unit's type, which
-        # ttpc counts nothing of
-        if (own_proto_differs($name, scalar @args)) {
-            my $to = { kind => 'CStyleCastExpr', castKind => 'BitCast', type => $callee->{type}, inner => [$callee] };
-            return expr({ %$n, inner => [$to, @args] });
-        }
         # (its value a long, as its first argument is made one)
         return cast_node([ctype(qt($n))], item(expr($args[0]))) if $name eq '__builtin_expect';
         return expr(tgmath($n, @args)) if $name eq '__builtin_tgmath';
@@ -2773,15 +2751,6 @@ sub pure {
     return 0 if $k eq 'UnaryOperator' && ($n->{opcode} // '') =~ /^(\+\+|--)$/;
     !grep { !pure($_) } kids($n);
 }
-# Does a value compute in floating point: an operator or a conversion of a
-# float, not a variable's value alone?
-sub fp_computes {
-    my ($n) = @_;
-    my $k = $n->{kind} // '';
-    return 1 if $k =~ /^(?:BinaryOperator|UnaryOperator)$/ && qt($n) =~ /^(?:float|double|long double|_Float\d+x?|__float128)$/;
-    return 1 if $k =~ /CastExpr$/ && ($n->{castKind} // '') =~ /Floating/;
-    !!grep { fp_computes($_) } kids($n);
-}
 sub cast_node {
     my ($t, @v) = @_;
     # (a value of one node that is a leaf in the words of now: content x
@@ -3101,47 +3070,6 @@ sub lindex {
     while ($lo < $hi) { my $mid = ($lo + $hi) >> 1; if ($nl->[$mid] <= $off) { $lo = $mid + 1 } else { $hi = $mid } }
     $lo - 1;
 }
-# Does this unit's own declaration of a function of the tree, in a .c (glibc's
-# headers agree with glibc's definitions: gcc checks them there), pass another
-# count of arguments than the tree's definition takes? Reads the definition's
-# file only then. A variadic function, an asm one: no count to compare.
-my %treepage;
-sub tree_nparams {
-    my ($name) = @_;
-    for (1 .. 8) {
-        my $f = $treedefs{$name} or return undef;
-        $treepage{$f} //= do {
-            open my $h, '<:raw', "$treedir$f" or return undef;
-            my %p;
-            for my $page (@{ read_ff(do { local $/; <$h> })->{children} }) {
-                next unless $page->{content} =~ /:$/;
-                $p{ $_->{content} =~ s/:$//r } = $_ for FF::kids($page);
-            }
-            \%p;
-        };
-        my $d = $treepage{$f}{$name} or return undef;
-        my @k = FF::kids($d);
-        return undef if @k && $k[0]{content} eq 'asm';
-        if (@k == 2 && $k[0]{content} eq 'alias') { $name = $k[1]{content}; next }
-        shift @k while @k && $k[0]{content} !~ /:$/;
-        my $n = 0;
-        for (@k) {
-            return undef if $_->{content} eq '...';
-            last unless $_->{content} =~ /:$/;
-            $n++;
-        }
-        return $n;
-    }
-    undef;
-}
-sub own_proto_differs {
-    my ($name, $nargs) = @_;
-    return 0 unless %treedefs && $treedefs{$name} && !$fn{$name} && $protos{$cur_unit}{$name};
-    return 0 unless grep { my ($f) = iplace($_); defined $f && $f =~ /\.c$/ } @{ $protos{$cur_unit}{$name} };
-    my $np = tree_nparams($name);
-    defined $np && $np != $nargs;
-}
-
 sub offset_of { my ($l) = @_; $l && ($l->{offset} // ($l->{expansionLoc} // {})->{offset}) }
 sub line_at {
     my ($off) = @_;

@@ -10,6 +10,7 @@ struct node { unsigned char hash[32]; long count; long room; struct node **kids;
 void *alloc (long n);
 unsigned char *cp_file (char *path, long *size);
 long cp_write (int fd, unsigned char *p, long n);
+long cp_create (char *path);
 long cp_readlink (char *path, unsigned char *buf, long room);
 void cp_exit (int status);
 void cp_heap_file (char *path, long size);

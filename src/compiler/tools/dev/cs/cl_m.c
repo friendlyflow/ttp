@@ -514,6 +514,37 @@ static void cl_license_nodes_of (struct cl_list *units, struct cl_list *o)
     i++;
   }
 }
+/* (-K file: the statics of the tree that keep their plain names, reached: a line each, for a program's -J; c2ff.pl's --statics-out) */
+static void cl_write_statics (void)
+{
+  struct cl_map st;
+  struct cl_map *maps[2];
+  char **keys;
+  long fd = cp_create (C->staticsout), m = 0, i = 0, count = 0;
+  if (fd < 0) cl_fail ("cannot write", C->staticsout);
+  st.tab = 0; st.count = 0;
+  maps[0] = &C->fn; maps[1] = &C->var;
+  while (m < 2) {
+    keys = cl_keys (maps[m], &count);
+    i = 0;
+    while (i < count) {
+      struct cs_decl *d = cl_get (&C->fn, keys[i]);
+      long q = 0;
+      if (!d) d = cl_get (&C->var, keys[i]);
+      while (keys[i][q] && keys[i][q] != ' ') q++;
+      if (!keys[i][q] && cl_val (&C->done, keys[i]) && d->sc == SC_STATIC) cl_set (&st, keys[i]);
+      i++;
+    }
+    m++;
+  }
+  keys = cl_keys (&st, &count);
+  i = 0;
+  while (i < count) {
+    char *n = cl_cat (cl_ffname (keys[i]), "\n");
+    cp_write (fd, (unsigned char *) n, cstrlen (n));
+    i++;
+  }
+}
 /* every unit read: what the roots reach, its types, the page */
 void cl_finish (void)
 {
@@ -529,6 +560,7 @@ void cl_finish (void)
     i++;
   }
   cl_reach ();
+  if (C->staticsout) cl_write_statics ();
   /* (an alias of what was left out is left out too: libgcc's __nehf2, of __eqhf2, a function of _Float16) */
   for (;;) {
     long r = 0, w = 0;
@@ -680,6 +712,7 @@ static void cl_read_index (void)
   }
 }
 void cl_statics_file (char *f) { C->staticsf = f; }
+void cl_statics_out (char *f) { C->staticsout = f; }
 void cl_options2 (char *program, char *indexf, int start, char **zero, long nzero, char **weak, long nweak, int keep_going)
 {
   long i = 0;
