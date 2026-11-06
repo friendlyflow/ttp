@@ -1006,6 +1006,14 @@ clayer-page-%:
 	    -l $(or $(LICENSE_$*),license.ff.txt) -u $(BUILD)/clayer/$*.page.units -R $(BUILD)/clayer/$*.page.roots \
 	    -f "$(foreach z,$(call with_start,ZEROS,$*),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$*),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$*)),-k)" \
 	    $(CPTOOLS)/csema $(FF)/$*.ff.txt $(BUILD)/clayer/$*.page
+# and every test program of glibc that a tests build has (make tests-ref AREA=x
+# first, for each of TAREAS), through both, byte for byte: 45 minutes for
+# 508 programs at -j3, so not in ports-check (../compiler/gen/cltests.sh).
+TAREAS ?= stdlib string stdio-common
+clayer-tests:
+	@$(SLOT) -v 8000000 -t 14400 sh ../compiler/gen/cltests.sh -r "$(CPRUN)" -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff \
+	    -T $(TBUILD) -x $(FF)/glibc/index.ff -J $(FF)/glibc.statics $(if $(GLIBC_START),,-I) -a "$(TAREAS)" $(CPTOOLS)/csema $(BUILD)/clayer/tests
+.PHONY: clayer-tests
 # all of glibc's page, from FF/glibc.units and FF/glibc.roots (make FF/glibc.ff
 # first; not in ports-check, which does not build it): its heap in a file
 clayer-glibc:
