@@ -540,6 +540,7 @@ $scalar{'unsigned long'} = 'u32' if $target eq 'arm';
 # __float128) ttpc's float128, binary128 (gen/patches/x87.pl); FFold.pm
 # rounds to them
 if ($target eq 'x86_64') { $scalar{'__float128'} = 'float128'; $scalar_word{float128} = 1; FFold::x87() }
+FFold::armld() if $target eq 'arm';
 
 my %enumof;                 # each enum constant's enum, as a tag
 my (%enumref, %enumunit);   # the uses of each enum constant and its first unit (enum_rename)
@@ -1965,7 +1966,9 @@ sub expr {
         stop("a ${w}'s initializer that is no constant here", $n) unless defined $v;
         return node(sprintf '0x%x', f16bits($v, $w));
     }
-    if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
+    # (arm too, its long double the double: compile time would take a long
+    # double for binary128, which it has no code of: printf-format's tests)
+    if ($in_global && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
         && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
         my @f = femit($v, tword($n));
         return @f if @f;

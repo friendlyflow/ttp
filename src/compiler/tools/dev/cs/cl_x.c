@@ -74,6 +74,7 @@ static void cl_fty (char *t, long *p, long long *emin, long long *emax, char **s
 {
   if (cl_eq (t, "float")) { *p = 24; *emin = -149; *emax = 127; *suf = "f"; *sp = "128f"; }
   else if (cl_eq (t, "double")) { *p = 53; *emin = -1074; *emax = 1023; *suf = ""; *sp = "1024"; }
+  else if (cl_eq (t, "long double") && C->target == 3) { *p = 53; *emin = -1074; *emax = 1023; *suf = ""; *sp = "1024"; }
   else if (cl_eq (t, "long double")) {
     if (C->target == 1) { *p = 64; *emin = -16445; } else { *p = 113; *emin = -16494; }
     *emax = 16383; *suf = "L"; *sp = "16384L";
@@ -1422,7 +1423,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     cl_push (o, cl_n (cl_f16_bits (n)));
     return;
   }
-  if (C->in_global && C->target != 3 && (k == E_BIN || k == E_UN || k == E_CAST || k == E_ICE) && cl_ftyp (cl_tword (n)) && cl_ldinside (n)) {
+  if (C->in_global && (k == E_BIN || k == E_UN || k == E_CAST || k == E_ICE) && cl_ftyp (cl_tword (n)) && cl_ldinside (n)) {
     struct cl_fv *v = cl_fold (n);
     if (v) {
       struct node *f = cl_femit (v, cl_tword (n));
