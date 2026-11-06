@@ -43,6 +43,18 @@ via_comma (int x)
   return ((void) x, &add2) (x, 2);
 }
 
+/* fts's FTSENT_FTS (pa[0])->fts_compar (pa, pb): a path from a cast in
+   parentheses, then a path from that in parentheses, then a call */
+struct ctl { long pad; int (*cmp) (int, int); int v; };
+struct wrap { long pad; struct ctl *ctl; int ent; };
+#define WRAP(p) ((struct wrap *) ((char *) (p) - __builtin_offsetof (struct wrap, ent)))
+#define WRAPCTL(p) (WRAP (p)->ctl)
+static int
+two_paths (int *ent)
+{
+  return WRAPCTL (ent)->cmp (40, 2) + WRAPCTL (ent)->v;
+}
+
 /* gmon's char buf[len + 20], then sizeof (buf): the size of a VLA */
 static unsigned long
 vla_size (unsigned long len)
@@ -263,6 +275,11 @@ main (void)
   f += levels (it) != 3;
   f += second (it, 1) != 2;
   f += via_comma (40) != 42;
+  {
+    struct ctl c = { 0, add2, 100 };
+    struct wrap w = { 0, &c, 0 };
+    f += two_paths (&w.ent) != 142;
+  }
   f += vla_size (7) != 27;
   f += label_attr (3) != 3 || label_attr (0) != 5;
   f += arrlit () != 8;

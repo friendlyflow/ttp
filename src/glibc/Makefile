@@ -1069,7 +1069,7 @@ $(eval $(call check,generic))
 $(eval $(call check,stdbit))
 $(eval $(call check,textcount))
 $(eval $(call check,roundnames))
-GENERIC_FNS := main levels second add2 via_comma vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
+GENERIC_FNS := main levels second add2 via_comma two_paths vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
 $(1)-roundtrip: $$(FF)/$(1)-prog.ff roundtrip.pl ../compiler/gen/ff2c.pl
