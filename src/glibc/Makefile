@@ -976,7 +976,7 @@ cparse-check:
 # casts, folded constants, layouts) clang's (clangsema.pl), unit by unit.
 CSUNITS = $(sort $(filter-out $(I)/libgcc/% %.clang.i,$(SCOPEI)) $(wildcard $(FF)/*-prog.i))
 CSCLANG = $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -Xclang -fdump-record-layouts -fsyntax-only \
-	--target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -fgnu89-inline -w
+	--target=$(CTARGET) $(PROGFLAGS) $(PROGCLANG_$(GTARGET)) -std=gnu11 -fgnu89-inline -w
 csema-check:
 	@echo "csema-check: $(words $(CSUNITS)) units of $(BUILD)"
 	@$(call unitsfile,$(BUILD)/csema.units,$(CSUNITS))CLANG="$(CSCLANG)" CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema @$(BUILD)/csema.units
@@ -999,10 +999,14 @@ clayer-check:
 # and each milestone's whole page, many units at once as c2ff.pl has them, its
 # reach, its --zero, --weak, --keep-going: FF/m.ff.txt, as this build made it
 # with c2ff.pl, begins with it byte for byte (../compiler/gen/clpagecheck.sh).
+# (arm's gccrt, of fixed-bit.c's thousand units, each with its headers: 8 GB
+# and more, its heap in a file, as all of glibc's)
+CLPAGEHEAP_arm_gccrt := 64
+clpage_heap = $(CLPAGEHEAP_$(GTARGET)_$(1))
 clayer-page-%:
 	@$(call unitsfile,$(BUILD)/clayer/$*.page.units,$(foreach o,$(OBJS_all_$*),$(I)/$(o))):
 	@{ printf '%s\n' $(ROOTS_$*) $(if $(call startms,$*),$(ROOTS_start)); for a in $(ASMS_all_$*); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done | sort -u; } > $(BUILD)/clayer/$*.page.roots
-	@CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl $(SLOT) -v 9000000 -t 1800 sh ../compiler/gen/clpagecheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" -i $(I) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff \
+	@CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVECPL=clangvec.pl $(SLOT) -v $(if $(call clpage_heap,$*),70000000,9000000) -t 1800 sh ../compiler/gen/clpagecheck.sh -r "$(CPRUN)" -t $(GTARGET) -v "$(CLANGVEC)" $(if $(call clpage_heap,$*),-M $(call clpage_heap,$*)) -i $(I) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff \
 	    -l $(or $(LICENSE_$*),license.ff.txt) -u $(BUILD)/clayer/$*.page.units -R $(BUILD)/clayer/$*.page.roots \
 	    -f "$(foreach z,$(call with_start,ZEROS,$*),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$*),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$*)),-k)" \
 	    $(CPTOOLS)/csema $(FF)/$*.ff.txt $(BUILD)/clayer/$*.page
@@ -1112,10 +1116,8 @@ CHECK_MS_aarch64 := $(LINKED_aarch64)
 CHECK_MS_x86_64 := $(LINKED_x86_64)
 CHECK_MS_arm := $(LINKED_arm)
 CHECK_MS := $(or $(CHECK_MS_$(GTARGET)),ldouble)
-# (clayer-pages, after CHECK_MS, which a prerequisite reads at once; arm's gccrt
-# holds fixed point, which csema has not yet)
-CLPAGE_SKIP_arm := gccrt
-clayer-pages: $(patsubst %,clayer-page-%,$(filter-out $(CLPAGE_SKIP_$(GTARGET)),$(CHECK_MS)))
+# (clayer-pages, after CHECK_MS, which a prerequisite reads at once)
+clayer-pages: $(CHECK_MS:%=clayer-page-%)
 .PHONY: clayer-pages
 ALLCHECKS_riscv64 := $(MILESTONES:%=%-check) $(MILESTONES:%=%-roundtrip)
 ALLCHECKS_aarch64 := $(LINKED_aarch64:%=%-check) $(LINKED_aarch64:%=%-roundtrip)

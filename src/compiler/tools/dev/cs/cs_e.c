@@ -310,6 +310,25 @@ static struct cs_ty *cs_uac (struct cs_ex **l, struct cs_ex **r, int comp)
     if (!comp && !cs_same_ty (lt, res)) *l = cs_ice (*l, res, cs_is_complex (lt) ? (cs_is_flt (cs_canon (lt)->to) ? CK_FLOATINGCOMPLEXCAST : CK_INTEGRALCOMPLEXTOFLOATINGCOMPLEX) : (cs_is_flt (lt) ? CK_FLOATINGREALTOCOMPLEX : CK_INTEGRALREALTOCOMPLEX));
     return res;
   }
+  /* (fixed point, clang's handleFloatConversion and handleFixedPointConversion: a floating
+     type's operand converted to it, else no conversion in the tree, the type of the higher
+     rank, an unsigned one signed beside a signed, saturating if either is) */
+  if (cs_is_fix (lt) || cs_is_fix (rty)) {
+    struct cs_ty *res;
+    int lr = 0, rr = 0;
+    if (cs_is_flt (lt)) { *r = cs_ice (*r, lt, CK_FIXEDPOINTTOFLOATING); return lt; }
+    if (cs_is_flt (rty)) { if (!comp) *l = cs_ice (*l, rty, CK_FIXEDPOINTTOFLOATING); return rty; }
+    if (cs_is_fix (lt) && cs_is_fix (rty)) {
+      if (!cs_fix_uns (rty) && cs_fix_uns (lt)) lt = cs_fix_ty (cs_fix_code (lt) - 6);
+      else if (cs_fix_uns (rty) && !cs_fix_uns (lt)) rty = cs_fix_ty (cs_fix_code (rty) - 6);
+    }
+    if (cs_is_fix (lt)) lr = cs_fix_rank (lt);
+    if (cs_is_fix (rty)) rr = cs_fix_rank (rty);
+    res = rty;
+    if (lr > rr) res = lt;
+    if (((cs_is_fix (lt) && cs_fix_sat (lt)) || (cs_is_fix (rty) && cs_fix_sat (rty))) && !cs_fix_sat (res)) res = cs_fix_ty (cs_fix_code (res) + 12);
+    return res;
+  }
   if (cs_is_flt (lt) && cs_is_flt (rty)) {
     if (cs_flt_rank (lt) > cs_flt_rank (rty)) { *r = cs_ice (*r, lt, CK_FLOATINGCAST); return lt; }
     if (!comp) *l = cs_ice (*l, rty, CK_FLOATINGCAST);
@@ -338,6 +357,16 @@ static int cs_scalar_kind (struct cs_ex **s, struct cs_ty *d)
 {
   struct cs_ty *st = (*s)->t;
   if (cs_same_ty (cs_unqual (st), cs_unqual (d))) return CK_NOOP;
+  if (cs_is_fix (st)) {
+    if (cs_is_fix (d)) return CK_FIXEDPOINTCAST;
+    if (cs_kind (d) == TY_BOOL) return CK_FIXEDPOINTTOBOOLEAN;
+    if (cs_is_int (d)) return CK_FIXEDPOINTTOINTEGRAL;
+    if (cs_is_flt (d)) return CK_FIXEDPOINTTOFLOATING;
+  }
+  if (cs_is_fix (d)) {
+    if (cs_is_int (st)) return CK_INTEGRALTOFIXEDPOINT;
+    if (cs_is_flt (st)) return CK_FLOATINGTOFIXEDPOINT;
+  }
   if (cs_is_ptr (st)) {
     if (cs_is_ptr (d) && cs_ptr_as (st) != cs_ptr_as (d)) return CK_ADDRESSSPACECONVERSION;
     if (cs_is_ptr (d)) return cs_cvr_similar (st, d) ? CK_NOOP : CK_BITCAST;

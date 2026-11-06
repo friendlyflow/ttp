@@ -42,6 +42,64 @@ static int cs_fits (unsigned long long v, int k)
   if (sg) return v < ((unsigned long long) 1 << (nbits - 1));
   return v < ((unsigned long long) 1 << nbits);
 }
+/* a fixed point literal's bits (clang's GetFixedPointValue): its decimal value times
+   2^scale, truncated; a fract's 1 its largest value */
+static unsigned long long cs_fix_bits (unsigned char *p, long len, struct cs_ty *t)
+{
+  unsigned char *dg = alloc (len + 8), *f;
+  long nd = 0, i = 0, ip, m = 0, j;
+  long long e = 0;
+  int pt = 0, scale = cs_fix_scale (t), b = 0;
+  unsigned long long ipart = 0, bits = 0, width = cs_ty_size (t) * 8, max;
+  while (i < len) {
+    unsigned char c = p[i];
+    if (c >= '0' && c <= '9') { dg[nd++] = c - '0'; if (pt) e--; i++; continue; }
+    if (c == '.') { pt = 1; i++; continue; }
+    if (c == '\'') { i++; continue; }
+    break;
+  }
+  if (i < len && (p[i] == 'e' || p[i] == 'E')) {
+    long long x = 0;
+    int neg = 0;
+    i++;
+    if (i < len && (p[i] == '+' || p[i] == '-')) { neg = p[i] == '-'; i++; }
+    while (i < len && p[i] >= '0' && p[i] <= '9') { x = x * 10 + (p[i] - '0'); i++; }
+    if (neg) x = 0 - x;
+    e = e + x;
+  }
+  /* (the value: digits dg times 10^e; its integer digits, then its fraction's) */
+  ip = nd + e;
+  f = alloc (nd + (ip < 0 ? 0 - ip : 0) + 8);
+  j = 0;
+  while (j < ip) { ipart = ipart * 10; if (j < nd) ipart = ipart + dg[j]; j++; }
+  j = ip;
+  while (j < 0) { f[m++] = 0; j++; }
+  while (j < nd) { f[m++] = dg[j]; j++; }
+  while (b < scale) {
+    int carry = 0;
+    j = m - 1;
+    while (j >= 0) { int x = f[j] * 2 + carry; f[j] = x % 10; carry = x / 10; j--; }
+    bits = bits * 2 + carry;
+    b++;
+  }
+  bits = (ipart << scale) | bits;
+  max = cs_fix_uns (t) ? ~(unsigned long long) 0 >> (64 - width) : ~(unsigned long long) 0 >> (65 - width);
+  if (cs_fix_code (t) % 6 < 3 && bits == max + 1) bits = max;
+  return bits;
+}
+/* its value as clang writes it (APFixedPoint::toString, of a value not negative): the
+   integer part, a point, the fraction's digits to its last (one at least) */
+static void cs_fix_text (struct cs_buf *b, unsigned long long bits, int scale)
+{
+  unsigned long long mask = ~(unsigned long long) 0 >> (64 - scale), fr = bits & mask;
+  cs_b_ull (b, bits >> scale);
+  cs_b_byte (b, '.');
+  do {
+    fr = fr * 10;
+    cs_b_byte (b, '0' + (int) (fr >> scale));
+    fr = fr & mask;
+  } while (fr != 0);
+}
 static struct cs_ex *cs_num_lit (struct node *n)
 {
   unsigned char *p = n->text;
@@ -59,6 +117,19 @@ static struct cs_ex *cs_num_lit (struct node *n)
     while (i < len) { if (p[i] == '.' || p[i] == 'e' || p[i] == 'E') isf = 1; i++; }
     if (len > 1 && p[0] == '0' && (p[1] == 'b' || p[1] == 'B')) base = 2;
     else if (p[0] == '0') base = 8;
+  }
+  /* (a fixed point literal: a decimal one with r or k, C's suffix of fixed point, after
+     [u][h|l]: never _Sat, its value's bits in val (no integer constant)) */
+  if (base != 16 && (p[len - 1] == 'r' || p[len - 1] == 'R' || p[len - 1] == 'k' || p[len - 1] == 'K')) {
+    long s = len - 1;
+    int acc = p[len - 1] == 'k' || p[len - 1] == 'K', sz = 1, us = 0;
+    if (s > 0 && (p[s - 1] == 'h' || p[s - 1] == 'H')) { sz = 0; s--; }
+    else if (s > 0 && (p[s - 1] == 'l' || p[s - 1] == 'L')) { sz = 2; s--; }
+    if (s > 0 && (p[s - 1] == 'u' || p[s - 1] == 'U')) { us = 1; s--; }
+    x = cs_mk (E_FIX, cs_fix_ty (sz + 3 * acc + 6 * us), 0);
+    x->val = (long long) cs_fix_bits (p, s, x->t);
+    x->src = n;
+    return x;
   }
   if (isf) {
     int fk = TY_DOUBLE;
