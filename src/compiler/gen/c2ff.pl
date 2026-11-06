@@ -611,6 +611,7 @@ sub def_text {
     my ($b, $e) = map { $_->{offset} // ($_->{expansionLoc} // {})->{offset} } $d->{range}{begin}, $d->{range}{end};
     defined $b && defined $e ? substr($u->{text}, $b, $e - $b) : '';
 }
+sub extern_inline { my ($d) = @_; $d->{inline} && ($d->{storageClass} // '') eq 'extern' }
 sub own_name {
     my ($map, $name, $d, $u) = @_;
     # (a program's static whose name its tree (--index) defines: a name of
@@ -818,11 +819,15 @@ for my $u (@units) {
             # definition where its tree has the function: gcc never emits it,
             # and its body may only inline, error.h's error with
             # __builtin_va_arg_pack)
-            my $inline_only = %treedefs && $d->{inline} && ($d->{storageClass} // '') eq 'extern' && $treedefs{ ffname($name) };
+            my $inline_only = %treedefs && extern_inline($d) && $treedefs{ ffname($name) };
             my $fk;
             if (!$inline_only && grep { $_->{kind} eq 'CompoundStmt' } @in) {
                 my $k = $fk = own_name(\%fn, $name, $d, $u);
-                $fn{$k} //= [$d, $u];
+                # (gnu89's extern inline is no definition where a plain one
+                # exists: gcc never emits it, so the plain one of any unit is
+                # the function, not the first header's copy: wctob of wchar.h
+                # calls __wctob_alias, asm "wctob", which nothing else names)
+                $fn{$k} = [$d, $u] if !$fn{$k} || (extern_inline($fn{$k}[0]) && !extern_inline($d));
                 # a constructor or destructor: run by the start code, so a
                 # root wherever its unit is linked (as an archive member is)
                 if (my ($c) = grep { $_->{kind} =~ /^(?:Con|De)structorAttr$/ } @in) {

@@ -20,11 +20,9 @@ do_xfrm_wcsmbs_wcsxfrm_l	1e6850065df2	false alarm	L'\1' : L'\0' of an unsigned w
 file locale_newlocale	-	clang refuses	assigns __locale_struct and its unit's own, one layout by value; ttpc takes that (tested)
 file nss_getgrgid_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
 file nss_getgrnam_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
-fts_compar	-	ff2c cannot write	offsetof's . inside a :, then the path and the call after a . of its own: ff2c stops on the second .
 internal_fnwmatch	66669bc97f24	false alarm	L'/' : L'\0' of an unsigned wchar_t is int in ff, then converted to u32: no value changes
 printf_positional_stdio_common_vfwprintf_internal	68b1f9f7f610	false alarm	pad == L' ' of an unsigned wchar_t: the literal is int in ff; == of a value and a small literal: the same
 restore_initial_cwd	259990701802	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__fchdir in a ?:)
 str_to_mpn_wcsmbs_wcstod_l	6c503ecd99f5	false alarm	x - L'0' with x a u64: the literal of 48 widened from int, not u32: the same
 str_to_mpn_wcsmbs_wcstof_l	af7e528a8c0f	false alarm	x - L'0' with x a u64: the literal of 48 widened from int, not u32: the same
 str_to_mpn_wcsmbs_wcstold_l	9e6d19bb94a3	false alarm	x - L'0' with x a u64: the literal of 48 widened from int, not u32: the same
-wctob	-	ff2c cannot write	c2ff takes a header's extern inline wctob (argp-fmtstream.i first), which calls __wctob_alias, left out; ttpc stops if a program reaches it: not silent, to fix
