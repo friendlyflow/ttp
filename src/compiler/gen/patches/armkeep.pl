@@ -23,17 +23,22 @@ my $c0 = index($t, "\nc:\n");
 my $c1 = index($t, "\nopt:\n");
 die "armkeep: no c: section before opt:\n" unless $c0 >= 0 && $c1 > $c0;
 
-# r8 and r9 in the C layer's primitives become lr (cc_syscall is new below)
-my $c = substr($t, $c0, $c1 - $c0);
-my ($m, $n, $out) = ('', 0, '');
-for my $l (split /^/, $c) {
-    $m = $1 if $l =~ /^  (\w+):\n/;
-    $m = '' if $l =~ /^  comment\n/;
-    $n++ if $m ne 'cc_syscall' && $l =~ s/^(\s+)r[89]\n/$1lr\n/;
-    $out .= $l;
+# r8 and r9 in the C layer's primitives become lr (cc_syscall is new
+# below): the c: section and fixed: (fixed.pl's cc_swap_p), the last one
+my $f0 = index($t, "\nfixed:\n");
+die "armkeep: no fixed: section after opt:\n" unless $f0 > $c1;
+my $n = 0;
+for my $r ([$f0, length($t) - $f0], [$c0, $c1 - $c0]) {
+    my ($m, $out) = ('', '');
+    for my $l (split /^/, substr($t, $r->[0], $r->[1])) {
+        $m = $1 if $l =~ /^  (\w+):\n/;
+        $m = '' if $l =~ /^  comment\n/;
+        $n++ if $m ne 'cc_syscall' && $l =~ s/^(\s+)r[89]\n/$1lr\n/;
+        $out .= $l;
+    }
+    substr($t, $r->[0], $r->[1]) = $out;
 }
 die "armkeep: no r8 or r9 in the C layer: already done?\n" unless $n;
-substr($t, $c0, $c1 - $c0) = $out;
 
 once(\$t, "X a scale or count (r8), FP the frame (r11), SP the stack (sp), LR the return address (lr).",
     "X a scale or count (lr), FP the frame (r11), SP the stack (sp), LR the return address (lr).\n"

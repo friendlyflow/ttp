@@ -5481,8 +5481,8 @@ fixed:
       r1
       r2
     mov
-      r9
+      lr
       r1
     mov
       r2
-      r9
+      lr
