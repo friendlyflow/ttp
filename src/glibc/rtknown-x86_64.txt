@@ -90,7 +90,6 @@ file libgcc_unwind-dw2	-	clang refuses	gcc's ia32intrin.h (__builtin_ia32_* that
 file locale_newlocale	-	clang refuses	assigns __locale_struct and its unit's own, one layout by value; ttpc takes that (tested)
 file nss_getgrgid_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
 file nss_getgrnam_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
-fts_compar	-	ff2c cannot write	offsetof's . inside a :, then the path and the call after a . of its own: ff2c stops on the second .
 gammal_positive_math_e_gammal_r	23ed4a681497	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
 get_cie	-	clang refuses	in file libgcc_unwind-dw2, see it
 init_dwarf_reg_size_table	-	clang refuses	in file libgcc_unwind-dw2, see it
