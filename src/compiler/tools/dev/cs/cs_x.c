@@ -905,8 +905,17 @@ static struct cs_ex *cs_ex_of1 (struct node *n)
   if (same (t, len, ".") && c == 2) return cs_member (n, 0);
   if (same (t, len, "->") && c == 2) return cs_member (n, 1);
   if (same (t, len, "[]") && c == 2) {
-    struct cs_ex *l = cs_rv (cs_ex_of (n->kids[0])), *r = cs_rv (cs_ex_of (n->kids[1])), *e;
-    struct cs_ty *et = cs_is_ptr (l->t) ? cs_canon (l->t)->to : cs_is_ptr (r->t) ? cs_canon (r->t)->to : 0;
+    struct cs_ex *l0 = cs_ex_of (n->kids[0]), *l, *r = cs_rv (cs_ex_of (n->kids[1])), *e;
+    struct cs_ty *et;
+    /* (GNU C's subscript of a vector, sincosf_poly.h's p->s2c3[0]: its element, the vector as it is, as clang has it) */
+    if (cs_kind (l0->t) == TY_VECTOR) {
+      e = cs_mk (E_IDX, cs_canon (l0->t)->to, l0->lv);
+      cs_add (e, l0);
+      cs_add (e, r);
+      return e;
+    }
+    l = cs_rv (l0);
+    et = cs_is_ptr (l->t) ? cs_canon (l->t)->to : cs_is_ptr (r->t) ? cs_canon (r->t)->to : 0;
     if (!et) cs_fail ("[] of what is not a pointer", n);
     e = cs_mk (E_IDX, et, !(cs_kind (et) == TY_FUNC || (cs_is_void (et) && !cs_quals (et))));
     cs_add (e, l);
