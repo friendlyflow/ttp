@@ -74,6 +74,7 @@ static void cl_fty (char *t, long *p, long long *emin, long long *emax, char **s
 {
   if (cl_eq (t, "float")) { *p = 24; *emin = -149; *emax = 127; *suf = "f"; *sp = "128f"; }
   else if (cl_eq (t, "double")) { *p = 53; *emin = -1074; *emax = 1023; *suf = ""; *sp = "1024"; }
+  else if (cl_eq (t, "long double") && C->target == 3) { *p = 53; *emin = -1074; *emax = 1023; *suf = ""; *sp = "1024"; }
   else if (cl_eq (t, "long double")) {
     if (C->target == 1) { *p = 64; *emin = -16445; } else { *p = 113; *emin = -16494; }
     *emax = 16383; *suf = "L"; *sp = "16384L";
@@ -304,7 +305,7 @@ static char *cl_special_float (struct cs_ex *n, struct cs_ex *t)
 static char *cl_narrowlit (struct cs_ex *n, struct cs_ex *e)
 {
   char *to, *l;
-  if (e->k != E_FLT || !(cl_isld (e) || cl_eq (cl_tword (e), "float128")) || C->target == 3) return 0;
+  if (e->k != E_FLT || !(cl_isld (e) || cl_eq (cl_tword (e), "float128"))) return 0;
   to = cl_tword (n);
   if (cl_eq (to, "double")) l = cl_ldround (cl_lit_text (e), 53, -1074, 1023);
   else if (cl_eq (to, "float")) l = cl_ldround (cl_lit_text (e), 24, -149, 127);
@@ -755,8 +756,8 @@ static int cl_ovf_ok (char *name, char *sig)
   while (a[i]) { if (cl_eq (sig, a[i])) return 1; i++; }
   if (C->target == 3) {
     if (cl_eq (name, "__builtin_mul_overflow") && (cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "u32 int u32"))) return 1;
-    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64"))) return 1;
-    if (cl_eq (name, "__builtin_sub_overflow") && (cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "int i64 i64") || cl_eq (sig, "u32 u32 u32"))) return 1;
+    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "i64 int i64"))) return 1;
+    if (cl_eq (name, "__builtin_sub_overflow") && (cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "int i64 i64") || cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "i64 i64 long"))) return 1;
   }
   return 0;
 }
@@ -1110,6 +1111,8 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   }
 
   if (cl_eq (name, "copysign") || cl_eq (name, "copysignf") || cl_eq (name, "copysignl") || cl_eq (name, "fabs") || cl_eq (name, "fabsf") || cl_eq (name, "fabsl")) name = cl_cat ("__builtin_", name);
+  /* (where long double is double, arm's EABI: the double's) */
+  if (C->target == 3 && (cl_eq (name, "__builtin_copysignl") || cl_eq (name, "__builtin_fabsl") || cl_eq (name, "__builtin_signbitl") || cl_eq (name, "__builtin_huge_vall") || cl_eq (name, "__builtin_infl") || cl_eq (name, "__builtin_nanl") || cl_eq (name, "__builtin_nansl"))) name = cl_copy ((unsigned char *) name, cstrlen (name) - 1);
   if (cl_eq (name, "copysignf128") || cl_eq (name, "fabsf128")) name = cl_cat ("__builtin_", name);
   if (C->target != 1 && cl_ends (name, "f128") && (cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_inff128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_nansf128") || cl_eq (name, "__builtin_signbitf128")))
     name = cl_cat (cl_copy ((unsigned char *) name, cstrlen (name) - 4), "l");
@@ -1128,6 +1131,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     char *t;
     if (cl_eq (name, "__builtin_fpclassify")) t = cl_tword_int (cl_k (n, n->nk - 1)); else t = cl_tword_int (cl_k (n, 1));
     if (!(cl_eq (t, "float") || cl_eq (t, "double") || cl_eq (t, "long double") || cl_eq (t, "float128") || cl_eq (t, "float16"))) cl_fail (name, t);
+    if (C->target == 3 && cl_eq (t, "long double")) t = "double";
     cl_push (o, cl_call_node (cl_cat3 (name, " ", t), n));
     return;
   }
@@ -1531,7 +1535,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     cl_push (o, cl_n (cl_f16_bits (n)));
     return;
   }
-  if (C->in_global && C->target != 3 && (k == E_BIN || k == E_UN || k == E_CAST || k == E_ICE) && cl_ftyp (cl_tword (n)) && cl_ldinside (n)) {
+  if (C->in_global && (k == E_BIN || k == E_UN || k == E_CAST || k == E_ICE) && cl_ftyp (cl_tword (n)) && cl_ldinside (n)) {
     struct cl_fv *v = cl_fold (n);
     if (v) {
       struct node *f = cl_femit (v, cl_tword (n));
@@ -1544,6 +1548,20 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     if (s->k == E_MEM || s->k == E_IDX) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
   }
   if (k == E_ICE && n->op == CK_FUNCTIONTOPOINTERDECAY) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
+  /* (an extern array that no C defines, cast to an integer: its address; it may be a label of asm, and a name of asm alone is a call in ff) */
+  if (k == E_CAST && n->op == CK_POINTERTOINTEGRAL) {
+    struct cs_ex *i = cl_k (n, 0);
+    while (i->k == E_PAREN) i = cl_k (i, 0);
+    if (i->k == E_ICE && i->op == CK_ARRAYTOPOINTERDECAY) {
+      struct cs_ex *r = cl_strip (cl_k (i, 0));
+      if (r->k == E_REF && r->d && r->d->k == DK_VAR && (!r->d->local || (r->d->sp && r->d->sp->sc == SC_EXTERN)) && !r->d->global && !cl_has (&C->var, cl_own (cl_dn (r->d)))) {
+        struct cl_list *v = cl_l ();
+        cl_push (v, cl_nl ("address", cl_ex (r)));
+        cl_push (o, cl_cast_node (cl_ct (n->t), v));
+        return;
+      }
+    }
+  }
   /* (to and from a 128-bit integer, written: a word is no pair) */
   if (k == E_ICE && n->op == CK_INTEGRALCAST && (cs_kind (n->t) == TY_INT128 || cs_kind (n->t) == TY_UINT128 || cs_kind (cl_k (n, 0)->t) == TY_INT128 || cs_kind (cl_k (n, 0)->t) == TY_UINT128)) {
     struct cl_list *to = cl_ct (n->t), *from = cl_ct (cl_k (n, 0)->t);

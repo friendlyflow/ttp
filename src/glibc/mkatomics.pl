@@ -17,6 +17,10 @@
 # the plain ones). A result of fewer bits than a word is zero-extended.
 # (aarch64: ldaxr and stlxr around each read-modify-write, ldar and stlr for
 # plain loads and stores, as gcc's without LSE; each CPU has them.)
+# (arm: ldrex and strex and their sizes around each read-modify-write, dmb ish
+# before and after, plain loads and stores of up to 4 bytes between dmb ish, 8
+# bytes through ldrexd and strexd, as gcc's for armv7-a. An 8-byte value is in a
+# pair of registers, r2 and r3 after the pointer.)
 #
 # A host tool (core Perl only).
 use strict;
@@ -34,6 +38,7 @@ my $target = shift // '';
 if ($target eq 'riscv64') { rv64(); exit 0 }
 if ($target eq 'x86_64') { x64(); exit 0 }
 if ($target eq 'aarch64') { a64(); exit 0 }
+if ($target eq 'arm') { arm(); exit 0 }
 die "mkatomics: no real atomics for $target yet\n" if $target ne '';
 
 my @fns;
@@ -74,7 +79,7 @@ sub asmfn {
         next if $l eq '';
         if ($l =~ /^(\w+):$/) { $lab = node("$1:"); push @top, $lab; next }
         my ($op, @a) = split ' ', $l;
-        my @k = map { /^rel:(.*)$/ ? node('rel', node($1)) : node($_) } @a;
+        my @k = map { /^(a?rel):(.*)$/ ? node($1, node($2)) : node($_) } @a;
         my $i = node($op, @k);
         if ($lab) { push @{ $lab->{children} }, $i } else { push @top, $i }
     }
@@ -180,6 +185,130 @@ sub a64 {
         }
     }
     print write_txt(node('comment', node("libatomic's functions in aarch64's atomics (ldaxr and stlxr, ldar and stlr), written by mkatomics.pl aarch64.")),
+        node('atomics:', ttp_license(), @f));
+}
+sub arm {
+    my @f;
+    # dmb ish; the loads and stores of each size; the zero extension of a
+    # result of fewer bits than a word
+    my $dmb = "dmb 11";
+    my %ex = (1 => 'b', 2 => 'h', 4 => '');
+    my %ls = (1 => ['ldrb', 'strb'], 2 => ['ldrh', 'strh'], 4 => ['ldr', 'str']);
+    my %zx = (1 => "uxtb 0 r3 r3\n", 2 => "uxth 0 r3 r3\n", 4 => '');
+    # (in ttpc's order, the destination last)
+    my %new = (add => "add r1 r2 r3", sub => "sub r1 r2 r3", and => "and r1 r2 r3", or => "orr r1 r2 r3",
+        xor => "eor r1 r2 r3", nand => "and r1 r2 r3\nmvn r3 r3");
+    for my $n (1, 2, 4) {
+        my $x = $ex{$n};
+        my ($ld, $st) = @{ $ls{$n} };
+        push @f, asmfn("__atomic_load_$n", "$dmb\n$ld 0 r0 r0\n$dmb\nret");
+        push @f, asmfn("__atomic_store_$n", "$dmb\n$st 0 r0 r1\n$dmb\nret");
+        # r0 the pointer, r1 the value, r2 the old, r3 the new, r12 strex's status
+        my $rmw = sub { my ($body) = @_; "$dmb\nL1:\nldrex$x r0 r2\n$body\nstrex$x r0 r3 r12\ncmpi 0 0 r12\nbne arel:L1\n$dmb" };
+        push @f, asmfn("__atomic_exchange_$n", $rmw->("mov r1 r3") . "\nmov r2 r0\nret");
+        # compare-exchange: r1 the expected's address, r2 the desired, r3 the
+        # expected, r12 the old (once equal to the expected, strex's status)
+        push @f, asmfn("__atomic_compare_exchange_$n", "
+            $ld 0 r1 r3
+            $dmb
+            L1:
+            ldrex$x r0 r12
+            cmp r3 r12
+            bne arel:L2
+            strex$x r0 r2 r12
+            cmpi 0 0 r12
+            bne arel:L1
+            $dmb
+            movi 0 1 r0
+            ret
+            L2:
+            clrex
+            $dmb
+            $st 0 r1 r12
+            movi 0 0 r0
+            ret");
+        for my $op (qw(add sub and or xor nand)) {
+            push @f, asmfn("__atomic_fetch_${op}_$n", $rmw->($new{$op}) . "\nmov r2 r0\nret");
+            push @f, asmfn("__atomic_${op}_fetch_$n", $rmw->($new{$op}) . "\n$zx{$n}mov r3 r0\nret");
+        }
+    }
+    # 8 bytes: r0 the pointer, r2 and r3 the value (AAPCS: an even pair), the
+    # result in r0 and r1. A load is ldrexd alone, one copy on armv7-a.
+    push @f, asmfn("__ff_atomic_load_8", "$dmb\nldrexd r0 r0\nclrex\n$dmb\nret");
+    my $xchg = "mov r0 r12\n$dmb\nL1:\nldrexd r12 r0\nstrexd r12 r2 r1\ncmpi 0 0 r1\nbne arel:L1\n$dmb";
+    push @f, asmfn("__ff_atomic_store_8", "$xchg\nret");
+    # (the old in r4 and r5, strexd's status in r0, which ends as the result)
+    push @f, asmfn("__ff_atomic_exchange_8", "
+        push 48
+        mov r0 r12
+        $dmb
+        L1:
+        ldrexd r12 r4
+        strexd r12 r2 r0
+        cmpi 0 0 r0
+        bne arel:L1
+        $dmb
+        mov r4 r0
+        mov r5 r1
+        pop 48
+        ret");
+    # r12 the pointer, r0 and r1 the old, r4 and r5 the new, r6 strexd's status
+    my %new8 = (add => "adds r2 r0 r4\nadc r3 r1 r5", sub => "subs r2 r0 r4\nsbc r3 r1 r5",
+        and => "and r2 r0 r4\nand r3 r1 r5", or => "orr r2 r0 r4\norr r3 r1 r5",
+        xor => "eor r2 r0 r4\neor r3 r1 r5", nand => "and r2 r0 r4\nand r3 r1 r5\nmvn r4 r4\nmvn r5 r5");
+    for my $op (qw(add sub and or xor nand)) {
+        my $body = "push 112\nmov r0 r12\n$dmb\nL1:\nldrexd r12 r0\n$new8{$op}\nstrexd r12 r4 r6\ncmpi 0 0 r6\nbne arel:L1\n$dmb\n";
+        push @f, asmfn("__ff_atomic_fetch_${op}_8", $body . "pop 112\nret");
+        push @f, asmfn("__ff_atomic_${op}_fetch_8", $body . "mov r4 r0\nmov r5 r1\npop 112\nret");
+    }
+    # compare-exchange: r1 the expected's address, r2 and r3 the desired, r6
+    # and r7 the expected, r4 and r5 the old, r12 strexd's status
+    push @f, asmfn("__ff_atomic_compare_exchange_8", "
+        push 240
+        ldrd 0 r1 r6
+        $dmb
+        L1:
+        ldrexd r0 r4
+        cmp r6 r4
+        cmp.if cond.eq r7 r5
+        bne arel:L2
+        strexd r0 r2 r12
+        cmpi 0 0 r12
+        bne arel:L1
+        $dmb
+        movi 0 1 r0
+        pop 240
+        ret
+        L2:
+        clrex
+        $dmb
+        strd 0 r1 r4
+        movi 0 0 r0
+        pop 240
+        ret");
+    # The C types of the 8-byte ones: an asm function's value is a word, and an
+    # int given for a u64 is no pair. libatomic's names are C functions of
+    # these types, which call them through pointers of their function types.
+    my @pv = (param('p', 'u64', '* pointer'));
+    push @f, node('__ff_atomic8_load:', leaf('function', 'u64'), @pv);
+    push @f, node('__ff_atomic8_store:', leaf('function', 'void'), @pv, param('v', 'u64'));
+    push @f, node('__ff_atomic8_op:', leaf('function', 'u64'), @pv, param('v', 'u64'));
+    push @f, node('__ff_atomic8_cas:', leaf('function', 'int'), @pv, param('e', 'u64', '* pointer'), param('d', 'u64'));
+    my $wrap = sub {
+        my ($name, $type, $ret, $params, @args) = @_;
+        my @call = (node('f', map { node($_) } @args));
+        push @f, node("__atomic_$name:", leaf($ret), @$params,
+            node('f:', leaf("__ff_atomic8_$type", '* pointer', "__ff_atomic_$name", '& address')),
+            $ret eq 'void' ? @call : node('return', @call));
+    };
+    $wrap->('load_8', 'load', 'u64', [@pv, param('order', 'int')], 'p');
+    $wrap->('store_8', 'store', 'void', [@pv, param('v', 'u64'), param('order', 'int')], 'p', 'v');
+    $wrap->('exchange_8', 'op', 'u64', [@pv, param('v', 'u64'), param('order', 'int')], 'p', 'v');
+    $wrap->('compare_exchange_8', 'cas', 'int', [@pv, param('e', 'u64', '* pointer'), param('d', 'u64'), param('success', 'int'), param('failure', 'int')], 'p', 'e', 'd');
+    for my $op (qw(add sub and or xor nand)) {
+        $wrap->("${_}_8", 'op', 'u64', [@pv, param('v', 'u64'), param('order', 'int')], 'p', 'v') for "fetch_$op", "${op}_fetch";
+    }
+    print write_txt(node('comment', node("libatomic's functions in arm's atomics (ldrex and strex, dmb ish), written by mkatomics.pl arm.")),
         node('atomics:', ttp_license(), @f));
 }
 sub rv64 {
