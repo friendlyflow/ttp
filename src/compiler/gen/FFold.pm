@@ -47,6 +47,8 @@ my %fty = (float => [24, -149, 127, 'f', '128f'], double => [53, -1074, 1023, ''
     'long double' => [113, -16494, 16383, 'L', '16384L'], float128 => [113, -16494, 16383, 'Q', '16384Q']);
 sub fty { $fty{ $_[0] // '' } }
 sub x87 { $fty{'long double'} = [64, -16445, 16383, 'L', '16384L'] }
+# (arm's EABI: long double is double, its literal the double's)
+sub armld { $fty{'long double'} = [53, -1074, 1023, '', '1024'] }
 
 # clang's decimal: n / d, or undef
 sub dec {

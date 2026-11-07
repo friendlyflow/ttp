@@ -13,6 +13,9 @@
 #   perl s2ff-arm.pl crti.s crti.dump --then crtn.s crtn.dump
 #                        crti's _init and _fini (.init, .fini) ended by
 #                        crtn's .init and .fini, as the linker joins them
+#   --plt name           a branch to name, an ifunc, goes through __ff_plt_name:
+#                        ttpc's label of an ifunc is its slot, a word; ld makes
+#                        such a stub for gcc's (memmove.S's bls memcpy)
 #   --zero name          the objects c2ff --zero makes (else a zero object's
 #                        aliases, which then name nothing, are left out)
 #
@@ -54,11 +57,13 @@ use armdec;
 
 my $page = 'glibc asm';
 my (@files, $size, $items, $facts, @then, %zeroed);
+my %plt;
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
     if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     if ($a eq '--zero') { $zeroed{ shift @ARGV } = 1; next }
+    if ($a eq '--plt') { $plt{ shift @ARGV } = 1; next }
     if ($a eq '--size') { $size = 1; next }
     # (--facts FILE: the ff, and in FILE what --size prints)
     if ($a eq '--facts') { $facts = shift @ARGV; next }
@@ -308,7 +313,7 @@ for my $s (@secs) {
             my $to = $at + ($mode eq 'a' ? 8 : 4) + $ops->[$k];
             my $label;
             if ($rel && $RELB{ $rel->{type} } && $weakref{ $rel->{target} } && $undef{ $rel->{target} }) { $label = ".Lweak $rel->{target}"; $weakb{ $rel->{target} } = 1 }
-            elsif ($rel && $RELB{ $rel->{type} }) { $label = $rel->{target} }
+            elsif ($rel && $RELB{ $rel->{type} }) { $label = $plt{ $rel->{target} } ? "__ff_plt_$rel->{target}" : $rel->{target} }
             elsif ($rel) { fail "a branch with $rel->{type}" }
             else { $label = $lname->($to); $target{$to} = 1 }
             $ops[$k] = node($mode eq 'a' ? 'arel' : 'trel', node($label));

@@ -628,6 +628,9 @@ $(I)/%.s: $(OBJ)/libc.a mki.pl
 S2FF_riscv64 := ../compiler/gen/s2ff.pl
 S2FF_aarch64 := ../compiler/gen/s2ff-aarch64.pl
 S2FF_arm := ../compiler/gen/s2ff-arm.pl
+# (the asm's branches to an ifunc through a stub, builtins-arm.ff.txt's __ff_plt_<name>:
+# memmove.S's bls memcpy, as ld's stub in gcc's; every forward memmove hung)
+PLT_arm := memcpy
 S2FF := $(or $(S2FF_$(GTARGET)),../compiler/gen/s2ff.pl)
 # the file s2ff reads: riscv64 the .s itself, aarch64 the .Ls (not .L.s:
 # that would be an .s of an object x.L, which mki.pl would be asked for)
@@ -714,7 +717,7 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(ASMS_all_$(1):%=$
 	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
-	    $$(RUN) -t 60 perl $$(S2FF) --items $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
+	    $$(RUN) -t 60 perl $$(S2FF) --items $$(foreach p,$$(PLT_$$(GTARGET)),--plt $$(p)) $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).asm.page.txt; \
 	done
 	$$(if $$(ASMS_all_$(1)),$$(LAYERS) $$(FF)/$(1).asm.page.txt >> $$(FF)/$(1).ff.txt)
@@ -1217,7 +1220,7 @@ ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(AL
 # and arm_sve.h, __Float32x4_t, __SVFloat32_t and gcc's __builtin_aarch64_*,
 # which clang does not read and ttpc's vector, x86_64's alone, does not take)
 ALLCSKIP_aarch64 := mathvec/advsimd/% mathvec/sve/%
-ALL_C = $(filter-out $(ALLCSKIP_$(GTARGET)),$(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))) $(SOFTFP:%=soft-fp/%) $(filter soft-fp/%,$(OBJS_ldouble_$(GTARGET)))
+ALL_C = $(filter-out $(ALLCSKIP_$(GTARGET)),$(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))) $(filter soft-fp/%,$(OBJS_ldouble))
 ALL_ASM = $(patsubst $(I)/%.s,%,$(filter %.s,$(ALLFILES)))
 # crt1.o's parts, crti.o and crtn.o, which a program links before libc.a:
 # their definitions are the ones of a name libc.a defines too
@@ -1300,7 +1303,7 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
-	  for r in $(ROOTS_ldouble); do echo $$r; done; } | sort -u > $@
+	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
@@ -1314,7 +1317,7 @@ $(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins
 	perl ../compiler/gen/s2ff.pl --header $(GLIBC_ASM:%=$(I)/%.s) | sed 's/^/  /' >> $(FF)/glibc.asm.page.txt
 	for a in $(GLIBC_ASM); do \
 	    then=; test $$a = csu/crti && test -n "$(GLIBC_THEN)" && then="--then $(I)/csu/crtn$(SSRC) $(I)/csu/crtn.dump"; \
-	    $(RUN) -t 60 perl $(S2FF) --items $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
+	    $(RUN) -t 60 perl $(S2FF) --items $(foreach p,$(PLT_$(GTARGET)),--plt $(p)) $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
@@ -1544,6 +1547,8 @@ TCLANGFIX_x86_64 = $(CLANGFIX) -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0
 	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g'
 # (aarch64: as riscv64's, long double binary128 on both)
 TCLANGFIX_aarch64 := $(TCLANGFIX_riscv64)
+# (arm: the same, its _Float32x and _Float64 double)
+TCLANGFIX_arm := $(TCLANGFIX_riscv64)
 TCLANGFIX = $(or $(TCLANGFIX_$(GTARGET)),$(CLANGFIX))
 # (and on x86_64 a test of gcc's intrinsics headers, <x86intrin.h>: the
 # tst-*-rtm tests' _xbegin and _xend, through clangvec.pl as glibc's

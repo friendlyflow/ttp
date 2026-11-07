@@ -180,6 +180,18 @@ static void cl_ins_other (char *line, struct cl_list *o)
     }
     if (cl_eq (op, "vmrs") && na == 2 && cl_r_reg (a[0]) && cl_eq (a[1], "fpscr")) { cl_push (o, cl_n1 ("vmrs", cl_n (a[0]))); return; }
     if (cl_eq (op, "vmsr") && na == 2 && cl_eq (a[0], "fpscr") && cl_r_reg (a[1])) { cl_push (o, cl_n1 ("vmsr", cl_n (a[1]))); return; }
+    if ((cl_eq (op, "ldc") || cl_eq (op, "ldcl")) && na == 3 && cl_eq (a[0], "p10") && cl_eq (a[1], "cr0") && a[2][0] == '[' && a[2][1] == 'r') {
+      long l = cstrlen (a[2]);
+      if (a[2][l - 1] == ']') {
+        cl_push (o, cl_ins ("vldr.f32", "0", cl_copy ((unsigned char *) a[2] + 1, l - 2), cl_eq (op, "ldc") ? "s0" : "s1"));
+        return;
+      }
+    }
+    if (cl_eq (op, "cdp") && na == 6 && cl_eq (a[0], "p10") && (cl_eq (a[1], "8") || cl_eq (a[1], "3")) && cl_eq (a[2], "cr0") && cl_eq (a[3], "cr0") && cl_eq (a[4], "cr0") && (cl_eq (a[5], "0") || cl_eq (a[5], "1"))) {
+      cl_push (o, cl_ins (cl_eq (a[1], "8") ? "vdiv.f32" : "vadd.f32", cl_eq (a[5], "1") ? "s1" : "s0", "s0", "s0"));
+      return;
+    }
+    if (cl_eq (op, "mrc") && na == 6 && cl_eq (a[0], "p10") && cl_eq (a[1], "7") && cl_r_reg (a[2]) && cl_eq (a[3], "cr1") && cl_eq (a[4], "cr0") && cl_eq (a[5], "0")) { cl_push (o, cl_n1 ("vmrs", cl_n (a[2]))); return; }
   } else if (C->target == 1) {
     static char *words0[] = { "fwait", "hlt", "pause", "nop", "cpuid", "xgetbv", "rdtsc", "mfence", "lfence", "sfence", "fnclex", "fpatan", "syscall", 0 };
     static char *wf[] = { "fnstcw", "fldcw", "fnstsw", 0 };

@@ -200,12 +200,59 @@
     return
       a
   comment
+    __ff_plt_memcpy: what an asm branch to the ifunc memcpy reaches (s2ff-arm --plt), as ld's stub in gcc's static program: the function in its slot, whose label memcpy is.
+  __ff_plt_memcpy:
+    asm
+    la
+      memcpy
+      r12
+    ldr
+      0
+      r12
+      pc
+  comment
     __builtin_arm_get_fpscr: VFP's status and control register (soft-fp's rounding mode in arm's _BitInt functions). The overflow builtins on long long, for libgcc's traps.
   __builtin_arm_get_fpscr:
     asm
     vmrs
       r0
     ret
+  comment
+    __builtin_add_overflow of a long long and an int (mktime's): the sum wrapped, and whether it did.
+  __builtin_add_overflow i64 int i64:
+    int
+    a:
+      i64
+    n:
+      int
+    r:
+      i64
+      * pointer
+    b:
+      i64
+      n
+    s:
+      i64
+      a
+      +
+      b
+    r
+    * pointer
+    =
+    s
+    return
+      :
+        :
+          a
+          ^
+          s
+        &
+        :
+          b
+          ^
+          s
+      <
+      0
   __builtin_add_overflow i64 i64 i64:
     int
     a:
@@ -284,6 +331,48 @@
         a
         b
         r
+  comment
+    __builtin_sub_overflow of two long longs into a long (mktime's offset): the difference wrapped to a long, and whether that is not the exact difference.
+  __builtin_sub_overflow i64 i64 long:
+    int
+    a:
+      i64
+    b:
+      i64
+    r:
+      long
+      * pointer
+    t:
+      i64
+      0
+    v:
+      int
+      __builtin_sub_overflow i64 i64 i64
+        a
+        b
+        t
+        & address
+    n:
+      long
+      cast
+        long
+      t
+    w:
+      i64
+      cast
+        i64
+      n
+    r
+    * pointer
+    =
+    n
+    return
+      v
+      |
+      :
+        w
+        !=
+        t
   __builtin_sub_overflow u32 u32 u32:
     int
     a:

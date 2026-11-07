@@ -472,6 +472,7 @@ static long cl_csize (struct cs_ty *t)
   struct cl_list *l;
   if (cs_kind (t) == TY_ENUM && cs_kind (t) == TY_ENUM) { return 4; }
   l = cl_ct (t);
+  if (C->target == 3 && (cl_eq ((char *) l->v[0]->text, "long") || cl_eq ((char *) l->v[0]->text, "address"))) return 4;
   return cl_wsize ((char *) l->v[0]->text);
 }
 /* the C name a floating type has, as c2ff's tword: "" for none */
@@ -671,6 +672,29 @@ static int cl_reg_rec (char *key, struct cs_rec *d)
   cl_rec_own (key, d);
   return 0;
 }
+/* the anonymous records of the fields of a unit's own by names are that unit's too (own_anon_fields) */
+static void cl_own_anon_fields (struct cs_rec *r, char *rname)
+{
+  struct cs_inner *i = r->in_first;
+  struct cs_rec *last = 0;
+  while (i) {
+    if (i->r) last = i->r;
+    else if (i->f->name && i->f->nlen && last && !last->tag && last->k != TY_ENUM) {
+      struct cs_rec *in = cl_anon_in (i->f->t);
+      if (in) {
+        char *key = cl_anon_key (in), *kind = cl_rec_kind (last);
+        char *name = cl_cat3 (rname, " ", cl_copy (i->f->name, i->f->nlen));
+        char *tag = cl_cat3 (kind, " ", name);
+        cl_put (&C->ownanon, key, tag);
+        cl_put_new (&C->rec, tag, last);
+        cl_put_new (&C->recunit, tag, C->cu);
+        cl_own_anon_fields (last, name);
+        last = 0;
+      }
+    }
+    i = i->nxt;
+  }
+}
 /* a unit's records of the first's text: its own too where they name otherwise, until there are no more (own_by_names) */
 static void cl_own_by_names (void)
 {
@@ -681,6 +705,7 @@ static void cl_own_by_names (void)
     while (s) {
       if (!cl_get (&C->ownrec, s->key) && cl_names_otherwise (s->d->dtext, s->d->dlen, cl_get (&C->recunit, s->key))) {
         cl_rec_own (s->key, s->d);
+        { char *kn = s->key; while (*kn != ' ') kn++; cl_own_anon_fields (s->d, cl_cat3 (kn + 1, " ", cl_unit_name ())); }
         more = 1;
       }
       s = s->nxt;

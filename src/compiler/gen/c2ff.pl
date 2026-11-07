@@ -419,6 +419,13 @@ sub reserve_target {
     # nothing of: ttpc found the lock prefix for localealias.c's lock, so
     # __libc_lock_lock (lock) took 0's address; pause, setns, fadd ... too;
     # its groups of instructions, isa/x86_64.pl's, and x86_64gnu.ff's)
+    # (and on arm its A32 and VFP instructions': ttpc found the pop of A32 for
+    # l10nflist.c's static pop, an empty pop, an illegal instruction: any
+    # program that opens a locale's messages)
+    if ($t eq 'arm') {
+        my %insgroup = map { $_ => 1 } qw(data data2 shifts multiply bits memory atomic branch system vfp a32x);
+        for (map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s{:$}{}r } } @{ $sec->{children} }) { $reserved{$1} = 1 if $_->{content} =~ /^([A-Za-z_]\w*):$/ }
+    }
     if ($t eq 'x86_64') {
         my %insgroup = map { $_ => 1 } qw(alu1 alu2 move unary shift1 shift2 bit branch set cmov stack atomic system sse);
         my @forms = map { @{ $_->{children} } } grep { $insgroup{ $_->{content} =~ s/:$//r } } @{ $sec->{children} };
@@ -533,6 +540,7 @@ $scalar{'unsigned long'} = 'u32' if $target eq 'arm';
 # __float128) ttpc's float128, binary128 (gen/patches/x87.pl); FFold.pm
 # rounds to them
 if ($target eq 'x86_64') { $scalar{'__float128'} = 'float128'; $scalar_word{float128} = 1; FFold::x87() }
+FFold::armld() if $target eq 'arm';
 
 my %enumof;                 # each enum constant's enum, as a tag
 my (%enumref, %enumunit);   # the uses of each enum constant and its first unit (enum_rename)
@@ -667,6 +675,25 @@ sub names_otherwise {
     }
     0;
 }
+# The anonymous records of the fields of a record that is a unit's own by the
+# names in its text are that unit's too: they hold those names (arm's fts64:
+# FTS64's union fts_cycle, the first's, pointed to fts.c's cycle_check_state,
+# whose dev_ino has a 32-bit st_ino, so that fts-cycle.c cut an inode).
+sub own_anon_fields {
+    my ($r, $rname, $u) = @_;
+    my $last;
+    for my $k (@{ $r->{inner} || [] }) {
+        if ($k->{kind} =~ /^(RecordDecl|EnumDecl)$/) { $last = $k; next }
+        next unless $k->{kind} eq 'FieldDecl' && defined $k->{name} && $k->{name} ne '' && $last && ($last->{name} // '') eq '' && $last->{kind} eq 'RecordDecl';
+        my $key = anon_key($k->{type}{qualType} // '') // next;
+        my $name = "$rname $k->{name}";
+        $ownanon{$u}{$key} = ["$last->{tagUsed} $name", $name];
+        $rec{"$last->{tagUsed} $name"} //= $last;
+        $recunit{"$last->{tagUsed} $name"} //= $u;
+        own_anon_fields($last, $name, $u);
+        undef $last;
+    }
+}
 # A unit's records of the first's text: its own too where they name otherwise,
 # until there are no more (one may point to one defined after it).
 sub own_by_names {
@@ -678,6 +705,7 @@ sub own_by_names {
             my ($key, $d) = @$_;
             next if $ownrec{$u}{$key} || !names_otherwise(def_text($d, $u), $u, $recunit{$key});
             rec_own($key, $d, $u);
+            own_anon_fields($d, $key =~ s{^\w+ }{}r . ' ' . unit_name($u), $u);
             $more = 1;
         }
     }
@@ -1371,9 +1399,9 @@ my %ovf_armsub;
 my %ovf = map { ($_ => 1) } map { "__builtin_add_overflow $_" } 'u64 u64 u64', 'i128 i128 i128', 'u32 u32 u32', 'u32 u32 u64', 'u32 u64 u64', 'u64 int u32', 'u64 u64 int', 'int int int', 'long int long', 'long long long', 'u64 u32 u64', 'u64 int u64';
 $ovf{"__builtin_mul_overflow $_"} = 1 for 'u64 u64 u64', 'u32 u64 u64', 'u64 int u32', 'int int int', 'long long long';
 $ovf{"__builtin_sub_overflow $_"} = 1 for 'long long long', 'int long int', 'long int long', 'i128 i128 i128', 'int i128 i128', 'int int int', 'int long long', 'u64 u64 u64';
-$ovf_armsub{$_} = 1 for 'i64 i64 i64', 'int i64 i64', 'u32 u32 u32';
+$ovf_armsub{$_} = 1 for 'i64 i64 i64', 'int i64 i64', 'u32 u32 u32', 'i64 i64 long';
 # (and builtins-arm.ff.txt's, of arm's 32-bit size_t)
-my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int', 'i64 i64 i64';
+my %ovf_arm = map { ($_ => 1) } (map { "__builtin_mul_overflow $_" } 'u32 u32 u32', 'u32 int u32'), map { "__builtin_add_overflow $_" } 'u32 int u32', 'u64 u32 int', 'i64 i64 i64', 'i64 int i64';
 my %csrno = (fflags => 1, frm => 2, fcsr => 3);
 our $asm_rd_out;
 my @xreg = qw(zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6);
@@ -1623,6 +1651,12 @@ sub asm_ins_other {
         # the FP status and control register (get_rounding_mode, fesetround)
         return node('vmrs', node($a[0])) if $op eq 'vmrs' && @a == 2 && $a[0] =~ /^r\d+$/ && $a[1] eq 'fpscr';
         return node('vmsr', node($a[1])) if $op eq 'vmsr' && @a == 2 && $a[0] eq 'fpscr' && $a[1] =~ /^r\d+$/;
+        # feraiseexcept's VFP by its coprocessor's words, as VFP's names: GNU's bytes.
+        # ldc p10, cr0 is vldr s0, ldcl s1; cdp p10 op1 cr0, cr0, cr0, op2 is
+        # s0 = s0 op s(op2), 8 vdiv, 3 vadd; mrc p10, 7 is vmrs
+        return node('vldr.f32', node(0), node($1), node($op eq 'ldc' ? 's0' : 's1')) if $op =~ m{^ldcl?$} && "@a" =~ m{^p10 cr0 \[(r\d+)\]$};
+        return node($a[1] eq '8' ? 'vdiv.f32' : 'vadd.f32', node("s$a[5]"), node('s0'), node('s0')) if $op eq 'cdp' && "@a" =~ m{^p10 [38] cr0 cr0 cr0 [01]$};
+        return node('vmrs', node($a[2])) if $op eq 'mrc' && "@a" =~ m{^p10 7 r\d+ cr1 cr0 0$};
     } elsif ($target eq 'x86_64') {
         # an instruction as its bytes (libgcc's cpuinfo.h: xgetbv as .byte
         # 0x0f, 0x01, 0xd0, for an old assembler)
@@ -1937,7 +1971,9 @@ sub expr {
         stop("a ${w}'s initializer that is no constant here", $n) unless defined $v;
         return node(sprintf '0x%x', f16bits($v, $w));
     }
-    if ($in_global && $target ne 'arm' && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
+    # (arm too, its long double the double: compile time would take a long
+    # double for binary128, which it has no code of: printf-format's tests)
+    if ($in_global && $k =~ /^(BinaryOperator|UnaryOperator|CStyleCastExpr|ImplicitCastExpr)$/
         && FFold::fty(tword($n)) && FFold::ldinside($n) && (my $v = FFold::fold($n))) {
         my @f = femit($v, tword($n));
         return @f if @f;
@@ -1952,6 +1988,20 @@ sub expr {
     }
     # a function as a value is its address (a function name alone is a call in ff)
     return node('address', expr((kids($n))[0])) if $k eq 'ImplicitCastExpr' && ($n->{castKind} // '') eq 'FunctionToPointerDecay';
+    # (an extern array that no C defines, cast to an integer: its address. It
+    # may be a label of asm, and a name of asm alone is a call in ff:
+    # cancellation_pc_check's (uintptr_t) __syscall_cancel_arch_start called it,
+    # with what its registers held, on every target; a segfault on arm)
+    if ($k eq 'CStyleCastExpr' && ($n->{castKind} // '') eq 'PointerToIntegral') {
+        my ($i) = kids($n);
+        ($i) = kids($i) while $i->{kind} eq 'ParenExpr';
+        if ($i->{kind} eq 'ImplicitCastExpr' && ($i->{castKind} // '') eq 'ArrayToPointerDecay') {
+            my $r = strip((kids($i))[0]);
+            my $d = $r->{kind} eq 'DeclRefExpr' ? $r->{referencedDecl} : {};
+            return cast_node([ctype(qt($n))], node('address', expr($r)))
+                if ($d->{kind} // '') eq 'VarDecl' && (!$local{ $d->{id} } || (($localdecl{ $d->{name} } // {})->{storageClass} // '') eq 'extern') && !$staticname{"$cur_unit $d->{id}"} && !$var{ own($d->{name}) };
+        }
+    }
     # the conversions C makes between integers and floating types, and
     # between those, are written out, as a cast is
     # on arm, where a long long is a pair of registers and a word is not, the
@@ -2273,6 +2323,9 @@ sub expr {
         # and the other way: a libm function gcc always expands, as its
         # builtin (s_scalbn's copysign, which libc.a has no function of)
         $name = "__builtin_$name" if $name =~ /^(?:copysign|fabs)[fl]?$/;
+        # (where long double is double, arm's EABI: the double's; builtins.ff.txt's
+        # long double ones read binary128's bits: isnan of a NaN was 0, strtold's tests)
+        $name =~ s{^(__builtin_(?:copysign|fabs|signbit|huge_val|inf|nan|nans))l$}{$1} if $target eq 'arm';
         # (x86_64's _Float128 builtins and copysignf128 / fabsf128: there
         # float128's, builtins.ff.txt's binary128 ones as x87builtins.pl names
         # them, __builtin_fabsf128 ...; elsewhere _Float128 is long double,
@@ -2299,6 +2352,7 @@ sub expr {
         if ($name =~ /^__builtin_(isnan|isinf_sign|isinf|signbit|isfinite|isunordered|isless|islessequal|isgreater|isgreaterequal|fpclassify)$/) {
             my $t = tword_int($name eq '__builtin_fpclassify' ? $args[-1] : $args[0]);
             $t =~ /^(float|double|long double|float128|float16)$/ or stop("$name on $t", $n);
+            $t = 'double' if $target eq 'arm' && $t eq 'long double';
             return node("$name $t", map { arg($_) } @args);
         }
         # C's va_ words, as clang has them
@@ -2615,7 +2669,7 @@ sub atomic_call {
 # The bytes of a scalar or an address: what the atomics need
 my %wsize = (char => 1, i8 => 1, u8 => 1, short => 2, i16 => 2, u16 => 2, int => 4, i32 => 4, u32 => 4,
     long => 8, i64 => 8, u64 => 8, address => 8);
-sub csize { my ($t) = @_; return 4 if $t =~ /^enum\b/; my ($w) = ctype($t); $wsize{$w} // die "c2ff: no size for $t\n" }
+sub csize { my ($t) = @_; return 4 if $t =~ /^enum\b/; my ($w) = ctype($t); return 4 if $target eq 'arm' && $w =~ /^(?:long|address)$/; $wsize{$w} // die "c2ff: no size for $t\n" }
 
 # A floating constant as an exact hex float, from its bits (f after a
 # float's): what ttpc reads without rounding
@@ -2664,7 +2718,7 @@ sub ldhexfloat {
 # __trunctfdf2, which compile time has no code of)
 sub narrowlit {
     my ($n, $e) = @_;
-    return undef unless $e->{kind} eq 'FloatingLiteral' && (isld($e) || tword($e) eq 'float128') && $target ne 'arm';
+    return undef unless $e->{kind} eq 'FloatingLiteral' && (isld($e) || tword($e) eq 'float128');
     my $to = tword($n);
     my $l = $to eq 'double' ? ldround($e->{value}, 53, -1074, 1023) : $to eq 'float' ? ldround($e->{value}, 24, -149, 127) : undef;
     return undef unless defined $l;
