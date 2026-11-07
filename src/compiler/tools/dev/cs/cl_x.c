@@ -1942,8 +1942,12 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     cl_push (g, cl_atom (cl_k (n, 0)));
     while (q < n->nk - 1) {
       char *w = "default:";
+      long p = 1;
+      int again = 0;
       if (n->tys[q]) w = cl_cat (cl_join (cl_ct (n->tys[q])), ":");
-      cl_push (g, cl_nl (w, cl_ex (cl_k (n, q + 1))));
+      /* (an association of a type an earlier one has in ff is never taken: x86_64's _Float32 after float, _Float64x after long double) */
+      while (p < g->n) { if (cl_eq (cl_txt (g->v[p]), w)) again = 1; p++; }
+      if (!again) cl_push (g, cl_nl (w, cl_ex (cl_k (n, q + 1))));
       q++;
     }
     cl_push (o, cl_nl ("generic", g));
