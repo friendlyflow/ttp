@@ -1,33 +1,31 @@
 # What make glibc-roundtrip knows of on x86_64, each judged: name, digest, kind, reason (tabs).
 # ../compiler/gen/rtknown.pl: the differences must be exactly these. Judged on lane A-x86's page of all of glibc, 2026-11-06.
-_Unwind_Backtrace	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_DebugHook	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_ForcedUnwind	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_ForcedUnwind_Phase2	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GRByValue	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetCFA	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetDataRelBase	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetGR	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetGRPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetIP	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetRegionStart	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_GetTextRelBase	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_Get_Unwind_Context_Reg_Val	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_Get_Unwind_Word	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_IsExtendedContext	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_IsSignalFrame	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_SetGRPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_SetGRValue	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_SetSignalFrame	-	clang refuses	in file libgcc_unwind-dw2, see it
-_Unwind_SetSpColumn	-	clang refuses	in file libgcc_unwind-dw2, see it
 __allocate_shadow_stack	a173326a60b8	false alarm	a parameter of __typeof (...) * is written as u64 *, the type it names: the same type
+__asinhf128	ecb945fd3e38	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__asinpif128	199d4f00ec1e	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__atan2pif128	b29aa6500330	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__atanf128	9b8032f61102	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__atanpif128	d0d458d9bf1e	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+base_of_encoded_value	-	clang refuses	in file libgcc_unwind-dw2, see it
+bindresvport	5d613f7656cd	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpid () % 600)
+__catanf128	5c02abb145f8	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__catanhf128	a672718e20f6	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ccoshf128	3b1c0ca84823	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __ccoshl	4a09260bd2f0	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
 __ceill	-	ff2c cannot write	calls libc_fetestexcept_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__cexpf128	043ad5b9a47c	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __cexpl	d6e9b39b6a71	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__clog10f128	6315be455558	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__clogf128	33884fb85e6c	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __clogl	d7f196c149de	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__compoundnf128	70dc010b8a8d	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__csinf128	5db3b0dc3572	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__csinhf128	069c74e4e466	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __csinhl	09edf796c575	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
 __csinl	6b7cb379fb6b	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__csqrtf128	2cf5c556931a	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ctanf128	5518e9ab41c6	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ctanhf128	b39d610f061b	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __ctanhl	f8577aaee721	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
 __ctanl	75e1607dc98c	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
 __daddl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
@@ -36,65 +34,98 @@ __dfmal	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc i
 __dmull	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
 __dsqrtl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
 __dsubl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+dwarf_reg_size_table	-	clang refuses	in file libgcc_unwind-dw2, see it
 __erfcl	f37cd5af58b7	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__erff128	957cf3b51c0b	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __erfl	9316074c8e47	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+execute_cfa_program	-	clang refuses	in file libgcc_unwind-dw2, see it
+execute_cfa_program_generic	-	clang refuses	in file libgcc_unwind-dw2, see it
+execute_cfa_program_specialized	-	clang refuses	in file libgcc_unwind-dw2, see it
+execute_stack_op	-	clang refuses	in file libgcc_unwind-dw2, see it
 __exp10	-	ff2c cannot write	calls its static special_case, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__exp10m1f128	9135995080d8	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __exp2	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__exp2m1f128	ac387d9dc27d	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+exp_inline	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__expm1f128	7a26f196f75c	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+extract_cie_info	-	clang refuses	in file libgcc_unwind-dw2, see it
+__f32addf128	dab0546d6cf4	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f32divf128	3af51c98db47	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f32fmaf128	5aab5a8c8a51	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f32mulf128	f533f62afd9e	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f32sqrtf128	0015bbab3aaa	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f32subf128	38cd24f8a25b	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64addf128	5620cde7ee92	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64divf128	5ac8b8cc5b88	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64fmaf128	9b2ed9e686a1	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64mulf128	02740cbcd162	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64sqrtf128	2ed35531e383	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64subf128	1356e8d8ffe9	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64xaddf128	2aef66b456fc	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64xdivf128	74dda2d20d85	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64xfmaf128	8ed266bf219d	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64xmulf128	69527f0a1ebd	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64xsqrtf128	54448206c867	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__f64xsubf128	f17debb210ea	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __faddl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
 __fdivl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
 __ffmal	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+file libgcc_unwind-dw2	-	clang refuses	gcc's ia32intrin.h (__builtin_ia32_* that clang lacks) in libgcc's unwind-dw2.i, which CLANGL reads: no AST of the unit, so none of its functions is compared
+file locale_newlocale	-	clang refuses	assigns __locale_struct and its unit's own, one layout by value; ttpc takes that (tested)
+file nss_getgrgid_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
+file nss_getgrnam_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
 __floorl	-	ff2c cannot write	calls libc_fetestexcept_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+__fmaf128	b82ac32cfcad	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __fmull	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
 __fsqrtl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
 __fsubl	-	ff2c cannot write	calls libc_feupdateenv_test_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
 __fts64_read	097c993fd7c0	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__fchdir in a ?:)
+gammal_positive_math_e_gammal_r	23ed4a681497	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+get_cie	-	clang refuses	in file libgcc_unwind-dw2, see it
 __getgrgid_r	-	clang refuses	in file nss_getgrgid_r, see it
 __getgrnam_r	-	clang refuses	in file nss_getgrnam_r, see it
+_get_ssp	-	clang refuses	in file libgcc_unwind-dw2, see it
 __gthread_active_p	-	clang refuses	in file libgcc_unwind-dw2, see it
 __gthread_cond_broadcast	-	clang refuses	in file libgcc_unwind-dw2, see it
 __gthread_cond_wait	-	clang refuses	in file libgcc_unwind-dw2, see it
 __gthread_mutex_lock	-	clang refuses	in file libgcc_unwind-dw2, see it
 __gthread_mutex_unlock	-	clang refuses	in file libgcc_unwind-dw2, see it
 __gthread_once	-	clang refuses	in file libgcc_unwind-dw2, see it
+__ieee754_asinf128	a695178a8292	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ieee754_atanhf128	1dfc1de5c83f	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ieee754_exp2f128	cd3037b95584	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __ieee754_exp_avx	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
-__ieee754_exp_fma	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__ieee754_expf128	b85adde46820	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __ieee754_exp_fma4	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__ieee754_exp_fma	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
 __ieee754_exp_sse2	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
+__ieee754_gammaf128_r	46c29932f9ea	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ieee754_hypotf128	08f1a6f4dd98	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ieee754_j1f128	b15edee06c5f	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ieee754_jnf128	6191c4122a45	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 __ieee754_lgammal_r	81292b0bb701	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
-__kernel_casinhl	bc25485cb3cb	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
-__lgamma_negl	bdc62271abb3	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
-__minimal_malloc	f4f08a173148	false alarm	&_end written as _end, an array of unknown size: the same address, under a cast to void *
-__newlocale	-	clang refuses	in file locale_newlocale, see it
-__newlocale_1	-	clang refuses	in file locale_newlocale, see it
-__pownl	101d42395d39	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
-__rootnl	8ec4a0765557	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
-__sincosf_table	c9aa6b45fcd7	false alarm	a v2df_t vector's two items in a : group: ff2c writes them as (a, b), C's comma; the tree has the two items
-__spawni	39b582e7fdad	false alarm	the addresses of asm __execve and C __execvpex in a ?: go through void * in the C written back: the same address
-__spawni_child	d040fa4d45ac	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpgid in a ?:)
-__sqrtl	-	ff2c cannot write	calls __ieee754_sqrtl, left out of glibc in ff (c2ff: the builtin __builtin_sqrtl, not yet)
-__truncl	-	ff2c cannot write	calls libc_fetestexcept_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
-__uselocale	7c2fed5b9b29	false alarm	records of one layout with two names (__locale_struct and its unit's own): a ?: of their addresses goes through void *: the same address
-__vfscanf_internal	0c743db8cb98	false alarm	an index of unsigned char (fc) is converted to int in ff as C promotes it; the same value
-_get_ssp	-	clang refuses	in file libgcc_unwind-dw2, see it
+__ieee754_powf128	a4856ee82702	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ieee754_sinhf128	49dbcd58a7aa	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__ieee754_y1f128	f3d6c2a44aa1	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 _inc_ssp	-	clang refuses	in file libgcc_unwind-dw2, see it
-base_of_encoded_value	-	clang refuses	in file libgcc_unwind-dw2, see it
-bindresvport	5d613f7656cd	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpid () % 600)
-dwarf_reg_size_table	-	clang refuses	in file libgcc_unwind-dw2, see it
-execute_cfa_program	-	clang refuses	in file libgcc_unwind-dw2, see it
-execute_cfa_program_generic	-	clang refuses	in file libgcc_unwind-dw2, see it
-execute_cfa_program_specialized	-	clang refuses	in file libgcc_unwind-dw2, see it
-execute_stack_op	-	clang refuses	in file libgcc_unwind-dw2, see it
-exp_inline	-	ff2c cannot write	calls its static specialcase, left out of glibc in ff (c2ff: an asm statement whose operands are not its text's, not yet)
-extract_cie_info	-	clang refuses	in file libgcc_unwind-dw2, see it
-file libgcc_unwind-dw2	-	clang refuses	gcc's ia32intrin.h (__builtin_ia32_* that clang lacks) in libgcc's unwind-dw2.i, which CLANGL reads: no AST of the unit, so none of its functions is compared
-file locale_newlocale	-	clang refuses	assigns __locale_struct and its unit's own, one layout by value; ttpc takes that (tested)
-file nss_getgrgid_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
-file nss_getgrnam_r	-	clang refuses	passes struct group of two units, one layout, by value; ttpc takes that (tested)
-gammal_positive_math_e_gammal_r	23ed4a681497	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
-get_cie	-	clang refuses	in file libgcc_unwind-dw2, see it
 init_dwarf_reg_size_table	-	clang refuses	in file libgcc_unwind-dw2, see it
+__kernel_casinhf128	45ef4f05f450	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__kernel_casinhl	bc25485cb3cb	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__kernel_sincosf128	92945c08444e	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__kernel_sinf128	d53cda79cd51	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__kernel_tanf128	8ecd98b40934	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 last_fde	-	clang refuses	in file libgcc_unwind-dw2, see it
+__lgamma_negl	bdc62271abb3	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+__log10p1f128	1f020d2061fd	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__log1pf128	1518f0a1b92b	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__log2p1f128	0c7ac1e91969	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__minimal_malloc	f4f08a173148	false alarm	&_end written as _end, an array of unknown size: the same address, under a cast to void *
+__nearbyintf128	6f6c27309d2e	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__newlocale_1	-	clang refuses	in file locale_newlocale, see it
+__newlocale	-	clang refuses	in file locale_newlocale, see it
+__nextafterf128	9d1c282e4492	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 next_fde	-	clang refuses	in file libgcc_unwind-dw2, see it
+__pownl	101d42395d39	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
 read_1s	-	clang refuses	in file libgcc_unwind-dw2, see it
 read_1u	-	clang refuses	in file libgcc_unwind-dw2, see it
 read_2s	-	clang refuses	in file libgcc_unwind-dw2, see it
@@ -109,13 +140,47 @@ read_pointer	-	clang refuses	in file libgcc_unwind-dw2, see it
 read_sleb128	-	clang refuses	in file libgcc_unwind-dw2, see it
 read_uleb128	-	clang refuses	in file libgcc_unwind-dw2, see it
 restore_initial_cwd	259990701802	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__fchdir in a ?:)
+__rootnl	8ec4a0765557	false alarm	an int operand of a long double (the x87's) has its conversion written in ff where C converts implicitly; the same value
+round_and_return_stdlib_strtof128_l	ffbade4c2a52	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+round_and_return_wcsmbs_wcstof128_l	ffbade4c2a52	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 sincosf_poly	-	ff2c cannot write	v2df_t vector arithmetic (sincosf_poly's x2 * p->s1c2 ...): ff2c does not write it; ttpc stops on it too (cannot compile: p), not yet
+__sincosf_table	c9aa6b45fcd7	false alarm	a v2df_t vector's two items in a : group: ff2c writes them as (a, b), C's comma; the tree has the two items
+__sinpif128	61a54d3f6be6	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
 size_of_encoded_value	-	clang refuses	in file libgcc_unwind-dw2, see it
+__spawni	39b582e7fdad	false alarm	the addresses of asm __execve and C __execvpex in a ?: go through void * in the C written back: the same address
+__spawni_child	d040fa4d45ac	false alarm	an asm function's value is a long in ff, so C converts the other arm of its ?: or % to long; same value (__getpgid in a ?:)
+__sqrtl	-	ff2c cannot write	calls __ieee754_sqrtl, left out of glibc in ff (c2ff: the builtin __builtin_sqrtl, not yet)
+__tanhf128	d3ef8495473e	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__tanpif128	413873bb46d7	false alarm	__builtin_types_compatible_p (__typeof (x), _Float128) of a float128 is 1 in csema, as in gcc; clang reads it 0 (math-barriers: then the =t branch): the branches differ only there
+__truncl	-	ff2c cannot write	calls libc_fetestexcept_387, left out of glibc in ff (c2ff: the asm output =a of a u16, not yet)
+_Unwind_Backtrace	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_DebugHook	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_ForcedUnwind	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_ForcedUnwind_Phase2	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetCFA	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetDataRelBase	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetGR	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetGRPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetIP	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetRegionStart	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetTextRelBase	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_Get_Unwind_Context_Reg_Val	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_Get_Unwind_Word	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GRByValue	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_IsExtendedContext	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_IsSignalFrame	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetGRPtr	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetGRValue	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetSignalFrame	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetSpColumn	-	clang refuses	in file libgcc_unwind-dw2, see it
+__uselocale	7c2fed5b9b29	false alarm	records of one layout with two names (__locale_struct and its unit's own): a ?: of their addresses goes through void *: the same address
 uw_advance_context	-	clang refuses	in file libgcc_unwind-dw2, see it
 uw_frame_state_for	-	clang refuses	in file libgcc_unwind-dw2, see it
 uw_init_context_1	-	clang refuses	in file libgcc_unwind-dw2, see it
 uw_init_context_1_once_regsizes	-	clang refuses	in file libgcc_unwind-dw2, see it
 uw_install_context_1	-	clang refuses	in file libgcc_unwind-dw2, see it
-uw_update_context	-	clang refuses	in file libgcc_unwind-dw2, see it
 uw_update_context_1	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_update_context	-	clang refuses	in file libgcc_unwind-dw2, see it
+__vfscanf_internal	0c743db8cb98	false alarm	an index of unsigned char (fc) is converted to int in ff as C promotes it; the same value
 x86_64_fallback_frame_state	-	clang refuses	in file libgcc_unwind-dw2, see it
