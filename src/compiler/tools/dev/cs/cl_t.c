@@ -379,12 +379,20 @@ static struct cs_ty *cl_td_walk (struct cs_ty *t)
   }
   return t;
 }
+/* fixed point's words (the user's), by its code */
+static char *cl_fix_words[] = {
+  "short fract", "fract", "long fract", "short accum", "accum", "long accum",
+  "unsigned short fract", "unsigned fract", "unsigned long fract", "unsigned short accum", "unsigned accum", "unsigned long accum",
+  "sat short fract", "sat fract", "sat long fract", "sat short accum", "sat accum", "sat long accum",
+  "sat unsigned short fract", "sat unsigned fract", "sat unsigned long fract", "sat unsigned short accum", "sat unsigned accum", "sat unsigned long accum", 0
+};
 static void cl_ctype (struct cs_ty *t, struct cl_list *o)
 {
   int q = cs_quals (t);
   struct cs_ty *c = cs_canon (cl_td_walk (t));
   if (q & Q_FS) { if (c->k != TY_ARRAY) cl_w (o, "fs"); }
   while (c->k == TY_ATOMIC) c = cs_canon (c->to);
+  if (cs_k_fix (c->k)) { cl_w (o, cl_fix_words[c->k - TY_FX0]); return; }
   switch (c->k) {
   case TY_VOID: cl_w (o, "void"); return;
   case TY_BOOL: cl_w (o, "u8"); return;

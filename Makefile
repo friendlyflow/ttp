@@ -25,6 +25,9 @@
 #                   tree of src/compiler (see src/compiler/gen/patchlib.pl)
 #   make ports-check  every check of the ports branch, the independent ones
 #                   at once: PASS or FAIL and the time of each
+#   make c2ff-crosscheck  after a ports-check, before ports goes into main:
+#                   the frozen gen/c2ff.pl and csema -l, the translator, give
+#                   the same pages on each target's milestones
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
@@ -146,10 +149,10 @@ PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
 PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
-PC_STEPS := bootstrap compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 clayer-riscv64 clayer-pages-riscv64 \
-	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 libgcc-aarch64 csema-aarch64 clayer-pages-aarch64 \
-	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 clayer-pages-x86_64 \
-	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm clayer-pages-arm \
+PC_STEPS := bootstrap tools compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 \
+	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 libgcc-aarch64 csema-aarch64 \
+	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 \
+	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm \
 	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
 	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t) roundnames-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
@@ -173,8 +176,15 @@ ports-check:
 pc-bootstrap:
 	$(call pc_step,bootstrap,$(PC_SLOT) $(MAKE) -j1 bootstrap)
 	@grep -q '^PASS' $(CHECKLOG)/bootstrap.result
-pc-compiler-check: pc-bootstrap
+pc-compiler-check: pc-bootstrap pc-tools
 	$(call pc_step,compiler-check,$(PC_SLOT) $(MAKE) -j1 compiler-check)
+# the translator, csema -l (src/compiler/tools, this machine's build): every
+# page of glibc and libgcc is its, so it is made first, alone (compiler-check
+# makes it too, later)
+PC_HOST := $(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
+pc-tools: pc-bootstrap
+	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema)
+	@grep -q '^PASS' $(CHECKLOG)/tools.result
 # the BUILDs, where they are not there yet
 pc-gbuild:
 	@test "$(abspath $(GBUILD))" != "$(abspath $(GLIBC_REF))" || { echo "ports-check: GBUILD is the shared $(GLIBC_REF): give it a folder of its own"; exit 1; }
@@ -184,7 +194,7 @@ pc-gbuild:
 	    mkdir -p $$d && ln -sfn $$(readlink -f $$s/obj) $$d/obj || exit 1; \
 	    echo "ports-check: $$d, obj from $$s"; \
 	done
-pc-units-riscv64: pc-bootstrap pc-gbuild
+pc-units-riscv64: pc-bootstrap pc-tools pc-gbuild
 	$(call pc_step,units-riscv64,$(call PC_GLIBC) units-ready)
 define pc_milestone
 pc-$(1)-check: pc-units-riscv64
@@ -206,18 +216,8 @@ pc-cparse-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 # (after compiler-check, which makes the tools: not the tools of before)
 pc-csema-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 	$(call pc_step,csema-riscv64,$(call PC_GLIBC) csema-check)
-# the C layer written in ff (T3c) against c2ff.pl on the same units, byte for byte
-pc-clayer-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
-	$(call pc_step,clayer-riscv64,$(call PC_GLIBC) clayer-check)
-# (each milestone's whole page, many units at once)
-pc-clayer-pages-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
-	$(call pc_step,clayer-pages-riscv64,$(call PC_GLIBC) clayer-pages)
-pc-clayer-pages-aarch64: pc-compiler-check $(PC_A64:%=pc-%-aarch64)
-	$(call pc_step,clayer-pages-aarch64,$(call PC_GLIBC,aarch64) clayer-pages)
-pc-clayer-pages-x86_64: pc-compiler-check $(PC_X64:%=pc-%-x86_64)
-	$(call pc_step,clayer-pages-x86_64,$(call PC_GLIBC,x86_64) clayer-pages)
-pc-clayer-pages-arm: pc-compiler-check $(PC_ARM:%=pc-%-arm)
-	$(call pc_step,clayer-pages-arm,$(call PC_GLIBC,arm) clayer-pages)
+# (the C layer is csema's now, the translator's: c2ff.pl against it is
+# c2ff-crosscheck, below, not a step of ports-check)
 # (csema on the other targets' units, a minute or two each)
 pc-csema-aarch64: pc-compiler-check $(PC_A64:%=pc-%-aarch64)
 	$(call pc_step,csema-aarch64,$(call PC_GLIBC,aarch64) csema-check)
@@ -225,7 +225,7 @@ pc-csema-x86_64: pc-compiler-check $(PC_X64:%=pc-%-x86_64)
 	$(call pc_step,csema-x86_64,$(call PC_GLIBC,x86_64) csema-check)
 pc-csema-arm: pc-compiler-check $(PC_ARM:%=pc-%-arm)
 	$(call pc_step,csema-arm,$(call PC_GLIBC,arm) csema-check)
-pc-units-aarch64: pc-bootstrap pc-gbuild
+pc-units-aarch64: pc-bootstrap pc-tools pc-gbuild
 	$(call pc_step,units-aarch64,$(call PC_GLIBC,aarch64) units-ready)
 define pc_a64
 pc-$(1)-aarch64: pc-units-aarch64
@@ -240,7 +240,7 @@ pc-asm-aarch64: pc-units-aarch64
 	$(call pc_step,asm-aarch64,$(call PC_GLIBC,aarch64) asm-check)
 pc-generic-aarch64: pc-units-aarch64
 	$(call pc_step,generic-aarch64,$(call PC_GLIBC,aarch64) generic-check generic-roundtrip)
-pc-units-x86_64: pc-bootstrap pc-gbuild
+pc-units-x86_64: pc-bootstrap pc-tools pc-gbuild
 	$(call pc_step,units-x86_64,$(call PC_GLIBC,x86_64) units-ready)
 define pc_x64
 pc-$(1)-x86_64: pc-units-x86_64
@@ -257,7 +257,7 @@ pc-libgcc-x86_64: pc-units-x86_64
 	$(call pc_step,libgcc-x86_64,$(call PC_GLIBC,x86_64) libgcc-licenses libgcc-asm-check)
 # arm: its milestones of LINKED_arm, as x86_64's, and its asm check (no
 # generic program: progs/generic.c takes a long for 64 bits)
-pc-units-arm: pc-bootstrap pc-gbuild
+pc-units-arm: pc-bootstrap pc-tools pc-gbuild
 	$(call pc_step,units-arm,$(call PC_GLIBC,arm) units-ready)
 define pc_arm
 pc-$(1)-arm: pc-units-arm
@@ -299,6 +299,16 @@ pc-roundnames-$(1): pc-units-$(1) pc-compiler-check
 endef
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_roundnames,$(t))))
 .PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
+
+# The cross-check of the frozen c2ff.pl (src/glibc's c2ff-crosscheck) on the
+# BUILDs of the last ports-check, each target in turn: run it before ports
+# goes into main, not on every change. Its output in CHECKLOG/c2ff-<target>.log.
+c2ff-crosscheck:
+	@mkdir -p $(CHECKLOG); ok=1; for t in riscv64 aarch64 x86_64 arm; do \
+	    if $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$$(test $$t = riscv64 || echo /$$t) GTARGET=$$t c2ff-crosscheck > $(CHECKLOG)/c2ff-$$t.log 2>&1; \
+	    then echo "PASS c2ff-crosscheck $$t"; else echo "FAIL c2ff-crosscheck $$t, log $(CHECKLOG)/c2ff-$$t.log"; ok=; fi; \
+	done; test -n "$$ok"
+.PHONY: c2ff-crosscheck
 
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean

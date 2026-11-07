@@ -17,7 +17,10 @@
 enum {
   TY_VOID, TY_BOOL, TY_CHAR, TY_SCHAR, TY_UCHAR, TY_SHORT, TY_USHORT, TY_INT, TY_UINT, TY_LONG, TY_ULONG,
   TY_LLONG, TY_ULLONG, TY_INT128, TY_UINT128, TY_FLOAT16, TY_BF16, TY_HALF, TY_FLOAT, TY_DOUBLE, TY_LDOUBLE,
-  TY_FLOAT128, TY_IBM128, TY_COMPLEX, TY_PTR, TY_ARRAY, TY_FUNC, TY_STRUCT, TY_UNION, TY_ENUM, TY_VECTOR,
+  TY_FLOAT128, TY_IBM128,
+  /* fixed point (ISO/IEC TR 18037, arm's libgcc): TY_FX0 + size (0 short, 1, 2 long) + 3 accum + 6 unsigned + 12 _Sat */
+  TY_FX0, TY_FXLAST = TY_FX0 + 23,
+  TY_COMPLEX, TY_PTR, TY_ARRAY, TY_FUNC, TY_STRUCT, TY_UNION, TY_ENUM, TY_VECTOR,
   TY_ATOMIC, TY_BITINT, TY_UBITINT, TY_BUILTINFN, TY_SVE, TY_TYPEDEF, TY_TYPEOF, TY_N
 };
 enum { Q_CONST = 1, Q_VOLATILE = 2, Q_RESTRICT = 4, Q_FS = 8, Q_GS = 16 };
@@ -26,7 +29,7 @@ enum { SC_NONE, SC_EXTERN, SC_STATIC, SC_AUTO, SC_REGISTER };
 enum {
   E_ICE, E_CAST, E_REF, E_INT, E_CHR, E_FLT, E_STR, E_UN, E_BIN, E_CASS, E_COND, E_BCOND, E_OVE, E_CALL,
   E_MEM, E_IDX, E_SIZEOF, E_CONST, E_INIT, E_IVI, E_CLIT, E_STMTX, E_OFFSETOF, E_VAARG, E_PREDEF, E_ADDRLABEL,
-  E_ATOMIC, E_TRAIT, E_OTHER, E_PAREN, E_GENERIC
+  E_ATOMIC, E_TRAIT, E_OTHER, E_PAREN, E_GENERIC, E_FIX
 };
 enum {
   CK_LVALUETORVALUE, CK_INTEGRALCAST, CK_FUNCTIONTOPOINTERDECAY, CK_ARRAYTOPOINTERDECAY, CK_NOOP, CK_BITCAST,
@@ -35,7 +38,8 @@ enum {
   CK_VECTORSPLAT, CK_INTEGRALREALTOCOMPLEX, CK_FLOATINGREALTOCOMPLEX, CK_FLOATINGCOMPLEXCAST, CK_INTEGRALCOMPLEXCAST,
   CK_FLOATINGCOMPLEXTOREAL, CK_INTEGRALCOMPLEXTOREAL, CK_FLOATINGCOMPLEXTOBOOLEAN, CK_INTEGRALCOMPLEXTOBOOLEAN,
   CK_FLOATINGCOMPLEXTOINTEGRALCOMPLEX, CK_INTEGRALCOMPLEXTOFLOATINGCOMPLEX, CK_NONATOMICTOATOMIC, CK_ATOMICTONONATOMIC,
-  CK_LVALUEBITCAST, CK_ADDRESSSPACECONVERSION, CK_N
+  CK_LVALUEBITCAST, CK_ADDRESSSPACECONVERSION, CK_FIXEDPOINTCAST, CK_FIXEDPOINTTOBOOLEAN, CK_FIXEDPOINTTOINTEGRAL,
+  CK_INTEGRALTOFIXEDPOINT, CK_FIXEDPOINTTOFLOATING, CK_FLOATINGTOFIXEDPOINT, CK_N
 };
 /* the builtins' argument rules */
 enum { BA_NORMAL, BA_NONE, BA_RVALUE, BA_PROMOTE, BA_UAC, BA_FPCLASS };
@@ -95,12 +99,17 @@ static char *ckname[] = {
   "VectorSplat", "IntegralRealToComplex", "FloatingRealToComplex", "FloatingComplexCast", "IntegralComplexCast",
   "FloatingComplexToReal", "IntegralComplexToReal", "FloatingComplexToBoolean", "IntegralComplexToBoolean",
   "FloatingComplexToIntegralComplex", "IntegralComplexToFloatingComplex", "NonAtomicToAtomic", "AtomicToNonAtomic",
-  "LValueBitCast", "AddressSpaceConversion"
+  "LValueBitCast", "AddressSpaceConversion", "FixedPointCast", "FixedPointToBoolean", "FixedPointToIntegral",
+  "IntegralToFixedPoint", "FixedPointToFloating", "FloatingToFixedPoint"
 };
 static char *tyname[] = {
   "void", "_Bool", "char", "signed char", "unsigned char", "short", "unsigned short", "int", "unsigned int", "long",
   "unsigned long", "long long", "unsigned long long", "__int128", "unsigned __int128", "_Float16", "__bf16", "__fp16",
-  "float", "double", "long double", "__float128", "__ibm128"
+  "float", "double", "long double", "__float128", "__ibm128",
+  "short _Fract", "_Fract", "long _Fract", "short _Accum", "_Accum", "long _Accum",
+  "unsigned short _Fract", "unsigned _Fract", "unsigned long _Fract", "unsigned short _Accum", "unsigned _Accum", "unsigned long _Accum",
+  "_Sat short _Fract", "_Sat _Fract", "_Sat long _Fract", "_Sat short _Accum", "_Sat _Accum", "_Sat long _Accum",
+  "_Sat unsigned short _Fract", "_Sat unsigned _Fract", "_Sat unsigned long _Fract", "_Sat unsigned short _Accum", "_Sat unsigned _Accum", "_Sat unsigned long _Accum"
 };
 
 /* ---- buffers ---- */
@@ -277,7 +286,17 @@ static int cs_k_int (int k) { return (k >= TY_BOOL && k <= TY_UINT128) || k == T
 static int cs_is_int (struct cs_ty *t) { return cs_k_int (cs_kind (t)); }
 static int cs_is_flt (struct cs_ty *t) { int k = cs_kind (t); return k >= TY_FLOAT16 && k <= TY_IBM128; }
 static int cs_is_complex (struct cs_ty *t) { return cs_kind (t) == TY_COMPLEX; }
-static int cs_is_arith (struct cs_ty *t) { return cs_is_int (t) || cs_is_flt (t) || cs_is_complex (t); }
+/* fixed point: its code (TY_FX0 + code), its scale (fraction bits, clang's: unsigned one more) */
+static int cs_k_fix (int k) { return k >= TY_FX0 && k <= TY_FXLAST; }
+static int cs_is_fix (struct cs_ty *t) { return cs_k_fix (cs_kind (t)); }
+static int cs_fix_code (struct cs_ty *t) { return cs_kind (t) - TY_FX0; }
+static int cs_fix_uns (struct cs_ty *t) { return cs_fix_code (t) % 12 >= 6; }
+static int cs_fix_sat (struct cs_ty *t) { return cs_fix_code (t) >= 12; }
+static int cs_fix_rank (struct cs_ty *t) { return cs_fix_code (t) % 6 + 1; }
+static int cs_fix_scale (struct cs_ty *t) { int c = cs_fix_code (t) % 3; return (c == 0 ? 7 : c == 1 ? 15 : 31) + cs_fix_uns (t); }
+/* the type with another code (a corresponding signed or saturating type: clang's builtin, no typedef) */
+static struct cs_ty *cs_fix_ty (int code) { return cs_basic (TY_FX0 + code); }
+static int cs_is_arith (struct cs_ty *t) { return cs_is_int (t) || cs_is_flt (t) || cs_is_complex (t) || cs_is_fix (t); }
 static int cs_is_ptr (struct cs_ty *t) { return cs_kind (t) == TY_PTR; }
 static int cs_is_scalar (struct cs_ty *t) { return cs_is_arith (t) || cs_is_ptr (t); }
 static int cs_is_rec (struct cs_ty *t) { int k = cs_kind (t); return k == TY_STRUCT || k == TY_UNION; }
@@ -416,6 +435,7 @@ static long long cs_basic_size (int k)
   if (k <= TY_ULLONG) return 8;
   if (k <= TY_UINT128) return 16;
   if (k <= TY_HALF) return 2;
+  if (k >= TY_FX0 && k <= TY_FXLAST) { int c = (k - TY_FX0) % 6; return c == 0 ? 1 : c == 1 || c == 3 ? 2 : c == 2 || c == 4 ? 4 : 8; }
   if (k == TY_FLOAT) return 4;
   if (k == TY_DOUBLE) return 8;
   if (k == TY_LDOUBLE) return T->ldbl == 2 ? 8 : 16;

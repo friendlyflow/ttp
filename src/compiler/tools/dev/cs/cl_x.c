@@ -55,6 +55,8 @@ static int cl_scalar_word (char *s)
   static char *w[] = { "char", "i8", "u8", "short", "u16", "int", "u32", "long", "u64", "float", "double", "long double", "i64", "i128", "u128", "float16", "bfloat16", "complex float16", "void", "va_list", "complex float", "complex double", "complex long double", "address", "array", 0 };
   long i = 0;
   while (w[i]) { if (cl_eq (s, w[i])) return 1; i++; }
+  i = 0;
+  while (cl_fix_words[i]) { if (cl_eq (s, cl_fix_words[i])) return 1; i++; }
   return C->target == 1 && (cl_eq (s, "float128") || cl_eq (s, "complex float128"));
 }
 
@@ -1254,6 +1256,23 @@ static int cl_foldf (struct cs_ex *n, struct cl_big **nn, struct cl_big **dd, in
   }
   return 0;
 }
+/* a fixed point literal: its value as clang writes it (a fixed point literal's, an integer
+   literal's), C's suffix of the type t (c2ff's fixedlit) */
+static char *cl_fix_lit (struct cs_ex *v, struct cs_ty *t, int neg)
+{
+  struct cs_buf b;
+  int c = cs_fix_code (t);
+  cs_b_init (&b);
+  if (neg) cs_b_byte (&b, '-');
+  if (v->k == E_FIX) cs_fix_text (&b, (unsigned long long) v->val, cs_fix_scale (v->t));
+  else cs_b_ull (&b, (unsigned long long) v->val);
+  if (cs_fix_uns (t)) cs_b_byte (&b, 'u');
+  if (c % 3 == 0) cs_b_byte (&b, 'h');
+  if (c % 3 == 2) cs_b_byte (&b, 'l');
+  if (c % 6 < 3) cs_b_byte (&b, 'r'); else cs_b_byte (&b, 'k');
+  cs_b_byte (&b, 0);
+  return (char *) b.p;
+}
 static char *cl_f16_bits (struct cs_ex *n)
 {
   struct cl_big *nn, *dd, *q;
@@ -1535,6 +1554,26 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     cl_push (o, cl_n (cl_f16_bits (n)));
     return;
   }
+  /* (a fixed point global's initializer: a literal of its type, its value worked out from
+     the literal's own (a fixed point or integer literal; c2ff's fixedlit)) */
+  if (C->in_global && (k == E_CAST || k == E_ICE || k == E_PAREN) && cs_is_fix (n->t)) {
+    struct cs_ex *v = cl_k (n, 0);
+    int neg = 0;
+    while (v->k == E_CAST || v->k == E_ICE || v->k == E_PAREN) v = cl_k (v, 0);
+    if (v->k == E_UN && cl_name_is (v, "-")) { neg = 1; v = cl_k (v, 0); while (v->k == E_CAST || v->k == E_ICE || v->k == E_PAREN) v = cl_k (v, 0); }
+    if (v->k == E_FLT) cl_fail ("a fixed point global of a floating literal (c2ff writes clang's text of it)", 0);
+    if (v->k == E_FIX || v->k == E_INT) { cl_push (o, cl_n (cl_fix_lit (v, n->t, neg))); return; }
+  }
+  /* (fixed point's conversions, written: ttpc converts by the types it is given) */
+  if (k == E_ICE && (n->op == CK_FIXEDPOINTCAST || n->op == CK_FIXEDPOINTTOFLOATING || n->op == CK_FLOATINGTOFIXEDPOINT || n->op == CK_FIXEDPOINTTOINTEGRAL || n->op == CK_INTEGRALTOFIXEDPOINT)) {
+    struct cl_list *x = cl_l ();
+    cl_itemx (cl_k (n, 0), x);
+    cl_push (o, cl_cast_node (cl_ct (n->t), x));
+    return;
+  }
+  if (k == E_FIX) { cl_push (o, cl_n (cl_fix_lit (n, n->t, 0))); return; }
+  if (k == E_UN && cl_name_is (n, "-") && cl_k (n, 0)->k == E_FIX) { cl_push (o, cl_n (cl_fix_lit (cl_k (n, 0), cl_k (n, 0)->t, 1))); return; }
+  if (k == E_UN && (cl_name_is (n, "++") || cl_name_is (n, "--") || cl_name_is (n, "post++") || cl_name_is (n, "post--")) && cs_is_fix (n->t)) cl_fail ("++ or -- of fixed point", 0);
   if (C->in_global && (k == E_BIN || k == E_UN || k == E_CAST || k == E_ICE) && cl_ftyp (cl_tword (n)) && cl_ldinside (n)) {
     struct cl_fv *v = cl_fold (n);
     if (v) {

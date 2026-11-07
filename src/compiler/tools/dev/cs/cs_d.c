@@ -45,6 +45,7 @@ static void cs_dump_ex (struct cs_ex *e)
   else if (k == E_INT) { cs_o_kind ("INT"); cs_o_val (e->val, e->t); cs_o_ty (e->t); cs_o_str ("\n"); }
   else if (k == E_CHR) { cs_o_kind ("CHR"); cs_o_sep (); cs_b_ull (&T->out, (unsigned long long) e->val); cs_o_ty (e->t); cs_o_str ("\n"); }
   else if (k == E_FLT) { cs_o_kind ("FLT"); cs_o_ty (e->t); cs_o_str ("\n"); }
+  else if (k == E_FIX) { cs_o_kind ("FIX"); cs_o_sep (); cs_fix_text (&T->out, (unsigned long long) e->val, cs_fix_scale (e->t)); cs_o_ty (e->t); cs_o_str ("\n"); }
   else if (k == E_STR) { cs_o_kind ("STR"); cs_o_ty (e->t); cs_o_vc (e); }
   else if (k == E_UN) { cs_o_kind ("UN"); cs_o_name (e->name, e->nlen); cs_o_ty (e->t); cs_o_vc (e); }
   else if (k == E_BIN) { cs_o_kind ("BIN"); cs_o_name (e->name, e->nlen); cs_o_ty (e->t); cs_o_vc (e); }
@@ -219,6 +220,21 @@ static int cs_mode_of (struct node *w)
   if (same (p, n, "DC")) return -1064;
   if (same (p, n, "TC") || same (p, n, "KC")) return -1128;
   if (same (p, n, "XC")) return -1080;
+  /* (fixed point's, arm's fixed-bit.c: 1000 + its code; DQ and UDQ, which clang has no type of, long long as clangfix.pl gives c2ff) */
+  if (same (p, n, "QQ")) return 1000;
+  if (same (p, n, "HQ")) return 1001;
+  if (same (p, n, "SQ")) return 1002;
+  if (same (p, n, "HA")) return 1003;
+  if (same (p, n, "SA")) return 1004;
+  if (same (p, n, "DA")) return 1005;
+  if (same (p, n, "UQQ")) return 1006;
+  if (same (p, n, "UHQ")) return 1007;
+  if (same (p, n, "USQ")) return 1008;
+  if (same (p, n, "UHA")) return 1009;
+  if (same (p, n, "USA")) return 1010;
+  if (same (p, n, "UDA")) return 1011;
+  if (same (p, n, "DQ")) return 1100;
+  if (same (p, n, "UDQ")) return 1101;
   return 0;
 }
 /* an attribute's argument as text: a name, or its strings without their quotes, joined */
@@ -301,10 +317,16 @@ static void cs_declare (struct cs_spec *spc, struct node *id, int where);
 static void cs_layout_and_dump (struct cs_rec *r);
 static struct cs_ty *cs_basic_of (int *cnt, int sg, int uns, int lng)
 {
-  /* cnt: 1 char 2 short 3 int 4 float 5 double 6 void 7 bool 8 int128 9 complex */
+  /* cnt: 1 char 2 short 3 int 4 float 5 double 6 void 7 bool 8 int128 9 complex 10 _Fract 11 _Accum 12 _Sat */
   struct cs_ty *t;
   int k;
   if (cnt[6]) return cs_basic (TY_VOID);
+  if (cnt[10] || cnt[11]) {
+    int s = 1;
+    if (cnt[2]) s = 0;
+    if (lng) s = 2;
+    return cs_fix_ty (s + 3 * cnt[11] + 6 * uns + 12 * cnt[12]);
+  }
   if (cnt[7]) return cs_basic (TY_BOOL);
   if (cnt[1]) k = uns ? TY_UCHAR : sg ? TY_SCHAR : TY_CHAR;
   else if (cnt[2]) k = uns ? TY_USHORT : TY_SHORT;
@@ -321,6 +343,9 @@ static struct cs_ty *cs_basic_of (int *cnt, int sg, int uns, int lng)
 static struct cs_ty *cs_mode_type (struct cs_ty *t, int m)
 {
   int uns = cs_is_int (t) && !cs_is_signed (t);
+  if (m == 1100) return cs_basic (TY_LLONG);
+  if (m == 1101) return cs_basic (TY_ULLONG);
+  if (m >= 1000) return cs_fix_ty (m - 1000);
   if (m > 0) {
     if (m == 8) return cs_basic (uns ? TY_UCHAR : TY_SCHAR);
     if (m == 16) return cs_basic (uns ? TY_USHORT : TY_SHORT);
@@ -393,6 +418,9 @@ static struct cs_ty *cs_type_of_specs (struct node *s, struct cs_spec *spc)
       else if (same (p, n, "__ibm128")) t = cs_basic (TY_IBM128);
       else if (same (p, n, "__fp16")) t = cs_basic (TY_HALF);
       else if (same (p, n, "__bf16")) t = cs_basic (TY_BF16);
+      else if (same (p, n, "_Fract")) cnt[10] = 1;
+      else if (same (p, n, "_Accum")) cnt[11] = 1;
+      else if (same (p, n, "_Sat")) cnt[12] = 1;
       else if (same (p, n, "__auto_type")) spc->autotype = 1;
       else {
         struct cs_decl *d = cs_lookup (p, n, 0);

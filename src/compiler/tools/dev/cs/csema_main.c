@@ -88,6 +88,36 @@ static void put (unsigned char *b, long *n, char *s, int target)
 }
 /* setjmp and longjmp, each target's (tools/csema-T.ff's _start sets them): what -k cannot translate goes back to the reach */
 long cp_jump[2];
+/* (arm's fixed-bit.c of an unsigned mode, whose INTunion has unsigned members: its INTunion
+   and INTstruct as INTunioU and INTstrucU, of the same length, the names clangfix.pl gives
+   them in clang's copy, which c2ff.pl's pages have) */
+static int fx_word (unsigned char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
+static int fx_line (unsigned char *p, long n, char *s)
+{
+  long i = 0, k = cstrlen (s);
+  while (i + k <= n) {
+    if ((i == 0 || p[i - 1] == '\n') && same (p + i, k, s)) return 1;
+    i++;
+  }
+  return 0;
+}
+static void fx_rename (unsigned char *p, long n, char *from, char *to)
+{
+  long i = 0, k = cstrlen (from), j;
+  while (i + k <= n) {
+    if (same (p + i, k, from) && (i == 0 || !fx_word (p[i - 1])) && (i + k == n || !fx_word (p[i + k]))) {
+      j = 0;
+      while (j < k) { p[i + j] = to[j]; j++; }
+      i += k;
+    } else i++;
+  }
+}
+static void fx_names (unsigned char *p, long n)
+{
+  if (!fx_line (p, n, "typedef _Fract QQtype ") || !fx_line (p, n, "  UDItype ll;")) return;
+  fx_rename (p, n, "INTunion", "INTunioU");
+  fx_rename (p, n, "INTstruct", "INTstrucU");
+}
 /* the unit's text after the prelude, parsed and its semantics worked out; with -l its pass */
 static void one_unit (char *file, char *name, int target, int mode)
 {
@@ -132,6 +162,7 @@ static void one_unit (char *file, char *name, int target, int mode)
   put (buf, &n, "typedef int __csema_end;\n", 0);
   i = 0;
   while (i < bytes) { buf[n + i] = src[i]; i++; }
+  if (mode == 2 && target == 3) fx_names (buf + n, bytes);
   root = c_parse (buf, n + bytes, file);
   cs_run (root, buf, n + bytes, n, target, mode, name);
 }
