@@ -238,8 +238,14 @@ static char *cl_resolve (char *cdir, char *p)
   char *r = p;
   struct cs_buf b;
   long i;
-  /* (without a folder of its own, gcc -E of a program: where the tool runs) */
+  /* (without a folder of its own, gcc -E of a program: where the tool runs, as
+     c2ff.pl's File::Spec->rel2abs; a round trip's unit of a program, progrt) */
   if (p[0] != '/' && cdir) r = cl_cat3 (cdir, "/", p);
+  else if (p[0] != '/') {
+    unsigned char *wd = alloc (4097);
+    long m = cp_readlink ("/proc/self/cwd", wd, 4096);
+    if (m > 0) r = cl_cat3 (cl_copy (wd, m), "/", p);
+  }
   for (;;) {
     /* /x/../ -> /, x not .. */
     long at = 0, done = 1;

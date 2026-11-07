@@ -65,7 +65,7 @@ sub tk { my ($k) = @_; my $t = $tok[$tp + ($k // 0)]; $t ? $t->[1] : '' }
 sub tkind { my ($k) = @_; my $t = $tok[$tp + ($k // 0)]; $t ? $t->[0] : '' }
 
 my %qualword = (const => 'const', volatile => 'volatile', restrict => 'restrict', __restrict => 'restrict');
-my %basic = map { $_ => 1 } qw(void char short int long float double signed unsigned _Bool bool _Complex __int128 _Float16 __fp16 __bf16 __float128 __ibm128 _Float128 _BitInt);
+my %basic = map { $_ => 1 } qw(void char short int long float double signed unsigned _Bool bool _Complex __int128 _Float16 __fp16 __bf16 __float128 __ibm128 _Float128 _BitInt _Fract _Accum _Sat);
 
 sub qual_add { my ($t, %q) = @_; return $t unless %q;
     my $k = $t->{k};
@@ -384,6 +384,7 @@ sub walk {
     elsif ($k eq 'IntegerLiteral') { line('INT', $n->{value}, ty($n)) }
     elsif ($k eq 'CharacterLiteral') { line('CHR', $n->{value}, ty($n)) }
     elsif ($k eq 'FloatingLiteral') { line('FLT', ty($n)) }
+    elsif ($k eq 'FixedPointLiteral') { line('FIX', $n->{value}, ty($n)) }
     elsif ($k eq 'StringLiteral') { line('STR', ty($n), $vc) }
     elsif ($k eq 'UnaryOperator') { line('UN', ($n->{isPostfix} ? 'post' : '') . $n->{opcode}, ty($n), $vc) }
     elsif ($k eq 'BinaryOperator') { line('BIN', $n->{opcode}, ty($n), $vc) }
