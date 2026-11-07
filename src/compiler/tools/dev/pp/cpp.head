@@ -1,0 +1,6 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+cpp --predef=FILE [gcc's options] file.c -o file.i: the C preprocessor, the .i that gcc 16 -E writes, byte for byte, from the same options;
+FILE: the target's predefined macros for each set of options (gcc -dM -E) and gcc's answers to __has_builtin and its kin (src/glibc/predef-<target>.txt);
+libcpp's model: tokens with the white space before them, macro contexts with each token's virtual location, padding tokens,
+the multiple-include optimization, and gcc's -E printer of line markers, newlines and columns (dev source: tools/dev/pp)

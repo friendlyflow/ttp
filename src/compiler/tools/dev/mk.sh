@@ -5,15 +5,16 @@
 # mk.sh: the C layer tools' pages from their dev C. The committed tools/*.ff
 # are the truth, and what the build reads; the C here is what they are made
 # from: c/ tools/c.ff, cparse.ff, cprint.ff; cs/ tools/csem.ff, csema.ff,
-# csema-<target>.ff (cs/ takes c/c.h). Through clang + gen/c2ff.pl --page,
+# csema-<target>.ff (cs/ takes c/c.h); pp/ tools/cpp.ff and cpp-start.ff, the C preprocessor
+# (on tools/rt.ff alone). Through clang + gen/c2ff.pl --page,
 # then each folder's mkpages.py, fftext and addlicense, all in build/dev.
 #
-#   sh src/compiler/tools/dev/mk.sh [-i] [-n] [c] [cs]
+#   sh src/compiler/tools/dev/mk.sh [-i] [-n] [c] [cs] [pp]
 #
 # Without -i: compares what it made with tools/, exit 1 if any differs (make
 # tools-dev-check; a change of gen/c2ff.pl can show here too). -i: installs it
 # in tools/, by a rename. -n: also a gcc build of each for fast work,
-# build/dev/c/cparse, build/dev/cs/csema. The folder here is only read; every
+# build/dev/c/cparse, build/dev/cs/csema, build/dev/pp/cpp. The folder here is only read; every
 # output goes to build/dev. It stops on a source that is empty or under half
 # its committed size: an accident, get it back with git checkout.
 # Needs nix develop's clang (it enters nix develop if C2FF_CLANG is not set).
@@ -36,7 +37,7 @@ OUT=$R/build/dev
 case "$OUT/" in "$D"/*) echo "mk.sh: its output $OUT is in its source" >&2; exit 2 ;; esac
 
 # ---- sources as they should be
-for f in "$D"/c/* "$D"/cs/*; do
+for f in "$D"/c/* "$D"/cs/* "$D"/pp/*; do
     test -s "$f" || { echo "mk.sh: $f is empty: git checkout it" >&2; exit 2; }
     was=$(git -C "$D" cat-file -s "HEAD:./${f#"$D"/}" 2> /dev/null || echo 0)
     now=$(wc -c < "$f")
@@ -70,7 +71,7 @@ pages() { # the pages made, each made ff with its license: installed or compared
 }
 
 bad=0
-for w in ${*:-c cs}; do
+for w in ${*:-c cs pp}; do
     case $w in
     c)
         fresh c
@@ -92,7 +93,16 @@ for w in ${*:-c cs}; do
         pages csem csema csema-riscv64 csema-x86_64 csema-aarch64 csema-arm || bad=1
         if test -n "$native"; then gcc -O1 -w -o csema shim.c c.c cs.c csema_main.c; fi
         ;;
-    *) echo "usage: mk.sh [-i] [-n] [c] [cs]" >&2; exit 2 ;;
+    pp)
+        fresh pp
+        cd "$OUT/pp"
+        units pp
+        perl "$C/gen/c2ff.pl" --page cpp --target riscv64 pp.json=pp.i -- cpp_main > all.ff.txt 2> c2ff.err
+        python3 mkpages.py
+        pages cpp cpp-start || bad=1
+        if test -n "$native"; then gcc -O1 -w -o cpp shim.c pp.c; fi
+        ;;
+    *) echo "usage: mk.sh [-i] [-n] [c] [cs] [pp]" >&2; exit 2 ;;
     esac
 done
 exit $bad

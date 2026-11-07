@@ -1018,6 +1018,52 @@ csema-check:
 	@$(call unitsfile,$(BUILD)/csema.units,$(CSUNITS))CLANG="$(CSCLANG)" CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema @$(BUILD)/csema.units
 .PHONY: csema-check
 
+# ---- the C preprocessor in ff (T3) -----------------------------------------
+# cpp (../compiler/tools/cpp.ff, built for this machine as csema) in gcc's
+# place: each unit's .i from the command of the reference build (mki.pl
+# --cpp) and predef-$(GTARGET).txt (gcc's predefined macros of each set of
+# options, its include directories and its answers to __has_builtin and its
+# kin: make predef), byte for byte as gcc -E's (cppcheck.sh).
+#   cpp-check       the C units of this build's milestones against their .i
+#                   in $(I) (a ports-check step: a minute or two)
+#   cpp-crosscheck  all of glibc's C objects against gcc -E run now (minutes,
+#                   nothing kept but the lists; with predef-check: run it
+#                   before ports goes into main)
+#   predef          predef-$(GTARGET).txt made again: gcc's answers to what
+#                   cpp --collect of all of glibc's units asks, until nothing
+#                   is new (needs gcc: the reference build's)
+#   predef-check    the committed file is what predef makes
+CPP := $(CPTOOLS)/cpp
+PREDEF := predef-$(GTARGET).txt
+PREDEF_CC = $(shell grep -m1 '^/nix/store/[^ ]*gcc .* -c .* -o ' $(OBJ)/build.log | cut -d' ' -f1)
+CPPMS = $(patsubst $(I)/%.i,%,$(filter %.i,$(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(MSUNITS:%=%.o) 2> /dev/null)))
+CPPALL = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
+# (cpp-check's units' .i are units-ready's: it runs after it)
+cpp-check:
+	$(RUN) -t 1800 bash cppcheck.sh -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp $(I) $(CPPMS)
+cpp-crosscheck:
+	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp-all - $(CPPALL)
+predef:
+	@set -e; d=$(BUILD)/predef; rm -rf $$d; mkdir -p $$d; : > $$d/queries; \
+	for pass in 1 2 3 4 5; do \
+	    perl predef.pl $(PREDEF_CC) --queries $$d/queries $(OBJ)/build.log > $$d/predef.txt; \
+	    echo "$(CPPALL)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 perl mki.pl --cpp "$(CPRUN) $(abspath $(CPP)) --collect" --predef $$d/predef.txt --out $$d/i $(OBJ) $(GLIBC_SRC) 2>&1 > /dev/null \
+	        | sed -n 's/^cpp: query //p; s/^cpp: \(target .*\)/\1/p' | sort -u > $$d/new; \
+	    rm -rf $$d/i; \
+	    if test ! -s $$d/new; then break; fi; \
+	    sort -u $$d/new $$d/queries > $$d/q; mv $$d/q $$d/queries; \
+	    echo "predef: pass $$pass, $$(wc -l < $$d/new) questions without gcc's answer"; \
+	done; \
+	test ! -s $$d/new || { echo "predef: still questions after 5 passes"; exit 1; }; \
+	cp $$d/predef.txt $(PREDEF); echo "predef: $(PREDEF)"
+predef-check:
+	@set -e; d=$(BUILD)/predef-check; rm -rf $$d; mkdir -p $$d; \
+	sed -n 's/^has \(.*\) [0-9]*$$/\1/p; s/^target \(.*\)$$/target \1/p' $(PREDEF) > $$d/queries; \
+	perl predef.pl $(PREDEF_CC) --queries $$d/queries $(OBJ)/build.log > $$d/predef.txt; \
+	cmp $$d/predef.txt $(PREDEF) || { echo "predef-check: $(PREDEF) is not what gcc says now: make predef"; exit 1; }; \
+	echo "predef-check: $(PREDEF) as gcc makes it"
+.PHONY: cpp-check cpp-crosscheck predef predef-check
+
 # ---- the C layer written in ff (T3c) ----------------------------------------
 # (c2ff-crosscheck's, below) csema -l against c2ff.pl, unit by unit, byte for byte: every unit of this
 # build's milestones from the names its object defines (as all-survey) and

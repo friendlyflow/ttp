@@ -154,7 +154,7 @@ PC_STEPS := bootstrap tools compiler-check units-riscv64 $(foreach m,$(PC_MS),$(
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm \
 	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
-	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t) roundnames-$(t))
+	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t) roundnames-$(t) cpp-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
 # with its time and how much of it its commands waited for a slot
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
@@ -180,10 +180,10 @@ pc-compiler-check: pc-bootstrap pc-tools
 	$(call pc_step,compiler-check,$(PC_SLOT) $(MAKE) -j1 compiler-check)
 # the translator, csema -l (src/compiler/tools, this machine's build): every
 # page of glibc and libgcc is its, so it is made first, alone (compiler-check
-# makes it too, later)
+# makes it too, later); and the C preprocessor in ff, cpp, for the cpp steps
 PC_HOST := $(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 pc-tools: pc-bootstrap
-	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema)
+	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp)
 	@grep -q '^PASS' $(CHECKLOG)/tools.result
 # the BUILDs, where they are not there yet
 pc-gbuild:
@@ -298,6 +298,13 @@ pc-roundnames-$(1): pc-units-$(1) pc-compiler-check
 	$$(call pc_step,roundnames-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) roundnames-check roundnames-roundtrip units-check)
 endef
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_roundnames,$(t))))
+# the C preprocessor in ff (cpp, made by the tools step) against gcc -E on
+# each target's milestone units (src/glibc's cpp-check)
+define pc_cpp
+pc-cpp-$(1): pc-units-$(1)
+	$$(call pc_step,cpp-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) cpp-check)
+endef
+$(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_cpp,$(t))))
 .PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
 
 # The cross-check of the frozen c2ff.pl (src/glibc's c2ff-crosscheck) on the
