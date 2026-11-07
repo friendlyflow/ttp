@@ -113,6 +113,13 @@ double cb_pcs (float a, double b, int c, double d, float e) __attribute__ ((pcs 
 float cb_pcsf (int a, float b) __attribute__ ((pcs ("aapcs")));
 double g_pcs (void);
 float g_pcsf (void);
+/* the AAPCS's callee-saved registers: gcc's g_keep holds values in r4..r11
+   and d8..d15 across a call of cb_keep (ttpc's), which uses many registers
+   (pairs and their division, scaled indexes, doubles, a system call of 7
+   words); g_keep's bits say which of them changed (0..7 r4..r11, 8..15
+   d8..d15, 16 a wrong result) */
+long long cb_keep (int n, long long a, double d);
+int g_keep (void);
 #endif
 #ifdef __x86_64__
 /* the SysV ABI's x87 classes of a result (gcc's default long double, the
