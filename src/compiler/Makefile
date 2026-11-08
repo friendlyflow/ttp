@@ -1027,7 +1027,7 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	    $$$$r $(TL)/$$$$w/csema -l -s ../glibc -S shared.ff $$$$u main > $(TL)/csema/$(1)/$$$$b.l.$$$$w 2>&1 || s=$$$$?; echo "exit $$$$s" >> $(TL)/csema/$(1)/$$$$b.l.$$$$w; done; \
 	    cmp $(TL)/csema/$(1)/$$$$b.l.$(1) $(TL)/csema/$(1)/$$$$b.l.$(TOOLT) || { echo "tools-check-$(1): csema -l on $$$$u: not this machine's build's"; exit 1; }; done
 	@echo "tools-check-$(1): csema -l writes this machine's build's C layer on $(words $(CPUNITS)) units"
-	$(RUN_$(1)) $(TL)/$(1)/cpp $(PPTEST) -o $(TL)/$(1).pp.i
+	$(RUN_$(1)) $(TL)/$(1)/cpp $$(PPTEST) -o $(TL)/$(1).pp.i
 	cmp $(TL)/$(1).pp.i progs/pp/main.i
 	@echo "tools-check-$(1): cpp writes what gcc -E writes of progs/pp"
 endef
