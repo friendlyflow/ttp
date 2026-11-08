@@ -584,6 +584,10 @@ comment
 complex long double:
   value
 comment
+  complex float128 value: C, a complex number of two float128 parts, 32 bytes: its real part, then its imaginary part (C's _Complex __float128); real / z and imag / z are its parts.
+complex float128:
+  value
+comment
   real z: C, the real part of z, a complex value (C's __real__ z); also on the left of =.
 real:
   z

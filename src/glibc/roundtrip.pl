@@ -248,7 +248,7 @@ sub special_float {
 sub fconst {
     my ($v, $t) = @_;
     my $x = $v->{k} ne 'num' ? "(fspecial $v->{k} " . tstr($t) . ')'
-        : $t eq 'long double' ? '(fltl ' . FFold::qlit($v->{q}, $v->{e}, 16383) . ')'
+        : $t eq 'long double' || $t eq 'float128' ? '(fltl ' . FFold::qlit($v->{q}, $v->{e}, 16383) . ')'
         : '(flt ' . sprintf('%.17g', $v->{q}->numify * 2**$v->{e}) . ')';
     $v->{neg} ? "(u- $x)" : $x;
 }
@@ -327,6 +327,7 @@ sub E {
         # offsetof as ff has it: the field's address in a T at 0
         if ($ck eq 'PointerToIntegral' && is_offsetof($c)) { return '(offsetof)' }
         # a double literal cast to long double: the literal
+
         if ($ck eq 'FloatingCast' && strip($c)->{kind} eq 'FloatingLiteral') { return '(flt ' . flt(strip($c)->{value}) . ')' }
         # (clang's type of __builtin_copysignf16's parameters, __fp16: as _Float16; c2ff's casts to float16 are there)
         return E($c) if $ck eq 'FloatingCast' && tcls($n) =~ /__fp16/;
@@ -724,6 +725,15 @@ sub asm_text {
     $template =~ s/\\n/;/g;
     ($template, [($outs // '') =~ /"([^"]*)"/g], [($ins // '') =~ /"([^"]*)"/g]);
 }
+# Does a value compute in floating point, as c2ff's fp_computes?
+sub fp_computes {
+    my ($n) = @_;
+    my $k = $n->{kind} // '';
+    my $q = $n->{type} ? $n->{type}{desugaredQualType} // $n->{type}{qualType} // '' : '';
+    return 1 if $k =~ /^(?:BinaryOperator|UnaryOperator)$/ && $q =~ /^(?:float|double|long double|_Float\d+x?|__float128)$/;
+    return 1 if $k =~ /CastExpr$/ && ($n->{castKind} // '') =~ /Floating/;
+    !!grep { fp_computes($_) } kids($n);
+}
 # glibc's optimization barrier, asm ("" : "+r" (x)): c2ff makes no code of it
 sub asm_barrier {
     my ($n) = @_;
@@ -861,7 +871,25 @@ sub S {
         if ($k eq 'ContinueStmt') { push @out, '(continue)'; next }
         if ($k eq 'GotoStmt') { push @out, '(goto ' . ($labels{ $n->{targetLabelDeclId} } // '?') . ')'; next }
         if ($k eq 'IndirectGotoStmt') { push @out, '(goto* ' . E((kids($n))[0]) . ')'; next }
-        if ($k eq 'GCCAsmStmt') { push @out, '(asm)' unless $side eq 'glibc' && asm_barrier($n); next }
+        if ($k eq 'GCCAsmStmt') {
+            # (x86_64's math_opt_barrier of a long double, asm ("" : "=t" (y) : "0" (x)): as c2ff, y = x)
+            if ($side eq 'glibc' && $target eq 'x86_64') {
+                my ($t, $oc, $ic) = asm_text($n);
+                if (defined $t && $t !~ /\S/ && @$oc == 1 && $oc->[0] =~ /^=&?t$/ && @$ic == 1 && $ic->[0] eq '0') {
+                    my ($y, $x) = kids($n);
+                    push @out, '(= ' . E($y) . ' ' . E($x) . ')';
+                    next;
+                }
+            }
+            if ($side eq 'glibc' && asm_barrier($n)) {
+                # (what an input computes in floating point stays, its value
+                # unused: c2ff's)
+                push @out, map { '(cast ToVoid void ' . E($_) . ')' } grep { fp_computes($_) } kids($n) if $target eq 'x86_64' && !(asm_text($n))[1]->@*;
+                next;
+            }
+            push @out, '(asm)';
+            next;
+        }
         # an expression whose value is not used
         push @out, xstmt($n);
     }

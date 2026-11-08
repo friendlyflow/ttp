@@ -266,6 +266,14 @@ static void cl_ins_other (char *line, struct cl_list *o)
       while (i < na) { if (!cl_starts (a[i], "%xmm") || !cl_all_digits (a[i] + 4)) ok = 0; i++; }
       if (ok) { cl_push (o, cl_pct_node (cl_cat (op, ".vex3"), a, na)); return; }
     }
+    /* (fraiseexcpt's divss_inline_asm) */
+    if (cl_eq (op, "divss") && na == 2 && a[0][0] == '%' && a[0][1] == 'x' && a[0][2] == 'm' && a[1][0] == '%' && a[1][1] == 'x' && a[1][2] == 'm') {
+      struct node *m = cl_n ("divss");
+      nd_add (m, cl_n (a[0] + 1));
+      nd_add (m, cl_n (a[1] + 1));
+      cl_push (o, m);
+      return;
+    }
     if (cl_in_words (op, wm) && na == 1 && cl_x86_mem (a[0], &disp, &rg)) {
       struct node *n = cl_n (cl_cat (op, ".m"));
       nd_add (n, cl_n (cs_pick (!disp[0], "0", disp)));
@@ -426,7 +434,7 @@ static void cl_x87 (struct cs_st *n, struct cl_asm *p, struct cl_list *o)
   }
 }
 /* a want of asm_stmt_other */
-enum { AW_VALUE, AW_ADDRESS, AW_MEM, AW_XIN, AW_XOUT };
+enum { AW_VALUE, AW_ADDRESS, AW_MEM, AW_XIN, AW_XOUT, AW_XIO };
 struct cl_want { long i; int how; char *r; long j; int hasj; };
 static void cl_asm_other (struct cs_st *n, struct cl_list *o)
 {
@@ -468,7 +476,15 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
     int all = 1;
     i = 0;
     while (i < nops) { if (!cl_pure (ops[i]) || (!x86 && !cl_eq (cl_tword (ops[i]), "long double"))) all = 0; i++; }
-    if (all) return;
+    /* (on x86_64 what an input computes in floating point stays, its value unused: its flags are what it is there for) */
+    if (all) {
+      i = 0;
+      while (x86 && i < nops) {
+        if (cl_fp_computes (ops[i])) { struct cl_list *v = cl_l (); cl_expr (ops[i], v); cl_push (o, cl_cast_w ("void", v)); }
+        i++;
+      }
+      return;
+    }
   }
   if (x86) {
     i = 0;
@@ -516,12 +532,11 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
     w[nw].hasj = 0;
     if (x86 && !blank && (cl_eq (k, "x") || cl_eq (k, "xm") || (cl_digit (k[0]) && !k[1] && !out && xr[k[0] - '0']))) {
       char *tw = cl_tword (ops[i]);
-      if (cl_has_plus (c)) cl_fail ("the asm constraint", c);
       if (!cl_eq (tw, "float") && !cl_eq (tw, "double")) cl_fail ("the asm operand of a", tw);
       if (cl_digit (k[0])) { xr[i] = xr[k[0] - '0']; xw[i] = xw[k[0] - '0']; }
       else { xr[i] = cl_cat ("xmm", cl_num (xn)); xn++; xw[i] = cl_eq (tw, "float") ? 's' : 'd'; }
       text[i] = xr[i];
-      w[nw].how = out ? AW_XOUT : AW_XIN;
+      w[nw].how = cl_has_plus (c) ? AW_XIO : out ? AW_XOUT : AW_XIN;
       nw++;
       i++;
       continue;
@@ -612,10 +627,10 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
           argi[pos] = ix;
           arghow[pos] = how == AW_VALUE;
           if (pos > maxarg) maxarg = pos;
-          if (how == AW_XIN || how == AW_XOUT) {
+          if (how == AW_XIN || how == AW_XOUT || how == AW_XIO) {
             char *sfx = xw[ix] == 's' ? "s" : "d";
-            if (how == AW_XIN) { struct node *m = cl_n (cl_cat3 ("movs", sfx, ".n.m0")); nd_add (m, cl_n ("0")); nd_add (m, cl_n (a)); nd_add (m, cl_n (xr[ix])); cl_push (code, m); }
-            else { struct node *m = cl_n (cl_cat3 ("movs", sfx, ".n.m0r")); nd_add (m, cl_n (xr[ix])); nd_add (m, cl_n ("0")); nd_add (m, cl_n (a)); cl_push (after, m); }
+            if (how == AW_XIN || how == AW_XIO) { struct node *m = cl_n (cl_cat3 ("movs", sfx, ".n.m0")); nd_add (m, cl_n ("0")); nd_add (m, cl_n (a)); nd_add (m, cl_n (xr[ix])); cl_push (code, m); }
+            if (how != AW_XIN) { struct node *m = cl_n (cl_cat3 ("movs", sfx, ".n.m0r")); nd_add (m, cl_n (xr[ix])); nd_add (m, cl_n ("0")); nd_add (m, cl_n (a)); cl_push (after, m); }
           } else if (how == AW_ADDRESS) {
             struct cl_list *tw = cl_ct (ops[ix]->t);
             char *t = cl_join (tw), *sz = 0;
@@ -711,7 +726,7 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
           if (v >= nops || !text[v]) cl_fail ("the asm operand", t);
           r = text[v];
           if (mod == 'w' && r[0] == 'x' && cl_all_digits (r + 1)) r = cl_cat ("w", r + 1);
-          else if (mod && !(mod == 's' && r[0] == 's' && cl_digit (r[1])) && !(mod == 'd' && r[0] == 'd' && cl_digit (r[1])) && !(mod == 'x' && r[0] == 'x' && cl_digit (r[1]))) cl_fail ("the asm operand of that modifier", t);
+          else if (mod && !(x86 && mod == 'd' && r[0] == 'x' && r[1] == 'm') && !(mod == 's' && r[0] == 's' && cl_digit (r[1])) && !(mod == 'd' && r[0] == 'd' && cl_digit (r[1])) && !(mod == 'x' && r[0] == 'x' && cl_digit (r[1]))) cl_fail ("the asm operand of that modifier", t);
           if (x86) {
             long q = 0;
             int paren = 0;
