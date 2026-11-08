@@ -179,6 +179,21 @@ TTPC_RUN = qemu-riscv64 $(TTPC) -j$(TTPCJ) --target $(GTARGET)
 endif
 # (and on x86_64 the forms GNU as picks, for glibc's asm: x86_64gnu.ff)
 SHARED := ../compiler/shared.ff $(if $(filter x86_64,$(GTARGET)),../compiler/x86_64gnu.ff)
+# What ttpc makes depends on ttpc and all of SHARED (the macros of each C
+# word are there: a change of macros/<target>.ff.txt and make refresh, with
+# no new ttpc, makes each program again). What csema -l makes depends on
+# csema and on what it reads of SHARED (its type words, registers and
+# instruction forms: csview.pl), CSVIEW, which is written only when that
+# changes: a change of the macros alone does not translate glibc again.
+# (Older than SHARED, it is looked at again by each make, half a second. A
+# BUILD's first one is dated 1970: what csema made there before stays; the
+# makes of a ports-check write it at once, each through a file of its own.
+# It is made even by make -n (+), which then shows what a make would do.)
+CSVIEW = $(FF)/shared.csview
+$(FF)/shared.csview: $(SHARED) csview.pl
+	+@mkdir -p $(FF)
+	+@t=$@.$$$$; perl csview.pl $(SHARED) > $$t || exit 1; \
+	if ! test -e $@; then touch -d @0 $$t && mv $$t $@; elif cmp -s $$t $@; then rm -f $$t; else mv $$t $@; fi
 
 # Per target: the CPUs a check runs on (riscv64 with V and without), and
 # the flags of a test program (gcc's defaults: x86_64's long double is the
@@ -706,7 +721,7 @@ endef
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
-$$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
+$$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
 	mkdir -p $$(FF)
 	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
 	$$(file >$$(FF)/$(1).csunits,$$(foreach o,$$(OBJS_all_$(1)),$$(call csread,$$(o))$$(nl)))
@@ -849,7 +864,7 @@ $(FF)/%-prog.json: $(FF)/%-prog.i clang-prelude.h
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h $(PROGCLANG_$(GTARGET)) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $< > $@
 progstart = $(if $(filter $(1),$(OWNSTART)),1,$(if $(call startms,$(1)),,1))
-$(FF)/%-prog.ff: $(FF)/%-prog.i $(CSEMA)
+$(FF)/%-prog.ff: $(FF)/%-prog.i $(CSEMA) $(CSVIEW)
 	$(RUN) -v 9000000 -t 300 $(CPRUN) $(CSEMA) -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -P $* $(if $(call progstart,$*),-T) \
 	    $(if $(filter $*,$(INDEXED)),-I $(FF)/$*/index.ff) $< main $(PROGROOTS_$*) > $(FF)/$*-prog.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
@@ -858,7 +873,7 @@ $(FF)/%-prog.ff: $(FF)/%-prog.i $(CSEMA)
 INDEXED := unwind
 $(INDEXED:%=$(FF)/%-prog.ff): $(FF)/%-prog.ff: $(FF)/%/index.ff
 
-$(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
+$(FF)/%-prog: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC) $(SHARED)
 	$(RUN) -t 900 $(TTPC_RUN) $(TTPCFLAGS_$*) $(SHARED) $< $@ > $@.lst
 
 # what a check expects: progs/NAME.expect, or progs/NAME.<target>.expect
@@ -888,7 +903,7 @@ $(foreach m,$(MILESTONES),$(eval $(call check,$(m))))
 # -O (ttpc's peephole, ../compiler/gen/patches/opt.pl): each milestone's
 # program built with -O (NAME-prog-O), against the same expect as its check;
 # check-O: every milestone of the target (riscv64's MILESTONES, else LINKED).
-$(FF)/%-prog-O: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC)
+$(FF)/%-prog-O: $(FF)/%-prog.ff $(FF)/%/index.ff $(TTPC) $(SHARED)
 	$(RUN) -t 900 $(TTPC_RUN) -O $(TTPCFLAGS_$*) $(SHARED) $< $@ > $@.lst
 define checkO
 $(1)-check-O: $$(FF)/$(1)-prog-O $$(FF)/$(1)-prog $$(call expect,$(1))
@@ -1248,7 +1263,7 @@ all-passes: $(ALL_C:%=$(I)/%.c2ff) $(LIBGCC_glibc:%=$(LI)/%.c2ff)
 # objects done and the reasons of the others, most first.
 # An object that defines nothing (riscv64's dirent/readdir.o: readdir64's
 # object defines readdir too) has nothing to translate.
-$(I)/%.one: $(I)/%.i $(CSEMA)
+$(I)/%.one: $(I)/%.i $(CSEMA) $(CSVIEW)
 	@roots=$$($(XPRE)nm --defined-only -g $(OBJ)/$*.o | awk 'NF == 3 { print $$3 }'); s=0; \
 	if test -z "$$roots"; then echo "all-survey: $*: defines nothing" > $(I)/$*.one.err; : > $(I)/$*.one.ff.txt; \
 	else $(SLOT) -v 9000000 -t 300 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -n $(I)/$*.i $(if $(filter $*,$(CLANGVEC)),$(I)/$*.vec.i,$(I)/$*.i) \
@@ -1307,7 +1322,7 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
+$(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
 	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
 	$(file >$(FF)/glibc.csunits,$(foreach o,$(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)) $(LIBGCC_glibc:%=libgcc/%),$(call csread,$(o))$(nl)))
 	$(SLOT) $(call csmem,glibc) -t 3600 $(call cstrans,glibc) -k -K $(FF)/glibc.statics $(foreach z,$(ZEROS_glibc),-Z $(z)) $(foreach w,$(WEAKS_glibc),-W $(w)) \
@@ -1435,7 +1450,7 @@ $(FF)/libgcc.roots $(FF)/libgcc.units &: $(FF)/libgcc.lists $(LIBGCC_C:%=$(LI)/%
 	for o in $(LIBGCC_C); do $(XPRE)nm --defined-only -g $(LOBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done | sort -u > $(FF)/libgcc.roots
 	for o in $(LIBGCC_C); do echo "$(LI)/$$o.json=$(LI)/$$o.i"; done > $(FF)/libgcc.units
 
-$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
+$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
 	cp ../libgcc/license.ff.txt $(FF)/libgcc.ff.txt
 	$(file >$(FF)/libgcc.csunits,$(foreach o,$(LIBGCC_C),$(LI)/$(o).i$(nl)))
 	$(RUN) $(call csmem,libgcc) -t 900 $(call cstrans,libgcc) -k -p gcc @$(FF)/libgcc.csunits -- @$(FF)/libgcc.roots \
@@ -1585,7 +1600,7 @@ $(TFF)/%.ref: $(OBJ)/libc.a $(TBUILD)/$(AREA).mk
 # program including glibc in ff (TFF/glibc, a link to FF/glibc), whose
 # index says which of the program's weak names glibc defines
 .SECONDEXPANSION:
-$(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).i) $(SUPPORT:%=$(TI)/%.i) $(FF)/glibc/index.ff $(CSEMA)
+$(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).i) $(SUPPORT:%=$(TI)/%.i) $(FF)/glibc/index.ff $(CSEMA) $(CSVIEW)
 	mkdir -p $(TFF)
 	ln -sfn $(abspath $(FF))/glibc $(TFF)/glibc
 	$(RUN) -v 9000000 -t 300 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(FF)/glibc/index.ff -J $(FF)/glibc.statics $(if $(GLIBC_START),,-T) \
@@ -1593,7 +1608,7 @@ $(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).i) $(SUPPORT:%=$(TI)/%.
 	perl ../compiler/gen/fftext.pl ff $(TFF)/$*-prog.ff.txt > $@
 
 TTPCFLAGS_tests := $(if $(LIBGCC_glibc),-g)
-$(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC)
+$(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC) $(SHARED)
 	$(RUN) -t 900 $(TTPC_RUN) $(TTPCFLAGS_tests) $(SHARED) $< $@ > $@.lst
 
 # a test's result: its steps, each to its log, the first that fails the
@@ -1603,7 +1618,9 @@ $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC)
 TRUN = $(if $(filter $(shell uname -m),$(GTARGET)),native native,qemu-$(GTARGET) $(CPUS))
 TSTEP = $(MAKE) --no-print-directory $(TFF)/$*$(1) > $(TFF)/$*.$(2).log 2>&1 || \
 	{ echo "not yet: $(3): $$(perl tests.pl why $(TFF)/$*.$(2).log)" > $@; exit 0; }
-$(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) tests.pl
+# (and what its steps' outputs depend on, ttpc's and csema's: each step is
+# a make of its own, so that one that fails is the result's reason)
+$(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) $(SHARED) $(CSEMA) $(CSVIEW) tests.pl
 	@mkdir -p $(TFF)
 	@if test -n "$(filter $*,$(TBROKEN))"; then echo "not yet: glibc's build did not make it (TOBJ/$(AREA).log)" > $@; exit 0; fi; \
 	$(call TSTEP,.ref,ref,gcc's link); \
