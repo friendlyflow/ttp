@@ -106,6 +106,26 @@ double f_pcs (float a, double b, int c, double d, float e) { return a + 2 * b + 
 float f_pcsf (int a, float b) { return a + 2 * b; }
 double g_pcs (void) { return cb_pcs (1.5f, 2.25, 3, 4.5, 5.5f); }
 float g_pcsf (void) { return cb_pcsf (7, 1.25f); }
+static volatile int ki[16] = { 0x4004, 0x5005, 0x6006, 0x7007, 0x8008, 0x9009, 0xa00a, 0xb00b,
+  -8, 9, -10, 11, -12, 13, -14, 15 };
+#define kd (ki + 8)
+int g_keep (void)
+{ register int r4 asm ("r4") = ki[0], r5 asm ("r5") = ki[1], r6 asm ("r6") = ki[2], r7 asm ("r7") = ki[3];
+  register int r8 asm ("r8") = ki[4], r9 asm ("r9") = ki[5], r10 asm ("r10") = ki[6], r11 asm ("r11") = ki[7];
+  register double d8 asm ("d8") = kd[0], d9 asm ("d9") = kd[1], d10 asm ("d10") = kd[2], d11 asm ("d11") = kd[3];
+  register double d12 asm ("d12") = kd[4], d13 asm ("d13") = kd[5], d14 asm ("d14") = kd[6], d15 asm ("d15") = kd[7];
+  long long v;
+  int bad;
+  asm volatile ("" : "+r" (r4), "+r" (r5), "+r" (r6), "+r" (r7), "+r" (r8), "+r" (r9), "+r" (r10), "+r" (r11));
+  asm volatile ("" : "+w" (d8), "+w" (d9), "+w" (d10), "+w" (d11), "+w" (d12), "+w" (d13), "+w" (d14), "+w" (d15));
+  v = cb_keep (5, 0x123456789LL, 2.5);
+  asm volatile ("" : "+r" (r4), "+r" (r5), "+r" (r6), "+r" (r7), "+r" (r8), "+r" (r9), "+r" (r10), "+r" (r11));
+  asm volatile ("" : "+w" (d8), "+w" (d9), "+w" (d10), "+w" (d11), "+w" (d12), "+w" (d13), "+w" (d14), "+w" (d15));
+  bad = (r4 != ki[0]) | (r5 != ki[1]) << 1 | (r6 != ki[2]) << 2 | (r7 != ki[3]) << 3
+      | (r8 != ki[4]) << 4 | (r9 != ki[5]) << 5 | (r10 != ki[6]) << 6 | (r11 != ki[7]) << 7
+      | (d8 != kd[0]) << 8 | (d9 != kd[1]) << 9 | (d10 != kd[2]) << 10 | (d11 != kd[3]) << 11
+      | (d12 != kd[4]) << 12 | (d13 != kd[5]) << 13 | (d14 != kd[6]) << 14 | (d15 != kd[7]) << 15;
+  return bad | (v != 39738643342LL) << 16; }
 #endif
 #ifdef __x86_64__
 ld1 r_ld1 (long double a) { ld1 r = { a * 2 }; return r; }
