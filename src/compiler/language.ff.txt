@@ -152,6 +152,7 @@ ff, the language ttpc compiles
       float128 is binary128 (C's _Float128): x86_64's, beside its long double; long double elsewhere
       a long double literal has L after it, binary128's 113 bits: 0x1.921fb54442d18469898cc51701b8p+1L; a subnormal one is 0x0.<digits>p-16382L, zero 0x0p+0L; on x86_64 it is rounded to nearest even to the x87's 64 bits
       a float128 literal has Q after it: 0x1.921fb54442d18469898cc51701b8p+1Q, binary128 on every target
+      complex float, complex double, complex long double and complex float128 are C's complex types: a struct of two parts of that type, real part and imag part, copied, passed and returned as one; real z and imag z are its parts, also on the left of =; ~ z its conjugate
       a hex float one exponent past its type's range is its IEEE bits: 0x1p+1024 is infinity (0x1p+128f, 0x1p+16384L), one with a fraction a NaN, 0x1.8p+1024 the quiet one (C's HUGE_VAL, INFINITY and NAN in a constant); minus infinity is : / - / 0x1p+1024
       + - * / and the comparisons work on them, - negates, cast: converts between them and to and from the integers, on every target
       a floating type larger than a word (long double, float128; double on arm) is in memory as a struct is, a value of it the address of a temporary; arm works on its double with VFP, x86_64 on its long double with the x87

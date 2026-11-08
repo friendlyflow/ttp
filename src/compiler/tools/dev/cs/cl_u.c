@@ -30,6 +30,7 @@ struct cl_state {
   char *ifile, *glibc_src, *libgcc_src, *shared;
   struct cl_map fn, var, alias, ifunc, weak, regvar, section;
   struct cl_map rec, enumd, anon_tag, anon_name, tagname, wanttag, tdone, enumof, enumval, enumref, enumused;
+  struct cl_map treefile, treepage;
   struct cl_map lastdecl, typedefs, localname, fieldname, own, done, fntype, reserved, renamed, text_item, asmfn, asmsig, ctor, pragma_weak, left_out;
   long nfieldrec, nrec;
   struct node **todo; long ntodo, roomtodo, attodo;

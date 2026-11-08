@@ -132,6 +132,10 @@ ld1 r_ld1 (long double a) { ld1 r = { a * 2 }; return r; }
 cld r_cld (long double re, long double im) { cld z; __real__ z = re; __imag__ z = im; return z; }
 long double g_ld1 (void) { return cb_ld1 (5.0L).x; }
 long double g_cld (void) { cld z = cb_cld (2.0L, 3.0L); return __real__ z * 10 + __imag__ z; }
+cq r_cq (__float128 re, __float128 im) { cq z; __real__ z = re; __imag__ z = im; return z; }
+static int same_q (__float128 a, __float128 b) { unsigned long *x = (void *) &a, *y = (void *) &b; return x[0] == y[0] && x[1] == y[1]; }
+int eq_cq (cq z, __float128 re, __float128 im) { return same_q (__real__ z, re) && same_q (__imag__ z, im); }
+int g_cq (void) { cq a = r_cq (2.0Q, 3.0Q); cq z = cb_cq (a); return same_q (__real__ z, 3.0Q) && same_q (__imag__ z, 2.0Q); }
 #endif
 #if defined __x86_64__ || defined __riscv
 long f_dl (dl a, dl b, dl c, dl d, dl e, dl f, dl g)

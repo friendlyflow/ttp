@@ -116,7 +116,7 @@ my %scalar = (char => 'char', short => 'short', int => 'int', long => 'long', i8
     'accum' => '_Accum', 'unsigned accum' => 'unsigned _Accum', 'sat accum' => '_Sat _Accum', 'sat unsigned accum' => '_Sat unsigned _Accum',
     'long accum' => 'long _Accum', 'unsigned long accum' => 'unsigned long _Accum', 'sat long accum' => '_Sat long _Accum', 'sat unsigned long accum' => '_Sat unsigned long _Accum',
     va_list => '__builtin_va_list', 'complex float' => '_Complex float', 'complex double' => '_Complex double',
-    'complex long double' => '_Complex long double');
+    'complex long double' => '_Complex long double', 'complex float128' => '_Complex __float128');
 $scalar{u64} = 'unsigned long long' if $target eq 'arm';
 my (%rec, %enum, %fntype, %fn, %var, %econst, @order);
 my %glibcpage;   # functions of the glibc pages (their bodies are written)

@@ -7,6 +7,7 @@
 #
 #   perl mkatomics.pl > atomics.ff.txt
 #   perl mkatomics.pl riscv64 > atomics-riscv64.ff.txt
+#   perl mkatomics.pl x86_64 > atomics-x86_64.ff.txt
 #
 # With a target, real atomics in its asm, as gcc makes them (riscv64: amo
 # for 4 and 8 bytes, lr/sc for nand and compare-exchange, and on the
@@ -35,6 +36,7 @@ sub content { (node($_[0]), node('* pointer')) }
 
 my $target = shift // '';
 if ($target eq 'riscv64') { rv64(); exit 0 }
+if ($target eq 'x86_64') { x64(); exit 0 }
 if ($target eq 'aarch64') { a64(); exit 0 }
 if ($target eq 'arm') { arm(); exit 0 }
 die "mkatomics: no real atomics for $target yet\n" if $target ne '';
@@ -82,6 +84,65 @@ sub asmfn {
         if ($lab) { push @{ $lab->{children} }, $i } else { push @top, $i }
     }
     node("$name:", node('asm'), @top);
+}
+# ---- x86_64 -------------------------------------------------------------
+# As gcc makes them, seq_cst whatever the order: a load is a mov, a store an
+# xchg, exchange an xchg, compare-exchange lock cmpxchg, add and sub lock xadd,
+# the rest a loop of lock cmpxchg. p in rdi, the value in rsi, compare-exchange's
+# e in rsi and d in rdx (SysV); a result of fewer bits than a word zero-extended.
+sub x64 {
+    my @f;
+    my %s = (1 => 'b', 2 => 'w', 4 => 'l', 8 => 'q');
+    my %ax = (1 => 'al', 2 => 'ax', 4 => 'eax', 8 => 'rax');
+    my %cx = (1 => 'cl', 2 => 'cx', 4 => 'ecx', 8 => 'rcx');
+    my %dx = (1 => 'dl', 2 => 'dx', 4 => 'edx', 8 => 'rdx');
+    my %si = (1 => 'sil', 2 => 'si', 4 => 'esi', 8 => 'rsi');
+    my %lmem = (1 => 'movzbl.m', 2 => 'movzwl.m', 4 => 'movl.m', 8 => 'movq.m');
+    my %lreg = (1 => 'movzbl', 2 => 'movzwl', 4 => 'movl', 8 => 'movq');
+    for my $n (1, 2, 4, 8) {
+        my $s = $s{$n};
+        # the register of the result: eax for fewer than 8 bytes, zero-extended
+        my $r = $n == 8 ? 'rax' : 'eax';
+        my $load = "$lmem{$n} 0 rdi $r";
+        my $zxsi = "$lreg{$n} $si{$n} $r";
+        my $zxcx = "$lreg{$n} $cx{$n} $r";
+        push @f, asmfn("__atomic_load_$n", "$load\nret");
+        push @f, asmfn("__atomic_store_$n", "xchg$s.mr $si{$n} 0 rdi\nret");
+        push @f, asmfn("__atomic_exchange_$n", "xchg$s.mr $si{$n} 0 rdi\n$zxsi\nret");
+        my $lmov = "$lmem{$n} 0 rsi $r";
+        push @f, asmfn("__atomic_compare_exchange_$n", "
+            $lmov
+            lock
+            cmpxchg$s.mr $dx{$n} 0 rdi
+            jne.8 L1
+            movl.i 1 eax
+            ret
+            L1:
+            mov$s.mr $ax{$n} 0 rsi
+            movl.i 0 eax
+            ret");
+        for my $op (qw(add sub)) {
+            my $neg = $op eq 'sub' ? "negq rsi\n" : '';
+            push @f, asmfn("__atomic_fetch_${op}_$n", "${neg}lock\nxadd$s.mr $si{$n} 0 rdi\n$zxsi\nret");
+            push @f, asmfn("__atomic_${op}_fetch_$n", "${neg}movq rsi rcx\nlock\nxadd$s.mr $si{$n} 0 rdi\naddq rsi rcx\n$zxcx\nret");
+        }
+        for my $op (qw(and or xor nand)) {
+            my $x = $op eq 'nand' ? "andq rsi rcx\nnotq rcx" : "${op}q rsi rcx";
+            my $loop = "
+                $load
+                L1:
+                movq rax rcx
+                $x
+                lock
+                cmpxchg$s.mr $cx{$n} 0 rdi
+                jne.8 L1";
+            # (fetch: what cmpxchg found, in al ... rax, which it left there)
+            push @f, asmfn("__atomic_fetch_${op}_$n", "$loop\n$lreg{$n} $ax{$n} $r\nret");
+            push @f, asmfn("__atomic_${op}_fetch_$n", "$loop\n$zxcx\nret");
+        }
+    }
+    print write_txt(node('comment', node("libatomic's functions in x86_64's atomics (lock cmpxchg, lock xadd, xchg), written by mkatomics.pl.")),
+        node('atomics:', ttp_license(), @f));
 }
 sub a64 {
     my @f;

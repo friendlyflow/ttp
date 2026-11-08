@@ -32,7 +32,7 @@ static char *builtins[] = {
   "void __builtin_abort (void) __attribute__ ((__noreturn__));",
   "_Bool __builtin_add_overflow ();", "_Bool __builtin_sub_overflow ();", "_Bool __builtin_mul_overflow ();",
   "void __builtin_va_start (VA);", "void __builtin_va_end (VA);", "void __builtin_va_copy (VA);",
-  "unsigned long long __builtin_ia32_rdtsc (void);", "__float128 __builtin_fabsf128 (__float128);",
+  "unsigned long long __builtin_ia32_rdtsc (void);", "__float128 __builtin_fabsf128 (__float128);", "_Float128 __builtin_copysignf128 (_Float128, _Float128);", "_Float128 __builtin_huge_valf128 (void);",
   "int __builtin_signbit ();", "int __builtin_isnan ();", "int __builtin_isinf ();", "int __builtin_isinf_sign ();",
   "int __builtin_isfinite ();", "int __builtin_isnormal ();", "int __builtin_issignaling ();",
   "int __builtin_isless ();", "int __builtin_islessequal ();", "int __builtin_isgreater ();", "int __builtin_isgreaterequal ();",

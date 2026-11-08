@@ -10,7 +10,7 @@ static char *cl_reserved_words[] = {
   "array", "struct", "union", "enum", "function", "sizeof", "alignof", "compile", "emit", "fail", "number",
   "target", "include", "workspace", "switch", "case", "default", "goto", "char", "short", "int", "long", "void",
   "type", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "float16", "bfloat16", "fract", "accum", "va_list", "va_start", "va_arg", "va_end", "va_copy",
-  "alias", "ifunc", "asm", "items", "cast", "weak", "va_arg_pack", "va_arg_pack_len", "real", "imag", "generic", "section", "constructor", "destructor", "fs", "vector", "line", 0
+  "alias", "ifunc", "asm", "items", "cast", "weak", "va_arg_pack", "va_arg_pack_len", "real", "imag", "generic", "section", "constructor", "destructor", "fs", "vector", "line", "byte", "half", "word", "dword", 0
 };
 static char *cl_reg_words[] = { "zero", "ra", "sp", "gp", "tp", "fp", "pc", 0 };
 static char *cl_reg_pre[] = { "x", "a", "s", "t", "f", "fa", "fs", "ft", "v", 0 };
@@ -421,6 +421,7 @@ static void cl_ctype (struct cs_ty *t, struct cl_list *o)
     else if (k == TY_DOUBLE) cl_w (o, "complex double");
     else if (k == TY_LDOUBLE) cl_w (o, "complex long double");
     else if (k == TY_FLOAT16) cl_w (o, "complex float16");
+    else if (k == TY_FLOAT128) cl_w (o, "complex float128");
     else cl_fail ("no ff type for a complex of that type", 0);
     return;
   }

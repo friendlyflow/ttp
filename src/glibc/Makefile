@@ -248,11 +248,12 @@ SOFTFP := addtf3 subtf3 multf3 divtf3 eqtf2 getf2 letf2 negtf2 floatditf floatun
 # x86_64's soft-fp raises its exceptions through a function of libm's; its
 # long double is the x87's, whose arithmetic is ttpc's own, the soft-fp
 # there for float128 (_Float128), and from it to long double __trunctfxf2
-OBJS_ldouble_x86_64 := math/sfp-exceptions soft-fp/trunctfxf2
+# (and libm's complex float128 of its parts, whose round trip says c2ff and ff2c agree on the type)
+OBJS_ldouble_x86_64 := math/sfp-exceptions soft-fp/trunctfxf2 math/conjf128 math/cimagf128 math/crealf128 math/s_cprojf128
 # (arm's long double is double, by its EABI: no soft-fp)
 OBJS_ldouble := $(if $(filter arm,$(GTARGET)),,$(SOFTFP:%=soft-fp/%)) $(OBJS_ldouble_$(GTARGET))
 ASMS_ldouble :=
-ROOTS_ldouble_x86_64 := __trunctfxf2
+ROOTS_ldouble_x86_64 := __trunctfxf2 __conjf128 __cimagf128 __crealf128 __cprojf128
 ROOTS_ldouble := __addtf3 __subtf3 __multf3 __divtf3 __eqtf2 __netf2 __getf2 __gttf2 __letf2 __lttf2 __negtf2 \
 	__floatditf __floatunditf __fixtfdi __fixunstfdi __extendsftf2 __extenddftf2 __trunctfsf2 __trunctfdf2 $(ROOTS_ldouble_$(GTARGET))
 
@@ -666,12 +667,15 @@ codesec = $(if $(filter x86_64,$(GTARGET)),$$($(XPRE)objdump -h $(1) | awk '$$2 
 # .i itself by the offsets in clang's AST). x86_64: gcc's %v in an asm
 # template (v under AVX, nothing here: glibc is not built for AVX) and the
 # mode __libgcc_cmp_return__ (8 bytes there, as gcc says: DI); the f128 or
-# F128 suffix of a _Float128 literal (after a digit, or a digit and a
-# point: u.f128 is a field), which clang lacks (its Q, __float128's); and gcc's _FloatN as associations of a _Generic, besides float,
+# F128 suffix of a _Float128 literal (a number that starts where no name
+# goes on: u.f128 is a field, __atan2f128 a name), which clang lacks (its Q,
+# __float128's); and gcc's _FloatN as associations of a _Generic, besides float,
 # double and long double, which for clang are those again (clang-prelude.h):
 # other types there, which no float matches.
+# LITSUF,suffix,what: a literal's suffix as what, the same length
+LITSUF = -e 's/\(^\|[^A-Za-z0-9_.]\)\([0-9][0-9a-zA-Z.+-]*\|\.[0-9][0-9a-zA-Z.+-]*\)[fF]$(1)\b/\1\2$(2)/g'
 CLANGFIX_x86_64 := sed -e 's/"%v"/""  /g' -e 's/mode (__libgcc_cmp_return__)/mode (__DI__               )/g' \
-	-e 's/\([0-9]\.\?\)[fF]128\b/\1Q   /g' -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
+	$(call LITSUF,128,Q   ) -e 's/_Float32:/short   :/g' -e 's/_Float64:/char    :/g' \
 	-e 's/_Float32x:/_Bool    :/g' -e 's/_Float64x:/unsigned :/g'
 CLANGFIX := $(CLANGFIX_$(GTARGET))
 # (a unit's c2ff pass keeps clang's AST of its .i: one made with other
@@ -700,7 +704,7 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 # functions (stdbit.ff.txt, from mkstdbit.pl: perl mkstdbit.pl >
 # stdbit.ff.txt) and libatomic's functions (atomics.ff.txt, from mkatomics.pl: perl mkatomics.pl >
 # atomics.ff.txt; a target with real atomics has its own, ATOMICS:
-# atomics-riscv64.ff.txt, perl mkatomics.pl riscv64). The asm parts share
+# atomics-riscv64.ff.txt, perl mkatomics.pl riscv64, and atomics-x86_64.ff.txt). The asm parts share
 # one page, glibc asm: the trees a
 # program reads have 255 pages in all (c2ff makes a page per directory);
 # past 255 items it is in layers (LAYERS, below: x86_64's string has 283).
@@ -1604,12 +1608,12 @@ $(TI)/%.i: mki.pl | $(TOBJ)/$(AREA).log
 # f32 f64 f32x f64x f128, which clang lacks, as the C types they are there,
 # each the same length, so that the offsets stay: strtod's and strfrom's
 # tests; glibc's own units have none that it translates)
-TCLANGFIX_riscv64 := sed -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\?\)[fF]64x\b/\1L   /g' \
-	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g' -e 's/\([0-9]\.\?\)[fF]128\b/\1L   /g'
+TCLANGFIX_riscv64 := sed $(call LITSUF,32x,    ) $(call LITSUF,64x,L   ) \
+	$(call LITSUF,32,f  ) $(call LITSUF,64,   ) $(call LITSUF,128,L   )
 # (x86_64: its CLANGFIX, and the same _FloatN suffixes but f64x, its long
 # double the x87's as gcc's _Float64x is there)
-TCLANGFIX_x86_64 = $(CLANGFIX) -e 's/\([0-9]\.\?\)[fF]32x\b/\1    /g' -e 's/\([0-9]\.\?\)[fF]64x\b/\1L   /g' \
-	-e 's/\([0-9]\.\?\)[fF]32\b/\1f  /g' -e 's/\([0-9]\.\?\)[fF]64\b/\1   /g'
+TCLANGFIX_x86_64 = $(CLANGFIX) $(call LITSUF,32x,    ) $(call LITSUF,64x,L   ) \
+	$(call LITSUF,32,f  ) $(call LITSUF,64,   )
 # (aarch64: as riscv64's, long double binary128 on both)
 TCLANGFIX_aarch64 := $(TCLANGFIX_riscv64)
 # (arm: the same, its _Float32x and _Float64 double)
