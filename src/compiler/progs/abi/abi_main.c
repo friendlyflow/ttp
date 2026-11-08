@@ -353,6 +353,31 @@ static void f16 (void)
 }
 #endif
 #ifdef __arm__
+/* arm's system call of 7 words, as glibc writes it (r7 the number, swi):
+   getpid, which reads none of them (written out: c2ff reads an asm's text
+   where it is in the source, not through a macro) */
+static long getpid7 (void)
+{ return ({ register long _r7 asm ("r7") = 20;
+    register long _r0 asm ("r0") = 1; register long _r1 asm ("r1") = 2; register long _r2 asm ("r2") = 3;
+    register long _r3 asm ("r3") = 4; register long _r4 asm ("r4") = 5; register long _r5 asm ("r5") = 6;
+    register long _r6 asm ("r6") = 7;
+    asm volatile ("swi 0x0" : "=r" (_r0) : "r" (_r7), "r" (_r0), "r" (_r1), "r" (_r2), "r" (_r3), "r" (_r4), "r" (_r5), "r" (_r6) : "memory");
+    _r0; }); }
+long long cb_keep (int n, long long a, double d)
+{ long long t[8], s = 0; int i;
+  struct { int w[6]; } z = { { 0 } };
+  for (i = 0; i < 8; i++) t[i] = a * (i + 1) + n;
+  for (i = 0; i < 8; i++) s += t[i] / (i + 2) + t[i] % 7 + (t[i] >> (i + 1)) + (t[i] < s);
+  for (i = 0; i < 6; i++) s += z.w[i];
+  d = d * 3 + i;
+  return s + (int) d + (getpid7 () > 0); }
+static void keep (void)
+{ int k = g_keep ();
+  check (!(k & 0xff), "arm: gcc's r4..r11 kept across ttpc's code");
+  check (!(k & 0xff00), "arm: gcc's d8..d15 kept across ttpc's code");
+  check (!(k >> 16), "arm: cb_keep's result"); }
+#endif
+#ifdef __arm__
 ah_t cb_ah2 (ah_t a, ah_t b) { return b; }
 ah_t cb_ah3 (ah_t a, double b, float c, int d, ah_t e) { return e; }
 static void af16 (void)
@@ -478,6 +503,7 @@ int main (void)
 #ifdef __arm__
   af16 ();
   afx ();
+  keep ();
 #endif
 #if defined __x86_64__ || defined __aarch64__ || defined __riscv
   f16 ();
