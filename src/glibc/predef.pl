@@ -29,13 +29,13 @@
 use strict;
 use warnings;
 
-my ($gcc, $qf, @keys, %seen);
+my ($gcc, $qf, @keys, @extra, %seen);
 $gcc = shift @ARGV or die "usage: predef.pl GCC [--queries FILE] [--key OPTIONS]... LOG...\n";
 my @logs;
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--queries') { $qf = shift @ARGV }
-    elsif ($a eq '--key') { push @keys, shift @ARGV }
+    elsif ($a eq '--key') { push @extra, shift @ARGV }
     else { push @logs, $a }
 }
 sub key_of {   # (as cpp's parse_opts)
@@ -66,6 +66,7 @@ for my $log (@logs) {
     }
 }
 push @keys, sort { $count{$b} <=> $count{$a} || $a cmp $b } keys %count;
+push @keys, @extra;
 @keys = grep { !$seen{$_}++ } @keys;
 die "predef: no commands\n" unless @keys;
 

@@ -3176,7 +3176,7 @@ static long chain_add (struct cand *c, long n, char **names, long k, int sysp)
 static int cand_eq (struct cand *a, struct cand *b) { return msame (a->canon, a->clen, b->canon, b->clen); }
 static void include_chains (struct opts *o)
 {
-  long total = o->niq + o->nib + o->nis + o->nia + 1;
+  long total = o->niq + o->nib + o->nis + o->nia + o->nsd + 1;
   struct cand *sys = alloc (total * sizeof (struct cand)), *br = alloc (total * sizeof (struct cand)), *qu = alloc (total * sizeof (struct cand));
   long ns = 0, nb = 0, nq = 0, i, j, k;
   struct dir *head = 0, *tail = 0, *d;

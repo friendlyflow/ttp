@@ -421,6 +421,142 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 +#define __EXCEPTIONS 1
 +#define __PIE__ 2
 +#define __pie__ 2
+predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fvisibility=hidden
++#define __CET__ 3
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __LIBGCC_BF_EPSILON__ __BFLT16_EPSILON__
++#define __LIBGCC_BF_EXCESS_PRECISION__ 1
++#define __LIBGCC_BF_FUNC_EXT__ bf16
++#define __LIBGCC_BF_MANT_DIG__ 8
++#define __LIBGCC_BF_MAX__ __BFLT16_MAX__
++#define __LIBGCC_BF_MIN__ __BFLT16_MIN__
++#define __LIBGCC_BITINT_LIMB_WIDTH__ 64
++#define __LIBGCC_BITINT_ORDER__ __ORDER_LITTLE_ENDIAN__
++#define __LIBGCC_DF_EPSILON__ __DBL_EPSILON__
++#define __LIBGCC_DF_EXCESS_PRECISION__ 0
++#define __LIBGCC_DF_FUNC_EXT__ 
++#define __LIBGCC_DF_MANT_DIG__ 53
++#define __LIBGCC_DF_MAX__ __DBL_MAX__
++#define __LIBGCC_DF_MIN__ __DBL_MIN__
++#define __LIBGCC_DWARF_CIE_DATA_ALIGNMENT__ -8
++#define __LIBGCC_DWARF_FRAME_REGISTERS__ 17
++#define __LIBGCC_EH_FRAME_SECTION_NAME__ ".eh_frame"
++#define __LIBGCC_EH_RETURN_STACKADJ_RTX__ 1
++#define __LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__ 1
++#define __LIBGCC_HAS_BF_MODE__ 1
++#define __LIBGCC_HAS_DF_MODE__ 1
++#define __LIBGCC_HAS_HF_MODE__ 1
++#define __LIBGCC_HAS_SF_MODE__ 1
++#define __LIBGCC_HAS_TF_MODE__ 1
++#define __LIBGCC_HAS_XF_MODE__ 1
++#define __LIBGCC_HAVE_HWDBL__ 1
++#define __LIBGCC_HAVE_LIBATOMIC 0
++#define __LIBGCC_HF_EPSILON__ __FLT16_EPSILON__
++#define __LIBGCC_HF_EXCESS_PRECISION__ 1
++#define __LIBGCC_HF_FUNC_EXT__ f16
++#define __LIBGCC_HF_MANT_DIG__ 11
++#define __LIBGCC_HF_MAX__ __FLT16_MAX__
++#define __LIBGCC_HF_MIN__ __FLT16_MIN__
++#define __LIBGCC_INIT_ARRAY_SECTION_ASM_OP__ 1
++#define __LIBGCC_SF_EPSILON__ __FLT_EPSILON__
++#define __LIBGCC_SF_EXCESS_PRECISION__ 0
++#define __LIBGCC_SF_FUNC_EXT__ f
++#define __LIBGCC_SF_MANT_DIG__ 24
++#define __LIBGCC_SF_MAX__ __FLT_MAX__
++#define __LIBGCC_SF_MIN__ __FLT_MIN__
++#define __LIBGCC_STACK_GROWS_DOWNWARD__ 1
++#define __LIBGCC_STACK_POINTER_REGNUM__ 7
++#define __LIBGCC_TEXT_SECTION_ASM_OP__ "\t.text"
++#define __LIBGCC_TF_EPSILON__ __FLT128_EPSILON__
++#define __LIBGCC_TF_EXCESS_PRECISION__ 0
++#define __LIBGCC_TF_FUNC_EXT__ f128
++#define __LIBGCC_TF_MANT_DIG__ 113
++#define __LIBGCC_TF_MAX__ __FLT128_MAX__
++#define __LIBGCC_TF_MIN__ __FLT128_MIN__
++#define __LIBGCC_TRAMPOLINE_SIZE__ 28
++#define __LIBGCC_VTABLE_USES_DESCRIPTORS__ 0
++#define __LIBGCC_XF_EPSILON__ __LDBL_EPSILON__
++#define __LIBGCC_XF_EXCESS_PRECISION__ 0
++#define __LIBGCC_XF_FUNC_EXT__ l
++#define __LIBGCC_XF_MANT_DIG__ 64
++#define __LIBGCC_XF_MAX__ __LDBL_MAX__
++#define __LIBGCC_XF_MIN__ __LDBL_MIN__
++#define __PIC__ 1
++#define __SHSTK__ 1
++#define __STDC_VERSION__ 202311L
++#define __pic__ 1
+-__GNUC_GNU_INLINE__
+-__ROUNDING_MATH__
+predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk
++#define __CET__ 3
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __LIBGCC_BF_EPSILON__ __BFLT16_EPSILON__
++#define __LIBGCC_BF_EXCESS_PRECISION__ 1
++#define __LIBGCC_BF_FUNC_EXT__ bf16
++#define __LIBGCC_BF_MANT_DIG__ 8
++#define __LIBGCC_BF_MAX__ __BFLT16_MAX__
++#define __LIBGCC_BF_MIN__ __BFLT16_MIN__
++#define __LIBGCC_BITINT_LIMB_WIDTH__ 64
++#define __LIBGCC_BITINT_ORDER__ __ORDER_LITTLE_ENDIAN__
++#define __LIBGCC_DF_EPSILON__ __DBL_EPSILON__
++#define __LIBGCC_DF_EXCESS_PRECISION__ 0
++#define __LIBGCC_DF_FUNC_EXT__ 
++#define __LIBGCC_DF_MANT_DIG__ 53
++#define __LIBGCC_DF_MAX__ __DBL_MAX__
++#define __LIBGCC_DF_MIN__ __DBL_MIN__
++#define __LIBGCC_DWARF_CIE_DATA_ALIGNMENT__ -8
++#define __LIBGCC_DWARF_FRAME_REGISTERS__ 17
++#define __LIBGCC_EH_FRAME_SECTION_NAME__ ".eh_frame"
++#define __LIBGCC_EH_RETURN_STACKADJ_RTX__ 1
++#define __LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__ 1
++#define __LIBGCC_HAS_BF_MODE__ 1
++#define __LIBGCC_HAS_DF_MODE__ 1
++#define __LIBGCC_HAS_HF_MODE__ 1
++#define __LIBGCC_HAS_SF_MODE__ 1
++#define __LIBGCC_HAS_TF_MODE__ 1
++#define __LIBGCC_HAS_XF_MODE__ 1
++#define __LIBGCC_HAVE_HWDBL__ 1
++#define __LIBGCC_HAVE_LIBATOMIC 0
++#define __LIBGCC_HF_EPSILON__ __FLT16_EPSILON__
++#define __LIBGCC_HF_EXCESS_PRECISION__ 1
++#define __LIBGCC_HF_FUNC_EXT__ f16
++#define __LIBGCC_HF_MANT_DIG__ 11
++#define __LIBGCC_HF_MAX__ __FLT16_MAX__
++#define __LIBGCC_HF_MIN__ __FLT16_MIN__
++#define __LIBGCC_INIT_ARRAY_SECTION_ASM_OP__ 1
++#define __LIBGCC_SF_EPSILON__ __FLT_EPSILON__
++#define __LIBGCC_SF_EXCESS_PRECISION__ 0
++#define __LIBGCC_SF_FUNC_EXT__ f
++#define __LIBGCC_SF_MANT_DIG__ 24
++#define __LIBGCC_SF_MAX__ __FLT_MAX__
++#define __LIBGCC_SF_MIN__ __FLT_MIN__
++#define __LIBGCC_STACK_GROWS_DOWNWARD__ 1
++#define __LIBGCC_STACK_POINTER_REGNUM__ 7
++#define __LIBGCC_TEXT_SECTION_ASM_OP__ "\t.text"
++#define __LIBGCC_TF_EPSILON__ __FLT128_EPSILON__
++#define __LIBGCC_TF_EXCESS_PRECISION__ 0
++#define __LIBGCC_TF_FUNC_EXT__ f128
++#define __LIBGCC_TF_MANT_DIG__ 113
++#define __LIBGCC_TF_MAX__ __FLT128_MAX__
++#define __LIBGCC_TF_MIN__ __FLT128_MIN__
++#define __LIBGCC_TRAMPOLINE_SIZE__ 28
++#define __LIBGCC_VTABLE_USES_DESCRIPTORS__ 0
++#define __LIBGCC_XF_EPSILON__ __LDBL_EPSILON__
++#define __LIBGCC_XF_EXCESS_PRECISION__ 0
++#define __LIBGCC_XF_FUNC_EXT__ l
++#define __LIBGCC_XF_MANT_DIG__ 64
++#define __LIBGCC_XF_MAX__ __LDBL_MAX__
++#define __LIBGCC_XF_MIN__ __LDBL_MIN__
++#define __PIC__ 1
++#define __SHSTK__ 1
++#define __STDC_VERSION__ 202311L
++#define __pic__ 1
+-__GNUC_GNU_INLINE__
+-__ROUNDING_MATH__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE
 +#define __PIE__ 2
 +#define __pie__ 2
@@ -474,6 +610,74 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 +#define __SSSE3__ 1
 +#define __XSAVE__ 1
 +#define __pie__ 2
+predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -msse2 -fvisibility=hidden
++#define __CET__ 3
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __LIBGCC_BF_EPSILON__ __BFLT16_EPSILON__
++#define __LIBGCC_BF_EXCESS_PRECISION__ 1
++#define __LIBGCC_BF_FUNC_EXT__ bf16
++#define __LIBGCC_BF_MANT_DIG__ 8
++#define __LIBGCC_BF_MAX__ __BFLT16_MAX__
++#define __LIBGCC_BF_MIN__ __BFLT16_MIN__
++#define __LIBGCC_BITINT_LIMB_WIDTH__ 64
++#define __LIBGCC_BITINT_ORDER__ __ORDER_LITTLE_ENDIAN__
++#define __LIBGCC_DF_EPSILON__ __DBL_EPSILON__
++#define __LIBGCC_DF_EXCESS_PRECISION__ 0
++#define __LIBGCC_DF_FUNC_EXT__ 
++#define __LIBGCC_DF_MANT_DIG__ 53
++#define __LIBGCC_DF_MAX__ __DBL_MAX__
++#define __LIBGCC_DF_MIN__ __DBL_MIN__
++#define __LIBGCC_DWARF_CIE_DATA_ALIGNMENT__ -8
++#define __LIBGCC_DWARF_FRAME_REGISTERS__ 17
++#define __LIBGCC_EH_FRAME_SECTION_NAME__ ".eh_frame"
++#define __LIBGCC_EH_RETURN_STACKADJ_RTX__ 1
++#define __LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__ 1
++#define __LIBGCC_HAS_BF_MODE__ 1
++#define __LIBGCC_HAS_DF_MODE__ 1
++#define __LIBGCC_HAS_HF_MODE__ 1
++#define __LIBGCC_HAS_SF_MODE__ 1
++#define __LIBGCC_HAS_TF_MODE__ 1
++#define __LIBGCC_HAS_XF_MODE__ 1
++#define __LIBGCC_HAVE_HWDBL__ 1
++#define __LIBGCC_HAVE_LIBATOMIC 0
++#define __LIBGCC_HF_EPSILON__ __FLT16_EPSILON__
++#define __LIBGCC_HF_EXCESS_PRECISION__ 1
++#define __LIBGCC_HF_FUNC_EXT__ f16
++#define __LIBGCC_HF_MANT_DIG__ 11
++#define __LIBGCC_HF_MAX__ __FLT16_MAX__
++#define __LIBGCC_HF_MIN__ __FLT16_MIN__
++#define __LIBGCC_INIT_ARRAY_SECTION_ASM_OP__ 1
++#define __LIBGCC_SF_EPSILON__ __FLT_EPSILON__
++#define __LIBGCC_SF_EXCESS_PRECISION__ 0
++#define __LIBGCC_SF_FUNC_EXT__ f
++#define __LIBGCC_SF_MANT_DIG__ 24
++#define __LIBGCC_SF_MAX__ __FLT_MAX__
++#define __LIBGCC_SF_MIN__ __FLT_MIN__
++#define __LIBGCC_STACK_GROWS_DOWNWARD__ 1
++#define __LIBGCC_STACK_POINTER_REGNUM__ 7
++#define __LIBGCC_TEXT_SECTION_ASM_OP__ "\t.text"
++#define __LIBGCC_TF_EPSILON__ __FLT128_EPSILON__
++#define __LIBGCC_TF_EXCESS_PRECISION__ 0
++#define __LIBGCC_TF_FUNC_EXT__ f128
++#define __LIBGCC_TF_MANT_DIG__ 113
++#define __LIBGCC_TF_MAX__ __FLT128_MAX__
++#define __LIBGCC_TF_MIN__ __FLT128_MIN__
++#define __LIBGCC_TRAMPOLINE_SIZE__ 28
++#define __LIBGCC_VTABLE_USES_DESCRIPTORS__ 0
++#define __LIBGCC_XF_EPSILON__ __LDBL_EPSILON__
++#define __LIBGCC_XF_EXCESS_PRECISION__ 0
++#define __LIBGCC_XF_FUNC_EXT__ l
++#define __LIBGCC_XF_MANT_DIG__ 64
++#define __LIBGCC_XF_MAX__ __LDBL_MAX__
++#define __LIBGCC_XF_MIN__ __LDBL_MIN__
++#define __PIC__ 1
++#define __SHSTK__ 1
++#define __STDC_VERSION__ 202311L
++#define __pic__ 1
+-__GNUC_GNU_INLINE__
+-__ROUNDING_MATH__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fno-math-errno -fPIC -fno-fp-int-builtin-inexact
 +#define __NO_MATH_ERRNO__ 1
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fno-math-errno -fPIE -fno-fp-int-builtin-inexact
@@ -549,7 +753,213 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 +#define __SSSE3__ 1
 +#define __XSAVE__ 1
 +#define __pie__ 2
+predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fnon-call-exceptions -fvisibility=hidden
++#define __CET__ 3
++#define __CHAR8_TYPE__ unsigned char
++#define __EXCEPTIONS 1
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __LIBGCC_BF_EPSILON__ __BFLT16_EPSILON__
++#define __LIBGCC_BF_EXCESS_PRECISION__ 1
++#define __LIBGCC_BF_FUNC_EXT__ bf16
++#define __LIBGCC_BF_MANT_DIG__ 8
++#define __LIBGCC_BF_MAX__ __BFLT16_MAX__
++#define __LIBGCC_BF_MIN__ __BFLT16_MIN__
++#define __LIBGCC_BITINT_LIMB_WIDTH__ 64
++#define __LIBGCC_BITINT_ORDER__ __ORDER_LITTLE_ENDIAN__
++#define __LIBGCC_DF_EPSILON__ __DBL_EPSILON__
++#define __LIBGCC_DF_EXCESS_PRECISION__ 0
++#define __LIBGCC_DF_FUNC_EXT__ 
++#define __LIBGCC_DF_MANT_DIG__ 53
++#define __LIBGCC_DF_MAX__ __DBL_MAX__
++#define __LIBGCC_DF_MIN__ __DBL_MIN__
++#define __LIBGCC_DWARF_CIE_DATA_ALIGNMENT__ -8
++#define __LIBGCC_DWARF_FRAME_REGISTERS__ 17
++#define __LIBGCC_EH_FRAME_SECTION_NAME__ ".eh_frame"
++#define __LIBGCC_EH_RETURN_STACKADJ_RTX__ 1
++#define __LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__ 1
++#define __LIBGCC_HAS_BF_MODE__ 1
++#define __LIBGCC_HAS_DF_MODE__ 1
++#define __LIBGCC_HAS_HF_MODE__ 1
++#define __LIBGCC_HAS_SF_MODE__ 1
++#define __LIBGCC_HAS_TF_MODE__ 1
++#define __LIBGCC_HAS_XF_MODE__ 1
++#define __LIBGCC_HAVE_HWDBL__ 1
++#define __LIBGCC_HAVE_LIBATOMIC 0
++#define __LIBGCC_HF_EPSILON__ __FLT16_EPSILON__
++#define __LIBGCC_HF_EXCESS_PRECISION__ 1
++#define __LIBGCC_HF_FUNC_EXT__ f16
++#define __LIBGCC_HF_MANT_DIG__ 11
++#define __LIBGCC_HF_MAX__ __FLT16_MAX__
++#define __LIBGCC_HF_MIN__ __FLT16_MIN__
++#define __LIBGCC_INIT_ARRAY_SECTION_ASM_OP__ 1
++#define __LIBGCC_SF_EPSILON__ __FLT_EPSILON__
++#define __LIBGCC_SF_EXCESS_PRECISION__ 0
++#define __LIBGCC_SF_FUNC_EXT__ f
++#define __LIBGCC_SF_MANT_DIG__ 24
++#define __LIBGCC_SF_MAX__ __FLT_MAX__
++#define __LIBGCC_SF_MIN__ __FLT_MIN__
++#define __LIBGCC_STACK_GROWS_DOWNWARD__ 1
++#define __LIBGCC_STACK_POINTER_REGNUM__ 7
++#define __LIBGCC_TEXT_SECTION_ASM_OP__ "\t.text"
++#define __LIBGCC_TF_EPSILON__ __FLT128_EPSILON__
++#define __LIBGCC_TF_EXCESS_PRECISION__ 0
++#define __LIBGCC_TF_FUNC_EXT__ f128
++#define __LIBGCC_TF_MANT_DIG__ 113
++#define __LIBGCC_TF_MAX__ __FLT128_MAX__
++#define __LIBGCC_TF_MIN__ __FLT128_MIN__
++#define __LIBGCC_TRAMPOLINE_SIZE__ 28
++#define __LIBGCC_VTABLE_USES_DESCRIPTORS__ 0
++#define __LIBGCC_XF_EPSILON__ __LDBL_EPSILON__
++#define __LIBGCC_XF_EXCESS_PRECISION__ 0
++#define __LIBGCC_XF_FUNC_EXT__ l
++#define __LIBGCC_XF_MANT_DIG__ 64
++#define __LIBGCC_XF_MAX__ __LDBL_MAX__
++#define __LIBGCC_XF_MIN__ __LDBL_MIN__
++#define __PIC__ 1
++#define __SHSTK__ 1
++#define __STDC_VERSION__ 202311L
++#define __pic__ 1
+-__GNUC_GNU_INLINE__
+-__ROUNDING_MATH__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIC -fomit-frame-pointer -ftls-model=initial-exec
+predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden
++#define __CET__ 3
++#define __CHAR8_TYPE__ unsigned char
++#define __EXCEPTIONS 1
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __LIBGCC_BF_EPSILON__ __BFLT16_EPSILON__
++#define __LIBGCC_BF_EXCESS_PRECISION__ 1
++#define __LIBGCC_BF_FUNC_EXT__ bf16
++#define __LIBGCC_BF_MANT_DIG__ 8
++#define __LIBGCC_BF_MAX__ __BFLT16_MAX__
++#define __LIBGCC_BF_MIN__ __BFLT16_MIN__
++#define __LIBGCC_BITINT_LIMB_WIDTH__ 64
++#define __LIBGCC_BITINT_ORDER__ __ORDER_LITTLE_ENDIAN__
++#define __LIBGCC_DF_EPSILON__ __DBL_EPSILON__
++#define __LIBGCC_DF_EXCESS_PRECISION__ 0
++#define __LIBGCC_DF_FUNC_EXT__ 
++#define __LIBGCC_DF_MANT_DIG__ 53
++#define __LIBGCC_DF_MAX__ __DBL_MAX__
++#define __LIBGCC_DF_MIN__ __DBL_MIN__
++#define __LIBGCC_DWARF_CIE_DATA_ALIGNMENT__ -8
++#define __LIBGCC_DWARF_FRAME_REGISTERS__ 17
++#define __LIBGCC_EH_FRAME_SECTION_NAME__ ".eh_frame"
++#define __LIBGCC_EH_RETURN_STACKADJ_RTX__ 1
++#define __LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__ 1
++#define __LIBGCC_HAS_BF_MODE__ 1
++#define __LIBGCC_HAS_DF_MODE__ 1
++#define __LIBGCC_HAS_HF_MODE__ 1
++#define __LIBGCC_HAS_SF_MODE__ 1
++#define __LIBGCC_HAS_TF_MODE__ 1
++#define __LIBGCC_HAS_XF_MODE__ 1
++#define __LIBGCC_HAVE_HWDBL__ 1
++#define __LIBGCC_HAVE_LIBATOMIC 0
++#define __LIBGCC_HF_EPSILON__ __FLT16_EPSILON__
++#define __LIBGCC_HF_EXCESS_PRECISION__ 1
++#define __LIBGCC_HF_FUNC_EXT__ f16
++#define __LIBGCC_HF_MANT_DIG__ 11
++#define __LIBGCC_HF_MAX__ __FLT16_MAX__
++#define __LIBGCC_HF_MIN__ __FLT16_MIN__
++#define __LIBGCC_INIT_ARRAY_SECTION_ASM_OP__ 1
++#define __LIBGCC_SF_EPSILON__ __FLT_EPSILON__
++#define __LIBGCC_SF_EXCESS_PRECISION__ 0
++#define __LIBGCC_SF_FUNC_EXT__ f
++#define __LIBGCC_SF_MANT_DIG__ 24
++#define __LIBGCC_SF_MAX__ __FLT_MAX__
++#define __LIBGCC_SF_MIN__ __FLT_MIN__
++#define __LIBGCC_STACK_GROWS_DOWNWARD__ 1
++#define __LIBGCC_STACK_POINTER_REGNUM__ 7
++#define __LIBGCC_TEXT_SECTION_ASM_OP__ "\t.text"
++#define __LIBGCC_TF_EPSILON__ __FLT128_EPSILON__
++#define __LIBGCC_TF_EXCESS_PRECISION__ 0
++#define __LIBGCC_TF_FUNC_EXT__ f128
++#define __LIBGCC_TF_MANT_DIG__ 113
++#define __LIBGCC_TF_MAX__ __FLT128_MAX__
++#define __LIBGCC_TF_MIN__ __FLT128_MIN__
++#define __LIBGCC_TRAMPOLINE_SIZE__ 28
++#define __LIBGCC_VTABLE_USES_DESCRIPTORS__ 0
++#define __LIBGCC_XF_EPSILON__ __LDBL_EPSILON__
++#define __LIBGCC_XF_EXCESS_PRECISION__ 0
++#define __LIBGCC_XF_FUNC_EXT__ l
++#define __LIBGCC_XF_MANT_DIG__ 64
++#define __LIBGCC_XF_MAX__ __LDBL_MAX__
++#define __LIBGCC_XF_MIN__ __LDBL_MIN__
++#define __PIC__ 1
++#define __SHSTK__ 1
++#define __STDC_VERSION__ 202311L
++#define __pic__ 1
+-__GNUC_GNU_INLINE__
+-__ROUNDING_MATH__
+predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -msse2
++#define __CET__ 3
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __LIBGCC_BF_EPSILON__ __BFLT16_EPSILON__
++#define __LIBGCC_BF_EXCESS_PRECISION__ 1
++#define __LIBGCC_BF_FUNC_EXT__ bf16
++#define __LIBGCC_BF_MANT_DIG__ 8
++#define __LIBGCC_BF_MAX__ __BFLT16_MAX__
++#define __LIBGCC_BF_MIN__ __BFLT16_MIN__
++#define __LIBGCC_BITINT_LIMB_WIDTH__ 64
++#define __LIBGCC_BITINT_ORDER__ __ORDER_LITTLE_ENDIAN__
++#define __LIBGCC_DF_EPSILON__ __DBL_EPSILON__
++#define __LIBGCC_DF_EXCESS_PRECISION__ 0
++#define __LIBGCC_DF_FUNC_EXT__ 
++#define __LIBGCC_DF_MANT_DIG__ 53
++#define __LIBGCC_DF_MAX__ __DBL_MAX__
++#define __LIBGCC_DF_MIN__ __DBL_MIN__
++#define __LIBGCC_DWARF_CIE_DATA_ALIGNMENT__ -8
++#define __LIBGCC_DWARF_FRAME_REGISTERS__ 17
++#define __LIBGCC_EH_FRAME_SECTION_NAME__ ".eh_frame"
++#define __LIBGCC_EH_RETURN_STACKADJ_RTX__ 1
++#define __LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__ 1
++#define __LIBGCC_HAS_BF_MODE__ 1
++#define __LIBGCC_HAS_DF_MODE__ 1
++#define __LIBGCC_HAS_HF_MODE__ 1
++#define __LIBGCC_HAS_SF_MODE__ 1
++#define __LIBGCC_HAS_TF_MODE__ 1
++#define __LIBGCC_HAS_XF_MODE__ 1
++#define __LIBGCC_HAVE_HWDBL__ 1
++#define __LIBGCC_HAVE_LIBATOMIC 0
++#define __LIBGCC_HF_EPSILON__ __FLT16_EPSILON__
++#define __LIBGCC_HF_EXCESS_PRECISION__ 1
++#define __LIBGCC_HF_FUNC_EXT__ f16
++#define __LIBGCC_HF_MANT_DIG__ 11
++#define __LIBGCC_HF_MAX__ __FLT16_MAX__
++#define __LIBGCC_HF_MIN__ __FLT16_MIN__
++#define __LIBGCC_INIT_ARRAY_SECTION_ASM_OP__ 1
++#define __LIBGCC_SF_EPSILON__ __FLT_EPSILON__
++#define __LIBGCC_SF_EXCESS_PRECISION__ 0
++#define __LIBGCC_SF_FUNC_EXT__ f
++#define __LIBGCC_SF_MANT_DIG__ 24
++#define __LIBGCC_SF_MAX__ __FLT_MAX__
++#define __LIBGCC_SF_MIN__ __FLT_MIN__
++#define __LIBGCC_STACK_GROWS_DOWNWARD__ 1
++#define __LIBGCC_STACK_POINTER_REGNUM__ 7
++#define __LIBGCC_TEXT_SECTION_ASM_OP__ "\t.text"
++#define __LIBGCC_TF_EPSILON__ __FLT128_EPSILON__
++#define __LIBGCC_TF_EXCESS_PRECISION__ 0
++#define __LIBGCC_TF_FUNC_EXT__ f128
++#define __LIBGCC_TF_MANT_DIG__ 113
++#define __LIBGCC_TF_MAX__ __FLT128_MAX__
++#define __LIBGCC_TF_MIN__ __FLT128_MIN__
++#define __LIBGCC_TRAMPOLINE_SIZE__ 28
++#define __LIBGCC_VTABLE_USES_DESCRIPTORS__ 0
++#define __LIBGCC_XF_EPSILON__ __LDBL_EPSILON__
++#define __LIBGCC_XF_EXCESS_PRECISION__ 0
++#define __LIBGCC_XF_FUNC_EXT__ l
++#define __LIBGCC_XF_MANT_DIG__ 64
++#define __LIBGCC_XF_MAX__ __LDBL_MAX__
++#define __LIBGCC_XF_MIN__ __LDBL_MIN__
++#define __PIC__ 1
++#define __SHSTK__ 1
++#define __STDC_VERSION__ 202311L
++#define __pic__ 1
+-__GNUC_GNU_INLINE__
+-__ROUNDING_MATH__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIC -fexceptions -fomit-frame-pointer -ftls-model=initial-exec
 +#define __EXCEPTIONS 1
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIC -fsignaling-nans -ftls-model=initial-exec
@@ -698,6 +1108,17 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 +#define __NO_MATH_ERRNO__ 1
 +#define __PIE__ 2
 +#define __pie__ 2
+predef 
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __NO_INLINE__ 1
++#define __PIE__ 2
++#define __STDC_VERSION__ 202311L
++#define __pie__ 2
+-__GNUC_GNU_INLINE__
+-__OPTIMIZE__
+-__ROUNDING_MATH__
 sysdir 1 /nix/store/nm96kzzbfmkg53l8l2zk3gbsrgl84a5g-gcc-16.2.0/lib/gcc/x86_64-unknown-linux-gnu/16.2.0/include
 sysdir 1 /nix/store/nm96kzzbfmkg53l8l2zk3gbsrgl84a5g-gcc-16.2.0/include
 sysdir 1 /nix/store/nm96kzzbfmkg53l8l2zk3gbsrgl84a5g-gcc-16.2.0/lib/gcc/x86_64-unknown-linux-gnu/16.2.0/include-fixed
@@ -744,4 +1165,287 @@ has builtin __builtin_stdc_trailing_ones 1
 has builtin __builtin_stdc_trailing_zeros 1
 has extension __attribute_deprecated_with_message__ 1
 has extension c_generic_selections 1
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only")
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("bmi")
++#define __BMI__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("bmi2")
++#define __BMI2__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("cldemote")
++#define __CLDEMOTE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("clflushopt")
++#define __CLFLUSHOPT__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("clwb")
++#define __CLWB__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("clzero")
++#define __CLZERO__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("cmpccxadd")
++#define __CMPCCXADD__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("crc32")
++#define __CRC32__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("enqcmd")
++#define __ENQCMD__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("fsgsbase")
++#define __FSGSBASE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("hreset")
++#define __HRESET__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("lwp")
++#define __LWP__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("lzcnt")
++#define __LZCNT__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("movdir64b")
++#define __MOVDIR64B__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("movdiri")
++#define __MOVDIRI__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("mwait")
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("mwaitx")
++#define __MWAITX__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("pconfig")
++#define __PCONFIG__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("pku")
++#define __PKU__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("popcnt")
++#define __POPCNT__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("prefetchi")
++#define __PREFETCHI__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("ptwrite")
++#define __PTWRITE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("raoint")
++#define __RAOINT__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("rdpid")
++#define __RDPID__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("rdrnd")
++#define __RDRND__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("rdseed")
++#define __RDSEED__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("rtm")
++#define __RTM__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("serialize")
++#define __SERIALIZE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("sgx")
++#define __SGX__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("tbm")
++#define __TBM__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("tsxldtrk")
++#define __TSXLDTRK__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("uintr")
++#define __UINTR__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("usermsr")
++#define __USER_MSR__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("waitpkg")
++#define __WAITPKG__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("wbnoinvd")
++#define __WBNOINVD__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("xsave")
++#define __XSAVE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("xsavec")
++#define __XSAVEC__ 1
++#define __XSAVE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("xsaveopt")
++#define __XSAVEOPT__ 1
++#define __XSAVE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fexceptions -fvisibility=hidden	t ("general-regs-only") ; t ("xsaves")
++#define __XSAVES__ 1
++#define __XSAVE__ 1
+-__MMX__
+-__SSE2_MATH__
+-__SSE2__
+-__SSE_MATH__
+-__SSE__
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fvisibility=hidden	o ("-fno-harden-control-flow-redundancy")
+target -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -fvisibility=hidden	o ("no-isolate-erroneous-paths-dereference")
 target -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -msse4 -ftls-model=initial-exec	t ("mwait")

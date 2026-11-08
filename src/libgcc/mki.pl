@@ -10,16 +10,27 @@
 #   perl mki.pl <libgcc build dir> <out dir> _muldc3.o unwind-dw2.o ...
 #   perl mki.pl --dry <libgcc build dir> <out dir> _muldc3.o ...
 #
-# --dry only prints the file each object would get (its .i or .s).
+# --dry only prints the file each object would get (its .i or .s). --cpp
+# TOOL --predef FILE runs the C preprocessor in ff (src/compiler/tools/
+# cpp.ff) in gcc's place, as src/glibc/mki.pl --cpp; --out DIR writes into
+# DIR in place of the out dir.
+#
+#   perl mki.pl --cpp TOOL --predef FILE [--out DIR] <libgcc build dir> <out dir> _muldc3.o ...
 #
 # A host tool (core Perl only).
 use strict;
 use warnings;
 use File::Path qw(make_path);
 
-my $dry = @ARGV && $ARGV[0] eq '--dry' ? shift @ARGV : undef;
-die "usage: mki.pl [--dry] <libgcc build dir> <out dir> <object>...\n" unless @ARGV >= 3;
+my ($dry, $cpp, $predef, $outdir);
+while (@ARGV && $ARGV[0] =~ /^--(dry|cpp|predef|out)$/) {
+    shift @ARGV;
+    if ($1 eq 'dry') { $dry = 1 } elsif ($1 eq 'cpp') { $cpp = shift @ARGV } elsif ($1 eq 'predef') { $predef = shift @ARGV } else { $outdir = shift @ARGV }
+}
+die "usage: mki.pl [--dry] [--cpp tool --predef file [--out dir]] <libgcc build dir> <out dir> <object>...\n" unless @ARGV >= 3;
+die "mki: --cpp needs --predef\n" if $cpp && !$predef;
 my ($dir, $out, @want) = @ARGV;
+$out = $outdir if defined $outdir;
 
 # each command once, its continued lines (\ at the end) joined
 open my $log, '<', "$dir/build.log" or die "mki: cannot open $dir/build.log: $!\n";
@@ -40,10 +51,13 @@ for my $o (@want) {
     my $ext = $c =~ / -xassembler-with-cpp / || $c =~ / -c \S+\.S\b/ ? 's' : 'i';
     (my $i = "$out/$o") =~ s/\.o$/.$ext/;
     if ($dry) { print "$i\n"; next }
+    if ($cpp && $ext ne 'i') { warn "mki: $o: asm, which --cpp does not preprocess yet\n"; $bad = 1; next }
     make_path($out);
     $c =~ s/ -c / -E / or die "mki: $o: no -c in its command\n";
     $c =~ s/ -o \S+\.o / -o $i /;
     $c =~ s/ -MT \S+ -MD -MP -MF \S+//;
+    # (the preprocessor in ff in the compiler's place)
+    if ($cpp) { $c =~ s{^\s*(\S+)}{$cpp --predef=$predef} or die "mki: $o: no compiler in its command\n" }
     # build.log names the compiler and the C library's headers by their
     # store paths (BUILD/gcroots keeps them): one that is gone cannot run
     my @gone = grep { !-e $_ } $c =~ m{(/nix/store/[a-z0-9]{32}-[^/\s'"]+)}g;

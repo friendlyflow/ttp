@@ -10,15 +10,17 @@
 # list). OUT/result: same, differ or fail for each unit; OUT/d/x.diff the
 # first lines of each difference. Exit 1 if one differs or failed.
 #
-#   bash cppcheck.sh [-g] [-j N] [-l LOG]... TOOL PREDEF OBJ SRC OUT REF UNITS...
+#   bash cppcheck.sh [-g] [-j N] [-l LOG]... [-k MKI] TOOL PREDEF OBJ SRC OUT REF UNITS...
 #
 # TOOL may be a command with its runner (qemu-riscv64 cpp). Units are named
 # as their objects without .o (string/strlen); -l LOG takes the commands
-# from LOG instead of build.log (mki.pl --log: glibc's tests).
+# from LOG instead of build.log (mki.pl --log: glibc's tests). -k MKI: its
+# mki.pl (libgcc's: ../libgcc/mki.pl, OBJ its build dir, SRC its out dir).
 set -eu
-gcc= jobs=1 logs=
+gcc= jobs=1 logs= mki=
 while :; do
     case "${1:-}" in
+    -k) mki=$(readlink -f "$2"); shift 2 ;;
     -g) gcc=1; shift ;;
     -j) jobs=$2; shift 2 ;;
     -l) logs="$logs --log $2"; shift 2 ;;
@@ -27,7 +29,7 @@ while :; do
 done
 tool=$1 predef=$(readlink -f "$2") obj=$3 src=$4 out=$5 ref=$6
 shift 6
-mki=$(cd "$(dirname "$0")" && pwd)/mki.pl
+test -n "$mki" || mki=$(cd "$(dirname "$0")" && pwd)/mki.pl
 case "$out" in /*) ;; *) out=$PWD/$out ;; esac
 rm -rf "$out"
 mkdir -p "$out/chunks"
