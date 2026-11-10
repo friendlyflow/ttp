@@ -146,6 +146,10 @@ FF := $(BUILD)/ff
 CPTOOLS ?= ../../build/compiler/tools/$(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 CPRUN := $(if $(filter x86_64,$(shell uname -m)),,qemu-riscv64)
 CSEMA := $(CPTOOLS)/csema
+# the C preprocessor in ff (../compiler/tools/cpp.ff, made as csema), and gcc's
+# predefined macros and answers it takes (make predef; see cpp-check below)
+CPP := $(CPTOOLS)/cpp
+PREDEF := predef-$(GTARGET).txt
 CSFLAGS = -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff
 CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
@@ -633,8 +637,13 @@ objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip) $(OBJS_skip_$(
 
 .PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
-$(I)/%.i: $(OBJ)/libc.a mki.pl
-	$(RUN) -t 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+# (a C object's .i is the C preprocessor in ff's, cpp, from the object's
+# command, as gcc -E's byte for byte: cpp-check, cpp-crosscheck; an asm
+# object's .s still gcc's. cpp and predef-$(GTARGET).txt only order the .i:
+# what they write does not change with them)
+CPPE = "$(CPRUN) $(abspath $(CPP))" --predef $(abspath $(PREDEF))
+$(I)/%.i: $(OBJ)/libc.a mki.pl | $(CPP) $(PREDEF)
+	$(RUN) -t 120 perl mki.pl --cpp $(CPPE) $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
 # An object of a .S: its .s (mki.pl again), and what glibc's compiler makes
 # of it without relaxation, as instructions (for s2ff.pl, which takes the
@@ -877,9 +886,9 @@ $(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
 # for a round trip of its own (progrt) and c2ff-crosscheck.
 .PRECIOUS: $(FF)/%-prog.i $(FF)/%-prog.json
 $(FF)/gccrt-prog.i: progs/gccrt-fixed.h progs/gccrt-fixedops.h
-$(FF)/%-prog.i: progs/%.c
+$(FF)/%-prog.i: progs/%.c | $(CPP) $(PREDEF)
 	mkdir -p $(FF)
-	$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $< -o $@
+	$(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) $< -o $@
 $(FF)/%-prog.json: $(FF)/%-prog.i clang-prelude.h
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h $(PROGCLANG_$(GTARGET)) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $< > $@
@@ -1053,6 +1062,62 @@ csema-check:
 	@$(call unitsfile,$(BUILD)/csema.units,$(CSUNITS))CLANG="$(CSCLANG)" CLANGFIX='$(subst ','\'',$(CLANGFIX))' CLANGVEC="$(CLANGVEC)" CLANGVECPL=clangvec.pl $(RUN) -t 3600 sh ../compiler/gen/csemacheck.sh -r "$(CPRUN)" -t $(GTARGET) $(CPTOOLS)/csema $(BUILD)/csema @$(BUILD)/csema.units
 .PHONY: csema-check
 
+# ---- the C preprocessor in ff (T3) -----------------------------------------
+# cpp (../compiler/tools/cpp.ff, built for this machine as csema) in gcc's
+# place: each unit's .i from the command of the reference build (mki.pl
+# --cpp) and predef-$(GTARGET).txt (gcc's predefined macros of each set of
+# options, its include directories and its answers to __has_builtin and its
+# kin: make predef), byte for byte as gcc -E's (cppcheck.sh).
+#   cpp-check       the C units of this build's milestones against their .i
+#                   in $(I) (a ports-check step: a minute or two)
+#   cpp-crosscheck  all of glibc's C objects against gcc -E run now (minutes,
+#                   nothing kept but the lists; with predef-check: run it
+#                   before ports goes into main)
+#   predef          predef-$(GTARGET).txt made again: gcc's answers to what
+#                   cpp --collect of all of glibc's units asks, until nothing
+#                   is new (needs gcc: the reference build's)
+#   predef-check    the committed file is what predef makes
+PREDEF_CC = $(shell grep -m1 '^/nix/store/[^ ]*gcc .* -c .* -o ' $(OBJ)/build.log | cut -d' ' -f1)
+CPPMS = $(patsubst $(I)/%.i,%,$(filter %.i,$(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(MSUNITS:%=%.o) 2> /dev/null)))
+CPPALL = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
+# (cpp-check's units' .i are units-ready's: it runs after it)
+CPPLG = $(patsubst libgcc/%,%,$(filter libgcc/%,$(MSUNITS)))
+CPPPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
+cpp-check:
+	$(RUN) -t 1800 bash cppcheck.sh -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp $(I) $(CPPMS)
+	$(if $(CPPLG),$(RUN) -t 1800 bash cppcheck.sh -j 3 -k ../libgcc/mki.pl "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc $(LI) $(filter $(patsubst $(LI)/%.i,%,$(wildcard $(LI)/*.i)),$(CPPLG)))
+	@n=0; for p in $(CPPPROGS); do test -f progs/$$p.c || continue; n=$$((n + 1)); \
+	    $(CPRUN) $(abspath $(CPP)) --predef=$(PREDEF) $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p-prog.i && cmp $(BUILD)/cpp/$$p-prog.i $(FF)/$$p-prog.i \
+	    || { echo "cpp-check: progs/$$p.c: not gcc's .i"; exit 1; }; done; echo "cpp-check: $$n programs as gcc's .i"
+cpp-crosscheck:
+	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp-all - $(CPPALL)
+# (the commands of glibc's and libgcc's builds, and the programs' gcc -E
+# $(PROGFLAGS); the questions of all their units)
+PREDEF_ARGS = --key "$(PROGFLAGS)" $(OBJ)/build.log $(LOBJ)/build.log
+CPPCOLLECT = "$(CPRUN) $(abspath $(CPP)) --collect" --predef $$d/predef.txt
+predef:
+	@set -e; d=$(BUILD)/predef; rm -rf $$d; mkdir -p $$d; : > $$d/queries; \
+	for pass in 1 2 3 4 5; do \
+	    perl predef.pl $(PREDEF_CC) --queries $$d/queries $(PREDEF_ARGS) > $$d/predef.txt; \
+	    { echo "$(CPPALL)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 perl mki.pl --cpp $(CPPCOLLECT) --out $$d/i $(OBJ) $(GLIBC_SRC) 2>&1 > /dev/null; \
+	      echo "$(LIBGCC_C)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 perl ../libgcc/mki.pl --cpp $(CPPCOLLECT) --out $$d/i $(LOBJ) $$d/i 2>&1 > /dev/null; \
+	      for f in progs/*.c; do $(CPRUN) $(abspath $(CPP)) --collect --predef=$$d/predef.txt $(PROGFLAGS) $$f -o $$d/p.i 2>&1 > /dev/null || true; done; } \
+	        | sed -n 's/^cpp: query //p; s/^cpp: \(target .*\)/\1/p' | sort -u > $$d/new; \
+	    rm -rf $$d/i $$d/p.i; \
+	    if test ! -s $$d/new; then break; fi; \
+	    sort -u $$d/new $$d/queries > $$d/q; mv $$d/q $$d/queries; \
+	    echo "predef: pass $$pass, $$(wc -l < $$d/new) questions without gcc's answer"; \
+	done; \
+	test ! -s $$d/new || { echo "predef: still questions after 5 passes"; exit 1; }; \
+	cp $$d/predef.txt $(PREDEF); echo "predef: $(PREDEF)"
+predef-check:
+	@set -e; d=$(BUILD)/predef-check; rm -rf $$d; mkdir -p $$d; \
+	sed -n 's/^has \(.*\) [0-9]*$$/\1/p; s/^target \(.*\)$$/target \1/p' $(PREDEF) > $$d/queries; \
+	perl predef.pl $(PREDEF_CC) --queries $$d/queries $(PREDEF_ARGS) > $$d/predef.txt; \
+	cmp $$d/predef.txt $(PREDEF) || { echo "predef-check: $(PREDEF) is not what gcc says now: make predef"; exit 1; }; \
+	echo "predef-check: $(PREDEF) as gcc makes it"
+.PHONY: cpp-check cpp-crosscheck predef predef-check
+
 # ---- the C layer written in ff (T3c) ----------------------------------------
 # (c2ff-crosscheck's, below) csema -l against c2ff.pl, unit by unit, byte for byte: every unit of this
 # build's milestones from the names its object defines (as all-survey) and
@@ -1126,7 +1191,7 @@ UNITS2 := units-a units-c units-b
 units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen/ff2c.pl $(CSEMA) clang-prelude.h
 	@mkdir -p $(FF)/units
 	@for u in $(UNITS2); do \
-	    $(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $(abspath progs)/$$u.c -o $(FF)/units/$$u.i && \
+	    $(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) $(abspath progs)/$$u.c -o $(FF)/units/$$u.i && \
 	    $(RUN) -t 120 $(CLANG_AST) $(FF)/units/$$u.i > $(FF)/units/$$u.json || exit 1; \
 	done
 	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -K $(FF)/units/statics $(UNITS2:%=$(FF)/units/%.i) -- ua ub uc > $(FF)/units/page.ff.txt
@@ -1137,7 +1202,7 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen
 	@grep -q 'blist u header' $(FF)/units/page.ff.txt && grep -q 'clist u header' $(FF)/units/page.ff.txt && grep -q '^ *holder .*units-b' $(FF)/units/page.ff.txt && grep -q '^ *both .*units-a:' $(FF)/units/page.ff.txt && grep -q '^ *both:' $(FF)/units/page.ff.txt
 	@# (a program's external definition of a name that is a static in its tree: a name of its own)
 	@rm -rf $(FF)/units/tree; perl ../compiler/gen/ffsplit.pl $(FF)/units/page.ff.txt $(FF)/units/tree > /dev/null
-	@$(RUN) -t 60 $(GLIBC_CC) -E $(PROGFLAGS) $(abspath progs)/units-p.c -o $(FF)/units/units-p.i
+	@$(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) $(abspath progs)/units-p.c -o $(FF)/units/units-p.i
 	@$(RUN) -t 120 $(CLANG_AST) $(FF)/units/units-p.i > $(FF)/units/units-p.json
 	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -P units -T -I $(FF)/units/tree/index.ff -J $(FF)/units/statics $(FF)/units/units-p.i main > $(FF)/units/prog.ff.txt
 	@grep -q '^twice units/units-p:' $(FF)/units/prog.ff.txt
@@ -1433,8 +1498,8 @@ $(LOBJ)/libgcc.a:
 	nix build --out-link $(LBUILD)/gcroots/CC $$(echo $(GLIBC_CC) | cut -d/ -f1-4)
 
 .PRECIOUS: $(LI)/%.i $(LI)/%.s $(LI)/%.json
-$(LI)/%.i: $(LOBJ)/libgcc.a ../libgcc/mki.pl
-	$(RUN) -t 120 perl ../libgcc/mki.pl $(LOBJ) $(LI) $*.o > /dev/null
+$(LI)/%.i: $(LOBJ)/libgcc.a ../libgcc/mki.pl | $(CPP) $(PREDEF)
+	$(RUN) -t 120 perl ../libgcc/mki.pl --cpp $(CPPE) $(LOBJ) $(LI) $*.o > /dev/null
 $(LI)/%.s: $(LOBJ)/libgcc.a ../libgcc/mki.pl
 	$(RUN) -t 120 perl ../libgcc/mki.pl $(LOBJ) $(LI) $*.o > /dev/null
 # (x86_64's: the shadow stack's builtins (-mshstk, as gcc's

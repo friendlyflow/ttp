@@ -861,6 +861,11 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # what a unit's roots reach, gen/c2ff.pl's output; gen/clayercheck.sh and
 # src/glibc's clayer-check compare the two unit by unit, byte for byte;
 # tools-check: each target's build writes the same (the machine's build).
+# The C preprocessor (T3, so that gcc -E can go): tools/cpp.ff and its
+# _start, cpp-start.ff (TOOLLIB alone, not CLIB: c.ff's names are not its), gcc 16's -E byte for byte from gcc's options and a file of the
+# target's predefined macros (src/glibc/predef-<target>.txt); tools-check
+# runs each target's build on progs/pp (made by gcc: its expected .i), and
+# src/glibc's cpp-check on every unit of a glibc build against gcc's .i.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -869,7 +874,7 @@ TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.f
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
 CSLIB := tools/csem.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -912,6 +917,11 @@ $(TL)/$(1)/mkff: tools/mkff.ff $(TOOLLIB) $(MKFFLIB) $(SHARED) $(BOOT)/stage2
 $(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $$< $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/cpp: tools/cpp.ff tools/cpp-start.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) tools/cpp.ff tools/cpp-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
@@ -1017,6 +1027,9 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	    $$$$r $(TL)/$$$$w/csema -l -s ../glibc -S shared.ff $$$$u main > $(TL)/csema/$(1)/$$$$b.l.$$$$w 2>&1 || s=$$$$?; echo "exit $$$$s" >> $(TL)/csema/$(1)/$$$$b.l.$$$$w; done; \
 	    cmp $(TL)/csema/$(1)/$$$$b.l.$(1) $(TL)/csema/$(1)/$$$$b.l.$(TOOLT) || { echo "tools-check-$(1): csema -l on $$$$u: not this machine's build's"; exit 1; }; done
 	@echo "tools-check-$(1): csema -l writes this machine's build's C layer on $(words $(CPUNITS)) units"
+	$(RUN_$(1)) $(TL)/$(1)/cpp $$(PPTEST) -o $(TL)/$(1).pp.i
+	cmp $(TL)/$(1).pp.i progs/pp/main.i
+	@echo "tools-check-$(1): cpp writes what gcc -E writes of progs/pp"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
@@ -1047,6 +1060,18 @@ tools-check: $(TOOLTARGETS:%=tools-check-%) tools-dev-check
 tools-dev-check:
 	@sh tools/dev/mk.sh
 .PHONY: tools-dev-check
+
+# progs/pp, the C preprocessor's test (tools-check): each target's build of
+# cpp on progs/pp/main.c (macros, padding, a system header's tokens, the
+# include path's forms, pragmas, #if) must write progs/pp/main.i, which is
+# gcc's: make cpp-test-ref (nix develop's riscv64 gcc, GLIBC_CC), after a
+# change of the test or of ../glibc/predef-riscv64.txt.
+PPKEY = $(shell sed -n '2s/^predef //p' ../glibc/predef-riscv64.txt)
+PPTEST = --predef=../glibc/predef-riscv64.txt $(PPKEY) -nostdinc -isystem progs/pp/sys -Iprogs/pp/inc -Iprogs/pp/inc2 -DX=1 -UY -include progs/pp/pre.h progs/pp/main.c
+cpp-test-ref:
+	@test -n "$(GLIBC_CC)" || { echo "cpp-test-ref needs nix develop's GLIBC_CC"; exit 1; }
+	$(GLIBC_CC) -E $(filter-out --predef=%,$(PPTEST)) -o progs/pp/main.i
+.PHONY: cpp-test-ref
 
 # The committed copies (boot/, tools/old/, see NL above), made again by
 # stage2's tools after a source of theirs changed: shared.ff, a tool.

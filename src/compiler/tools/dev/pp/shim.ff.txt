@@ -1,0 +1,143 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+comment
+  the preprocessor's own runtime (its dev source declares it), on tools/rt.ff: raw syscalls, each result the kernel's, a negative errno when it fails; pp_file is rt.ff's read file, which dies on a file it cannot read
+pp_open:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      0
+      0
+pp_read:
+  long
+  fd:
+    long
+  buf:
+    u8
+    * pointer
+  n:
+    long
+  return
+    syscall
+      SYS_read
+      fd
+      buf
+      n
+pp_close:
+  long
+  fd:
+    long
+  return
+    syscall
+      SYS_close
+      fd
+pp_file:
+  u8
+  * pointer
+  path:
+    char
+    * pointer
+  size:
+    long
+    * pointer
+  return
+    read file
+      path
+      size
+pp_write:
+  long
+  fd:
+    long
+  p:
+    u8
+    * pointer
+  n:
+    long
+  return
+    syscall
+      SYS_write
+      fd
+      p
+      n
+pp_create:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  comment
+    a file to write, empty (O_WRONLY, O_CREAT, O_TRUNC; 0666)
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      577
+      438
+pp_readlink:
+  long
+  path:
+    char
+    * pointer
+  buf:
+    u8
+    * pointer
+  room:
+    long
+  sysno:
+    long
+    78
+  probe:
+    char
+    255
+  here:
+    long
+    0
+    -
+    100
+  comment
+    readlinkat by its number: 78 on riscv64 and aarch64, 267 on x86_64 (its char signed), 332 on arm (its long 4 bytes)
+  if
+    probe
+    <
+    0
+    sysno
+    =
+    267
+  if
+    sizeof
+      long
+    ==
+    4
+    sysno
+    =
+    332
+  return
+    syscall
+      sysno
+      here
+      path
+      buf
+      room
+pp_exit:
+  void
+  status:
+    long
+  syscall
+    SYS_exit
+    status

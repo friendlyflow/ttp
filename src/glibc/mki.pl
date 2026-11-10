@@ -23,11 +23,16 @@
 #   perl mki.pl <obj dir> <glibc source> string/strlen.o ...
 #   perl mki.pl --dry <obj dir> <glibc source> string/strlen.o ...
 #   perl mki.pl --log tests/string.log ... <obj dir> <glibc source> string/tst-strlen.o ...
+#   perl mki.pl --cpp TOOL --predef FILE [--out DIR] <obj dir> <glibc source> string/strlen.o ...
 #
 # --dry only prints the file each object would get (its .i or .s), making
 # none: which objects are C and which asm. --log (once or more) reads the
 # commands from that log of the build instead of build.log: glibc's tests
-# and libsupport, which `make check` compiles (tests-ref).
+# and libsupport, which `make check` compiles (tests-ref). --cpp runs the C
+# preprocessor in ff (src/compiler/tools/cpp.ff) in gcc's place, with the
+# same options and FILE's predefined macros (predef-<target>.txt); --out
+# writes the .i into DIR instead of the build's i/ (a comparison's). An
+# object of asm has no .s from it (not yet): mki.pl says so and fails.
 #
 # A host tool (core Perl only).
 use strict;
@@ -36,12 +41,14 @@ use File::Path qw(make_path);
 use File::Basename qw(dirname);
 use Cwd ();
 
-my ($dry, @logs);
-while (@ARGV && $ARGV[0] =~ /^--(dry|log)$/) {
+my ($dry, @logs, $cpp, $predef, $outdir);
+while (@ARGV && $ARGV[0] =~ /^--(dry|log|cpp|predef|out)$/) {
     shift @ARGV;
-    if ($1 eq 'dry') { $dry = 1 } else { push @logs, shift @ARGV }
+    if ($1 eq 'dry') { $dry = 1 } elsif ($1 eq 'log') { push @logs, shift @ARGV }
+    elsif ($1 eq 'cpp') { $cpp = shift @ARGV } elsif ($1 eq 'predef') { $predef = shift @ARGV } else { $outdir = shift @ARGV }
 }
-die "usage: mki.pl [--dry] [--log file]... <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
+die "usage: mki.pl [--dry] [--log file]... [--cpp tool --predef file [--out dir]] <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
+die "mki: --cpp needs --predef\n" if $cpp && !$predef;
 my ($obj, $src, @want) = @ARGV;
 # (the folder of the build, as given: its i/ is next to obj/, also where obj
 # is a link to another build's, whose build.log names its own folder)
@@ -107,13 +114,16 @@ for my $o (@want) {
     $c or do { warn "mki: no command for $o in " . join(', ', @logs) . "\n"; $bad = 1; next };
     chomp $c;
     my $ext = !$gen{$o} && $c =~ m{\.S\s| -x assembler-with-cpp } ? "s" : "i";
-    (my $i = "$build/i/$o") =~ s/\.o[sS]?$/.$ext/;
+    (my $i = ($outdir // "$build/i") . "/$o") =~ s/\.o[sS]?$/.$ext/;
     if ($dry) { print "$i\n"; next }
+    if ($cpp && $ext ne 'i') { warn "mki: $o: asm, which --cpp does not preprocess yet\n"; $bad = 1; next }
     make_path(dirname($i));
     $c =~ s/ -c / -E / or $c =~ s/ -S(\s|$)/ -E$1/;
     $c =~ s/ -o \S+\.(?:o[sS]?|S) / -o $i /;
 
     $c =~ s/ -MD -MP -MF \S+ -MT \S+//;
+    # (the preprocessor in ff in the compiler's place)
+    if ($cpp) { $c =~ s{^\s*(\S+)}{$cpp --predef=$predef} or die "mki: $o: no compiler in its command\n" }
     # build.log names the compiler and the kernel's headers by their store
     # paths: after a nixpkgs update moved them and nix gc took the old ones,
     # the command cannot run again, and the shell would only say "No such
