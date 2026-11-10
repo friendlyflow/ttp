@@ -140,6 +140,13 @@
           LIBGCC_HEADERS_aarch64 = "${pkgs.pkgsCross.aarch64-multiplatform.glibc.dev}/include";
           LIBGCC_HEADERS_x86_64 = "${pkgs.pkgsCross.gnu64.glibc.dev}/include";
           LIBGCC_HEADERS_arm = "${pkgs.pkgsCross.armv7l-hf-multiplatform.glibc.dev}/include";
+          # For src/ports (programs of the outside world in ff): each
+          # package's source as this nixpkgs has it, upstream's tarball
+          SED_SRC = "${pkgs.gnused.src}";
+          # the locales a package's tests ask for, made by a localedef of
+          # glibc 2.44 (the reference's version; its own localedef is a
+          # dynamic program of that build's, not runnable here)
+          LOCALEDEF = "${pkgs.glibc.bin}/bin/localedef";
 
           # `nix develop` always starts bash; drop into fish instead.
           # Guard against re-exec loops and non-interactive invocations
