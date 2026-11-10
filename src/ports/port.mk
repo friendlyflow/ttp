@@ -92,7 +92,7 @@ NATIVE := $(filter $(shell uname -m),$(GTARGET))
 GLIBCMAKE = $(MAKE) --no-print-directory -C $(TOP)/src/glibc BUILD=$(GB) $(if $(filter-out riscv64,$(GTARGET)),GTARGET=$(GTARGET))
 
 .DELETE_ON_ERROR:
-.PHONY: sysroot ref units ff check predef predef-check licenses
+.PHONY: sysroot ref units ff check predef predef-check licenses FORCE
 
 # ---- the sysroot: glibc installed as a program's build sees it
 # (PERL: config.make's is the store path of the reference build's day, which
@@ -144,7 +144,8 @@ $(REFDIR)/$(PKG_PROGRAM): $(REFDIR)/config.status
 
 # ---- the program's units: its link's objects (-O: their constructors are
 # roots) and its archives' members, each one's .i by cpp from its command
-$(PFF)/units: $(REFDIR)/$(PKG_PROGRAM) ../units.sh
+# (from the link's record, not the program: the check puts another in its place)
+$(PFF)/units: $(REC)/l/$(PKG_PROGRAM).cmd ../units.sh
 	mkdir -p $(PFF)
 	sh ../units.sh $(REFDIR) $(REC) $(REC)/l/$(PKG_PROGRAM).cmd > $@.tmp
 	mv $@.tmp $@
@@ -159,7 +160,9 @@ $(PFF)/units.same: $(PFF)/units ../cppunits.sh $(PREDEF) | $(CPP)
 CSFLAGS = -t $(GTARGET) -s $(SRCDIR) -S $(TOP)/src/compiler/shared.ff
 # (all of glibc in ff, src/glibc's, in GB: its obj the reference's, as
 # ports-check's pc-gbuild links it)
-$(GB)/ff/glibc/index.ff:
+$(REC)/l/$(PKG_PROGRAM).cmd: | $(REFDIR)/$(PKG_PROGRAM)
+# (src/glibc's make decides whether it is up to date: csema, the units, ...)
+$(GB)/ff/glibc/index.ff: FORCE
 	test -e $(GB)/obj || { mkdir -p $(GB) && ln -sfn $$(readlink -f $(GREF)) $(GB)/obj; }
 	$(GLIBCMAKE) -j3 $@
 ff: $(PFF)/$(PKG)
