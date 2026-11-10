@@ -1080,15 +1080,23 @@ csema-check:
 PREDEF_CC = $(shell grep -m1 '^/nix/store/[^ ]*gcc .* -c .* -o ' $(OBJ)/build.log | cut -d' ' -f1)
 CPPMS = $(patsubst $(I)/%.i,%,$(filter %.i,$(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(MSUNITS:%=%.o) 2> /dev/null)))
 CPPALL = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
-# (cpp-check's units' .i are units-ready's: it runs after it)
+# (cpp-check's references are gcc -E's, made by the check itself from
+# today's sources and options: the units' by cppcheck.sh -g, and each
+# program's, every progs/*.c with its NAME-prog.i's options, as
+# $(BUILD)/cpp/NAME.gcc.i; never the .i a BUILD kept, which cpp itself
+# makes now and which may be older than its source. A unit gcc -E does not
+# take fails it too.)
 CPPLG = $(patsubst libgcc/%,%,$(filter libgcc/%,$(MSUNITS)))
-CPPPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
+CPPPROGS = $(patsubst progs/%.c,%,$(wildcard progs/*.c))
+cppcount = s=0; $(1) > $(2) || s=$$?; cat $(2); test $$s = 0 && grep -q ', 0 without gcc' $(2)
 cpp-check:
-	$(RUN) -t 1800 bash cppcheck.sh -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp $(I) $(CPPMS)
-	$(if $(CPPLG),$(RUN) -t 1800 bash cppcheck.sh -j 3 -k ../libgcc/mki.pl "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc $(LI) $(filter $(patsubst $(LI)/%.i,%,$(wildcard $(LI)/*.i)),$(CPPLG)))
-	@n=0; for p in $(CPPPROGS); do test -f progs/$$p.c || continue; n=$$((n + 1)); \
-	    $(CPRUN) $(abspath $(CPP)) --predef=$(PREDEF) $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p-prog.i && cmp $(BUILD)/cpp/$$p-prog.i $(FF)/$$p-prog.i \
-	    || { echo "cpp-check: progs/$$p.c: not gcc's .i"; exit 1; }; done; echo "cpp-check: $$n programs as gcc's .i"
+	@mkdir -p $(BUILD)
+	$(call cppcount,$(RUN) -t 1800 bash cppcheck.sh -g -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp - $(CPPMS),$(BUILD)/cpp-check.out)
+	$(if $(CPPLG),$(call cppcount,$(RUN) -t 1800 bash cppcheck.sh -g -j 3 -k ../libgcc/mki.pl "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc - $(CPPLG),$(BUILD)/cpp-check-libgcc.out))
+	@mkdir -p $(BUILD)/cpp; n=0; for p in $(CPPPROGS); do n=$$((n + 1)); \
+	    $(GLIBC_CC) -E $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p.gcc.i || { echo "cpp-check: progs/$$p.c: gcc -E stops"; exit 1; }; \
+	    $(CPRUN) $(abspath $(CPP)) --predef=$(PREDEF) $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p-prog.i && cmp $(BUILD)/cpp/$$p-prog.i $(BUILD)/cpp/$$p.gcc.i \
+	    || { echo "cpp-check: progs/$$p.c: not gcc -E's"; exit 1; }; done; echo "cpp-check: $$n programs as gcc -E's of them now"
 cpp-crosscheck:
 	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp-all - $(CPPALL)
 # (the commands of glibc's and libgcc's builds, and the programs' gcc -E
