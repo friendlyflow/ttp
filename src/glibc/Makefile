@@ -562,7 +562,9 @@ $(I)/gccq/gccq.s: progs/gccq.c
 	mkdir -p $(@D)
 	{ $(GLIBC_CC) -E -g $< | grep '^# [0-9]* "'; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $<; } > $@
 .PRECIOUS: $(I)/gccq/%.s
-$(I)/gccq/%.s: $(I)/libgcc/_%.i
+# (a static pattern: as a pattern rule it lost to $(I)/%.s, mki's, whenever
+# _%.i was not made yet, as in a fresh BUILD: mki had no command for gccq/multc3.o)
+$(I)/gccq/multc3.s $(I)/gccq/divtc3.s: $(I)/gccq/%.s: $(I)/libgcc/_%.i
 	mkdir -p $(@D)
 	{ grep '^# [0-9]* "' $<; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $< | sed 's/\<__$*\>/__gcc_$*/g'; } > $@
 ASMS_gccrt_aarch64 := $(LIBGCC_ASM_aarch64:%=libgcc/%)
