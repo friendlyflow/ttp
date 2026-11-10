@@ -18,7 +18,7 @@ ff, the language ttpc compiles
           01010
     scope: a name's place in the tree
       a definition is seen in the subtree of its parent: by its siblings and everything below them, nowhere else
-      a name is looked up from where it stands, up the tree, innermost first: its siblings, its parent's siblings, and so on; then the program page, the target's section, the shared page
+      a name is looked up from where it stands, up the tree, innermost first: its siblings, its parent's siblings, and so on; then the program page, the program page's groups, the target's section, the shared page and the other pages
       an inner definition hides an outer one of the same name; the same name under two parents is two names
       example
         a:
@@ -31,7 +31,9 @@ ff, the language ttpc compiles
             done
           done:
             ret
-      a group's children are local to the group; a section is the exception: calling it puts the definitions of its groups in scope
+      a group (a definition whose children are all definitions) is seen by the whole program, on every page, the program page's too: its definitions after the page's own top-level names, before the other pages; a nested function's children stay local
+      a section is a group of groups: calling it puts the definitions of its groups in scope
+      the C of a definition page (a library) looks a name up in its function's scopes, then the program page, then its own group, then the other pages in their order: two pages may each have a tok
       a function whose name is only digits (0: 1: 2: ...) is a layer, the overflow of its parent past the 255 children a node holds: its children count as the parent's, in every scope, code and labels too
         a layer may hold layers, each level 255 more children
         a layer is never a name itself
@@ -535,7 +537,7 @@ ff, the language ttpc compiles
       line file number, line number: where the statements after it come from in the C the tree was made from (C's #line N "file", #line N; c2ff writes them); no code, as a comment; a line with no children is a name
         with -g the line table has that file and line for their code (the C view), elsewhere each node's line in the tree's text (the ff view)
     scope
-      the program page's functions and globals are seen everywhere on it, above and below their definition (two passes)
+      the program page's functions and globals, and those of its groups, are seen everywhere on it, above and below their definition (two passes)
       a parameter is seen in its function's body
       a function's body, an if, else or while body and a lambda are blocks; a declaration is seen from below it to the end of its block, inner blocks too
       used above its declaration is an error, used after its block an unknown name

@@ -55,6 +55,12 @@ units() { # the units' .i and clang's AST of them, in riscv64's C (the C has no 
 pages() { # the pages made, each made ff with its license: installed or compared
     b=0
     for p in "$@"; do
+        # a name ttpc reserves on some target (one of its registers), which the riscv64 translation let through
+        if ! r=$(perl "$C/gen/regcheck.pl" "$C/shared.ff" "$p.ff.txt"); then
+            echo "$r" | sed 's/^/mk.sh: /'
+            echo "mk.sh: tools/$p.ff names a register of a target (ttpc's reserved word there): rename it in the dev C"
+            b=1; continue
+        fi
         perl "$C/gen/fftext.pl" ff "$p.ff.txt" > "$p.ff"
         perl "$C/gen/addlicense.pl" "$p.ff" > /dev/null
         if test -n "$install"; then
