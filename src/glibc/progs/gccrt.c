@@ -33,6 +33,10 @@ cd __divdc3 (double, double, double, double);
 cl __multc3 (tf, tf, tf, tf);
 cl __divtc3 (tf, tf, tf, tf);
 #else
+/* (complex float128: gcc's word for it is _Complex _Float128) */
+typedef _Complex _Float128 cq;
+cq __multc3 (tf, tf, tf, tf);
+cq __divtc3 (tf, tf, tf, tf);
 cx __mulxc3 (long double, long double, long double, long double);
 cx __divxc3 (long double, long double, long double, long double);
 long double __powixf2 (long double, int);
@@ -221,6 +225,36 @@ static void l (tf x) { union { tf d; unsigned long long u[2]; } v; v.d = x; w (v
 #ifdef __x86_64__
 /* (the x87's 80 bits: the 6 bytes above them are padding) */
 static void xl (long double x) { union { long double d; unsigned long u[2]; } v; v.d = x; w (v.u[0]); w (v.u[1] & 0xffff); }
+static tf qb (const unsigned long long *p) { union { tf d; unsigned long long u[2]; } v; v.u[0] = p[0]; v.u[1] = p[1]; return v.d; }
+/* complex float128 (x86_64's __multc3 and __divtc3: _Complex __float128 in
+   memory by the SysV ABI), called from here and mixed with gcc's code
+   (progs/gccq.c, by gcc alone): gccq_muldiv, gcc's calls of the libgcc this
+   program has; __gcc_multc3 and __gcc_divtc3, gcc's code of libgcc's own C
+   (gcc -S of their .i, renamed), called from here through pointers of their
+   types (an asm function has no type in ff) */
+void gccq_muldiv (const unsigned long long *, unsigned long long *);
+cq __gcc_multc3 (tf, tf, tf, tf);
+cq __gcc_divtc3 (tf, tf, tf, tf);
+static struct
+{
+  cq (*mul) (tf, tf, tf, tf), (*div) (tf, tf, tf, tf);
+  void (*muldiv) (const unsigned long long *, unsigned long long *);
+} gq = { __gcc_multc3, __gcc_divtc3, gccq_muldiv };
+static void cqs (tf a, tf b, tf c, tf e)
+{
+  union { tf d[4]; unsigned long long u[8]; } p;
+  unsigned long long r[8];
+  int k;
+  cq z = __multc3 (a, b, c, e), q = __divtc3 (a, b, c, e);
+  l (__real__ z); l (__imag__ z); l (__real__ q); l (__imag__ q);
+  z = gq.mul (a, b, c, e);
+  q = gq.div (a, b, c, e);
+  l (__real__ z); l (__imag__ z); l (__real__ q); l (__imag__ q);
+  p.d[0] = a; p.d[1] = b; p.d[2] = c; p.d[3] = e;
+  gq.muldiv (p.u, r);
+  for (k = 0; k < 8; k++)
+    w (r[k]);
+}
 #endif
 
 #ifndef __arm__
@@ -312,8 +346,19 @@ int main (void)
 #elif defined __x86_64__
         cx zx = __mulxc3 (a, b, c, e), qx = __divxc3 (a, b, c, e);
         xl (__real__ zx); xl (__imag__ zx); xl (__real__ qx); xl (__imag__ qx);
+        cqs (a, b, c, e);
 #endif
       }
+#ifdef __x86_64__
+  /* (binary128's own range and precision: 1/3, the least normal, the least
+     subnormal, the greatest, a negative, infinity, a quiet and a signaling NaN) */
+  static unsigned long long qv[][2] = { { 0x5555555555555555ull, 0x3ffd555555555555ull }, { 0, 0x0001000000000000ull },
+    { 1, 0 }, { ~0ull, 0x7ffeffffffffffffull }, { 0x0123456789abcdefull, 0xc00123456789abcdull },
+    { 0, 0x7fff000000000000ull }, { 0, 0x7fff800000000000ull }, { 1, 0x7fff000000000000ull } };
+  for (i = 0; i < 8; i++)
+    for (j = 0; j < 8; j++)
+      cqs (qb (qv[i]), qb (qv[(i + 3) % 8]), qb (qv[j]), qb (qv[(j + 1) % 8]));
+#endif
   static long long iv[] = { 0, 1, -1, 2, 0x7f, 0x80, 0x12345678, -0x7fffffffLL, 0x0102030405060708LL, 0x7fffffffffffffffLL, (long long) 0x8000000000000000ULL };
   for (i = 0; i < sizeof iv / sizeof iv[0]; i++)
     {

@@ -521,7 +521,23 @@ OBJS_gccrt := $(OBJS_unwind) nptl/pthread_key_create nptl/pthread_setspecific np
 # morestack.S's guards, libgcc's asm)
 OBJS_gccrt_x86_64 := csu/errno-loc misc/writev signal/sigempty signal/sigfillset signal/sigdelset
 OBJS_gccrt += $(OBJS_gccrt_$(GTARGET))
-ASMS_gccrt_x86_64 := misc/syscall $(LIBGCC_ASM_x86_64:%=libgcc/%)
+# (and complex float128's calls mixed with gcc's code, by gcc alone, as asm
+# in both programs: progs/gccq.c, gcc's calls of __multc3 and __divtc3; and
+# gcc's own code of libgcc's _multc3.i and _divtc3.i, renamed __gcc_multc3
+# and __gcc_divtc3, which gccrt.c calls; each .s after its .i's line marks,
+# its license's file; gccq.c's is the program's own, ttp's, not in the asm
+# page's list of glibc's and gcc's files)
+GCCQ_x86_64 := gccq/gccq gccq/multc3 gccq/divtc3
+ASMS_gccrt_x86_64 := misc/syscall $(LIBGCC_ASM_x86_64:%=libgcc/%) $(GCCQ_x86_64)
+REFLIBS_gccrt_x86_64 = $(GCCQ_x86_64:%=$(I)/%.ref.o)
+$(FF)/gccrt.ref: $(GCCQ_$(GTARGET):%=$(I)/%.dump)
+$(I)/gccq/gccq.s: progs/gccq.c
+	mkdir -p $(@D)
+	{ $(GLIBC_CC) -E -g $< | grep '^# [0-9]* "'; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $<; } > $@
+.PRECIOUS: $(I)/gccq/%.s
+$(I)/gccq/%.s: $(I)/libgcc/_%.i
+	mkdir -p $(@D)
+	{ grep '^# [0-9]* "' $<; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $< | sed 's/\<__$*\>/__gcc_$*/g'; } > $@
 ASMS_gccrt_aarch64 := $(LIBGCC_ASM_aarch64:%=libgcc/%)
 ASMS_gccrt_arm := $(LIBGCC_ASM_arm:%=libgcc/%)
 ASMS_gccrt := $(ASMS_gccrt_$(GTARGET))
@@ -718,7 +734,7 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(ASMS_all_$(1):%=$
 	$$(RUN) $$(call csmem,$(1)) -t 600 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
 	    -- @$$(FF)/$(1).rootlist $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
-	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
+	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
 	    $$(RUN) -t 60 perl $$(S2FF) --items $$(foreach p,$$(PLT_$$(GTARGET)),--plt $$(p)) $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
@@ -1353,8 +1369,10 @@ print-%:
 # builtins, as a milestone's; its license at its root
 # (../libgcc/license.ff.txt), each page with its files' headers. What c2ff
 # cannot translate yet is left out (--keep-going), with why, in
-# $(FF)/libgcc.csema.err: _Float16 and __bf16 (HF, BF), the trapping
-# arithmetic of 128 bits. clang reads neither atomic.c (it redefines gcc's
+# $(FF)/libgcc.csema.err: riscv64's syscall_5_args (feature_bits.c's ecall),
+# arm's __floatbitintdf (an asm of two register outputs) and
+# __gcc_personality_v0 (no __builtin_eh_return_data_regno there); x86_64
+# and aarch64 none. clang reads neither atomic.c (it redefines gcc's
 # __sync builtins) nor strub.c (__builtin_stack_address, which clang lacks).
 # x86_64 (gcc's libgcc built with -mlong-double-80): its long double is
 # x87's, as ttpc's there, and __float128 (TF) ff's float128; clang does
