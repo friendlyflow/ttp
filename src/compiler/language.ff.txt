@@ -539,7 +539,7 @@ ff, the language ttpc compiles
       a parameter is seen in its function's body
       a function's body, an if, else or while body and a lambda are blocks; a declaration is seen from below it to the end of its block, inner blocks too
       used above its declaration is an error, used after its block an unknown name
-      a local hides a global or a parameter of the same name, an inner block's local hides the outer one; declared twice in one block, the later one counts
+      a local hides a global, a parameter or a struct type of the same name (in every block: its leaf is the local, not a compound literal), an inner block's local hides the outer one; declared twice in one block, the later one counts
       a function does not see the locals of its caller
       example
         x:
