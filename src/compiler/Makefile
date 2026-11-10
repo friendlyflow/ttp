@@ -1033,6 +1033,10 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	@echo "tools-check-$(1): csema -l writes this machine's build's C layer on $(words $(CPUNITS)) units"
 	$(RUN_$(1)) $(TL)/$(1)/cpp $$(PPTEST) -o $(TL)/$(1).pp.i
 	cmp $(TL)/$(1).pp.i progs/pp/main.i
+	$(RUN_$(1)) $(TL)/$(1)/cpp $$(PPTF) -o $(TL)/$(1).tf.i
+	cmp $(TL)/$(1).tf.i progs/pp/tf.i
+	$(RUN_$(1)) $(TL)/$(1)/cpp $$(PPTF) $$(PPKEY) -o $(TL)/$(1).tf-gnu11.i
+	cmp $(TL)/$(1).tf-gnu11.i progs/pp/tf-gnu11.i
 	@echo "tools-check-$(1): cpp writes what gcc -E writes of progs/pp"
 endef
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
@@ -1075,12 +1079,17 @@ tools-dev-check: | $(BUILD)
 # cpp on progs/pp/main.c (macros, padding, a system header's tokens, the
 # include path's forms, pragmas, #if) must write progs/pp/main.i, which is
 # gcc's: make cpp-test-ref (nix develop's riscv64 gcc, GLIBC_CC), after a
-# change of the test or of ../glibc/predef-riscv64.txt.
+# change of the test or of ../glibc/predef-riscv64.txt. progs/pp/tf.c: true
+# and false in #if, under gcc's default std (C23: 1 and 0) and under
+# -std=gnu11 (identifiers), tf.i and tf-gnu11.i.
 PPKEY = $(shell sed -n '2s/^predef //p' ../glibc/predef-riscv64.txt)
 PPTEST = --predef=../glibc/predef-riscv64.txt $(PPKEY) -nostdinc -isystem progs/pp/sys -Iprogs/pp/inc -Iprogs/pp/inc2 -DX=1 -UY -include progs/pp/pre.h progs/pp/main.c
+PPTF = --predef=../glibc/predef-riscv64.txt -nostdinc progs/pp/tf.c
 cpp-test-ref:
 	@test -n "$(GLIBC_CC)" || { echo "cpp-test-ref needs nix develop's GLIBC_CC"; exit 1; }
 	$(GLIBC_CC) -E $(filter-out --predef=%,$(PPTEST)) -o progs/pp/main.i
+	$(GLIBC_CC) -E $(filter-out --predef=%,$(PPTF)) -o progs/pp/tf.i
+	$(GLIBC_CC) -E $(filter-out --predef=%,$(PPTF)) $(PPKEY) -o progs/pp/tf-gnu11.i
 .PHONY: cpp-test-ref
 
 # The committed copies (boot/, tools/old/, see NL above), made again by
