@@ -150,6 +150,14 @@ CSEMA := $(CPTOOLS)/csema
 # predefined macros and answers it takes (make predef; see cpp-check below)
 CPP := $(CPTOOLS)/cpp
 PREDEF := predef-$(GTARGET).txt
+# mki.pl and ../libgcc/mki.pl in ff (../compiler/tools/mki.ff, made as
+# csema; mki-crosscheck compares it with them): an object's command from
+# the reference build's log, again with -E or cpp. MKID is its --dry, in
+# make's own lists: it stops when mki is not made yet (an empty list
+# would make a check pass on nothing)
+MKIT := $(CPTOOLS)/mki
+MKI = $(CPRUN) $(abspath $(MKIT))
+MKID = $(if $(wildcard $(MKIT)),$(MKI) --dry,$(error $(MKIT) is not made: make -C ../compiler BUILD=... its tools/<host>/mki first (ports-check's tools step makes it)))
 CSFLAGS = -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff
 CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
@@ -164,7 +172,7 @@ csread = $(if $(filter $(1),$(CLANGVEC)),$(I)/$(1).vec.i=)$(I)/$(1).i
 csflags = $(foreach z,$(call with_start,ZEROS,$(1)),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$(1)),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$(1))),-k)
 csdeps = $(1:%=$(I)/%.i) $(addprefix $(I)/,$(addsuffix .vec.i,$(filter $(1),$(CLANGVEC))))
 # (it is made by make -C ../compiler, never here: four targets' makes at once)
-$(CSEMA):
+$(CSEMA) $(CPP) $(MKIT):
 	@echo "$@ is not made: make -C ../compiler $(abspath $@) first (ports-check's tools step does)"; exit 1
 C2FF_CLANG ?= $(error C2FF_CLANG is not set: run this in `nix develop`)
 # ttpc: on an x86_64 machine its own build for x86_64 (make bootstraps makes
@@ -622,14 +630,14 @@ objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip) $(OBJS_skip_$(
 .PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 # (a C object's .i is the C preprocessor in ff's, cpp, from the object's
-# command, as gcc -E's byte for byte: cpp-check, cpp-crosscheck; an asm
-# object's .s still gcc's. cpp and predef-$(GTARGET).txt only order the .i:
-# what they write does not change with them)
+# command, as gcc -E's byte for byte: cpp-check, cpp-crosscheck; so is an
+# asm object's .s, cpp's -x assembler-with-cpp. cpp and predef-$(GTARGET).txt
+# only order the .i and .s: what they write does not change with them)
 CPPE = "$(CPRUN) $(abspath $(CPP))" --predef $(abspath $(PREDEF))
-$(I)/%.i: $(OBJ)/libc.a mki.pl | $(CPP) $(PREDEF)
-	$(RUN) -t 120 perl mki.pl --cpp $(CPPE) $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+$(I)/%.i: $(OBJ)/libc.a | $(MKIT) $(CPP) $(PREDEF)
+	$(RUN) -t 120 $(MKI) --cpp $(CPPE) $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
-# An object of a .S: its .s (mki.pl again), and what glibc's compiler makes
+# An object of a .S: its .s (mki.pl --cpp again), and what glibc's compiler makes
 # of it without relaxation, as instructions (for s2ff.pl, which takes the
 # compressed ones GNU as picked) and as the bytes of its .text, which ttpc
 # must make too. Per target: riscv64's relaxation off and its
@@ -640,8 +648,8 @@ DUMPOPT_riscv64 := -M no-aliases
 DUMPOPT_x86_64 := -w
 # (arm's with its symbols and relocations: the literal pools' words)
 DUMPOPT_arm := -r -t
-$(I)/%.s: $(OBJ)/libc.a mki.pl
-	$(RUN) -t 120 perl mki.pl $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
+$(I)/%.s: $(OBJ)/libc.a | $(MKIT) $(CPP) $(PREDEF)
+	$(RUN) -t 120 $(MKI) --cpp $(CPPE) $(OBJ) $(GLIBC_SRC) $*.o > /dev/null
 
 #
 # aarch64 (s2ff-aarch64.pl): the instructions are read from the object
@@ -855,8 +863,8 @@ $(FF)/%.ref $(FF)/%.map &: progs/%.c $(OBJ)/libc.a
 	    $(FF)/$*.ref.o -Wl,--start-group $(OBJ)/libc.a $(REFLIBS_$*_$(GTARGET)) -lgcc -lgcc_eh -Wl,--end-group $(CRTEND) $(OBJ)/csu/crtn.o
 
 # what a milestone's program links of glibc (aarch64's milestones)
-$(FF)/%.objs.mk: $(FF)/%.map linkobjs.pl allobjs.pl mki.pl
-	perl linkobjs.pl $* $(FF)/$*.map $(OBJ) $(GLIBC_SRC) > $@
+$(FF)/%.objs.mk: $(FF)/%.map linkobjs.pl allobjs.pl | $(MKIT)
+	MKI="$(MKI)" perl linkobjs.pl $* $(FF)/$*.map $(OBJ) $(GLIBC_SRC) > $@
 
 # A milestone as a folder that a program includes lazily (ffsplit.pl): a file
 # per page and index.ff, the file of each name; ttpc reads only the files
@@ -1025,6 +1033,8 @@ unitsfile = $(shell mkdir -p $(dir $(1)))$(file >$(1),$(subst $(sp1),$(nl),$(str
 # else its i/ holds, so that a check means one thing in every BUILD; ALLUNITS=1:
 # every unit there, for a BUILD of all of glibc)
 MSUNITS = $(sort $(foreach m,$(CHECK_MS),$(OBJS_all_$(m))))
+# (and their asm objects: cpp-check's and mki-crosscheck's .s)
+MSASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
 SCOPEI = $(if $(ALLUNITS),$(wildcard $(I)/*/*.i),$(wildcard $(MSUNITS:%=$(I)/%.i)))
 cparse-check:
 	@echo "cparse-check: $(words $(sort $(SCOPEI) $(wildcard $(FF)/*-prog.i))) units of $(BUILD)"
@@ -1052,29 +1062,32 @@ csema-check:
 # --cpp) and predef-$(GTARGET).txt (gcc's predefined macros of each set of
 # options, its include directories and its answers to __has_builtin and its
 # kin: make predef), byte for byte as gcc -E's (cppcheck.sh).
-#   cpp-check       the C units of this build's milestones against their .i
-#                   in $(I) (a ports-check step: a minute or two)
-#   cpp-crosscheck  all of glibc's C objects against gcc -E run now (minutes,
-#                   nothing kept but the lists; with predef-check: run it
-#                   before ports goes into main)
+# An asm object's .s the same (-x assembler-with-cpp, a .S: gcc's asm mode,
+# predef's sets that begin with -x assembler-with-cpp).
+#   cpp-check       the C and asm units of this build's milestones against
+#                   their .i and .s in $(I) (a ports-check step: a minute or two)
+#   cpp-crosscheck  all of glibc's C and asm objects, and libgcc's, against
+#                   gcc -E run now (minutes, nothing kept but the lists; with
+#                   predef-check: run it before ports goes into main)
 #   predef          predef-$(GTARGET).txt made again: gcc's answers to what
 #                   cpp --collect of all of glibc's units asks, until nothing
 #                   is new (needs gcc: the reference build's)
 #   predef-check    the committed file is what predef makes
 PREDEF_CC = $(shell grep -m1 '^/nix/store/[^ ]*gcc .* -c .* -o ' $(OBJ)/build.log | cut -d' ' -f1)
-CPPMS = $(patsubst $(I)/%.i,%,$(filter %.i,$(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(MSUNITS:%=%.o) 2> /dev/null)))
-CPPALL = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
+CPPMS = $(basename $(patsubst $(I)/%,%,$(filter %.i %.s,$(shell $(MKID) $(OBJ) $(GLIBC_SRC) $(MSUNITS:%=%.o) $(MSASMS:%=%.o) 2> /dev/null))))
+CPPALL = $(basename $(patsubst $(I)/%,%,$(filter %.i %.s,$(ALLFILES))))
 # (cpp-check's units' .i are units-ready's: it runs after it)
 CPPLG = $(patsubst libgcc/%,%,$(filter libgcc/%,$(MSUNITS)))
 CPPPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
 cpp-check:
-	$(RUN) -t 1800 bash cppcheck.sh -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp $(I) $(CPPMS)
-	$(if $(CPPLG),$(RUN) -t 1800 bash cppcheck.sh -j 3 -k ../libgcc/mki.pl "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc $(LI) $(filter $(patsubst $(LI)/%.i,%,$(wildcard $(LI)/*.i)),$(CPPLG)))
+	$(RUN) -t 1800 bash cppcheck.sh -j 3 -k "$(MKI)" "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp $(I) $(CPPMS)
+	$(if $(CPPLG),$(RUN) -t 1800 bash cppcheck.sh -j 3 -k "$(MKI) --libgcc" "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc $(LI) $(filter $(basename $(patsubst $(LI)/%,%,$(wildcard $(LI)/*.i $(LI)/*.s))),$(CPPLG)))
 	@n=0; for p in $(CPPPROGS); do test -f progs/$$p.c || continue; n=$$((n + 1)); \
 	    $(CPRUN) $(abspath $(CPP)) --predef=$(PREDEF) $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p-prog.i && cmp $(BUILD)/cpp/$$p-prog.i $(FF)/$$p-prog.i \
 	    || { echo "cpp-check: progs/$$p.c: not gcc's .i"; exit 1; }; done; echo "cpp-check: $$n programs as gcc's .i"
 cpp-crosscheck:
-	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp-all - $(CPPALL)
+	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 -k "$(MKI)" "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp-all - $(CPPALL)
+	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 -k "$(MKI) --libgcc" "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc-all - $(LIBGCC_C) $(LIBGCC_ASM) $(LIBGCC_ASMWEAK_$(GTARGET))
 # (the commands of glibc's and libgcc's builds, and the programs' gcc -E
 # $(PROGFLAGS); the questions of all their units)
 PREDEF_ARGS = --key "$(PROGFLAGS)" $(OBJ)/build.log $(LOBJ)/build.log
@@ -1083,8 +1096,8 @@ predef:
 	@set -e; d=$(BUILD)/predef; rm -rf $$d; mkdir -p $$d; : > $$d/queries; \
 	for pass in 1 2 3 4 5; do \
 	    perl predef.pl $(PREDEF_CC) --queries $$d/queries $(PREDEF_ARGS) > $$d/predef.txt; \
-	    { echo "$(CPPALL)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 perl mki.pl --cpp $(CPPCOLLECT) --out $$d/i $(OBJ) $(GLIBC_SRC) 2>&1 > /dev/null; \
-	      echo "$(LIBGCC_C)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 perl ../libgcc/mki.pl --cpp $(CPPCOLLECT) --out $$d/i $(LOBJ) $$d/i 2>&1 > /dev/null; \
+	    { echo "$(CPPALL)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 $(MKI) --cpp $(CPPCOLLECT) --out $$d/i $(OBJ) $(GLIBC_SRC) 2>&1 > /dev/null; \
+	      echo "$(LIBGCC_C)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 $(MKI) --libgcc --cpp $(CPPCOLLECT) --out $$d/i $(LOBJ) $$d/i 2>&1 > /dev/null; \
 	      for f in progs/*.c; do $(CPRUN) $(abspath $(CPP)) --collect --predef=$$d/predef.txt $(PROGFLAGS) $$f -o $$d/p.i 2>&1 > /dev/null || true; done; } \
 	        | sed -n 's/^cpp: query //p; s/^cpp: \(target .*\)/\1/p' | sort -u > $$d/new; \
 	    rm -rf $$d/i $$d/p.i; \
@@ -1101,6 +1114,41 @@ predef-check:
 	cmp $$d/predef.txt $(PREDEF) || { echo "predef-check: $(PREDEF) is not what gcc says now: make predef"; exit 1; }; \
 	echo "predef-check: $(PREDEF) as gcc makes it"
 .PHONY: cpp-check cpp-crosscheck predef predef-check
+
+# ---- mki in ff (T4) ----------------------------------------------------------
+# mki-crosscheck: tools/mki.ff (MKI) against mki.pl and ../libgcc/mki.pl, the
+# Perl it replaces on the normal path (kept as this cross-check): the same
+# lines, messages and exit status of --dry and --show (each command as it
+# would run, with and without --cpp) over every object of glibc (ALLOBJS
+# and libm's soft-fp objects) and of libgcc (LIBGCC_C, LIBGCC_ASM), and the
+# same .i and .s files (gcc -E run by each) of this build's milestones.
+# Run it before ports goes into main, with cpp-crosscheck.
+MKICMP = perl $(1) $(2) > $$d/p.out 2> $$d/p.err || echo "exit $$?" >> $$d/p.err; \
+	$(MKI) $(3) $(2) > $$d/f.out 2> $$d/f.err || echo "exit $$?" >> $$d/f.err; \
+	cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.err $$d/f.err || { echo "mki-crosscheck: mki $(3) $(firstword $(2)) is not $(1)'s"; diff $$d/p.out $$d/f.out | head; diff $$d/p.err $$d/f.err | head; exit 1; }; \
+	echo "mki-crosscheck: mki$(if $(3), $(3)) $(firstword $(2)) ... as $(1): $$(wc -l < $$d/p.out) lines"
+MKISOFT := soft-fp/addtf3 soft-fp/subtf3 soft-fp/multf3 soft-fp/divtf3
+# (the lists in files: on one command line they are past what sh takes;
+# make writes them as it expands the recipe, before it runs it)
+MKIX = $(BUILD)/mki-crosscheck
+mki-crosscheck:
+	$(file >$(MKIX).objs,$(ALLOBJS:%=%.o) $(MKISOFT:%=%.o))
+	$(file >$(MKIX).lobjs,$(LIBGCC_C:%=%.o) $(LIBGCC_ASM:%=%.o))
+	$(file >$(MKIX).ms,$(MSUNITS:%=%.o) $(MSASMS:%=%.o))
+	@set -e; d=$(MKIX); rm -rf $$d; mkdir -p $$d; \
+	$(call MKICMP,mki.pl,--dry $(OBJ) $(GLIBC_SRC) $$(cat $$d.objs)); \
+	$(call MKICMP,mki.pl,--show $(OBJ) $(GLIBC_SRC) $$(cat $$d.objs)); \
+	$(call MKICMP,mki.pl,--show --cpp CPP --predef PREDEF $(OBJ) $(GLIBC_SRC) $$(cat $$d.objs)); \
+	$(call MKICMP,../libgcc/mki.pl,--dry $(LOBJ) $(LI) $$(cat $$d.lobjs),--libgcc); \
+	$(call MKICMP,../libgcc/mki.pl,--show $(LOBJ) $(LI) $$(cat $$d.lobjs),--libgcc); \
+	$(call MKICMP,../libgcc/mki.pl,--show --cpp CPP --predef PREDEF $(LOBJ) $(LI) $$(cat $$d.lobjs),--libgcc); \
+	perl mki.pl --out $$d/p $(OBJ) $(GLIBC_SRC) $$(cat $$d.ms) > $$d/p.files 2> $$d/p.err || true; \
+	$(MKI) --out $$d/f $(OBJ) $(GLIBC_SRC) $$(cat $$d.ms) > $$d/f.files 2> $$d/f.err || true; \
+	sed "s|^$$d/p/||" $$d/p.files > $$d/p.list; sed "s|^$$d/f/||" $$d/f.files > $$d/f.list; \
+	cmp $$d/p.list $$d/f.list && cmp $$d/p.err $$d/f.err && diff -r $$d/p $$d/f > /dev/null \
+	    || { echo "mki-crosscheck: the milestones' files differ ($$d)"; exit 1; }; \
+	echo "mki-crosscheck: the milestones' $$(grep -c '\.i$$' $$d/p.list) .i and $$(grep -c '\.s$$' $$d/p.list) .s as mki.pl's"
+.PHONY: mki-crosscheck
 
 # ---- the C layer written in ff (T3c) ----------------------------------------
 # (c2ff-crosscheck's, below) csema -l against c2ff.pl, unit by unit, byte for byte: every unit of this
@@ -1297,7 +1345,7 @@ all-checks:
 SLOT := $(RUN)
 ALLOBJS = $(shell perl allobjs.pl $(OBJ) | cut -d' ' -f2)
 # (worked out once, where a target needs it)
-ALLFILES = $(eval ALLFILES := $(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
+ALLFILES = $(eval ALLFILES := $(shell $(MKID) $(OBJ) $(GLIBC_SRC) $(ALLOBJS:%=%.o)))$(ALLFILES)
 # (and long double's soft-fp, as the ldouble milestone has it: libgcc's on
 # a gcc build, glibc's own code, which ttpc's long double calls)
 # (not libmvec's vector functions on aarch64 yet: their C is gcc's arm_neon.h
@@ -1480,10 +1528,10 @@ $(LOBJ)/libgcc.a:
 	nix build --out-link $(LBUILD)/gcroots/CC $$(echo $(GLIBC_CC) | cut -d/ -f1-4)
 
 .PRECIOUS: $(LI)/%.i $(LI)/%.s $(LI)/%.json
-$(LI)/%.i: $(LOBJ)/libgcc.a ../libgcc/mki.pl | $(CPP) $(PREDEF)
-	$(RUN) -t 120 perl ../libgcc/mki.pl --cpp $(CPPE) $(LOBJ) $(LI) $*.o > /dev/null
-$(LI)/%.s: $(LOBJ)/libgcc.a ../libgcc/mki.pl
-	$(RUN) -t 120 perl ../libgcc/mki.pl $(LOBJ) $(LI) $*.o > /dev/null
+$(LI)/%.i: $(LOBJ)/libgcc.a | $(MKIT) $(CPP) $(PREDEF)
+	$(RUN) -t 120 $(MKI) --libgcc --cpp $(CPPE) $(LOBJ) $(LI) $*.o > /dev/null
+$(LI)/%.s: $(LOBJ)/libgcc.a | $(MKIT) $(CPP) $(PREDEF)
+	$(RUN) -t 120 $(MKI) --libgcc --cpp $(CPPE) $(LOBJ) $(LI) $*.o > /dev/null
 # (x86_64's: the shadow stack's builtins (-mshstk, as gcc's
 # -fcf-protection -mshstk), the casts of longlong.h's asm
 # outputs, which gcc takes as their lvalues; unwind-dw2's intrinsics
@@ -1616,8 +1664,8 @@ endif
 
 .PRECIOUS: $(TI)/%.i $(TI)/%.c2ff $(TFF)/%-prog.ff $(TFF)/%.ref $(TFF)/%-prog
 
-$(TI)/%.i: mki.pl | $(TOBJ)/$(AREA).log
-	$(RUN) -t 120 perl mki.pl $(TLOGS) $(TOBJ) $(GLIBC_SRC) $*.o > /dev/null
+$(TI)/%.i: | $(MKIT) $(TOBJ)/$(AREA).log
+	$(RUN) -t 120 $(MKI) $(TLOGS) $(TOBJ) $(GLIBC_SRC) $*.o > /dev/null
 
 # (a test's .i for clang: on riscv64 the suffixes of gcc's _FloatN literals,
 # f32 f64 f32x f64x f128, which clang lacks, as the C types they are there,

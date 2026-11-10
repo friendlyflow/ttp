@@ -6,15 +6,16 @@
 # are the truth, and what the build reads; the C here is what they are made
 # from: c/ tools/c.ff, cparse.ff, cprint.ff; cs/ tools/csem.ff, csema.ff,
 # csema-<target>.ff (cs/ takes c/c.h); pp/ tools/cpp.ff and cpp-start.ff, the C preprocessor
-# (on tools/rt.ff and c.ff's runtime). Through clang + gen/c2ff.pl --page,
+# (on tools/rt.ff and c.ff's runtime); mki/ tools/mki.ff and mki-start.ff, src/glibc's and
+# src/libgcc's mki.pl in ff (the same). Through clang + gen/c2ff.pl --page,
 # then each folder's mkpages.py, fftext and addlicense, all in build/dev.
 #
-#   sh src/compiler/tools/dev/mk.sh [-i] [-n] [c] [cs] [pp]
+#   sh src/compiler/tools/dev/mk.sh [-i] [-n] [c] [cs] [pp] [mki]
 #
 # Without -i: compares what it made with tools/, exit 1 if any differs (make
 # tools-dev-check; a change of gen/c2ff.pl can show here too). -i: installs it
 # in tools/, by a rename. -n: also a gcc build of each for fast work,
-# build/dev/c/cparse, build/dev/cs/csema, build/dev/pp/cpp. The folder here is only read; every
+# build/dev/c/cparse, build/dev/cs/csema, build/dev/pp/cpp, build/dev/mki/mki. The folder here is only read; every
 # output goes to build/dev. It stops on a source that is empty or under half
 # its committed size: an accident, get it back with git checkout.
 # Needs nix develop's clang (it enters nix develop if C2FF_CLANG is not set).
@@ -37,7 +38,7 @@ OUT=$R/build/dev
 case "$OUT/" in "$D"/*) echo "mk.sh: its output $OUT is in its source" >&2; exit 2 ;; esac
 
 # ---- sources as they should be
-for f in "$D"/c/* "$D"/cs/* "$D"/pp/*; do
+for f in "$D"/c/* "$D"/cs/* "$D"/pp/* "$D"/mki/*; do
     test -s "$f" || { echo "mk.sh: $f is empty: git checkout it" >&2; exit 2; }
     was=$(git -C "$D" cat-file -s "HEAD:./${f#"$D"/}" 2> /dev/null || echo 0)
     now=$(wc -c < "$f")
@@ -77,7 +78,7 @@ pages() { # the pages made, each made ff with its license: installed or compared
 }
 
 bad=0
-for w in ${*:-c cs pp}; do
+for w in ${*:-c cs pp mki}; do
     case $w in
     c)
         fresh c
@@ -108,7 +109,16 @@ for w in ${*:-c cs pp}; do
         pages cpp cpp-start || bad=1
         if test -n "$native"; then gcc -O1 -w -o cpp shim.c pp.c; fi
         ;;
-    *) echo "usage: mk.sh [-i] [-n] [c] [cs] [pp]" >&2; exit 2 ;;
+    mki)
+        fresh mki
+        cd "$OUT/mki"
+        units mki
+        perl "$C/gen/c2ff.pl" --page mki --target riscv64 mki.json=mki.i -- mki_main > all.ff.txt 2> c2ff.err
+        python3 mkpages.py
+        pages mki mki-start || bad=1
+        if test -n "$native"; then gcc -O1 -w -o mki shim.c mki.c; fi
+        ;;
+    *) echo "usage: mk.sh [-i] [-n] [c] [cs] [pp] [mki]" >&2; exit 2 ;;
     esac
 done
 exit $bad

@@ -13,7 +13,9 @@
    macro was named, and whether the token was spelled in a system header),
    the padding tokens of an expansion, the multiple-include optimization,
    and gcc's -E printer (c-ppoutput.cc) of line markers, newlines and
-   columns. */
+   columns. Also the .s of an object of asm, gcc -E -x assembler-with-cpp
+   (a .S, or stdin, -, after -x): libcpp's CLK_ASM, its set of predefined
+   macros in --predef the one whose options begin with -x assembler-with-cpp. */
 
 /* the runtime: tools/rt.ff's alloc, tools/c.ff's cp_* (the C parser's runtime: c/shim.ff.txt) and the page's
    own pp_* (pp/shim.ff.txt; the dev build's shim.c): raw syscalls, each result the kernel's, a negative errno
@@ -227,6 +229,8 @@ struct pst {
   long errors;
   /* the target */
   int uchar, wchar_unsigned, wchar_bits;
+  int lang_asm;         /* -x assembler-with-cpp (CLK_ASM): no $ or UTF-8 in names, no digraphs, only L'' and L"", an unknown
+                           directive kept, # without a parameter kept, no #pragma or #ident printed, no line adjustments */
   struct has *has; int collect;
   struct hnode *cur_macro_node;   /* the macro being defined (diagnostics) */
 };
@@ -517,14 +521,14 @@ static void stream (struct tok *t, struct vloc *l)
   pps->prev_was_system = is_sys;
   if (pps->avoid_paste_p) {
     if (pps->source == 0) pps->source = t;
-    if (l->lno != pps->src_line && !pps->in_pragma) {
+    if (l->lno != pps->src_line && !pps->in_pragma && !pps->lang_asm) {
       marker = do_line_change (t, l, 0);
       o_ch (' '); pps->printed = 1;
     } else if ((pps->source->flags & PREV_WHITE) || (pps->prev && avoid_paste (pps->prev, t)) || (pps->prev == 0 && t->type == T_HASH)) {
       o_ch (' '); pps->printed = 1;
     }
   } else if ((t->flags & PREV_WHITE) && t->type != T_PRAGMA) {
-    if (l->lno != pps->src_line && !pps->in_pragma) marker = do_line_change (t, l, 0);
+    if (l->lno != pps->src_line && !pps->in_pragma && !pps->lang_asm) marker = do_line_change (t, l, 0);
     o_ch (' '); pps->printed = 1;
   }
   pps->avoid_paste_p = 0;
@@ -533,22 +537,23 @@ static void stream (struct tok *t, struct vloc *l)
   if (t->type == T_PRAGMA) {
     char *space, *name;
     pps->in_pragma = 1;
-    maybe_print_line (&t->loc);
-    o_str ("#pragma ");
-    pragma_name (t->pragma, &space, &name);
-    if (space) { o_str (space); o_ch (' '); }
-    o_str (name);
-    pps->printed = 1;
+    if (!pps->lang_asm) {   /* (should_output_pragmas) */
+      maybe_print_line (&t->loc);
+      o_str ("#pragma ");
+      pragma_name (t->pragma, &space, &name);
+      if (space) { o_str (space); o_ch (' '); }
+      o_str (name);
+      pps->printed = 1;
+    }
     pragma_early (t->pragma);
   } else if (t->type == T_PRAGMA_EOL) {
-    maybe_print_line (0);
+    if (!pps->lang_asm) maybe_print_line (0);
     pps->in_pragma = 0;
     if (pps->tpending) pragma_late ();
   } else {
     if (pps->tpending) targs_add (t);
-    if (!pps->in_pragma && !marker && changed && !l->bi) marker = do_line_change (t, l, 0);
-    out_token (t);
-    pps->printed = 1;
+    if (!pps->in_pragma && !pps->lang_asm && !marker && changed && !l->bi) marker = do_line_change (t, l, 0);
+    if (!pps->in_pragma || !pps->lang_asm) { out_token (t); pps->printed = 1; }
   }
 }
 
@@ -647,8 +652,9 @@ static int utf8_len (unsigned char *p)   /* a valid UTF-8 sequence's length, or 
   while (i < n) { if ((p[i] & 0xc0) != 0x80) return 0; i++; }
   return n;
 }
-static int ident_more (unsigned char *p)   /* forms_identifier_p: $ or UTF-8 */
+static int ident_more (unsigned char *p)   /* forms_identifier_p: $ or UTF-8 (neither in assembler) */
 {
+  if (pps->lang_asm) return 0;
   if (*p == '$') return 1;
   if (*p >= 0x80) return utf8_len (p);
   return 0;
@@ -805,7 +811,8 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
   case 'L': case 'u': case 'U': case 'R':
     {
       unsigned char *p = b->cur;
-      if ((*p == '\'' && c != 'R') || *p == '"' || (*p == 'R' && c != 'R' && p[1] == '"')
+      if (pps->lang_asm) { if (c == 'L' && (*p == '\'' || *p == '"')) { lex_string (result, p - 1); break; } }
+      else if ((*p == '\'' && c != 'R') || *p == '"' || (*p == 'R' && c != 'R' && p[1] == '"')
           || (*p == '8' && c == 'u' && (p[1] == '"' || (p[1] == 'R' && p[2] == '"')))) {
         lex_string (result, p - 1);
         break;
@@ -832,8 +839,8 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
     result->type = T_LESS;
     if (*b->cur == '=') b->cur++, result->type = T_LESS_EQ;
     else if (*b->cur == '<') { b->cur++; result->type = T_LSHIFT; if (*b->cur == '=') b->cur++, result->type = T_LSHIFT_EQ; }
-    else if (*b->cur == ':') { b->cur++; result->flags |= DIGRAPH; result->type = T_OPEN_SQUARE; }
-    else if (*b->cur == '%') { b->cur++; result->flags |= DIGRAPH; result->type = T_OPEN_BRACE; }
+    else if (*b->cur == ':' && !pps->lang_asm) { b->cur++; result->flags |= DIGRAPH; result->type = T_OPEN_SQUARE; }
+    else if (*b->cur == '%' && !pps->lang_asm) { b->cur++; result->flags |= DIGRAPH; result->type = T_OPEN_BRACE; }
     break;
   case '>':
     result->type = T_GREATER;
@@ -843,10 +850,10 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
   case '%':
     result->type = T_MOD;
     if (*b->cur == '=') b->cur++, result->type = T_MOD_EQ;
-    else if (*b->cur == ':') {
+    else if (*b->cur == ':' && !pps->lang_asm) {
       b->cur++; result->flags |= DIGRAPH; result->type = T_HASH;
       if (*b->cur == '%' && b->cur[1] == ':') b->cur += 2, result->type = T_PASTE;
-    } else if (*b->cur == '>') { b->cur++; result->flags |= DIGRAPH; result->type = T_CLOSE_BRACE; }
+    } else if (*b->cur == '>' && !pps->lang_asm) { b->cur++; result->flags |= DIGRAPH; result->type = T_CLOSE_BRACE; }
     break;
   case '.':
     result->type = T_DOT;
@@ -877,7 +884,7 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
   case ':':
     result->type = T_COLON;
     if (*b->cur == ':') b->cur++, result->type = T_SCOPE;
-    else if (*b->cur == '>') { b->cur++; result->flags |= DIGRAPH; result->type = T_CLOSE_SQUARE; }
+    else if (*b->cur == '>' && !pps->lang_asm) { b->cur++; result->flags |= DIGRAPH; result->type = T_CLOSE_SQUARE; }
     break;
   case '*': result->type = T_MULT; if (*b->cur == '=') b->cur++, result->type = T_MULT_EQ; break;
   case '=': result->type = T_EQ; if (*b->cur == '=') b->cur++, result->type = T_EQ_EQ; break;
@@ -1102,7 +1109,7 @@ static int paste_tokens (struct tok **plhs, struct tok *rhs)
     r->loc = keep;
     r->flags &= ~PASTE_LEFT;
     *plhs = r;
-    error ("pasting does not give a valid preprocessing token");
+    if (!pps->lang_asm) error ("pasting does not give a valid preprocessing token");
     return 0;
   }
   r->flags |= lhs->flags & PREV_WHITE;
@@ -2377,7 +2384,7 @@ static struct macro *create_definition (void)   /* create_iso_definition */
         t[-1] = t[0];
         m->count--;
         t--;
-      } else { error ("'#' is not followed by a macro parameter"); goto out; }
+      } else if (!pps->lang_asm) { error ("'#' is not followed by a macro parameter"); goto out; }
     }
     if (t->type == T_EOF) {
       if (following_paste) { error ("'##' cannot appear at either end of a macro expansion"); goto out; }
@@ -2559,7 +2566,7 @@ static void do_ident (void)
 {
   struct tok *s = get_token ();
   if (s->type != T_STRING) error ("invalid #ident directive");
-  else {
+  else if (!pps->lang_asm) {   /* (cb_ident: not in assembler) */
     struct vloc l; map_loc (pps->curmap, pps->directive_line, &l);
     maybe_print_line (&l);
     o_str ("#ident "); o_bytes (s->text, s->len); o_ch ('\n');
@@ -2670,7 +2677,7 @@ static void do_pragma (void)
       pragma_run (p->kind);
       if (p->expand) pps->prevent_expansion++;
     }
-  } else {
+  } else if (!pps->lang_asm) {   /* (cb_def_pragma: not in assembler) */
     if (count == 1 || pps->ctx->prev == 0) backup_tokens (count);
     else {
       struct tok **a = alloc (2 * sizeof (struct tok *));
@@ -2916,13 +2923,14 @@ static int handle_directive (int indented)
   dname = lex_token ();
   if (dname->type == T_NAME) {
     if (dname->node->dir) dir = dname->node->dir;
-  } else if (dname->type == T_NUMBER) dir = D_LINEMARKER;
+  } else if (dname->type == T_NUMBER && !pps->lang_asm) dir = D_LINEMARKER;   /* (not in assembler) */
   if (dir) {
     if (!(dir == D_LINEMARKER ? 0 : (dflags[dir] & F_IF_COND))) pps->mi_valid = 0;
     pps->angled_headers = dir != D_LINEMARKER && (dflags[dir] & F_INCL);
     pps->directive_wants_padding = pps->angled_headers;
     if (pps->skipping && !(dir != D_LINEMARKER && (dflags[dir] & F_COND))) dir = 0;
   } else if (dname->type == T_EOF) ;
+  else if (pps->lang_asm) skip = 0;   /* an assembler's # (a comment, a pseudo-op): the line as it is */
   else if (!pps->skipping) {
     unsigned char b[256]; long n = spell (dname, b);
     error2 ("invalid preprocessing directive #", b, n);
@@ -2948,7 +2956,7 @@ static int handle_directive (int indented)
     else if (dir == D_LINEMARKER) do_linemarker ();
     else if (dir == D_EMBED) fatal ("#embed is not supported");
     else if (dir == D_ASSERT || dir == D_UNASSERT) fatal ("#assert is not supported");
-  }
+  } else if (skip == 0) backup_tokens (1);
   end_directive (skip);
   if (was_parsing_args && !pps->in_deferred_pragma) { pps->parsing_args = 2; pps->prevent_expansion = 1; }
   if (was_discarding) pps->prevent_expansion = 1;
@@ -2987,15 +2995,31 @@ static void key_add (struct opts *o, char *s)
   o->key = k; o->klen += n;
 }
 static int starts (char *s, char *p) { long i = 0; while (p[i]) { if (s[i] != p[i]) return 0; i++; } return 1; }
+static int lang_of (char *x)   /* -x: c or assembler-with-cpp, none (-1) */
+{
+  long n = slen (x);
+  if (is ((unsigned char *) x, n, "c")) return 0;
+  if (is ((unsigned char *) x, n, "assembler-with-cpp")) return 1;
+  if (is ((unsigned char *) x, n, "none")) return -1;
+  fatal2 ("only -x c and -x assembler-with-cpp are supported: -x ", (unsigned char *) x, n);
+  return 0;
+}
 static void parse_opts (struct opts *o, int argc, char **argv)
 {
-  int i = 1;
+  int i = 1, x = -1;   /* the -x in force: -1 none (the file's suffix decides), 0 c, 1 assembler-with-cpp */
   o->incs = alloc (argc * sizeof (char *)); o->defs = alloc (argc * sizeof (char *)); o->defk = alloc (argc * sizeof (int));
   o->iq = alloc (argc * sizeof (char *)); o->ib = alloc (argc * sizeof (char *)); o->is = alloc (argc * sizeof (char *)); o->ia = alloc (argc * sizeof (char *));
   while (i < argc) {
     char *a = argv[i];
     char *arg = 0;
-    if (a[0] != '-' || a[1] == 0) { if (o->in) fatal ("two input files"); o->in = a; i++; continue; }
+    if (a[0] != '-' || a[1] == 0) {
+      long n = slen (a);
+      if (o->in) fatal ("two input files");
+      o->in = a; i++;
+      /* gcc's driver: .S and .sx are assembler-with-cpp; - (stdin) and the rest C, unless -x said */
+      pps->lang_asm = x >= 0 ? x : (n > 2 && is ((unsigned char *) a + n - 2, 2, ".S")) || (n > 3 && is ((unsigned char *) a + n - 3, 3, ".sx"));
+      continue;
+    }
     if (starts (a, "--predef=")) { o->predef = a + 9; i++; continue; }
     if (starts (a, "--collect")) { pps->collect = 1; i++; continue; }
     if (is ((unsigned char *) a, slen (a), "-o") || is ((unsigned char *) a, slen (a), "-I") || is ((unsigned char *) a, slen (a), "-D")
@@ -3017,7 +3041,7 @@ static void parse_opts (struct opts *o, int argc, char **argv)
       else if (starts (a, "-idirafter")) o->ia[o->nia++] = arg;
       else if (starts (a, "-include")) o->incs[o->nincs++] = arg;
       else if (starts (a, "-imacros")) fatal ("-imacros is not supported");
-      else if (a[1] == 'x') { if (!is ((unsigned char *) arg, slen (arg), "c")) fatal ("only C (-x c) is supported"); }
+      else if (a[1] == 'x') x = lang_of (arg);
       continue;
     }
     if (a[1] == 'I') { o->ib[o->nib++] = a + 2; continue; }
@@ -3025,7 +3049,7 @@ static void parse_opts (struct opts *o, int argc, char **argv)
     if (a[1] == 'U') { o->defs[o->ndefs] = a + 2; o->defk[o->ndefs++] = 0; continue; }
     if (a[1] == 'W' || a[1] == 'w' || a[1] == 'M' || starts (a, "-pipe") || is ((unsigned char *) a, slen (a), "-c") || is ((unsigned char *) a, slen (a), "-E")
         || is ((unsigned char *) a, slen (a), "-S") || is ((unsigned char *) a, slen (a), "-v")) continue;
-    if (starts (a, "-x")) { if (!is ((unsigned char *) a + 2, slen (a + 2), "c")) fatal ("only C (-x c) is supported"); continue; }
+    if (starts (a, "-x")) { x = lang_of (a + 2); continue; }
     if (is ((unsigned char *) a, slen (a), "-nostdinc")) { o->nostdinc = 1; continue; }
     if (a[1] == 'g') { o->g = !is ((unsigned char *) a, slen (a), "-g0"); continue; }
     if (starts (a, "-fno-builtin-")) continue;
@@ -3033,6 +3057,14 @@ static void parse_opts (struct opts *o, int argc, char **argv)
     fatal2 ("unknown option ", (unsigned char *) a, slen (a));
   }
   if (!o->in) fatal ("no input file");
+  if (pps->lang_asm) {   /* the key of assembler's predefined macros: -x assembler-with-cpp first */
+    char *k = "-x assembler-with-cpp";
+    long n = slen (k);
+    unsigned char *y = alloc (n + o->klen + 2);
+    mcopy (y, (unsigned char *) k, n);
+    if (o->klen) { y[n] = ' '; mcopy (y + n + 1, o->key, o->klen); n += 1 + o->klen; }
+    o->key = y; o->klen = n;
+  }
 }
 /* the predefined macros of these options and the answers of __has_*: the --predef file
    (predef KEY, then #define lines: the first set whole, the others +#define and -NAME against it;
@@ -3146,7 +3178,13 @@ static void builtins (void)
     BT_COUNTER, BT_HAS_ATTRIBUTE, BT_HAS_STD_ATTRIBUTE, BT_HAS_ATTRIBUTE, BT_HAS_BUILTIN, BT_HAS_INCLUDE,
     BT_HAS_INCLUDE_NEXT, BT_HAS_EMBED, BT_HAS_FEATURE, BT_HAS_EXTENSION, BT_PRAGMA };
   long i = 0;
-  while (names[i]) { struct hnode *n = lookup_s (names[i]); n->type = NT_BUILTIN; n->builtin = kinds[i]; i++; }
+  while (names[i]) {
+    /* (not __has_attribute, __has_c_attribute, __has_cpp_attribute, __has_builtin in assembler) */
+    if (!(pps->lang_asm && (kinds[i] == BT_HAS_ATTRIBUTE || kinds[i] == BT_HAS_STD_ATTRIBUTE || kinds[i] == BT_HAS_BUILTIN))) {
+      struct hnode *n = lookup_s (names[i]); n->type = NT_BUILTIN; n->builtin = kinds[i];
+    }
+    i++;
+  }
   i = 1;
   while (dnames[i]) { lookup_s (dnames[i])->dir = (int) i; i++; }
 }
@@ -3301,7 +3339,17 @@ int cpp_main (int argc, char **argv)
   include_chains (o);
   if (o->out) { pps->ofd = cp_create (o->out); if (pps->ofd < 0) fatal2 ("cannot create ", (unsigned char *) o->out, slen (o->out)); }
   /* the main file, then <built-in>, <command-line> and the -include files */
-  pps->main_file = find_file ((unsigned char *) o->in, slen (o->in), pps->no_search, 0);
+  if (is ((unsigned char *) o->in, slen (o->in), "-")) {
+    /* stdin: libcpp's file "" (linemap_add names it <stdin>; its directory the current one) */
+    struct file *f = alloc (sizeof (struct file));
+    long n;
+    f->name = (unsigned char *) ""; f->path = (unsigned char *) "<stdin>"; f->plen = 7; f->dir = pps->no_search; f->found = 1;
+    n = read_fd (0, &f->raw);
+    if (n < 0) fatal ("cannot read stdin");
+    f->size = n;
+    f->next_all = pps->all_files; pps->all_files = f;
+    pps->main_file = f;
+  } else pps->main_file = find_file ((unsigned char *) o->in, slen (o->in), pps->no_search, 0);
   if (!pps->main_file->found) fatal2 ("no such file: ", (unsigned char *) o->in, slen (o->in));
   pps->lno = 0;
   clean_file (pps->main_file);

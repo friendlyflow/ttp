@@ -1,0 +1,143 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+comment
+  mki's own runtime (its dev source declares it), beside tools/c.ff's cp_* on tools/rt.ff: raw syscalls, each result the kernel's, a negative errno when it fails
+mk_open:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      0
+      0
+mk_exists:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  comment
+    an O_PATH descriptor of path (0x200000 on the four targets), as -e and Cwd::abs_path see it: the file there, links followed
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      2097152
+      0
+mk_read:
+  long
+  fd:
+    long
+  buf:
+    u8
+    * pointer
+  n:
+    long
+  return
+    syscall
+      SYS_read
+      fd
+      buf
+      n
+mk_close:
+  long
+  fd:
+    long
+  return
+    syscall
+      SYS_close
+      fd
+mk_mkdir:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  return
+    syscall
+      SYS_mkdirat
+      here
+      path
+      511
+mk_run:
+  long
+  path:
+    char
+    * pointer
+  argv:
+    char
+    * pointer
+    * pointer
+  envp:
+    char
+    * pointer
+    * pointer
+  comment
+    path run with argv and envp in a child (clone as fork: SIGCHLD alone), its wait status (0 when it exits 0); a negative errno when there is no child
+  pid:
+    long
+    syscall
+      SYS_clone
+      17
+      0
+      0
+      0
+      0
+  if
+    pid
+    ==
+    0
+    syscall
+      SYS_execve
+      path
+      argv
+      envp
+    syscall
+      SYS_exit
+      127
+  if
+    pid
+    <
+    0
+    return
+      pid
+  st:
+    long
+    0
+  r:
+    long
+    syscall
+      SYS_wait4
+      pid
+      st
+      & address
+      0
+      0
+  if
+    r
+    <
+    0
+    return
+      r
+  return
+    st
+    &
+    65535

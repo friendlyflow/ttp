@@ -41,12 +41,14 @@ while (<$a>) {
 close $a or die "linkobjs: allobjs.pl failed\n";
 my @objs = map { $path{$_} // die "linkobjs: $_ is no object of its library\n" } sort keys %member;
 
-# C or asm, as mki.pl would make it
+# C or asm, as mki would make it (MKI: the command of tools/mki.ff, as the
+# Makefile gives it; else mki.pl)
 my (@c, @s);
-open my $d, '-|', 'perl', "$FindBin::Bin/mki.pl", '--dry', $obj, $src, map { "$_.o" } @objs or die "linkobjs: mki.pl: $!\n";
+my @mki = $ENV{MKI} ? split(' ', $ENV{MKI}) : ('perl', "$FindBin::Bin/mki.pl");
+open my $d, '-|', @mki, '--dry', $obj, $src, map { "$_.o" } @objs or die "linkobjs: mki: $!\n";
 while (<$d>) {
     chomp;
-    if (m{/i/(.+)\.i$}) { push @c, $1 } elsif (m{/i/(.+)\.s$}) { push @s, $1 } else { die "linkobjs: mki.pl --dry: $_\n" }
+    if (m{/i/(.+)\.i$}) { push @c, $1 } elsif (m{/i/(.+)\.s$}) { push @s, $1 } else { die "linkobjs: mki --dry: $_\n" }
 }
-close $d or die "linkobjs: mki.pl --dry failed\n";
+close $d or die "linkobjs: mki --dry failed\n";
 print "OBJS_link_$name := @c\nASMS_link_$name := @s\n";

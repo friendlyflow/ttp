@@ -871,6 +871,11 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # target's predefined macros (src/glibc/predef-<target>.txt); tools-check
 # runs each target's build on progs/pp (made by gcc: its expected .i), and
 # src/glibc's cpp-check on every unit of a glibc build against gcc's .i.
+# src/glibc's mki.pl and src/libgcc's in ff (T4): tools/mki.ff and its
+# _start, mki-start.ff (as cpp's, on TOOLLIB and CLIB), the same commands
+# (--dry, --show) and files; tools-check runs each target's build and the
+# Perl on progs/mki's logs, src/glibc's mki-crosscheck on all of glibc's
+# and libgcc's objects.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -879,7 +884,7 @@ TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.f
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
 CSLIB := tools/csem.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -927,6 +932,11 @@ $(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB)
 $(TL)/$(1)/cpp: tools/cpp.ff tools/cpp-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/cpp.ff tools/cpp-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/mki: tools/mki.ff tools/mki-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/mki.ff tools/mki-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
@@ -1035,7 +1045,21 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	$(RUN_$(1)) $(TL)/$(1)/cpp $$(PPTEST) -o $(TL)/$(1).pp.i
 	cmp $(TL)/$(1).pp.i progs/pp/main.i
 	@echo "tools-check-$(1): cpp writes what gcc -E writes of progs/pp"
+	@for m in --dry --show "--show --cpp CPP --predef PRE --out o"; do \
+	    perl ../glibc/mki.pl $$$$m progs/mki/obj progs/mki/src $$(MKITEST)> $(TL)/$(1).mki.p 2> $(TL)/$(1).mki.pe; echo "exit $$$$?" >> $(TL)/$(1).mki.pe; \
+	    $(RUN_$(1)) $(TL)/$(1)/mki $$$$m progs/mki/obj progs/mki/src $$(MKITEST)> $(TL)/$(1).mki.f 2> $(TL)/$(1).mki.fe; echo "exit $$$$?" >> $(TL)/$(1).mki.fe; \
+	    cmp $(TL)/$(1).mki.p $(TL)/$(1).mki.f && cmp $(TL)/$(1).mki.pe $(TL)/$(1).mki.fe || { echo "tools-check-$(1): mki $$$$m is not mki.pl's"; exit 1; }; \
+	    perl ../libgcc/mki.pl $$$$m progs/mki/lgcc OUT $$(MKILTEST)> $(TL)/$(1).mki.p 2> $(TL)/$(1).mki.pe; echo "exit $$$$?" >> $(TL)/$(1).mki.pe; \
+	    $(RUN_$(1)) $(TL)/$(1)/mki --libgcc $$$$m progs/mki/lgcc OUT $$(MKILTEST)> $(TL)/$(1).mki.f 2> $(TL)/$(1).mki.fe; echo "exit $$$$?" >> $(TL)/$(1).mki.fe; \
+	    cmp $(TL)/$(1).mki.p $(TL)/$(1).mki.f && cmp $(TL)/$(1).mki.pe $(TL)/$(1).mki.fe || { echo "tools-check-$(1): mki --libgcc $$$$m is not ../libgcc/mki.pl's"; exit 1; }; \
+	done
+	@echo "tools-check-$(1): mki and mki --libgcc say what mki.pl and ../libgcc/mki.pl say of progs/mki's logs (--dry, --show, --cpp)"
 endef
+# mki on a glibc build's log of each kind of command (C, .os, a .S, a
+# syscall stub from (echo ...) | gcc, an -aux.S of -S, misc's dummy.o, an
+# object named twice, one with no command) and a libgcc build's
+MKITEST := string/a.o string/c.o string/b.o io/chdir.o stdio-common/errlist-data.o dummy.o missing/x.o
+MKILTEST := _muldi3.o save-restore.o cas_1_1.o x.o
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
 # NIST's vectors (FIPS 180-2, appendix B: abc, 448 and 896 bits, a million
