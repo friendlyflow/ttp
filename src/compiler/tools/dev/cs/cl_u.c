@@ -52,6 +52,7 @@ struct cl_state {
   char *tree, *tree_spdx, *tree_copying, *tree_build;   /* (-B: its build folder, of files the build makes: shown as build/...) */
   int groups;
   struct cl_map treedefs, treerec, zero, forceweak, constint, recfn, ownfn;
+  struct cl_map absdef;        /* a top-level asm's .globl N and .set N, V (or N = V): N defined there, its unit (glibc's _nl_current_LC_*_used) */
   /* the units */
   struct cl_unit *cu;          /* (c2ff.pl's $cur_unit, 0 for none) */
   struct cl_unit **units; long nunits, roomunits;

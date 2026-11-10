@@ -501,6 +501,51 @@ static int cl_section_name_ok (char *s)
   return 1;
 }
 /* asm ("memset = __memset_generic") at the top of a unit: its calls of memset are of __memset_generic */
+/* a top-level asm's lines ".globl N" and ".set N, V" or "N = V", V a number: an absolute symbol the unit defines
+   (localeinfo.h's _NL_CURRENT_DEFINE_ABS: lc-ctype.c's _nl_current_LC_CTYPE_used, whose address setlocale tests);
+   N is then defined in this unit, a char of value V: its address not 0, as the linker's would be */
+static char *cl_asm_word (char *s, long *at)
+{
+  long b, e;
+  while (s[*at] == ' ' || s[*at] == '\t') (*at)++;
+  b = *at;
+  while (cl_alpha (s[*at]) || cl_digit (s[*at]) || s[*at] == '_' || s[*at] == '.' || s[*at] == '$') (*at)++;
+  e = *at;
+  return cl_copy ((unsigned char *) s + b, e - b);
+}
+static void cl_asm_absdefs (char *s)
+{
+  struct cl_map globl;
+  long at = 0;
+  globl.tab = 0; globl.count = 0;
+  while (s[at]) {
+    long e = at, p = at;
+    char *w, *nm = 0, *v = 0;
+    /* (the asm's text as written: its \\n two bytes) */
+    while (s[e] && s[e] != '\n' && s[e] != ';' && !(s[e] == '\\' && s[e + 1] == 'n')) e++;
+    w = cl_asm_word (s, &p);
+    if (cl_eq (w, ".globl") || cl_eq (w, ".global")) { char *g = cl_asm_word (s, &p); if (g[0]) cl_set (&globl, g); }
+    else if (cl_eq (w, ".set") || cl_eq (w, ".equ")) {
+      nm = cl_asm_word (s, &p);
+      while (s[p] == ' ' || s[p] == '\t') p++;
+      if (s[p] == ',') { p++; v = cl_asm_word (s, &p); }
+    } else if (w[0]) {
+      long q = p;
+      while (s[q] == ' ' || s[q] == '\t') q++;
+      if (s[q] == '=') { q++; nm = w; v = cl_asm_word (s, &q); p = q; }
+    }
+    if (nm && v && v[0] && cl_digit (v[0]) && cl_val (&globl, nm)) {
+      long q = 0, ok = 1;
+      while (v[q]) { if (!cl_digit (v[q])) ok = 0; q++; }
+      while (s[p] == ' ' || s[p] == '\t') p++;
+      if (ok && p == e) cl_put (&C->absdef, nm, cl_nl (v, cl_l ()));
+      if (ok && p == e) cl_put (&C->absdef, cl_cat (nm, " unit"), (void *) C->cu);
+    }
+    at = e;
+    if (s[at] == '\\') at++;
+    if (s[at]) at++;
+  }
+}
 static void cl_file_asm (struct node *n)
 {
   struct cs_buf b;
@@ -514,6 +559,7 @@ static void cl_file_asm (struct node *n)
     i++;
   }
   s = cl_copy (b.p, b.n);
+  cl_asm_absdefs (s);
   i = 0;
   while (s[i] == ' ' || s[i] == '\t') i++;
   j = i;

@@ -1707,3 +1707,33 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 	@perl tests.pl table $(AREA) $(GTARGET) $(TFF) $(TESTS) > $(TBUILD)/$(AREA).table
 	@cat $(TBUILD)/$(AREA).table
 .PHONY: tests-ref
+
+# ---- a locale of files, against all of glibc in ff --------------------------
+# progs/locale.c: setlocale (LC_ALL, "C.UTF-8"), MB_CUR_MAX and the
+# multibyte conversions in it, built as glibc's tests' programs are (csema -l
+# against FF/glibc, ttpc) and by gcc against libc.a; both run with LOCPATH
+# a folder of C.utf8, made from glibc's own locale source by nixpkgs'
+# localedef of glibc 2.44 (LOCALEDEF, nix develop's), and must print what
+# progs/locale.expect says. Needs all of glibc in ff (make FF/glibc/index.ff),
+# so a target of its own, not a ports-check step.
+#
+#   make GTARGET=x86_64 BUILD=... locale-check
+LOCALEDEF ?= $(error LOCALEDEF is not set: run this in `nix develop`)
+$(BUILD)/locales/C.utf8/LC_CTYPE:
+	mkdir -p $(BUILD)/locales
+	I18NPATH=$(GLIBC_SRC)/localedata $(LOCALEDEF) -c --no-archive -i C -f UTF-8 $(BUILD)/locales/C.utf8 || test -e $@
+$(FF)/locale-all.ff: $(FF)/locale-prog.i $(FF)/glibc/index.ff $(CSEMA) $(CSVIEW)
+	$(RUN) -v 9000000 -t 300 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(FF)/glibc/index.ff -J $(FF)/glibc.statics $(if $(GLIBC_START),,-T) \
+	    $< -- main > $(FF)/locale-all.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/locale-all.ff.txt > $@
+$(FF)/locale-all: $(FF)/locale-all.ff $(FF)/glibc/index.ff $(TTPC) $(SHARED)
+	$(RUN) -t 900 $(TTPC_RUN) $(TTPCFLAGS_tests) $(SHARED) $< $@ > $@.lst
+locale-check: $(FF)/locale.ref $(FF)/locale-all progs/locale.expect $(BUILD)/locales/C.utf8/LC_CTYPE
+	@tail -n +2 progs/locale.expect > $(FF)/locale.want
+	@for b in locale.ref locale-all; do \
+	    s=0; LOCPATH=$(BUILD)/locales $(RUN) -t 60 qemu-$(GTARGET) $(FF)/$$b > $(FF)/$$b.out || s=$$?; \
+	    test $$s -eq 0 || { echo "locale-check: $$b: exit status $$s"; exit 1; }; \
+	    cmp -s $(FF)/$$b.out $(FF)/locale.want || { echo "locale-check: $$b: wrong output"; diff $(FF)/$$b.out $(FF)/locale.want | head; exit 1; }; \
+	done
+	@echo "locale-check: gcc + libc.a and ttpc + all of glibc in ff agree on $(GTARGET): C.UTF-8's data installed and used"
+.PHONY: locale-check

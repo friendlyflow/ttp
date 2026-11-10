@@ -131,6 +131,16 @@ static void cl_reach (void)
       cl_out (v);
       continue;
     }
+    /* an absolute symbol of a unit's top-level asm (cl_asm_absdefs): a char of its value there */
+    if (cl_get (&C->absdef, name)) {
+      struct cl_list *x = cl_l ();
+      struct node *vn = cl_get (&C->absdef, name);
+      cl_enter ((struct cl_unit *) cl_get (&C->absdef, cl_cat (name, " unit")));
+      cl_w (x, "char");
+      cl_push (x, cl_n ((char *) vn->text));
+      cl_out (cl_nl (cl_cat (cl_ffname (name), ":"), x));
+      continue;
+    }
     cl_enter (0);
     d = cl_get (&C->weak, name);
     if (d && cl_val (&C->treedefs, cl_ffname (name))) continue;
