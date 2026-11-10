@@ -25,6 +25,13 @@
 #   make predef    PKG/predef-GTARGET.txt: gcc's predefined macros and
 #                  answers for the commands of this package (as src/glibc's
 #                  make predef), which cpp reads
+#   make licenses  the tree's license (licenses.pl)
+#
+# What it costs, cold, per target: the sysroot a few minutes; all of glibc in
+# ff (src/glibc's, the first time: every unit's .i, csema, s2ff of its asm)
+# 30 to 60 minutes; the package's two builds and its cpp check minutes; its
+# csema -l under a minute, ttpc a minute; its test suite natively a minute,
+# under qemu a few. So not a ports-check step: the top Makefile's ports-sed.
 #
 # Builds in PB (~/.cache/ttp/build/<worktree>/ports/PKG/GTARGET), glibc's
 # side in GB (the worktree's glibc BUILD of that target, as ports-check's
@@ -176,6 +183,10 @@ $(PFF)/$(PKG).ff: $(PFF)/units.same $(GB)/ff/glibc/index.ff $(CSEMA) $(CURDIR)/l
 	perl $(TOP)/src/compiler/gen/fftext.pl ff $(PFF)/$(PKG).ff.txt > $@
 $(PFF)/$(PKG): $(PFF)/$(PKG).ff $(TTPC) $(SHARED)
 	$(RUN) -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
+# (the tree's license at its root; its groups hold each file's header, as
+# a program's tree, not a library's pages: its types are at the top)
+licenses: $(PFF)/$(PKG).ff
+	perl $(TOP)/src/compiler/gen/licenses.pl $(CURDIR)/license.ff.txt $(PFF)/$(PKG).ff
 
 # ---- the check: the package's test suite with gcc's program, then ttpc's
 # (each run's logs kept: PB/check-gcc, PB/check-ff); the table of both
