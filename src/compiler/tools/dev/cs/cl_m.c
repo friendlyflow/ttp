@@ -668,7 +668,9 @@ void cl_finish (void)
         }
         i++;
       }
-      cl_write_txt (cl_group (cl_cat (C->page, " types"), ty), 0);
+      /* (a program's types at its top, as a program's of one file: ttpc sees no enum constant of a group's type on the program page) */
+      if (C->program) { long q = 0; while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; } }
+      else cl_write_txt (cl_group (cl_cat (C->page, " types"), ty), 0);
       while (g < ng) {
         struct cl_list *lic = cl_l ();
         cl_license_nodes_of (cl_get (&inunits, order[g]), lic);
