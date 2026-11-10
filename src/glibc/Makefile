@@ -540,7 +540,23 @@ OBJS_gccrt := $(OBJS_unwind) nptl/pthread_key_create nptl/pthread_setspecific np
 # morestack.S's guards, libgcc's asm)
 OBJS_gccrt_x86_64 := csu/errno-loc misc/writev signal/sigempty signal/sigfillset signal/sigdelset
 OBJS_gccrt += $(OBJS_gccrt_$(GTARGET))
-ASMS_gccrt_x86_64 := misc/syscall $(LIBGCC_ASM_x86_64:%=libgcc/%)
+# (and complex float128's calls mixed with gcc's code, by gcc alone, as asm
+# in both programs: progs/gccq.c, gcc's calls of __multc3 and __divtc3; and
+# gcc's own code of libgcc's _multc3.i and _divtc3.i, renamed __gcc_multc3
+# and __gcc_divtc3, which gccrt.c calls; each .s after its .i's line marks,
+# its license's file; gccq.c's is the program's own, ttp's, not in the asm
+# page's list of glibc's and gcc's files)
+GCCQ_x86_64 := gccq/gccq gccq/multc3 gccq/divtc3
+ASMS_gccrt_x86_64 := misc/syscall $(LIBGCC_ASM_x86_64:%=libgcc/%) $(GCCQ_x86_64)
+REFLIBS_gccrt_x86_64 = $(GCCQ_x86_64:%=$(I)/%.ref.o)
+$(FF)/gccrt.ref: $(GCCQ_$(GTARGET):%=$(I)/%.dump)
+$(I)/gccq/gccq.s: progs/gccq.c
+	mkdir -p $(@D)
+	{ $(GLIBC_CC) -E -g $< | grep '^# [0-9]* "'; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $<; } > $@
+.PRECIOUS: $(I)/gccq/%.s
+$(I)/gccq/%.s: $(I)/libgcc/_%.i
+	mkdir -p $(@D)
+	{ grep '^# [0-9]* "' $<; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $< | sed 's/\<__$*\>/__gcc_$*/g'; } > $@
 ASMS_gccrt_aarch64 := $(LIBGCC_ASM_aarch64:%=libgcc/%)
 ASMS_gccrt_arm := $(LIBGCC_ASM_arm:%=libgcc/%)
 ASMS_gccrt := $(ASMS_gccrt_$(GTARGET))
@@ -742,7 +758,7 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_a
 	$$(RUN) $$(call csmem,$(1)) -t 600 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
 	    -- @$$(FF)/$(1).rootlist $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
-	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(ASMS_all_$(1):%=$$(I)/%.s) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
+	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
 	    $$(RUN) -t 60 perl $$(S2FF) --items $$(foreach p,$$(PLT_$$(GTARGET)),--plt $$(p)) $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
@@ -1064,15 +1080,23 @@ csema-check:
 PREDEF_CC = $(shell grep -m1 '^/nix/store/[^ ]*gcc .* -c .* -o ' $(OBJ)/build.log | cut -d' ' -f1)
 CPPMS = $(patsubst $(I)/%.i,%,$(filter %.i,$(shell perl mki.pl --dry $(OBJ) $(GLIBC_SRC) $(MSUNITS:%=%.o) 2> /dev/null)))
 CPPALL = $(patsubst $(I)/%.i,%,$(filter %.i,$(ALLFILES)))
-# (cpp-check's units' .i are units-ready's: it runs after it)
+# (cpp-check's references are gcc -E's, made by the check itself from
+# today's sources and options: the units' by cppcheck.sh -g, and each
+# program's, every progs/*.c with its NAME-prog.i's options, as
+# $(BUILD)/cpp/NAME.gcc.i; never the .i a BUILD kept, which cpp itself
+# makes now and which may be older than its source. A unit gcc -E does not
+# take fails it too.)
 CPPLG = $(patsubst libgcc/%,%,$(filter libgcc/%,$(MSUNITS)))
-CPPPROGS = $(patsubst $(FF)/%-prog.i,%,$(wildcard $(FF)/*-prog.i))
+CPPPROGS = $(patsubst progs/%.c,%,$(wildcard progs/*.c))
+cppcount = s=0; $(1) > $(2) || s=$$?; cat $(2); test $$s = 0 && grep -q ', 0 without gcc' $(2)
 cpp-check:
-	$(RUN) -t 1800 bash cppcheck.sh -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp $(I) $(CPPMS)
-	$(if $(CPPLG),$(RUN) -t 1800 bash cppcheck.sh -j 3 -k ../libgcc/mki.pl "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc $(LI) $(filter $(patsubst $(LI)/%.i,%,$(wildcard $(LI)/*.i)),$(CPPLG)))
-	@n=0; for p in $(CPPPROGS); do test -f progs/$$p.c || continue; n=$$((n + 1)); \
-	    $(CPRUN) $(abspath $(CPP)) --predef=$(PREDEF) $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p-prog.i && cmp $(BUILD)/cpp/$$p-prog.i $(FF)/$$p-prog.i \
-	    || { echo "cpp-check: progs/$$p.c: not gcc's .i"; exit 1; }; done; echo "cpp-check: $$n programs as gcc's .i"
+	@mkdir -p $(BUILD)
+	$(call cppcount,$(RUN) -t 1800 bash cppcheck.sh -g -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp - $(CPPMS),$(BUILD)/cpp-check.out)
+	$(if $(CPPLG),$(call cppcount,$(RUN) -t 1800 bash cppcheck.sh -g -j 3 -k ../libgcc/mki.pl "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc - $(CPPLG),$(BUILD)/cpp-check-libgcc.out))
+	@mkdir -p $(BUILD)/cpp; n=0; for p in $(CPPPROGS); do n=$$((n + 1)); \
+	    $(GLIBC_CC) -E $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p.gcc.i || { echo "cpp-check: progs/$$p.c: gcc -E stops"; exit 1; }; \
+	    $(CPRUN) $(abspath $(CPP)) --predef=$(PREDEF) $(PROGFLAGS) progs/$$p.c -o $(BUILD)/cpp/$$p-prog.i && cmp $(BUILD)/cpp/$$p-prog.i $(BUILD)/cpp/$$p.gcc.i \
+	    || { echo "cpp-check: progs/$$p.c: not gcc -E's"; exit 1; }; done; echo "cpp-check: $$n programs as gcc -E's of them now"
 cpp-crosscheck:
 	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp-all - $(CPPALL)
 # (the commands of glibc's and libgcc's builds, and the programs' gcc -E
@@ -1433,8 +1457,10 @@ print-%:
 # builtins, as a milestone's; its license at its root
 # (../libgcc/license.ff.txt), each page with its files' headers. What c2ff
 # cannot translate yet is left out (--keep-going), with why, in
-# $(FF)/libgcc.csema.err: _Float16 and __bf16 (HF, BF), the trapping
-# arithmetic of 128 bits. clang reads neither atomic.c (it redefines gcc's
+# $(FF)/libgcc.csema.err: riscv64's syscall_5_args (feature_bits.c's ecall),
+# arm's __floatbitintdf (an asm of two register outputs) and
+# __gcc_personality_v0 (no __builtin_eh_return_data_regno there); x86_64
+# and aarch64 none. clang reads neither atomic.c (it redefines gcc's
 # __sync builtins) nor strub.c (__builtin_stack_address, which clang lacks).
 # x86_64 (gcc's libgcc built with -mlong-double-80): its long double is
 # x87's, as ttpc's there, and __float128 (TF) ff's float128; clang does
