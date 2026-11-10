@@ -2432,6 +2432,14 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
     {
       struct cl_list *x = cl_l ();
       if (n->a) cl_stmt (n->a, x);
+      /* (a label whose first statement is a number, gnulib's lock_unlock as ((void) 0): an empty statement
+         before it, or ttpc reads name: number as a declaration without its type) */
+      if (x->n && !x->v[0]->count && x->v[0]->len && cl_digit (x->v[0]->text[0])) {
+        struct cl_list *y = cl_l ();
+        cl_push (y, cl_n (""));
+        cl_append (y, x);
+        x = y;
+      }
       cl_push (o, cl_nl (l, x));
     }
     return;
