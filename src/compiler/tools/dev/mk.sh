@@ -6,7 +6,7 @@
 # are the truth, and what the build reads; the C here is what they are made
 # from: c/ tools/c.ff, cparse.ff, cprint.ff; cs/ tools/csem.ff, csema.ff,
 # csema-<target>.ff (cs/ takes c/c.h); pp/ tools/cpp.ff and cpp-start.ff, the C preprocessor
-# (on tools/rt.ff alone). Through clang + gen/c2ff.pl --page,
+# (on tools/rt.ff and c.ff's runtime). Through clang + gen/c2ff.pl --page,
 # then each folder's mkpages.py, fftext and addlicense, all in build/dev.
 #
 #   sh src/compiler/tools/dev/mk.sh [-i] [-n] [c] [cs] [pp]

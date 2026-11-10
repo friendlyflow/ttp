@@ -50,7 +50,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -382,7 +382,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups
+CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # x86_64's long double is the x87's (gen/patches/x87.pl): the tests of
@@ -866,7 +866,8 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # src/glibc's clayer-check compare the two unit by unit, byte for byte;
 # tools-check: each target's build writes the same (the machine's build).
 # The C preprocessor (T3, so that gcc -E can go): tools/cpp.ff and its
-# _start, cpp-start.ff (TOOLLIB alone, not CLIB: c.ff's names are not its), gcc 16's -E byte for byte from gcc's options and a file of the
+# _start, cpp-start.ff (on TOOLLIB and CLIB, c.ff's runtime cp_*: cpp's C finds
+# its own tok, text, base first, as library C looks in its own group first), gcc 16's -E byte for byte from gcc's options and a file of the
 # target's predefined macros (src/glibc/predef-<target>.txt); tools-check
 # runs each target's build on progs/pp (made by gcc: its expected .i), and
 # src/glibc's cpp-check on every unit of a glibc build against gcc's .i.
@@ -923,9 +924,9 @@ $(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
-$(TL)/$(1)/cpp: tools/cpp.ff tools/cpp-start.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
+$(TL)/$(1)/cpp: tools/cpp.ff tools/cpp-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) tools/cpp.ff tools/cpp-start.ff $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/cpp.ff tools/cpp-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2

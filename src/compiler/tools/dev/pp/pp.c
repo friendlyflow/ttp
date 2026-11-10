@@ -15,17 +15,18 @@
    and gcc's -E printer (c-ppoutput.cc) of line markers, newlines and
    columns. */
 
-/* the runtime: tools/rt.ff's alloc, and the page's own (pp/shim.ff.txt; the dev build's shim.c): raw
-   syscalls, each result the kernel's, a negative errno when it fails; pp_file dies on a file it cannot read */
+/* the runtime: tools/rt.ff's alloc, tools/c.ff's cp_* (the C parser's runtime: c/shim.ff.txt) and the page's
+   own pp_* (pp/shim.ff.txt; the dev build's shim.c): raw syscalls, each result the kernel's, a negative errno
+   when it fails; cp_file dies on a file it cannot read */
 void *alloc (long n);
 long pp_open (char *path);
 long pp_read (long fd, unsigned char *buf, long n);
 long pp_close (long fd);
-unsigned char *pp_file (char *path, long *size);
-long pp_write (long fd, unsigned char *p, long n);
-long pp_create (char *path);
-long pp_readlink (char *path, unsigned char *buf, long room);
-void pp_exit (long status);
+unsigned char *cp_file (char *path, long *size);
+long cp_write (int fd, unsigned char *p, long n);
+long cp_create (char *path);
+long cp_readlink (char *path, unsigned char *buf, long room);
+void cp_exit (int status);
 
 /* ---- tokens (libcpp's order: avoid_paste and the expression parser depend on it) */
 enum {
@@ -106,8 +107,8 @@ struct vloc {           /* a token's location: where the outermost macro was nam
 };
 struct hnode;
 struct tok {
-  int typ, flags;
-  struct hnode *hn;
+  int type, flags;
+  struct hnode *node;
   unsigned char *text; long len;
   long argno;
   struct tok *source;   /* a padding token's */
@@ -123,7 +124,7 @@ struct pragma;
 struct hnode {
   unsigned char *name; long len;
   struct hnode *next;
-  int typ, flags, builtin, dir;
+  int type, flags, builtin, dir;
   struct macro *macro;
   long argidx;
   int stype; struct macro *smacro; long sargidx;   /* while it names a parameter */
@@ -150,7 +151,7 @@ struct file {
   struct file *next_all;
 };
 struct fent { unsigned char *name; long nlen; struct dir *start; struct file *f; struct fent *next; };
-struct ifs { struct ifs *next; long lno; int skip_elses, was_skipping, typ; struct hnode *mi_cmacro; };
+struct ifs { struct ifs *next; long lno; int skip_elses, was_skipping, type; struct hnode *mi_cmacro; };
 struct buf {
   unsigned char *base, *cur, *lim, *line_base;
   long *notes; long nnotes, inote;
@@ -172,7 +173,7 @@ struct arg {
   struct tok *str;
   int omitted;          /* GNU's , ## __VA_ARGS__: no variable arguments at all */
 };
-struct pushed { struct hnode *hn; int typ; struct macro *macro; int builtin; struct pushed *next; };
+struct pushed { struct hnode *node; int type; struct macro *macro; int builtin; struct pushed *next; };
 struct has { unsigned char *key; long klen; long value; struct has *next; };
 struct optset { struct optset *next; unsigned char *state; long slen; };
 /* the macros of a state of #pragma GCC target and optimize: gcc's, against those of the options (--predef) */
@@ -182,7 +183,7 @@ struct tset { unsigned char *key; long klen; unsigned char **lines; long n; stru
 struct pst {
   struct hnode **tab;
   struct buf *buffer;
-  struct ctx *base, *ctx;   /* (no struct in the state by value: ttpc lays out a struct before the ones c2ff writes after it) */
+  struct ctx base, *ctx;
   struct map *curmap, *builtin_map, *cmdline_map;
   long lno;
   int forced;           /* the tokens lexed now get: 1 the built-in location, 2 the command line's */
@@ -192,9 +193,9 @@ struct pst {
   int about_to_expand;
   int mi_valid; struct hnode *mi_cmacro, *mi_ind_cmacro;
   int directive; long directive_line;
-  struct tok *dres;     /* the directive's result */
-  struct tok *avoid_paste, *endarg;
-  struct hnode *topmost; struct vloc *invocation;
+  struct tok dres;      /* the directive's result */
+  struct tok avoid_paste, endarg;
+  struct hnode *topmost; struct vloc invocation;
   /* the token run: what cur_token[-1] is, lookaheads */
   struct tok **run; long rc, rroom, la;
   struct tok *pool; long npool;
@@ -261,7 +262,7 @@ static long numtext (unsigned long v, unsigned char *b)
 }
 
 /* ---- diagnostics' output, and the output */
-static void perr_bytes (unsigned char *p, long n) { pp_write (2, p, n); }
+static void perr_bytes (unsigned char *p, long n) { cp_write (2, p, n); }
 static void perr_str (char *s) { perr_bytes ((unsigned char *) s, slen (s)); }
 static void perr_num (long v)
 {
@@ -274,8 +275,8 @@ static void o_flush (void)
 {
   long p = 0;
   while (p < pps->on) {
-    long w = pp_write (pps->ofd, pps->obuf + p, pps->on - p);
-    if (w <= 0) { perr_str ("cpp: cannot write the output\n"); pp_exit (1); }
+    long w = cp_write (pps->ofd, pps->obuf + p, pps->on - p);
+    if (w <= 0) { perr_str ("cpp: cannot write the output\n"); cp_exit (1); }
     p += w;
   }
   pps->on = 0;
@@ -283,7 +284,7 @@ static void o_flush (void)
 static void o_bytes (unsigned char *p, long n)
 {
   if (pps->on + n > 65536) o_flush ();
-  if (n > 65536) { long w = 0; while (w < n) { long k = pp_write (pps->ofd, p + w, n - w); if (k <= 0) { perr_str ("cpp: cannot write the output\n"); pp_exit (1); } w += k; } return; }
+  if (n > 65536) { long w = 0; while (w < n) { long k = cp_write (pps->ofd, p + w, n - w); if (k <= 0) { perr_str ("cpp: cannot write the output\n"); cp_exit (1); } w += k; } return; }
   mcopy (pps->obuf + pps->on, p, n);
   pps->on += n;
 }
@@ -299,8 +300,8 @@ static void where (void)
 static void error (char *s) { where (); perr_str ("error: "); perr_str (s); perr_str ("\n"); pps->errors++; }
 static void error2 (char *s, unsigned char *a, long n) { where (); perr_str ("error: "); perr_str (s); perr_bytes (a, n); perr_str ("\n"); pps->errors++; }
 static void warning2 (char *s, unsigned char *a, long n) { where (); perr_str ("warning: "); perr_str (s); perr_bytes (a, n); perr_str ("\n"); }
-static void fatal (char *s) { o_flush (); perr_str ("cpp: "); where (); perr_str (s); perr_str ("\n"); pp_exit (2); }
-static void fatal2 (char *s, unsigned char *a, long n) { o_flush (); perr_str ("cpp: "); where (); perr_str (s); perr_bytes (a, n); perr_str ("\n"); pp_exit (2); }
+static void fatal (char *s) { o_flush (); perr_str ("cpp: "); where (); perr_str (s); perr_str ("\n"); cp_exit (2); }
+static void fatal2 (char *s, unsigned char *a, long n) { o_flush (); perr_str ("cpp: "); where (); perr_str (s); perr_bytes (a, n); perr_str ("\n"); cp_exit (2); }
 
 /* ---- names */
 static long hashof (unsigned char *p, long n)
@@ -348,50 +349,50 @@ static struct tok *temp_token (void)   /* _cpp_temp_token: before the lookaheads
   pps->run[pps->rc++] = t;
   return t;
 }
-static int seen_eol (void) { return pps->rc > 0 && pps->run[pps->rc - 1]->typ == T_EOF; }
+static int seen_eol (void) { return pps->rc > 0 && pps->run[pps->rc - 1]->type == T_EOF; }
 
 /* ---- spelling */
-static int spell_kind (int typ)   /* 0 operator, 1 identifier, 2 literal, 3 none */
+static int spell_kind (int type)   /* 0 operator, 1 identifier, 2 literal, 3 none */
 {
-  if (typ == T_EOF) return 3;
-  if (typ < T_NAME) return 0;
-  if (typ <= T_AT_NAME) return 1;
-  if (typ <= T_COMMENT) return 2;
+  if (type == T_EOF) return 3;
+  if (type < T_NAME) return 0;
+  if (type <= T_AT_NAME) return 1;
+  if (type <= T_COMMENT) return 2;
   return 3;
 }
 static long spell (struct tok *t, unsigned char *d)   /* cpp_spell_token (forstring) */
 {
-  int k = spell_kind (t->typ);
+  int k = spell_kind (t->type);
   if (k == 0) {
-    char *s = (t->flags & DIGRAPH) ? digraphs[t->typ - T_HASH] : opname[t->typ];
+    char *s = (t->flags & DIGRAPH) ? digraphs[t->type - T_HASH] : opname[t->type];
     long n = slen (s); mcopy (d, (unsigned char *) s, n); return n;
   }
-  if (k == 1) { mcopy (d, t->hn->name, t->hn->len); return t->hn->len; }
+  if (k == 1) { mcopy (d, t->node->name, t->node->len); return t->node->len; }
   if (k == 2) { mcopy (d, t->text, t->len); return t->len; }
   return 0;
 }
 static long spell_len (struct tok *t)
 {
-  int k = spell_kind (t->typ);
+  int k = spell_kind (t->type);
   if (k == 0) return 4;
-  if (k == 1) return t->hn->len;
+  if (k == 1) return t->node->len;
   if (k == 2) return t->len;
   return 0;
 }
 static void out_token (struct tok *t)   /* cpp_output_token */
 {
-  int k = spell_kind (t->typ);
+  int k = spell_kind (t->type);
   if (k == 0) {
-    if (t->flags & DIGRAPH) o_str (digraphs[t->typ - T_HASH]); else o_str (opname[t->typ]);
+    if (t->flags & DIGRAPH) o_str (digraphs[t->type - T_HASH]); else o_str (opname[t->type]);
   } else if (k == 1) {
-    long i = 0; unsigned char *n = t->hn->name;
-    while (i < t->hn->len) {
+    long i = 0; unsigned char *n = t->node->name;
+    while (i < t->node->len) {
       if (n[i] & 0x80) {
         /* utf8_to_ucn */
         unsigned long u = 0; int len = 1; unsigned char b[10]; int j;
         int c = n[i];
         if (c >= 0xf0) { u = c & 7; len = 4; } else if (c >= 0xe0) { u = c & 15; len = 3; } else { u = c & 31; len = 2; }
-        j = 1; while (j < len && i + j < t->hn->len) { u = (u << 6) | (n[i + j] & 63); j++; }
+        j = 1; while (j < len && i + j < t->node->len) { u = (u << 6) | (n[i + j] & 63); j++; }
         b[0] = '\\'; b[1] = 'U';
         j = 0; while (j < 8) { int d = (int) ((u >> (28 - 4 * j)) & 15); b[2 + j] = d < 10 ? '0' + d : 'a' + d - 10; j++; }
         o_bytes (b, 10);
@@ -399,9 +400,9 @@ static void out_token (struct tok *t)   /* cpp_output_token */
       } else { o_ch (n[i]); i++; }
     }
   } else if (k == 2) {
-    if (t->typ == T_HEADER_NAME) o_ch ('"');
+    if (t->type == T_HEADER_NAME) o_ch ('"');
     o_bytes (t->text, t->len);
-    if (t->typ == T_HEADER_NAME) o_ch ('"');
+    if (t->type == T_HEADER_NAME) o_ch ('"');
   }
 }
 
@@ -441,10 +442,10 @@ static int maybe_print_line (struct vloc *l)
 static int do_line_change (struct tok *t, struct vloc *l, int parsing_args)
 {
   int m;
-  if (t->typ == T_EOF || parsing_args) return 0;
+  if (t->type == T_EOF || parsing_args) return 0;
   m = maybe_print_line (l);
   pps->prev = 0; pps->source = 0;
-  if (t->typ != T_PRAGMA) {
+  if (t->type != T_PRAGMA) {
     long spaces = l->col - 2;
     pps->printed = 1;
     while (--spaces >= 0) o_ch (' ');
@@ -505,12 +506,12 @@ static void targs_add (struct tok *t);
 static void stream (struct tok *t, struct vloc *l)
 {
   int is_sys, changed, marker = 0;
-  if (t->typ == T_PADDING) {
+  if (t->type == T_PADDING) {
     pps->avoid_paste_p = 1;
     if (pps->source == 0 || (!(pps->source->flags & PREV_WHITE) && t->source == 0)) pps->source = t->source;
     return;
   }
-  if (t->typ == T_EOF) return;
+  if (t->type == T_EOF) return;
   is_sys = l->sys != 0;
   changed = is_sys != pps->prev_was_system;
   pps->prev_was_system = is_sys;
@@ -519,17 +520,17 @@ static void stream (struct tok *t, struct vloc *l)
     if (l->lno != pps->src_line && !pps->in_pragma) {
       marker = do_line_change (t, l, 0);
       o_ch (' '); pps->printed = 1;
-    } else if ((pps->source->flags & PREV_WHITE) || (pps->prev && avoid_paste (pps->prev, t)) || (pps->prev == 0 && t->typ == T_HASH)) {
+    } else if ((pps->source->flags & PREV_WHITE) || (pps->prev && avoid_paste (pps->prev, t)) || (pps->prev == 0 && t->type == T_HASH)) {
       o_ch (' '); pps->printed = 1;
     }
-  } else if ((t->flags & PREV_WHITE) && t->typ != T_PRAGMA) {
+  } else if ((t->flags & PREV_WHITE) && t->type != T_PRAGMA) {
     if (l->lno != pps->src_line && !pps->in_pragma) marker = do_line_change (t, l, 0);
     o_ch (' '); pps->printed = 1;
   }
   pps->avoid_paste_p = 0;
   pps->source = 0;
   pps->prev = t;
-  if (t->typ == T_PRAGMA) {
+  if (t->type == T_PRAGMA) {
     char *space, *name;
     pps->in_pragma = 1;
     maybe_print_line (&t->loc);
@@ -539,7 +540,7 @@ static void stream (struct tok *t, struct vloc *l)
     o_str (name);
     pps->printed = 1;
     pragma_early (t->pragma);
-  } else if (t->typ == T_PRAGMA_EOL) {
+  } else if (t->type == T_PRAGMA_EOL) {
     maybe_print_line (0);
     pps->in_pragma = 0;
     if (pps->tpending) pragma_late ();
@@ -664,9 +665,9 @@ static void lex_identifier (struct tok *t, unsigned char *base)
     c += k;
   }
   b->cur = c;
-  t->typ = T_NAME;
-  t->hn = lookup (base, c - base);
-  if ((t->hn->flags & N_POISONED) && !pps->skipping) error2 ("attempt to use poisoned ", t->hn->name, t->hn->len);
+  t->type = T_NAME;
+  t->node = lookup (base, c - base);
+  if ((t->node->flags & N_POISONED) && !pps->skipping) error2 ("attempt to use poisoned ", t->node->name, t->node->len);
 }
 static void lex_number (struct tok *t, unsigned char *base)
 {
@@ -680,7 +681,7 @@ static void lex_number (struct tok *t, unsigned char *base)
     c += k;
   }
   b->cur = c;
-  t->typ = T_NUMBER; t->text = base; t->len = c - base;
+  t->type = T_NUMBER; t->text = base; t->len = c - base;
 }
 static void lex_raw_string (struct tok *t, unsigned char *base, unsigned char *cur)
 {
@@ -688,43 +689,43 @@ static void lex_raw_string (struct tok *t, unsigned char *base, unsigned char *c
   struct buf *b = pps->buffer;
   unsigned char *d = cur + 1, *p;
   long dlen = 0;
-  int typ = *base == 'L' ? T_WSTRING : *base == 'U' ? T_STRING32 : *base == 'u' ? (base[1] == '8' ? T_UTF8STRING : T_STRING16) : T_STRING;
+  int type = *base == 'L' ? T_WSTRING : *base == 'U' ? T_STRING32 : *base == 'u' ? (base[1] == '8' ? T_UTF8STRING : T_STRING16) : T_STRING;
   while (d[dlen] != '(' && d[dlen] != '\n' && dlen < 16) dlen++;
-  if (d[dlen] != '(') { t->typ = T_OTHER; t->text = base; t->len = 1; b->cur = base + 1; return; }
+  if (d[dlen] != '(') { t->type = T_OTHER; t->text = base; t->len = 1; b->cur = base + 1; return; }
   p = d + dlen + 1;
   for (;;) {
-    if (p >= b->lim) { error ("unterminated raw string"); t->typ = T_OTHER; t->text = base; t->len = 1; b->cur = base + 1; return; }
+    if (p >= b->lim) { error ("unterminated raw string"); t->type = T_OTHER; t->text = base; t->len = 1; b->cur = base + 1; return; }
     if (*p == ')' && msame (p + 1, dlen, d, dlen) && p[1 + dlen] == '"') { p += dlen + 2; break; }
     if (*p == '\n') pps->lno++;
     p++;
   }
   b->cur = p;
-  t->typ = typ; t->text = base; t->len = p - base;
+  t->type = type; t->text = base; t->len = p - base;
 }
 static void lex_string (struct tok *t, unsigned char *base)
 {
   struct buf *b = pps->buffer;
   unsigned char *cur = base;
-  int term = *cur++, typ;
+  int term = *cur++, type;
   if (term == 'L' || term == 'U') term = *cur++;
   else if (term == 'u') { term = *cur++; if (term == '8') term = *cur++; }
   if (term == 'R') { lex_raw_string (t, base, cur); return; }
-  if (term == '"') typ = *base == 'L' ? T_WSTRING : *base == 'U' ? T_STRING32 : *base == 'u' ? (base[1] == '8' ? T_UTF8STRING : T_STRING16) : T_STRING;
-  else if (term == '\'') typ = *base == 'L' ? T_WCHAR : *base == 'U' ? T_CHAR32 : *base == 'u' ? (base[1] == '8' ? T_UTF8CHAR : T_CHAR16) : T_CHAR;
-  else { term = '>'; typ = T_HEADER_NAME; }
+  if (term == '"') type = *base == 'L' ? T_WSTRING : *base == 'U' ? T_STRING32 : *base == 'u' ? (base[1] == '8' ? T_UTF8STRING : T_STRING16) : T_STRING;
+  else if (term == '\'') type = *base == 'L' ? T_WCHAR : *base == 'U' ? T_CHAR32 : *base == 'u' ? (base[1] == '8' ? T_UTF8CHAR : T_CHAR16) : T_CHAR;
+  else { term = '>'; type = T_HEADER_NAME; }
   for (;;) {
     int c = *cur++;
     if (c == '\\' && !pps->angled_headers && *cur != '\n') cur++;
     else if (c == term) break;
     else if (c == '\n') {
       cur--;
-      if (term == '>') { t->typ = T_LESS; return; }
-      typ = T_OTHER;
+      if (term == '>') { t->type = T_LESS; return; }
+      type = T_OTHER;
       break;
     }
   }
   b->cur = cur;
-  t->typ = typ; t->text = base; t->len = cur - base;
+  t->type = type; t->text = base; t->len = cur - base;
 }
 static void skip_block_comment (void)
 {
@@ -760,14 +761,14 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
   b = pps->buffer;
   if (b->need_line) {
     if (pps->in_deferred_pragma) {
-      result->typ = T_PRAGMA_EOL;
+      result->type = T_PRAGMA_EOL;
       pps->in_deferred_pragma = 0;
       if (!pps->pragma_allow_expansion) pps->prevent_expansion--;
       set_loc (result, 0);
       return result;
     }
     if (!fresh_line ()) {
-      result->typ = T_EOF;
+      result->type = T_EOF;
       set_loc (result, 0);
       if (!pps->in_directive && !pps->parsing_args) { result->flags = BOL; pop_buffer (); }
       return result;
@@ -781,7 +782,7 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
   if (b->inote < b->nnotes) process_notes (b);
   c = *b->cur++;
   set_loc (result, b->cur - b->line_base);
-  result->hn = 0;
+  result->node = 0;
   switch (c) {
   case ' ': case '\t': case '\f': case '\v': case 0:
     result->flags |= PREV_WHITE;
@@ -791,7 +792,7 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
     if (b->cur < b->lim || pps->in_directive > 1) pps->lno++;
     b->need_line = 1;
     if (pps->in_deferred_pragma) {
-      result->typ = T_PRAGMA_EOL;
+      result->type = T_PRAGMA_EOL;
       result->flags &= ~PREV_WHITE;
       pps->in_deferred_pragma = 0;
       if (!pps->pragma_allow_expansion) pps->prevent_expansion--;
@@ -819,88 +820,88 @@ static struct tok *lex_direct_into (struct tok *result, int inrun)
     c = *b->cur;
     if (c == '*') { skip_block_comment (); }
     else if (c == '/') { skip_line_comment (); }
-    else if (c == '=') { b->cur++; result->typ = T_DIV_EQ; break; }
-    else { result->typ = T_DIV; break; }
+    else if (c == '=') { b->cur++; result->type = T_DIV_EQ; break; }
+    else { result->type = T_DIV; break; }
     result->flags |= PREV_WHITE;
     goto skipped_white;
   case '<':
     if (pps->angled_headers) {
       lex_string (result, b->cur - 1);
-      if (result->typ != T_LESS) break;
+      if (result->type != T_LESS) break;
     }
-    result->typ = T_LESS;
-    if (*b->cur == '=') b->cur++, result->typ = T_LESS_EQ;
-    else if (*b->cur == '<') { b->cur++; result->typ = T_LSHIFT; if (*b->cur == '=') b->cur++, result->typ = T_LSHIFT_EQ; }
-    else if (*b->cur == ':') { b->cur++; result->flags |= DIGRAPH; result->typ = T_OPEN_SQUARE; }
-    else if (*b->cur == '%') { b->cur++; result->flags |= DIGRAPH; result->typ = T_OPEN_BRACE; }
+    result->type = T_LESS;
+    if (*b->cur == '=') b->cur++, result->type = T_LESS_EQ;
+    else if (*b->cur == '<') { b->cur++; result->type = T_LSHIFT; if (*b->cur == '=') b->cur++, result->type = T_LSHIFT_EQ; }
+    else if (*b->cur == ':') { b->cur++; result->flags |= DIGRAPH; result->type = T_OPEN_SQUARE; }
+    else if (*b->cur == '%') { b->cur++; result->flags |= DIGRAPH; result->type = T_OPEN_BRACE; }
     break;
   case '>':
-    result->typ = T_GREATER;
-    if (*b->cur == '=') b->cur++, result->typ = T_GREATER_EQ;
-    else if (*b->cur == '>') { b->cur++; result->typ = T_RSHIFT; if (*b->cur == '=') b->cur++, result->typ = T_RSHIFT_EQ; }
+    result->type = T_GREATER;
+    if (*b->cur == '=') b->cur++, result->type = T_GREATER_EQ;
+    else if (*b->cur == '>') { b->cur++; result->type = T_RSHIFT; if (*b->cur == '=') b->cur++, result->type = T_RSHIFT_EQ; }
     break;
   case '%':
-    result->typ = T_MOD;
-    if (*b->cur == '=') b->cur++, result->typ = T_MOD_EQ;
+    result->type = T_MOD;
+    if (*b->cur == '=') b->cur++, result->type = T_MOD_EQ;
     else if (*b->cur == ':') {
-      b->cur++; result->flags |= DIGRAPH; result->typ = T_HASH;
-      if (*b->cur == '%' && b->cur[1] == ':') b->cur += 2, result->typ = T_PASTE;
-    } else if (*b->cur == '>') { b->cur++; result->flags |= DIGRAPH; result->typ = T_CLOSE_BRACE; }
+      b->cur++; result->flags |= DIGRAPH; result->type = T_HASH;
+      if (*b->cur == '%' && b->cur[1] == ':') b->cur += 2, result->type = T_PASTE;
+    } else if (*b->cur == '>') { b->cur++; result->flags |= DIGRAPH; result->type = T_CLOSE_BRACE; }
     break;
   case '.':
-    result->typ = T_DOT;
+    result->type = T_DOT;
     if (isdig (*b->cur)) lex_number (result, b->cur - 1);
-    else if (*b->cur == '.' && b->cur[1] == '.') b->cur += 2, result->typ = T_ELLIPSIS;
+    else if (*b->cur == '.' && b->cur[1] == '.') b->cur += 2, result->type = T_ELLIPSIS;
     break;
   case '+':
-    result->typ = T_PLUS;
-    if (*b->cur == '+') b->cur++, result->typ = T_PLUS_PLUS;
-    else if (*b->cur == '=') b->cur++, result->typ = T_PLUS_EQ;
+    result->type = T_PLUS;
+    if (*b->cur == '+') b->cur++, result->type = T_PLUS_PLUS;
+    else if (*b->cur == '=') b->cur++, result->type = T_PLUS_EQ;
     break;
   case '-':
-    result->typ = T_MINUS;
-    if (*b->cur == '>') b->cur++, result->typ = T_DEREF;
-    else if (*b->cur == '-') b->cur++, result->typ = T_MINUS_MINUS;
-    else if (*b->cur == '=') b->cur++, result->typ = T_MINUS_EQ;
+    result->type = T_MINUS;
+    if (*b->cur == '>') b->cur++, result->type = T_DEREF;
+    else if (*b->cur == '-') b->cur++, result->type = T_MINUS_MINUS;
+    else if (*b->cur == '=') b->cur++, result->type = T_MINUS_EQ;
     break;
   case '&':
-    result->typ = T_AND;
-    if (*b->cur == '&') b->cur++, result->typ = T_AND_AND;
-    else if (*b->cur == '=') b->cur++, result->typ = T_AND_EQ;
+    result->type = T_AND;
+    if (*b->cur == '&') b->cur++, result->type = T_AND_AND;
+    else if (*b->cur == '=') b->cur++, result->type = T_AND_EQ;
     break;
   case '|':
-    result->typ = T_OR;
-    if (*b->cur == '|') b->cur++, result->typ = T_OR_OR;
-    else if (*b->cur == '=') b->cur++, result->typ = T_OR_EQ;
+    result->type = T_OR;
+    if (*b->cur == '|') b->cur++, result->type = T_OR_OR;
+    else if (*b->cur == '=') b->cur++, result->type = T_OR_EQ;
     break;
   case ':':
-    result->typ = T_COLON;
-    if (*b->cur == ':') b->cur++, result->typ = T_SCOPE;
-    else if (*b->cur == '>') { b->cur++; result->flags |= DIGRAPH; result->typ = T_CLOSE_SQUARE; }
+    result->type = T_COLON;
+    if (*b->cur == ':') b->cur++, result->type = T_SCOPE;
+    else if (*b->cur == '>') { b->cur++; result->flags |= DIGRAPH; result->type = T_CLOSE_SQUARE; }
     break;
-  case '*': result->typ = T_MULT; if (*b->cur == '=') b->cur++, result->typ = T_MULT_EQ; break;
-  case '=': result->typ = T_EQ; if (*b->cur == '=') b->cur++, result->typ = T_EQ_EQ; break;
-  case '!': result->typ = T_NOT; if (*b->cur == '=') b->cur++, result->typ = T_NOT_EQ; break;
-  case '^': result->typ = T_XOR; if (*b->cur == '=') b->cur++, result->typ = T_XOR_EQ; break;
-  case '#': result->typ = T_HASH; if (*b->cur == '#') b->cur++, result->typ = T_PASTE; break;
-  case '?': result->typ = T_QUERY; break;
-  case '~': result->typ = T_COMPL; break;
-  case ',': result->typ = T_COMMA; break;
-  case '(': result->typ = T_OPEN_PAREN; break;
-  case ')': result->typ = T_CLOSE_PAREN; break;
-  case '[': result->typ = T_OPEN_SQUARE; break;
-  case ']': result->typ = T_CLOSE_SQUARE; break;
-  case '{': result->typ = T_OPEN_BRACE; break;
-  case '}': result->typ = T_CLOSE_BRACE; break;
-  case ';': result->typ = T_SEMICOLON; break;
-  case '@': result->typ = T_ATSIGN; break;
+  case '*': result->type = T_MULT; if (*b->cur == '=') b->cur++, result->type = T_MULT_EQ; break;
+  case '=': result->type = T_EQ; if (*b->cur == '=') b->cur++, result->type = T_EQ_EQ; break;
+  case '!': result->type = T_NOT; if (*b->cur == '=') b->cur++, result->type = T_NOT_EQ; break;
+  case '^': result->type = T_XOR; if (*b->cur == '=') b->cur++, result->type = T_XOR_EQ; break;
+  case '#': result->type = T_HASH; if (*b->cur == '#') b->cur++, result->type = T_PASTE; break;
+  case '?': result->type = T_QUERY; break;
+  case '~': result->type = T_COMPL; break;
+  case ',': result->type = T_COMMA; break;
+  case '(': result->type = T_OPEN_PAREN; break;
+  case ')': result->type = T_CLOSE_PAREN; break;
+  case '[': result->type = T_OPEN_SQUARE; break;
+  case ']': result->type = T_CLOSE_SQUARE; break;
+  case '{': result->type = T_OPEN_BRACE; break;
+  case '}': result->type = T_CLOSE_BRACE; break;
+  case ';': result->type = T_SEMICOLON; break;
+  case '@': result->type = T_ATSIGN; break;
   default:
     {
       unsigned char *base = b->cur - 1;
       if (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) { lex_identifier (result, base); break; }
       if (ident_more (base)) { b->cur = base + ident_more (base); lex_identifier (result, base); break; }
       if (c >= 0xc0 && utf8_len (base)) b->cur = base + utf8_len (base);
-      result->typ = T_OTHER; result->text = base; result->len = b->cur - base;
+      result->type = T_OTHER; result->text = base; result->len = b->cur - base;
     }
   }
   if (b->inote < b->nnotes && b->base + b->notes[b->inote] <= b->cur) process_notes (b);
@@ -931,7 +932,7 @@ static void pop_ctx (void)
   struct ctx *c = pps->ctx;
   struct hnode *m = c->macro;
   if (m && (c->prev ? c->prev->macro : 0) != m) m->flags &= ~N_DISABLED;
-  if (m && m == pps->topmost && c->prev == pps->base) pps->topmost = 0;
+  if (m && m == pps->topmost && c->prev == &pps->base) pps->topmost = 0;
   pps->ctx = c->prev;
 }
 static void backup_tokens (long n)
@@ -942,7 +943,7 @@ static void backup_tokens (long n)
 static struct tok *padding_token (struct tok *source)
 {
   struct tok *t = temp_token ();
-  t->typ = T_PADDING; t->source = source; t->flags = 0;
+  t->type = T_PADDING; t->source = source; t->flags = 0;
   return t;
 }
 
@@ -955,23 +956,23 @@ static struct tok *lex_token (void)
     if (pps->la) { pps->la--; r = pps->run[pps->rc++]; }
     else r = lex_direct ();
     if (r->flags & BOL) {
-      if (r->typ == T_HASH && pps->parsing_args != 1) {
+      if (r->type == T_HASH && pps->parsing_args != 1) {
         if (handle_directive (r->flags & PREV_WHITE)) {
-          if (pps->dres->typ == T_PADDING) continue;
-          r = pps->dres;
+          if (pps->dres.type == T_PADDING) continue;
+          r = &pps->dres;
         }
-      } else if (pps->in_deferred_pragma) r = pps->dres;
+      } else if (pps->in_deferred_pragma) r = &pps->dres;
       if (!pps->skipping) line_change (r, pps->parsing_args);
     }
     if (pps->in_directive || pps->in_deferred_pragma) break;
     pps->mi_valid = 0;
-    if (!pps->skipping || r->typ == T_EOF) break;
+    if (!pps->skipping || r->type == T_EOF) break;
   }
   return r;
 }
 
 /* ---- macro expansion (macro.cc) */
-static int enter_macro (struct hnode *hn, struct tok *result, struct vloc *loc);
+static int enter_macro (struct hnode *node, struct tok *result, struct vloc *loc);
 static void paste_all (struct tok *lhs);
 static int in_macro_expansion (void) { return pps->about_to_expand || pps->ctx->macro != 0; }
 static struct tok *get_tok (struct vloc *loc)   /* cpp_get_token_1 */
@@ -981,7 +982,7 @@ static struct tok *get_tok (struct vloc *loc)   /* cpp_get_token_1 */
   int have = 0, saved = pps->about_to_expand;
   for (;;) {
     struct ctx *c = pps->ctx;
-    struct hnode *hn;
+    struct hnode *node;
     if (!c->prev) { r = lex_token (); vl = r->loc; have = 1; }
     else if (c->i < c->n) {
       r = c->t[c->i];
@@ -997,18 +998,18 @@ static struct tok *get_tok (struct vloc *loc)   /* cpp_get_token_1 */
     } else {
       pop_ctx ();
       if (pps->in_directive) continue;
-      r = pps->avoid_paste;
+      r = &pps->avoid_paste;
       goto out;
     }
-    if (pps->in_directive && r->typ == T_COMMENT) continue;
-    if (r->typ != T_NAME) break;
-    hn = r->hn;
-    if (hn->typ == NT_VOID || hn->typ == NT_ARG || (r->flags & NO_EXPAND)) break;
-    if (!(hn->flags & N_DISABLED)) {
+    if (pps->in_directive && r->type == T_COMMENT) continue;
+    if (r->type != T_NAME) break;
+    node = r->node;
+    if (node->type == NT_VOID || node->type == NT_ARG || (r->flags & NO_EXPAND)) break;
+    if (!(node->flags & N_DISABLED)) {
       int ret;
-      if (!in_macro_expansion ()) { *pps->invocation = r->loc; pps->topmost = hn; }
+      if (!in_macro_expansion ()) { pps->invocation = r->loc; pps->topmost = node; }
       if (pps->prevent_expansion) break;
-      ret = enter_macro (hn, r, &vl);
+      ret = enter_macro (node, r, &vl);
       if (ret) {
         if (pps->in_directive || ret == 2) continue;
         r = padding_token (r);
@@ -1032,7 +1033,7 @@ static struct tok *get_tok (struct vloc *loc)   /* cpp_get_token_1 */
 static struct tok *get_token (void) { return get_tok (0); }
 static struct tok *get_token_no_padding (void)
 {
-  for (;;) { struct tok *t = get_token (); if (t->typ != T_PADDING) return t; }
+  for (;;) { struct tok *t = get_token (); if (t->type != T_PADDING) return t; }
 }
 
 static void stringify_buf (unsigned char **d, long *n, long *room, long add)
@@ -1052,11 +1053,11 @@ static struct tok *stringify_arg (struct tok **first, long count)
     struct tok *tk = first[i];
     int esc;
     long len;
-    if (tk->typ == T_PADDING) {
+    if (tk->type == T_PADDING) {
       if (source == 0 || (!(source->flags & PREV_WHITE) && tk->source == 0)) source = tk->source;
       continue;
     }
-    esc = (tk->typ >= T_CHAR && tk->typ <= T_UTF8CHAR) || (tk->typ >= T_STRING && tk->typ <= T_UTF8STRING);
+    esc = (tk->type >= T_CHAR && tk->type <= T_UTF8CHAR) || (tk->type >= T_STRING && tk->type <= T_UTF8STRING);
     len = spell_len (tk) * (esc ? 2 : 1) + 4;
     stringify_buf (&d, &n, &room, len + 4);
     if (n != 1) {
@@ -1069,13 +1070,13 @@ static struct tok *stringify_arg (struct tok **first, long count)
       long k = spell (tk, tmp), j = 0;
       while (j < k) { int c = tmp[j++]; if (c == '\n') { d[n++] = '\\'; d[n++] = 'n'; } else { if (c == '\\' || c == '"') d[n++] = '\\'; d[n++] = c; } }
     } else n += spell (tk, d + n);
-    if (tk->typ == T_OTHER && tk->text[0] == '\\') backslash++; else backslash = 0;
+    if (tk->type == T_OTHER && tk->text[0] == '\\') backslash++; else backslash = 0;
   }
   if (backslash & 1) n--;
   stringify_buf (&d, &n, &room, 2);
   d[n++] = '"';
   t = temp_token ();
-  t->typ = T_STRING; t->text = d; t->len = n; t->flags = 0; t->hn = 0;
+  t->type = T_STRING; t->text = d; t->len = n; t->flags = 0; t->node = 0;
   return t;
 }
 /* paste_tokens: lhs ## rhs lexed again; 0 when they do not make one token */
@@ -1087,8 +1088,8 @@ static int paste_tokens (struct tok **plhs, struct tok *rhs)
   struct buf *pb;
   int ok;
   n = spell (lhs, b);
-  if (lhs->typ == T_DIV && rhs->typ != T_EQ) b[n++] = ' ';
-  if (rhs->typ != T_PADDING) n += spell (rhs, b + n);
+  if (lhs->type == T_DIV && rhs->type != T_EQ) b[n++] = ' ';
+  if (rhs->type != T_PADDING) n += spell (rhs, b + n);
   push_text (b, n);
   pb = pps->buffer;
   r = temp_token ();
@@ -1115,7 +1116,7 @@ static void paste_all (struct tok *lhs)
   struct vloc vl;
   struct tok **a;
   struct vloc *va;
-  if (c->vl) vl = c->vl[c->i - 1]; else vl = *pps->invocation;
+  if (c->vl) vl = c->vl[c->i - 1]; else vl = pps->invocation;
   do {
     rhs = c->t[c->i++];
     if (!paste_tokens (&lhs, rhs)) { backup_tokens (1); break; }
@@ -1151,9 +1152,9 @@ static void argvloc (struct vloc *exp, struct vloc *spell, struct vloc *out)   /
   out->bi = spell->bi; out->sys = spell->sys;
 }
 
-static struct arg *collect_args (struct hnode *hn, struct tok ***pragma_buf, long *npragma, long *nargs)
+static struct arg *collect_args (struct hnode *node, struct tok ***pragma_buf, long *npragma, long *nargs)
 {
-  struct macro *m = hn->macro;
+  struct macro *m = node->macro;
   long argc = m->paramc ? m->paramc : 1, n = 0, alloced = 0;
   struct arg *args = alloc (argc * sizeof (struct arg)), *arg = args;
   struct tok *t = 0;
@@ -1174,12 +1175,12 @@ static struct arg *collect_args (struct hnode *hn, struct tok ***pragma_buf, lon
         arg->first = nt; arg->vl = nv; room = r;
       }
       t = get_tok (&vl);
-      if (t->typ == T_PADDING) { if (ntok == 0) continue; }
-      else if (t->typ == T_OPEN_PAREN) depth++;
-      else if (t->typ == T_CLOSE_PAREN) { if (depth-- == 0) break; }
-      else if (t->typ == T_COMMA) { if (depth == 0 && !(m->variadic && n == m->paramc)) break; }
-      else if (t->typ == T_EOF || (t->typ == T_HASH && (t->flags & BOL))) break;
-      else if (t->typ == T_PRAGMA && !(t->flags & PRAGMA_OP)) {
+      if (t->type == T_PADDING) { if (ntok == 0) continue; }
+      else if (t->type == T_OPEN_PAREN) depth++;
+      else if (t->type == T_CLOSE_PAREN) { if (depth-- == 0) break; }
+      else if (t->type == T_COMMA) { if (depth == 0 && !(m->variadic && n == m->paramc)) break; }
+      else if (t->type == T_EOF || (t->type == T_HASH && (t->flags & BOL))) break;
+      else if (t->type == T_PRAGMA && !(t->flags & PRAGMA_OP)) {
         struct tok *nt = temp_token ();
         *nt = *t;
         t = nt;
@@ -1190,48 +1191,48 @@ static struct arg *collect_args (struct hnode *hn, struct tok ***pragma_buf, lon
             *pragma_buf = x;
           }
           (*pragma_buf)[(*npragma)++] = t;
-          if (t->typ == T_PRAGMA_EOL) break;
+          if (t->type == T_PRAGMA_EOL) break;
           t = get_tok (&vl);
-        } while (t->typ != T_EOF);
+        } while (t->type != T_EOF);
         pps->parsing_args = 2; pps->prevent_expansion = 1;
-        if (t->typ == T_EOF) break;
+        if (t->type == T_EOF) break;
         continue;
       }
       arg->first[ntok] = t; arg->vl[ntok] = vl;
       ntok++;
     }
-    while (ntok > 0 && arg->first[ntok - 1]->typ == T_PADDING) ntok--;
+    while (ntok > 0 && arg->first[ntok - 1]->type == T_PADDING) ntok--;
     arg->count = ntok;
-    arg->first[ntok] = pps->endarg; arg->vl[ntok] = t->loc;
+    arg->first[ntok] = &pps->endarg; arg->vl[ntok] = t->loc;
     if (n <= m->paramc) { if (n != m->paramc) arg++; }
-  } while (t->typ != T_CLOSE_PAREN && t->typ != T_EOF);
-  if (t->typ == T_EOF) {
-    if (t == pps->endarg) backup_tokens (1);
-    error2 ("unterminated argument list invoking macro ", hn->name, hn->len);
+  } while (t->type != T_CLOSE_PAREN && t->type != T_EOF);
+  if (t->type == T_EOF) {
+    if (t == &pps->endarg) backup_tokens (1);
+    error2 ("unterminated argument list invoking macro ", node->name, node->len);
     return 0;
   }
   if (n == 1 && m->paramc == 0 && args[0].count == 0) n = 0;
   if (n == m->paramc || (n + 1 == m->paramc && m->variadic)) {
     if (m->variadic && (n < m->paramc || (n == 1 && args[0].count == 0))) {
       args[m->paramc - 1].omitted = 1;
-      if (n < m->paramc) { args[m->paramc - 1].count = 0; args[m->paramc - 1].first = alloc (sizeof (struct tok *)); args[m->paramc - 1].first[0] = pps->endarg; args[m->paramc - 1].vl = alloc (sizeof (struct vloc)); }
+      if (n < m->paramc) { args[m->paramc - 1].count = 0; args[m->paramc - 1].first = alloc (sizeof (struct tok *)); args[m->paramc - 1].first[0] = &pps->endarg; args[m->paramc - 1].vl = alloc (sizeof (struct vloc)); }
     }
     *nargs = alloced;
     return args;
   }
-  error2 ("wrong number of arguments to macro ", hn->name, hn->len);
+  error2 ("wrong number of arguments to macro ", node->name, node->len);
   return 0;
 }
-static struct arg *funlike_invocation (struct hnode *hn, struct tok ***pragma_buf, long *npragma, long *nargs)
+static struct arg *funlike_invocation (struct hnode *node, struct tok ***pragma_buf, long *npragma, long *nargs)
 {
   struct tok *t, *padding = 0;
   for (;;) {
     t = get_token ();
-    if (t->typ != T_PADDING) break;
+    if (t->type != T_PADDING) break;
     if (padding == 0 || padding->source == 0 || (!(padding->source->flags & PREV_WHITE) && t->source == 0)) padding = t;
   }
-  if (t->typ == T_OPEN_PAREN) { pps->parsing_args = 2; return collect_args (hn, pragma_buf, npragma, nargs); }
-  if (t->typ != T_EOF || t == pps->endarg) {
+  if (t->type == T_OPEN_PAREN) { pps->parsing_args = 2; return collect_args (node, pragma_buf, npragma, nargs); }
+  if (t->type != T_EOF || t == &pps->endarg) {
     backup_tokens (1);
     if (padding) push_token_ctx (0, padding);
   }
@@ -1256,7 +1257,7 @@ static void expand_arg (struct arg *a)
       a->exp = nt; a->evl = nv; room = r;
     }
     t = get_tok (&l);
-    if (t->typ == T_EOF) break;
+    if (t->type == T_EOF) break;
     a->exp[a->ecount] = t; a->evl[a->ecount] = l; a->ecount++;
   }
   pop_ctx ();
@@ -1276,7 +1277,7 @@ static long macro_count (struct macro *m)
   long i;
   if (!m->extra) return m->count;
   i = m->count;
-  while (i-- > 0) if (m->toks[i].typ != T_PASTE) return i + 1;
+  while (i-- > 0) if (m->toks[i].type != T_PASTE) return i + 1;
   return 0;
 }
 /* __VA_OPT__'s state (vaopt_state) */
@@ -1289,13 +1290,13 @@ struct vaopt { struct arg *arg; int variadic, last_paste, stringify, state, upda
 static int vaopt_update (struct vaopt *v, struct tok *t)
 {
   if (!v->variadic) return VO_INCLUDE;
-  if (t->typ == T_NAME && t->hn == pps->n_va_opt) {
+  if (t->type == T_NAME && t->node == pps->n_va_opt) {
     if (v->state > 0) { error ("__VA_OPT__ may not appear in a __VA_OPT__"); return VO_ERROR; }
     v->state++;
     v->stringify = (t->flags & STRINGIFY_ARG) != 0;
     return VO_BEGIN;
   } else if (v->state == 1) {
-    if (t->typ != T_OPEN_PAREN) { error ("__VA_OPT__ must be followed by an open parenthesis"); return VO_ERROR; }
+    if (t->type != T_OPEN_PAREN) { error ("__VA_OPT__ must be followed by an open parenthesis"); return VO_ERROR; }
     v->state++;
     if (v->update == VO_ERROR) {
       if (v->arg == 0) v->update = VO_INCLUDE;
@@ -1303,19 +1304,19 @@ static int vaopt_update (struct vaopt *v, struct tok *t)
         long i = 0;
         v->update = VO_DROP;
         if (!v->arg->expanded) expand_arg (v->arg);
-        while (i < v->arg->ecount) { if (v->arg->exp[i]->typ != T_PADDING) { v->update = VO_INCLUDE; break; } i++; }
+        while (i < v->arg->ecount) { if (v->arg->exp[i]->type != T_PADDING) { v->update = VO_INCLUDE; break; } i++; }
       }
     }
     return VO_DROP;
   } else if (v->state >= 2) {
     int was;
-    if (v->state == 2 && t->typ == T_PASTE) { error ("'##' cannot appear at either end of __VA_OPT__"); return VO_ERROR; }
+    if (v->state == 2 && t->type == T_PASTE) { error ("'##' cannot appear at either end of __VA_OPT__"); return VO_ERROR; }
     if (v->state == 2) v->state++;
     was = v->last_paste;
     v->last_paste = 0;
-    if (t->typ == T_PASTE) v->last_paste = 1;
-    else if (t->typ == T_OPEN_PAREN) v->state++;
-    else if (t->typ == T_CLOSE_PAREN) {
+    if (t->type == T_PASTE) v->last_paste = 1;
+    else if (t->type == T_OPEN_PAREN) v->state++;
+    else if (t->type == T_CLOSE_PAREN) {
       v->state--;
       if (v->state == 2) {
         v->state = 0;
@@ -1327,7 +1328,7 @@ static int vaopt_update (struct vaopt *v, struct tok *t)
   }
   return VO_INCLUDE;
 }
-static void replace_args (struct hnode *hn, struct macro *m, struct arg *args, struct vloc *exp)
+static void replace_args (struct hnode *node, struct macro *m, struct arg *args, struct vloc *exp)
 {
   struct tbuf b;
   long limit = macro_count (m), srci;
@@ -1336,7 +1337,7 @@ static void replace_args (struct hnode *hn, struct macro *m, struct arg *args, s
   b.t = 0; b.vl = 0; b.n = 0; b.room = 0;
   for (srci = 0; srci < limit; srci++) {
     struct tok *src = &m->toks[srci];
-    if (src->typ == T_MACRO_ARG) {
+    if (src->type == T_MACRO_ARG) {
       struct arg *a = &args[src->argno - 1];
       if (src->flags & STRINGIFY_ARG) { if (!a->str) a->str = stringify_arg (a->first, a->count); }
       else if ((src->flags & PASTE_LEFT) || (srci > 0 && (src[-1].flags & PASTE_LEFT))) ;
@@ -1382,15 +1383,15 @@ static void replace_args (struct hnode *hn, struct macro *m, struct arg *args, s
           tb_add (&b, t, 0);
           continue;
         }
-        if (start >= 0 && pf == start && (b.t[start]->flags & PASTE_LEFT)) b.t[start] = copy_paste_flag (b.t[start], pps->avoid_paste);
+        if (start >= 0 && pf == start && (b.t[start]->flags & PASTE_LEFT)) b.t[start] = copy_paste_flag (b.t[start], &pps->avoid_paste);
         if (src->flags & PASTE_LEFT) {
-          while (pf >= 0 && pf != start && b.t[pf] == pps->avoid_paste) { b.n--; pf = b.n - 1; }
-          if (pf >= 0 && b.t[pf]->typ != T_PADDING) b.t[pf] = copy_paste_flag (b.t[pf], src);
-        } else tb_add (&b, pps->avoid_paste, 0);
+          while (pf >= 0 && pf != start && b.t[pf] == &pps->avoid_paste) { b.n--; pf = b.n - 1; }
+          if (pf >= 0 && b.t[pf]->type != T_PADDING) b.t[pf] = copy_paste_flag (b.t[pf], src);
+        } else tb_add (&b, &pps->avoid_paste, 0);
       }
       continue;
     }
-    if (src->typ != T_MACRO_ARG) {
+    if (src->type != T_MACRO_ARG) {
       mkvloc (exp, &src->loc, &l);
       tb_add (&b, src, &l);
       continue;
@@ -1403,7 +1404,7 @@ static void replace_args (struct hnode *hn, struct macro *m, struct arg *args, s
         count = a->count; from = a->first; fromvl = a->vl;
         if (b.n != 0) {
           long last = b.n - 1;
-          if (b.t[last]->typ == T_COMMA && m->variadic && src->argno == m->paramc) {
+          if (b.t[last]->type == T_COMMA && m->variadic && src->argno == m->paramc) {
             if (a->omitted) b.n--;
             else paste_flag = (int) last;
           } else if (count == 0) paste_flag = (int) last;
@@ -1411,7 +1412,7 @@ static void replace_args (struct hnode *hn, struct macro *m, struct arg *args, s
       } else {
         count = a->ecount; from = a->exp; fromvl = a->evl;
         if (vaopt_start >= 0 && b.n - 1 == vaopt_start) {
-          while (count && from[0]->typ == T_PADDING) { from++; fromvl++; count--; }
+          while (count && from[0]->type == T_PADDING) { from++; fromvl++; count--; }
         }
       }
       if ((!pps->in_directive || pps->directive_wants_padding) && srci > 0 && !(src[-1].flags & PASTE_LEFT) && !(vaopt_start >= 0 && b.n - 1 == vaopt_start)) {
@@ -1427,40 +1428,40 @@ static void replace_args (struct hnode *hn, struct macro *m, struct arg *args, s
         }
         if (src->flags & PASTE_LEFT) paste_flag = (int) (b.n - 1);
       }
-      if (!pps->in_directive && !(src->flags & PASTE_LEFT)) tb_add (&b, pps->avoid_paste, 0);
+      if (!pps->in_directive && !(src->flags & PASTE_LEFT)) tb_add (&b, &pps->avoid_paste, 0);
       if (paste_flag >= 0) b.t[paste_flag] = copy_paste_flag (b.t[paste_flag], src);
     }
   }
-  push_ctx (hn, b.t, b.vl, b.n, 1);
+  push_ctx (node, b.t, b.vl, b.n, 1);
 }
 
-static int builtin_macro (struct hnode *hn, struct vloc *loc);
-static int enter_macro (struct hnode *hn, struct tok *result, struct vloc *loc)
+static int builtin_macro (struct hnode *node, struct vloc *loc);
+static int enter_macro (struct hnode *node, struct tok *result, struct vloc *loc)
 {
   pps->mi_valid = 0;
   pps->angled_headers = 0;
   pps->about_to_expand = 1;
-  if (hn->typ == NT_USER) {
-    struct macro *m = hn->macro;
+  if (node->type == NT_USER) {
+    struct macro *m = node->macro;
     struct tok **pragma_buf = 0;
     long npragma = 0;
     if (m->fun_like) {
       struct arg *args;
       long nargs = 0;
       pps->prevent_expansion++; pps->keep_tokens++; pps->parsing_args = 1;
-      args = funlike_invocation (hn, &pragma_buf, &npragma, &nargs);
+      args = funlike_invocation (node, &pragma_buf, &npragma, &nargs);
       pps->parsing_args = 0; pps->keep_tokens--; pps->prevent_expansion--;
       if (!args) { pps->about_to_expand = 0; return 0; }
-      if (m->paramc > 0) replace_args (hn, m, args, loc);
+      if (m->paramc > 0) replace_args (node, m, args, loc);
     }
-    hn->flags |= N_DISABLED;
+    node->flags |= N_DISABLED;
     m->used = 1;
     if (m->paramc == 0) {
       long n = macro_count (m), i;
       struct tok **t = alloc ((n + 1) * sizeof (struct tok *));
       struct vloc *vl = alloc ((n + 1) * sizeof (struct vloc));
       for (i = 0; i < n; i++) { t[i] = &m->toks[i]; mkvloc (loc, &m->toks[i].loc, &vl[i]); }
-      push_ctx (hn, t, vl, n, 1);
+      push_ctx (node, t, vl, n, 1);
     }
     if (npragma) {
       if (!pps->in_directive) push_token_ctx (0, padding_token (result));
@@ -1472,7 +1473,7 @@ static int enter_macro (struct hnode *hn, struct tok *result, struct vloc *loc)
     return 1;
   }
   pps->about_to_expand = 0;
-  return builtin_macro (hn, loc);
+  return builtin_macro (node, loc);
 }
 
 /* ---- the answers of __has_builtin and its kin: the target's gcc's (--predef) */
@@ -1499,30 +1500,30 @@ static long has_query (char *kind)
   struct tok *t = get_token_no_padding ();
   unsigned char nb[512];
   long n = 0, depth;
-  if (t->typ != T_OPEN_PAREN) { error ("missing '(' after __has_"); return 0; }
+  if (t->type != T_OPEN_PAREN) { error ("missing '(' after __has_"); return 0; }
   t = get_token_no_padding ();
-  if (t->typ != T_NAME) {
+  if (t->type != T_NAME) {
     error ("macro __has_ requires an identifier");
-    if (t->typ == T_CLOSE_PAREN) return 0;
+    if (t->type == T_CLOSE_PAREN) return 0;
   } else {
     n = spell (t, nb);
     t = get_token_no_padding ();
     if (kind[0] == 'a' || kind[0] == 'c') {
       /* vendor::attr: :: (or : : with COLON_SCOPE) then a name */
-      if (t->typ == T_SCOPE || (t->typ == T_COLON && (t->flags & COLON_SCOPE))) {
-        if (t->typ == T_COLON) t = get_token_no_padding ();
+      if (t->type == T_SCOPE || (t->type == T_COLON && (t->flags & COLON_SCOPE))) {
+        if (t->type == T_COLON) t = get_token_no_padding ();
         t = get_token_no_padding ();
         nb[n++] = ':'; nb[n++] = ':';
-        if (t->typ == T_NAME && n + t->hn->len < 500) n += spell (t, nb + n);
+        if (t->type == T_NAME && n + t->node->len < 500) n += spell (t, nb + n);
         t = get_token_no_padding ();
       }
     }
   }
   depth = 1;
   for (;;) {
-    if (t->typ == T_OPEN_PAREN) depth++;
-    else if (t->typ == T_CLOSE_PAREN) depth--;
-    else if (t->typ == T_EOF) break;
+    if (t->type == T_OPEN_PAREN) depth++;
+    else if (t->type == T_CLOSE_PAREN) depth--;
+    else if (t->type == T_EOF) break;
     if (!depth) break;
     t = get_token_no_padding ();
   }
@@ -1530,7 +1531,7 @@ static long has_query (char *kind)
   return has_answer (kind, nb, n);
 }
 
-static int has_header (unsigned char *fname, long n, int angle, int typ);
+static int has_header (unsigned char *fname, long n, int angle, int type);
 static long builtin_has_include (struct hnode *op, int next)
 {
   struct tok *t;
@@ -1541,19 +1542,19 @@ static long builtin_has_include (struct hnode *op, int next)
   pps->angled_headers = 1;
   pps->directive_wants_padding = 1;
   t = get_token_no_padding ();
-  paren = t->typ == T_OPEN_PAREN;
+  paren = t->type == T_OPEN_PAREN;
   if (paren) t = get_token_no_padding (); else error ("missing '(' before __has_include operand");
   pps->angled_headers = 0;
   pps->directive_wants_padding = sav;
-  bracket = t->typ != T_STRING;
-  if (t->typ == T_STRING || t->typ == T_HEADER_NAME) { fname = t->text + 1; fn = t->len - 2; }
-  else if (t->typ == T_LESS) {
+  bracket = t->type != T_STRING;
+  if (t->type == T_STRING || t->type == T_HEADER_NAME) { fname = t->text + 1; fn = t->len - 2; }
+  else if (t->type == T_LESS) {
     /* _cpp_bracket_include: the tokens to the > */
     long room = 256; unsigned char *d = alloc (room);
     for (;;) {
       t = get_token_no_padding ();
-      if (t->typ == T_GREATER) break;
-      if (t->typ == T_EOF) { error ("missing terminating > character"); break; }
+      if (t->type == T_GREATER) break;
+      if (t->type == T_EOF) { error ("missing terminating > character"); break; }
       stringify_buf (&d, &fn, &room, spell_len (t) + 4);
       if (t->flags & PREV_WHITE) d[fn++] = ' ';
       fn += spell (t, d + fn);
@@ -1563,7 +1564,7 @@ static long builtin_has_include (struct hnode *op, int next)
   if (fname) {
     if (!pps->skip_eval && has_header (fname, fn, bracket, next ? IT_INCLUDE_NEXT : IT_INCLUDE)) result = 1;
   }
-  if (paren && get_token_no_padding ()->typ != T_CLOSE_PAREN) error ("missing ')' after __has_include operand");
+  if (paren && get_token_no_padding ()->type != T_CLOSE_PAREN) error ("missing ')' after __has_include operand");
   return result;
 }
 static void do_pragma_text (unsigned char *text, long n, struct vloc *loc);
@@ -1571,17 +1572,17 @@ static struct tok *get_pragma_string (void)
 {
   struct tok *paren, *s;
   paren = get_token_no_padding ();
-  if (paren->typ == T_EOF) backup_tokens (1);
-  if (paren->typ != T_OPEN_PAREN) return 0;
+  if (paren->type == T_EOF) backup_tokens (1);
+  if (paren->type != T_OPEN_PAREN) return 0;
   s = get_token_no_padding ();
-  if (s->typ == T_EOF) backup_tokens (1);
-  if (s->typ != T_STRING && s->typ != T_WSTRING && s->typ != T_STRING32 && s->typ != T_STRING16 && s->typ != T_UTF8STRING) return 0;
+  if (s->type == T_EOF) backup_tokens (1);
+  if (s->type != T_STRING && s->type != T_WSTRING && s->type != T_STRING32 && s->type != T_STRING16 && s->type != T_UTF8STRING) return 0;
   paren = get_token_no_padding ();
-  if (paren->typ == T_EOF) backup_tokens (1);
-  if (paren->typ != T_CLOSE_PAREN) return 0;
+  if (paren->type == T_EOF) backup_tokens (1);
+  if (paren->type != T_CLOSE_PAREN) return 0;
   return s;
 }
-static int builtin_macro (struct hnode *hn, struct vloc *loc)
+static int builtin_macro (struct hnode *node, struct vloc *loc)
 {
   unsigned char b[64], *text = b;
   long n = 0, numv = 1;
@@ -1589,22 +1590,22 @@ static int builtin_macro (struct hnode *hn, struct vloc *loc)
   struct buf *pb;
   struct tok *t, **ta;
   struct vloc *va;
-  if (hn->builtin == BT_PRAGMA) {
+  if (node->builtin == BT_PRAGMA) {
     struct tok *s;
     if (pps->in_directive || pps->ignore_pragma) return 0;
     pps->keep_tokens++;
     s = get_pragma_string ();
     pps->keep_tokens--;
-    pps->dres->typ = T_PADDING;
+    pps->dres.type = T_PADDING;
     if (s) { do_pragma_text (s->text, s->len, loc); return 1; }
     error ("_Pragma takes a parenthesized string literal");
     return 0;
   }
-  if (hn->builtin == BT_FILE || hn->builtin == BT_FILE_NAME || hn->builtin == BT_BASE_FILE) {
+  if (node->builtin == BT_FILE || node->builtin == BT_FILE_NAME || node->builtin == BT_BASE_FILE) {
     unsigned char *name; long nl, i, k = 0;
-    if (hn->builtin == BT_BASE_FILE) { name = pps->main_file->name; nl = pps->main_file->nlen; }
+    if (node->builtin == BT_BASE_FILE) { name = pps->main_file->name; nl = pps->main_file->nlen; }
     else { name = pps->curmap->name; nl = pps->curmap->nlen; }
-    if (hn->builtin == BT_FILE_NAME) { i = nl; while (i > 0 && name[i - 1] != '/') i--; name += i; nl -= i; }
+    if (node->builtin == BT_FILE_NAME) { i = nl; while (i > 0 && name[i - 1] != '/') i--; name += i; nl -= i; }
     text = alloc (nl * 2 + 3);
     text[k++] = '"';
     for (i = 0; i < nl; i++) {
@@ -1614,19 +1615,19 @@ static int builtin_macro (struct hnode *hn, struct vloc *loc)
     }
     text[k++] = '"';
     n = k; isnum = 0;
-  } else if (hn->builtin == BT_LINE) numv = loc->lno;
-  else if (hn->builtin == BT_INCLUDE_LEVEL) numv = pps->curmap->depth - 1;
-  else if (hn->builtin == BT_COUNTER) numv = pps->counter++;
-  else if (hn->builtin == BT_DATE || hn->builtin == BT_TIME || hn->builtin == BT_TIMESTAMP) {
-    fatal2 ("not reproducible: ", hn->name, hn->len);
-  } else if (hn->builtin == BT_HAS_ATTRIBUTE) numv = has_query ("attribute");
-  else if (hn->builtin == BT_HAS_STD_ATTRIBUTE) numv = has_query ("c_attribute");
-  else if (hn->builtin == BT_HAS_BUILTIN) numv = has_query ("builtin");
-  else if (hn->builtin == BT_HAS_FEATURE) numv = has_query ("feature");
-  else if (hn->builtin == BT_HAS_EXTENSION) numv = has_query ("extension");
-  else if (hn->builtin == BT_HAS_INCLUDE) numv = builtin_has_include (hn, 0);
-  else if (hn->builtin == BT_HAS_INCLUDE_NEXT) numv = builtin_has_include (hn, 1);
-  else if (hn->builtin == BT_HAS_EMBED) fatal ("__has_embed is not supported");
+  } else if (node->builtin == BT_LINE) numv = loc->lno;
+  else if (node->builtin == BT_INCLUDE_LEVEL) numv = pps->curmap->depth - 1;
+  else if (node->builtin == BT_COUNTER) numv = pps->counter++;
+  else if (node->builtin == BT_DATE || node->builtin == BT_TIME || node->builtin == BT_TIMESTAMP) {
+    fatal2 ("not reproducible: ", node->name, node->len);
+  } else if (node->builtin == BT_HAS_ATTRIBUTE) numv = has_query ("attribute");
+  else if (node->builtin == BT_HAS_STD_ATTRIBUTE) numv = has_query ("c_attribute");
+  else if (node->builtin == BT_HAS_BUILTIN) numv = has_query ("builtin");
+  else if (node->builtin == BT_HAS_FEATURE) numv = has_query ("feature");
+  else if (node->builtin == BT_HAS_EXTENSION) numv = has_query ("extension");
+  else if (node->builtin == BT_HAS_INCLUDE) numv = builtin_has_include (node, 0);
+  else if (node->builtin == BT_HAS_INCLUDE_NEXT) numv = builtin_has_include (node, 1);
+  else if (node->builtin == BT_HAS_EMBED) fatal ("__has_embed is not supported");
   if (isnum) n = numtext ((unsigned long) (unsigned int) numv, b);
   push_text (text, n);
   pb = pps->buffer;
@@ -1637,13 +1638,13 @@ static int builtin_macro (struct hnode *hn, struct vloc *loc)
   ta = alloc (sizeof (struct tok *)); va = alloc (sizeof (struct vloc));
   ta[0] = t;
   va[0] = *loc; va[0].bi = 1;
-  push_ctx (hn, ta, va, 1, 1);
+  push_ctx (node, ta, va, 1, 1);
   return 1;
 }
 /* the printer's avoid_paste (cpp_avoid_paste) */
 static int avoid_paste (struct tok *tk1, struct tok *tk2)
 {
-  int a = tk1->typ, b = tk2->typ, c = -1;
+  int a = tk1->type, b = tk2->type, c = -1;
   if (tk1->flags & NAMED_OP) a = T_NAME;
   if (tk2->flags & NAMED_OP) b = T_NAME;
   if (tk2->flags & DIGRAPH) c = digraphs[b - T_HASH][0];
@@ -1678,7 +1679,7 @@ static void ex_next (struct ex *e)
 {
   for (;;) {
     e->t = get_token ();
-    if (e->t->typ != T_PADDING) break;
+    if (e->t->type != T_PADDING) break;
   }
   e->lex_count++;
 }
@@ -1727,8 +1728,8 @@ static int hexval (int c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && 
 static void ex_char (struct tok *t, struct num *r)   /* cpp_interpret_charconst */
 {
   unsigned char *s = t->text, *e = t->text + t->len - 1;
-  int wide = t->typ != T_CHAR && t->typ != T_UTF8CHAR;
-  long width = wide ? (t->typ == T_CHAR16 ? 16 : t->typ == T_CHAR32 ? 32 : pps->wchar_bits) : 8;
+  int wide = t->type != T_CHAR && t->type != T_UTF8CHAR;
+  long width = wide ? (t->type == T_CHAR16 ? 16 : t->type == T_CHAR32 ? 32 : pps->wchar_bits) : 8;
   int unsignedp;
   unsigned long long res = 0, c;
   long count = 0;
@@ -1765,10 +1766,10 @@ static void ex_char (struct tok *t, struct num *r)   /* cpp_interpret_charconst 
     count++;
   }
   if (wide) {
-    unsignedp = t->typ == T_WCHAR ? pps->wchar_unsigned : 1;
+    unsignedp = t->type == T_WCHAR ? pps->wchar_unsigned : 1;
   } else {
     if (count > 1) { unsignedp = 0; width = 32; }
-    else unsignedp = t->typ == T_UTF8CHAR ? 1 : pps->uchar;
+    else unsignedp = t->type == T_UTF8CHAR ? 1 : pps->uchar;
   }
   if (width < 64) {
     unsigned long long mask = (1ULL << width) - 1;
@@ -1782,19 +1783,19 @@ static void ex_char (struct tok *t, struct num *r)   /* cpp_interpret_charconst 
 static void ex_defined (struct ex *e, struct num *r)   /* parse_defined */
 {
   int paren = 0;
-  struct hnode *hn = 0;
+  struct hnode *node = 0;
   struct tok *t;
   pps->prevent_expansion++;
   t = get_token_no_padding ();
-  if (t->typ == T_OPEN_PAREN) { paren = 1; t = get_token_no_padding (); }
-  if (t->typ == T_NAME) {
-    hn = t->hn;
-    if (paren && get_token_no_padding ()->typ != T_CLOSE_PAREN) { error ("missing ')' after \"defined\""); hn = 0; }
+  if (t->type == T_OPEN_PAREN) { paren = 1; t = get_token_no_padding (); }
+  if (t->type == T_NAME) {
+    node = t->node;
+    if (paren && get_token_no_padding ()->type != T_CLOSE_PAREN) { error ("missing ')' after \"defined\""); node = 0; }
   } else error ("operator \"defined\" requires an identifier");
   r->v = 0; r->uns = 0;
-  if (hn) {
-    r->v = hn->typ == NT_USER || hn->typ == NT_BUILTIN;
-    pps->mi_ind_cmacro = hn;
+  if (node) {
+    r->v = node->type == NT_USER || node->type == NT_BUILTIN;
+    pps->mi_ind_cmacro = node;
   }
   pps->prevent_expansion--;
 }
@@ -1803,20 +1804,20 @@ static void ex_comma (struct ex *e, struct num *r);
 static void ex_unary (struct ex *e, struct num *r)
 {
   struct tok *t = e->t;
-  int ty = t->typ;
+  int ty = t->type;
   r->v = 0; r->uns = 0;
   if (e->err) return;
   if (ty == T_NUMBER) { ex_number (t, r); ex_next (e); return; }
   if (ty >= T_CHAR && ty <= T_UTF8CHAR) { ex_char (t, r); ex_next (e); return; }
   if (ty == T_NAME) {
-    if (t->hn == pps->n_defined) { ex_defined (e, r); ex_next (e); return; }
+    if (t->node == pps->n_defined) { ex_defined (e, r); ex_next (e); return; }
     ex_next (e);
     return;
   }
   if (ty == T_OPEN_PAREN) {
     ex_next (e);
     ex_comma (e, r);
-    if (e->t->typ != T_CLOSE_PAREN) { if (!e->err) error ("missing ')' in expression"); e->err = 1; return; }
+    if (e->t->type != T_CLOSE_PAREN) { if (!e->err) error ("missing ')' in expression"); e->err = 1; return; }
     ex_next (e);
     return;
   }
@@ -1892,7 +1893,7 @@ static void ex_bin (struct ex *e, struct num *r, int minp)
 {
   ex_unary (e, r);
   for (;;) {
-    int op = e->t->typ, p = prec (op);
+    int op = e->t->type, p = prec (op);
     struct num b;
     if (e->err || p == 0 || p < minp) return;
     ex_next (e);
@@ -1913,13 +1914,13 @@ static void ex_cond (struct ex *e, struct num *r)
 {
   struct num a, b;
   ex_bin (e, r, 1);
-  if (e->err || e->t->typ != T_QUERY) return;
+  if (e->err || e->t->type != T_QUERY) return;
   ex_next (e);
   if (r->v == 0) pps->skip_eval++;
   ex_comma (e, &a);
   if (r->v == 0) pps->skip_eval--;
   if (e->err) return;
-  if (e->t->typ != T_COLON) { error ("'?' without following ':'"); e->err = 1; return; }
+  if (e->t->type != T_COLON) { error ("'?' without following ':'"); e->err = 1; return; }
   ex_next (e);
   if (r->v != 0) pps->skip_eval++;
   ex_cond (e, &b);
@@ -1930,7 +1931,7 @@ static void ex_cond (struct ex *e, struct num *r)
 static void ex_comma (struct ex *e, struct num *r)
 {
   ex_cond (e, r);
-  while (!e->err && e->t->typ == T_COMMA) { ex_next (e); ex_cond (e, r); }
+  while (!e->err && e->t->type == T_COMMA) { ex_next (e); ex_cond (e, r); }
 }
 static int parse_expr (void)   /* _cpp_parse_expr: the truth of #if's expression */
 {
@@ -1941,7 +1942,7 @@ static int parse_expr (void)   /* _cpp_parse_expr: the truth of #if's expression
   e.lex_count = 0; e.saw_leading_not = 0; e.err = 0;
   ex_next (&e);
   ex_comma (&e, &r);
-  if (!e.err && e.t->typ != T_EOF) {
+  if (!e.err && e.t->type != T_EOF) {
     unsigned char b[64]; long n = spell (e.t, b);
     error2 ("missing binary operator before token ", b, n);
     e.err = 1;
@@ -2065,15 +2066,15 @@ static unsigned char *dir_name_of (struct file *f, long *n)
   *n = i;
   return f->path;
 }
-static struct dir *search_path_head (unsigned char *fname, long fn, int angle, int typ)
+static struct dir *search_path_head (unsigned char *fname, long fn, int angle, int type)
 {
   struct file *f;
   struct dir *d;
   if ((fn > 0 && fname[0] == '/') || fn == 0) return pps->no_search;
   f = pps->buffer ? pps->buffer->file : pps->main_file;
-  if (typ == IT_INCLUDE_NEXT && f && f->dir && f->dir != pps->no_search) d = f->dir->next;
+  if (type == IT_INCLUDE_NEXT && f && f->dir && f->dir != pps->no_search) d = f->dir->next;
   else if (angle) d = pps->bracket;
-  else if (typ == IT_CMDLINE) return make_dir ((unsigned char *) "./", 2, 0);
+  else if (type == IT_CMDLINE) return make_dir ((unsigned char *) "./", 2, 0);
   else {
     long n; unsigned char *dn = dir_name_of (f, &n);
     return make_dir (dn, n, pps->buffer ? pps->buffer->sysp : 0);
@@ -2081,9 +2082,9 @@ static struct dir *search_path_head (unsigned char *fname, long fn, int angle, i
   if (d == 0) error2 ("no include path in which to search for ", fname, fn);
   return d;
 }
-static int has_header (unsigned char *fname, long fn, int angle, int typ)
+static int has_header (unsigned char *fname, long fn, int angle, int type)
 {
-  struct dir *d = search_path_head (fname, fn, angle, typ);
+  struct dir *d = search_path_head (fname, fn, angle, type);
   struct file *f;
   if (!d) return 0;
   f = find_file (fname, fn, d, 0);
@@ -2099,7 +2100,7 @@ static int unique_contents (struct file *f)   /* has_unique_contents: the same b
   }
   return 1;
 }
-static int stack_file (struct file *f, int typ, long inc_line)
+static int stack_file (struct file *f, int type, long inc_line)
 {
   int sysp = 0;
   struct buf *b;
@@ -2117,22 +2118,22 @@ static int stack_file (struct file *f, int typ, long inc_line)
   do_file_change (LC_ENTER, f->path, f->plen, 1, sysp, inc_line);
   return 1;
 }
-static int stack_include (unsigned char *fname, long fn, int angle, int typ)
+static int stack_include (unsigned char *fname, long fn, int angle, int type)
 {
-  struct dir *d = search_path_head (fname, fn, angle, typ);
+  struct dir *d = search_path_head (fname, fn, angle, type);
   struct file *f;
   long inc_line;
   if (!d) return 0;
   f = find_file (fname, fn, d, 0);
   if (!f->found) {
-    if (typ == IT_DEFAULT) return 0;   /* gcc's preinclude, when there is none */
+    if (type == IT_DEFAULT) return 0;   /* gcc's preinclude, when there is none */
     fatal2 ("no such file: ", fname, fn);
   }
-  if (typ == IT_IMPORT) { pps->seen_once_only = 1; f->once_only = 1; if (f->stack_count) return 0; }
+  if (type == IT_IMPORT) { pps->seen_once_only = 1; f->once_only = 1; if (f->stack_count) return 0; }
   if (f->once_only) return 0;
-  if (f->cmacro && (f->cmacro->typ == NT_USER || f->cmacro->typ == NT_BUILTIN)) return 0;
-  inc_line = typ == IT_CMDLINE || typ == IT_DEFAULT ? pps->lno : pps->lno - 1;
-  return stack_file (f, typ, inc_line);
+  if (f->cmacro && (f->cmacro->type == NT_USER || f->cmacro->type == NT_BUILTIN)) return 0;
+  inc_line = type == IT_CMDLINE || type == IT_DEFAULT ? pps->lno : pps->lno - 1;
+  return stack_file (f, type, inc_line);
 }
 /* realpath (3), for the canonical path of a file in a system directory */
 static unsigned char *realpath_of (unsigned char *path, long n, long *outn)
@@ -2158,7 +2159,7 @@ static unsigned char *realpath_of (unsigned char *path, long n, long *outn)
     r[rn++] = '/'; mcopy (r + rn, rest + s, seglen); rn += seglen; r[rn] = 0;
     {
       unsigned char lb[4096];
-      long k = pp_readlink ((char *) r, lb, 4095);
+      long k = cp_readlink ((char *) r, lb, 4095);
       if (k > 0) {
         unsigned char *nr;
         long tail = restn - i;
@@ -2180,13 +2181,13 @@ static unsigned char *realpath_of (unsigned char *path, long n, long *outn)
 static void start_directive (void)
 {
   pps->in_directive = 1;
-  pps->dres->typ = T_PADDING;
+  pps->dres.type = T_PADDING;
   pps->directive_line = pps->lno;
 }
 static void skip_rest_of_line (void)
 {
   while (pps->ctx->prev) pop_ctx ();
-  if (!seen_eol ()) while (lex_token ()->typ != T_EOF) ;
+  if (!seen_eol ()) while (lex_token ()->type != T_EOF) ;
 }
 static void end_directive (int skip_line)
 {
@@ -2201,19 +2202,19 @@ static void end_directive (int skip_line)
 }
 static void check_eol (int expand)
 {
-  if (!seen_eol () && (expand ? get_token () : lex_token ())->typ != T_EOF) ;   /* a pedwarn: extra tokens */
+  if (!seen_eol () && (expand ? get_token () : lex_token ())->type != T_EOF) ;   /* a pedwarn: extra tokens */
 }
 static struct hnode *lex_macro_node (int def)
 {
   struct tok *t = lex_token ();
-  if (t->typ == T_NAME) {
-    if (def && t->hn == pps->n_defined) error ("\"defined\" cannot be used as a macro name");
-    else if (!(t->hn->flags & N_POISONED)) return t->hn;
-  } else if (t->typ == T_EOF) error ("no macro name given");
+  if (t->type == T_NAME) {
+    if (def && t->node == pps->n_defined) error ("\"defined\" cannot be used as a macro name");
+    else if (!(t->node->flags & N_POISONED)) return t->node;
+  } else if (t->type == T_EOF) error ("no macro name given");
   else error ("macro names must be identifiers");
   return 0;
 }
-static void push_conditional (int skip, int typ, struct hnode *cmacro)
+static void push_conditional (int skip, int type, struct hnode *cmacro)
 {
   struct ifs *i = alloc (sizeof (struct ifs));
   struct buf *b = pps->buffer;
@@ -2221,12 +2222,12 @@ static void push_conditional (int skip, int typ, struct hnode *cmacro)
   i->next = b->if_stack;
   i->skip_elses = pps->skipping || !skip;
   i->was_skipping = pps->skipping;
-  i->typ = typ;
+  i->type = type;
   i->mi_cmacro = pps->mi_valid && pps->mi_cmacro == 0 ? cmacro : 0;
   pps->skipping = skip;
   b->if_stack = i;
 }
-static int defined_p (struct hnode *n) { return n->typ == NT_USER || n->typ == NT_BUILTIN; }
+static int defined_p (struct hnode *n) { return n->type == NT_USER || n->type == NT_BUILTIN; }
 static void do_ifdef (void)
 {
   int skip = 1;
@@ -2256,8 +2257,8 @@ static void do_elif (void)
 {
   struct ifs *i = pps->buffer->if_stack;
   if (!i) { error ("#elif without #if"); return; }
-  if (i->typ == D_ELSE) error ("#elif after #else");
-  i->typ = D_ELIF;
+  if (i->type == D_ELSE) error ("#elif after #else");
+  i->type = D_ELIF;
   if (i->skip_elses) pps->skipping = 1;
   else {
     if (pps->directive == D_ELIF) pps->skipping = !parse_expr ();
@@ -2277,8 +2278,8 @@ static void do_else (void)
 {
   struct ifs *i = pps->buffer->if_stack;
   if (!i) { error ("#else without #if"); return; }
-  if (i->typ == D_ELSE) error ("#else after #else");
-  i->typ = D_ELSE;
+  if (i->type == D_ELSE) error ("#else after #else");
+  i->type = D_ELSE;
   pps->skipping = i->skip_elses;
   i->skip_elses = 1;
   i->mi_cmacro = 0;
@@ -2294,15 +2295,15 @@ static void do_endif (void)
 /* #define */
 static int save_parameter (struct hnode *n, long idx)
 {
-  if (n->typ == NT_ARG) { error2 ("duplicate macro parameter ", n->name, n->len); return 0; }
-  n->stype = n->typ; n->smacro = n->macro; n->sargidx = n->argidx;
-  n->typ = NT_ARG; n->argidx = idx;
+  if (n->type == NT_ARG) { error2 ("duplicate macro parameter ", n->name, n->len); return 0; }
+  n->stype = n->type; n->smacro = n->macro; n->sargidx = n->argidx;
+  n->type = NT_ARG; n->argidx = idx;
   return 1;
 }
 static void unsave_parameters (struct hnode **params, long n)
 {
   long i = 0;
-  while (i < n) { struct hnode *p = params[i++]; if (p->typ == NT_ARG) { p->typ = p->stype; p->macro = p->smacro; p->argidx = p->sargidx; } }
+  while (i < n) { struct hnode *p = params[i++]; if (p->type == NT_ARG) { p->type = p->stype; p->macro = p->smacro; p->argidx = p->sargidx; } }
 }
 static int parse_params (struct hnode ***pp, long *np, int *variadic)
 {
@@ -2312,17 +2313,17 @@ static int parse_params (struct hnode ***pp, long *np, int *variadic)
   for (;;) {
     struct tok *t = lex_token ();
     if (n + 1 >= room) { struct hnode **x = alloc (room * 2 * sizeof (struct hnode *)); long i = 0; while (i < n) { x[i] = params[i]; i++; } params = x; room *= 2; }
-    if (t->typ == T_NAME) {
+    if (t->type == T_NAME) {
       if (prev_ident || *variadic) goto bad;
       prev_ident = 1;
-      if (!save_parameter (t->hn, n + 1)) goto out;
-      params[n++] = t->hn;
-    } else if (t->typ == T_CLOSE_PAREN && (prev_ident || !n || *variadic)) {
+      if (!save_parameter (t->node, n + 1)) goto out;
+      params[n++] = t->node;
+    } else if (t->type == T_CLOSE_PAREN && (prev_ident || !n || *variadic)) {
       *pp = params; *np = n; return 1;
-    } else if (t->typ == T_CLOSE_PAREN || t->typ == T_COMMA) {
+    } else if (t->type == T_CLOSE_PAREN || t->type == T_COMMA) {
       if (!prev_ident || *variadic) goto bad;
       prev_ident = 0;
-    } else if (t->typ == T_ELLIPSIS) {
+    } else if (t->type == T_ELLIPSIS) {
       if (*variadic) goto bad;
       *variadic = 1;
       if (!prev_ident) {
@@ -2350,7 +2351,7 @@ static struct macro *create_definition (void)   /* create_iso_definition */
   t = &first;
   m->syshdr = pps->buffer && pps->buffer->sysp != 0;
   if (first.flags & PREV_WHITE) ;
-  else if (first.typ == T_OPEN_PAREN) {
+  else if (first.type == T_OPEN_PAREN) {
     if (!parse_params (&params, &nparms, &variadic)) goto out;
     t = 0;
   }
@@ -2363,11 +2364,11 @@ static struct macro *create_definition (void)   /* create_iso_definition */
       if (m->count + 2 > room) { struct tok *x = alloc (room * 2 * sizeof (struct tok)); long i = 0; while (i < m->count) { x[i] = m->toks[i]; i++; } m->toks = x; room *= 2; }
       t = &m->toks[m->count];
       lex_direct_into (t, 0);
-      if (t->typ == T_NAME && t->hn->typ == NT_ARG) { t->typ = T_MACRO_ARG; t->argno = t->hn->argidx; }
+      if (t->type == T_NAME && t->node->type == NT_ARG) { t->type = T_MACRO_ARG; t->argno = t->node->argidx; }
       m->count++;
     }
-    if (m->count > 1 && t[-1].typ == T_HASH && m->fun_like) {
-      if (t->typ == T_MACRO_ARG || (m->variadic && t->typ == T_NAME && t->hn == pps->n_va_opt)) {
+    if (m->count > 1 && t[-1].type == T_HASH && m->fun_like) {
+      if (t->type == T_MACRO_ARG || (m->variadic && t->type == T_NAME && t->node == pps->n_va_opt)) {
         if (t->flags & PREV_WHITE) t->flags |= SP_PREV_WHITE;
         if (t[-1].flags & DIGRAPH) t->flags |= SP_DIGRAPH;
         t->flags &= ~PREV_WHITE;
@@ -2378,12 +2379,12 @@ static struct macro *create_definition (void)   /* create_iso_definition */
         t--;
       } else { error ("'#' is not followed by a macro parameter"); goto out; }
     }
-    if (t->typ == T_EOF) {
+    if (t->type == T_EOF) {
       if (following_paste) { error ("'##' cannot appear at either end of a macro expansion"); goto out; }
       if (vo.state != 0) { error ("unterminated __VA_OPT__"); goto out; }
       break;
     }
-    if (t->typ == T_PASTE) {
+    if (t->type == T_PASTE) {
       if (m->count == 1) { error ("'##' cannot appear at either end of a macro expansion"); goto out; }
       if (following_paste) { extra++; t->argno = m->count - 1; }
       else {
@@ -2402,7 +2403,7 @@ static struct macro *create_definition (void)   /* create_iso_definition */
   if (extra) {
     struct tok *tmp = alloc (extra * sizeof (struct tok));
     long ei = 0, ni = 0, i;
-    for (i = 0; i < m->count; i++) { if (m->toks[i].typ == T_PASTE) tmp[ei++] = m->toks[i]; else m->toks[ni++] = m->toks[i]; }
+    for (i = 0; i < m->count; i++) { if (m->toks[i].type == T_PASTE) tmp[ei++] = m->toks[i]; else m->toks[ni++] = m->toks[i]; }
     for (i = 0; i < extra; i++) m->toks[ni + i] = tmp[i];
     m->extra = 1;
   }
@@ -2419,7 +2420,7 @@ static void do_define (void)
     pps->cur_macro_node = n;
     m = create_definition ();
     if (m) {
-      n->typ = NT_USER; n->macro = m;
+      n->type = NT_USER; n->macro = m;
       if (n->len > 7 && is (n->name, 7, "__STDC_")) n->flags |= N_WARN;
     }
     n->flags &= ~N_USED;
@@ -2429,7 +2430,7 @@ static void do_undef (void)
 {
   struct hnode *n = lex_macro_node (1);
   if (n) {
-    if (n->typ == NT_USER || n->typ == NT_BUILTIN) { n->typ = NT_VOID; n->macro = 0; }
+    if (n->type == NT_USER || n->type == NT_BUILTIN) { n->type = NT_VOID; n->macro = 0; }
     n->flags &= ~N_USED;
   }
   check_eol (0);
@@ -2439,15 +2440,15 @@ static unsigned char *parse_include (int *angle, long *fnp)
 {
   struct tok *h = get_token_no_padding ();
   unsigned char *fname = 0;
-  if ((h->typ == T_STRING && h->text[0] != 'R') || h->typ == T_HEADER_NAME) {
+  if ((h->type == T_STRING && h->text[0] != 'R') || h->type == T_HEADER_NAME) {
     fname = dup (h->text + 1, h->len - 2); *fnp = h->len - 2;
-    *angle = h->typ == T_HEADER_NAME;
-  } else if (h->typ == T_LESS) {
+    *angle = h->type == T_HEADER_NAME;
+  } else if (h->type == T_LESS) {
     long room = 256, fn = 0; unsigned char *d = alloc (room);
     for (;;) {
       struct tok *t = get_token_no_padding ();
-      if (t->typ == T_GREATER) break;
-      if (t->typ == T_EOF) { error ("missing terminating > character"); break; }
+      if (t->type == T_GREATER) break;
+      if (t->type == T_EOF) { error ("missing terminating > character"); break; }
       stringify_buf (&d, &fn, &room, spell_len (t) + 4);
       if (t->flags & PREV_WHITE) d[fn++] = ' ';
       fn += spell (t, d + fn);
@@ -2457,7 +2458,7 @@ static unsigned char *parse_include (int *angle, long *fnp)
   if (pps->directive != D_PRAGMA) check_eol (1);
   return fname;
 }
-static void do_include_common (int typ)
+static void do_include_common (int type)
 {
   int angle = 0;
   long fn = 0;
@@ -2468,21 +2469,21 @@ static void do_include_common (int typ)
   if (fn == 0) { error ("empty filename in #include"); return; }
   if (pps->curmap->depth >= 200) { error ("#include nested too deeply"); return; }
   skip_rest_of_line ();
-  stack_include (fname, fn, angle, typ);
+  stack_include (fname, fn, angle, type);
 }
 static void do_include (void) { do_include_common (IT_INCLUDE); }
 static void do_import (void) { do_include_common (IT_IMPORT); }
 static void do_include_next (void)
 {
-  int typ = IT_INCLUDE_NEXT;
-  if (pps->curmap->depth == 1) typ = IT_INCLUDE;
-  do_include_common (typ);
+  int type = IT_INCLUDE_NEXT;
+  if (pps->curmap->depth == 1) type = IT_INCLUDE;
+  do_include_common (type);
 }
 /* #line and # 33 "file" */
 static int str_to_line (struct tok *t, long *v)
 {
   long i = 0, n = 0;
-  if (t->typ != T_NUMBER) return 0;
+  if (t->type != T_NUMBER) return 0;
   while (i < t->len) { if (!isdig (t->text[i])) return 0; n = n * 10 + (t->text[i] - '0'); i++; }
   *v = n;
   return 1;
@@ -2512,8 +2513,8 @@ static void do_line (void)
   int sysp = pps->curmap->sysp;
   if (!str_to_line (t, &lineno)) { error ("#line expects a positive integer"); return; }
   t = get_token ();
-  if (t->typ == T_STRING) { name = unquote (t, &nl); check_eol (1); }
-  else if (t->typ != T_EOF) { error ("invalid filename in #line"); return; }
+  if (t->type == T_STRING) { name = unquote (t, &nl); check_eol (1); }
+  else if (t->type != T_EOF) { error ("invalid filename in #line"); return; }
   skip_rest_of_line ();
   do_file_change (LC_RENAME, name, nl, lineno, sysp, 0);
 }
@@ -2527,7 +2528,7 @@ static void do_linemarker (void)
   t = get_token ();
   if (!str_to_line (t, &lineno)) { error ("line marker: not a positive integer"); return; }
   t = get_token ();
-  if (t->typ == T_STRING) {
+  if (t->type == T_STRING) {
     long flag;
     name = unquote (t, &nl);
     sysp = 0;
@@ -2537,7 +2538,7 @@ static void do_linemarker (void)
     else if (flag == 2) { reason = LC_LEAVE; t = get_token (); flag = 0; str_to_line (t, &flag); }
     if (flag == 3) { sysp = 1; t = get_token (); flag = 0; if (str_to_line (t, &flag) && flag == 4) sysp = 2; }
     pps->buffer->sysp = sysp;
-  } else if (t->typ != T_EOF) { error ("invalid filename in a line marker"); return; }
+  } else if (t->type != T_EOF) { error ("invalid filename in a line marker"); return; }
   skip_rest_of_line ();
   if (reason == LC_ENTER) do_file_change (LC_ENTER, name, nl, lineno, sysp, pps->lno - 1);
   else if (reason == LC_LEAVE) { do_file_change (LC_LEAVE, 0, 0, 0, 0, 0); pps->lno = lineno; pps->curmap->sysp = sysp; }
@@ -2557,7 +2558,7 @@ static void do_diagnostic (int err)
 static void do_ident (void)
 {
   struct tok *s = get_token ();
-  if (s->typ != T_STRING) error ("invalid #ident directive");
+  if (s->type != T_STRING) error ("invalid #ident directive");
   else {
     struct vloc l; map_loc (pps->curmap, pps->directive_line, &l);
     maybe_print_line (&l);
@@ -2626,7 +2627,7 @@ static void def_pragma (long lno)   /* cb_def_pragma: #pragma and the rest of th
   maybe_print_line (&l);
   o_str ("#pragma ");
   t = get_token ();
-  while (t->typ != T_EOF) {
+  while (t->type != T_EOF) {
     out_token (t);
     t = get_token ();
     if (t->flags & PREV_WHITE) o_ch (' ');
@@ -2645,21 +2646,21 @@ static void do_pragma (void)
   pps->prevent_expansion++;
   pt = t = get_tok (&ptl);
   ns = *t;
-  if (t->typ == T_NAME) {
-    p = lookup_pragma (pps->pragmas, t->hn);
+  if (t->type == T_NAME) {
+    p = lookup_pragma (pps->pragmas, t->node);
     if (p && p->nspace) {
       t = get_token ();
-      if (t->typ == T_NAME) p = lookup_pragma (p->sub, t->hn); else p = 0;
+      if (t->type == T_NAME) p = lookup_pragma (p->sub, t->node); else p = 0;
       count = 2;
     }
   }
   if (p) {
     if (p->deferred) {
-      pps->dres->loc = ptl;
-      pps->dres->typ = T_PRAGMA;
-      pps->dres->flags = pt->flags;
-      pps->dres->pragma = p->id;
-      pps->dres->hn = 0;
+      pps->dres.loc = ptl;
+      pps->dres.type = T_PRAGMA;
+      pps->dres.flags = pt->flags;
+      pps->dres.pragma = p->id;
+      pps->dres.node = 0;
       pps->in_deferred_pragma = 1;
       pps->pragma_allow_expansion = p->expand;
       if (!p->expand) pps->prevent_expansion++;
@@ -2704,13 +2705,13 @@ static void do_pragma_text (unsigned char *text, long n, struct vloc *loc)   /* 
   start_directive ();
   pps->directive = D_PRAGMA;
   do_pragma ();
-  if (pps->dres->typ == T_PRAGMA) pps->dres->flags |= PRAGMA_OP;
+  if (pps->dres.type == T_PRAGMA) pps->dres.flags |= PRAGMA_OP;
   end_directive (1);
   pps->directive = saved_dir;
-  if (pps->dres->typ == T_PRAGMA) {
+  if (pps->dres.type == T_PRAGMA) {
     long room = 50;
     toks = alloc (room * sizeof (struct tok *));
-    toks[0] = newtok (); *toks[0] = *pps->dres; toks[0]->loc = *loc;
+    toks[0] = newtok (); *toks[0] = pps->dres; toks[0]->loc = *loc;
     count = 1;
     do {
       struct tok *x;
@@ -2719,16 +2720,16 @@ static void do_pragma_text (unsigned char *text, long n, struct vloc *loc)   /* 
       x->loc = *loc;
       x->flags |= NO_EXPAND;
       toks[count++] = x;
-    } while (toks[count - 1]->typ != T_PRAGMA_EOL);
+    } while (toks[count - 1]->type != T_PRAGMA_EOL);
   } else {
     count = 1;
     toks = alloc (sizeof (struct tok *));
-    toks[0] = pps->avoid_paste;
+    toks[0] = &pps->avoid_paste;
     {
       /* line_change (pfile->cur_token): end_directive put cur_token at the base of the run, the first
          token of this line's run */
       struct tok x;
-      x.typ = T_NAME; x.flags = 0;
+      x.type = T_NAME; x.flags = 0;
       if (saved_rc + saved_la > 0) x.loc = saved_run[0]->loc; else x.loc = *loc;
       do_line_change (&x, &x.loc, 0);
     }
@@ -2742,7 +2743,7 @@ static void do_pragma_text (unsigned char *text, long n, struct vloc *loc)   /* 
 }
 static void pop_macro_into (struct hnode *n, struct pushed *c)
 {
-  n->typ = c->typ; n->macro = c->macro; n->builtin = c->builtin;
+  n->type = c->type; n->macro = c->macro; n->builtin = c->builtin;
   if (c->macro) {
     /* as gcc, which lexes the saved definition again here: its tokens are of this place */
     struct macro *m = alloc (sizeof (struct macro));
@@ -2760,12 +2761,12 @@ static struct hnode *push_pop_name (void)
 {
   struct tok *t = get_token_no_padding ();
   struct hnode *n = 0;
-  if (t->typ != T_OPEN_PAREN) { error ("invalid #pragma push_macro or pop_macro"); return 0; }
+  if (t->type != T_OPEN_PAREN) { error ("invalid #pragma push_macro or pop_macro"); return 0; }
   t = get_token_no_padding ();
-  if (t->typ != T_STRING) { error ("invalid #pragma push_macro or pop_macro"); return 0; }
+  if (t->type != T_STRING) { error ("invalid #pragma push_macro or pop_macro"); return 0; }
   n = lookup (t->text + 1, t->len - 2);
   t = get_token_no_padding ();
-  if (t->typ != T_CLOSE_PAREN) { error ("invalid #pragma push_macro or pop_macro"); return 0; }
+  if (t->type != T_CLOSE_PAREN) { error ("invalid #pragma push_macro or pop_macro"); return 0; }
   check_eol (0);
   return n;
 }
@@ -2777,22 +2778,22 @@ static void pragma_run (int kind)
     struct hnode *n = push_pop_name ();
     if (n) {
       struct pushed *c = alloc (sizeof (struct pushed));
-      c->hn = n; c->typ = n->typ; c->macro = n->macro; c->builtin = n->builtin;
+      c->node = n; c->type = n->type; c->macro = n->macro; c->builtin = n->builtin;
       c->next = pps->pushed; pps->pushed = c;
     }
   } else if (kind == PK_POP) {
     struct hnode *n = push_pop_name ();
     struct pushed *c = pps->pushed, *l = 0;
     while (n && c) {
-      if (c->hn == n) { if (l) l->next = c->next; else pps->pushed = c->next; pop_macro_into (n, c); break; }
+      if (c->node == n) { if (l) l->next = c->next; else pps->pushed = c->next; pop_macro_into (n, c); break; }
       l = c; c = c->next;
     }
   } else if (kind == PK_POISON) {
     for (;;) {
       struct tok *t = lex_token ();
-      if (t->typ == T_EOF) break;
-      if (t->typ != T_NAME) { error ("invalid #pragma GCC poison directive"); break; }
-      t->hn->flags |= N_POISONED;
+      if (t->type == T_EOF) break;
+      if (t->type != T_NAME) { error ("invalid #pragma GCC poison directive"); break; }
+      t->node->flags |= N_POISONED;
     }
   } else if (kind == PK_SYSHDR) {
     if (pps->buffer->file == pps->main_file) ;   /* ignored outside an include file */
@@ -2806,7 +2807,7 @@ static void pragma_run (int kind)
     struct tok *t = get_token_no_padding ();
     where ();
     perr_str (kind == PK_ERROR ? "error: #pragma GCC error " : "warning: #pragma GCC warning ");
-    if (t->typ == T_STRING) perr_bytes (t->text, t->len);
+    if (t->type == T_STRING) perr_bytes (t->text, t->len);
     perr_str ("\n");
     if (kind == PK_ERROR) pps->errors++;
   } else if (kind == PK_DEPENDENCY) {
@@ -2856,7 +2857,7 @@ static void apply_tstate (void)
       unsigned char *x = pps->plines[j];
       if (x && msame (x + 8, macro_name_len (x + 8), nm, nn)) { base = x; break; }
     }
-    if (base) define_line (base); else { h->typ = NT_VOID; h->macro = 0; }
+    if (base) define_line (base); else { h->type = NT_VOID; h->macro = 0; }
   }
   pps->ntnames = 0;
   if (pps->tslen == 0) return;
@@ -2878,7 +2879,7 @@ static void apply_tstate (void)
     unsigned char *nm = x[0] == '+' ? x + 9 : x + 1;
     long nn = macro_name_len (nm);
     if (x[0] == '+') define_line (x + 1);
-    else { struct hnode *h = lookup (nm, nn); h->typ = NT_VOID; h->macro = 0; }
+    else { struct hnode *h = lookup (nm, nn); h->type = NT_VOID; h->macro = 0; }
     pps->tnames[pps->ntnames] = nm; pps->tnlen[pps->ntnames++] = nn;
   }
 }
@@ -2913,15 +2914,15 @@ static int handle_directive (int indented)
   if (was_parsing_args) { pps->parsing_args = 0; pps->prevent_expansion = 0; }
   start_directive ();
   dname = lex_token ();
-  if (dname->typ == T_NAME) {
-    if (dname->hn->dir) dir = dname->hn->dir;
-  } else if (dname->typ == T_NUMBER) dir = D_LINEMARKER;
+  if (dname->type == T_NAME) {
+    if (dname->node->dir) dir = dname->node->dir;
+  } else if (dname->type == T_NUMBER) dir = D_LINEMARKER;
   if (dir) {
     if (!(dir == D_LINEMARKER ? 0 : (dflags[dir] & F_IF_COND))) pps->mi_valid = 0;
     pps->angled_headers = dir != D_LINEMARKER && (dflags[dir] & F_INCL);
     pps->directive_wants_padding = pps->angled_headers;
     if (pps->skipping && !(dir != D_LINEMARKER && (dflags[dir] & F_COND))) dir = 0;
-  } else if (dname->typ == T_EOF) ;
+  } else if (dname->type == T_EOF) ;
   else if (!pps->skipping) {
     unsigned char b[256]; long n = spell (dname, b);
     error2 ("invalid preprocessing directive #", b, n);
@@ -3044,7 +3045,7 @@ static void predefine (struct opts *o)
   unsigned char **lines; long nlines = 0, i, room;
   int inset = 0, isbase = 0, found = 0, first = 1;
   if (!o->predef) fatal ("no --predef=FILE: the target's predefined macros");
-  s = pp_file (o->predef, &size);
+  s = cp_file (o->predef, &size);
   e = s + size;
   room = 1024;
   lines = alloc (room * sizeof (unsigned char *));
@@ -3114,8 +3115,8 @@ static void predefine (struct opts *o)
   {
     struct hnode *w = lookup_s ("__WCHAR_MIN__"), *z = lookup_s ("__SIZEOF_WCHAR_T__");
     pps->wchar_bits = 32;
-    if (w->typ == NT_USER && w->macro->count == 1 && w->macro->toks[0].typ == T_NUMBER) pps->wchar_unsigned = 1;
-    if (z->typ == NT_USER && z->macro->count == 1 && z->macro->toks[0].len == 1 && z->macro->toks[0].text[0] == '2') pps->wchar_bits = 16;
+    if (w->type == NT_USER && w->macro->count == 1 && w->macro->toks[0].type == T_NUMBER) pps->wchar_unsigned = 1;
+    if (z->type == NT_USER && z->macro->count == 1 && z->macro->toks[0].len == 1 && z->macro->toks[0].text[0] == '2') pps->wchar_bits = 16;
   }
 }
 static void read_sysdirs (struct opts *o)   /* --predef's sysdir and preinclude lines */
@@ -3123,7 +3124,7 @@ static void read_sysdirs (struct opts *o)   /* --predef's sysdir and preinclude 
   long size = 0;
   unsigned char *s, *e, *p;
   if (!o->predef) return;
-  s = pp_file (o->predef, &size);
+  s = cp_file (o->predef, &size);
   e = s + size;
   o->sd = alloc (64 * sizeof (char *)); o->sdk = alloc (64 * sizeof (int));
   p = s;
@@ -3145,7 +3146,7 @@ static void builtins (void)
     BT_COUNTER, BT_HAS_ATTRIBUTE, BT_HAS_STD_ATTRIBUTE, BT_HAS_ATTRIBUTE, BT_HAS_BUILTIN, BT_HAS_INCLUDE,
     BT_HAS_INCLUDE_NEXT, BT_HAS_EMBED, BT_HAS_FEATURE, BT_HAS_EXTENSION, BT_PRAGMA };
   long i = 0;
-  while (names[i]) { struct hnode *n = lookup_s (names[i]); n->typ = NT_BUILTIN; n->builtin = kinds[i]; i++; }
+  while (names[i]) { struct hnode *n = lookup_s (names[i]); n->type = NT_BUILTIN; n->builtin = kinds[i]; i++; }
   i = 1;
   while (dnames[i]) { lookup_s (dnames[i])->dir = (int) i; i++; }
 }
@@ -3250,14 +3251,14 @@ static void scan (void)   /* scan_translation_unit */
     struct vloc l;
     struct tok *t = get_tok (&l);
     stream (t, &l);
-    if (t->typ == T_EOF) break;
+    if (t->type == T_EOF) break;
   }
   if (pps->printed) o_ch ('\n');
 }
 static void get_cwd (char **envp)
 {
   unsigned char b[4096];
-  long n = pp_readlink ("/proc/self/cwd", b, 4095), i = 0;
+  long n = cp_readlink ("/proc/self/cwd", b, 4095), i = 0;
   if (n <= 0) fatal ("cannot read /proc/self/cwd");
   pps->cwd = dup (b, n); pps->cwdlen = n;
   /* getpwd: $PWD when it names the same directory */
@@ -3281,12 +3282,9 @@ int cpp_main (int argc, char **argv)
   pps->ftab = alloc (4096 * sizeof (struct fent *));
   pps->obuf = alloc (65536 + 16);
   pps->ofd = 1;
-  pps->base = alloc (sizeof (struct ctx));
-  pps->ctx = pps->base;
-  pps->dres = newtok (); pps->avoid_paste = newtok (); pps->endarg = newtok ();
-  pps->invocation = alloc (sizeof (struct vloc));
-  pps->avoid_paste->typ = T_PADDING;
-  pps->endarg->typ = T_EOF;
+  pps->ctx = &pps->base;
+  pps->avoid_paste.type = T_PADDING;
+  pps->endarg.type = T_EOF;
   pps->src_line = 1; pps->first_time = 1; pps->src_file = (unsigned char *) ""; pps->src_flen = 0;
   pps->no_search = alloc (sizeof (struct dir));
   pps->no_search->name = (unsigned char *) ""; pps->no_search->len = 0;
@@ -3301,7 +3299,7 @@ int cpp_main (int argc, char **argv)
   init_pragmas ();
   read_sysdirs (o);
   include_chains (o);
-  if (o->out) { pps->ofd = pp_create (o->out); if (pps->ofd < 0) fatal2 ("cannot create ", (unsigned char *) o->out, slen (o->out)); }
+  if (o->out) { pps->ofd = cp_create (o->out); if (pps->ofd < 0) fatal2 ("cannot create ", (unsigned char *) o->out, slen (o->out)); }
   /* the main file, then <built-in>, <command-line> and the -include files */
   pps->main_file = find_file ((unsigned char *) o->in, slen (o->in), pps->no_search, 0);
   if (!pps->main_file->found) fatal2 ("no such file: ", (unsigned char *) o->in, slen (o->in));
