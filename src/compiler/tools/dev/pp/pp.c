@@ -1671,8 +1671,8 @@ static int avoid_paste (struct tok *tk1, struct tok *tk2)
   return 0;
 }
 
-/* ---- #if's expressions (expr.cc) */
-struct num { unsigned long v; int uns; };
+/* ---- #if's expressions (expr.cc): intmax_t, 64 bits on every target (long long: long is 32 on arm) */
+struct num { unsigned long long v; int uns; };
 struct ex { long lex_count; int saw_leading_not; int err; struct tok *t; };
 static void ex_next (struct ex *e)
 {
@@ -1692,7 +1692,7 @@ static void ex_number (struct tok *t, struct num *r)   /* cpp_classify_number + 
   unsigned char *s = t->text;
   long n = t->len, i = 0, j;
   int base = 10, ok = 1, uns = 0, over = 0;
-  unsigned long v = 0;
+  unsigned long long v = 0;
   r->v = 0; r->uns = 0;
   if (n >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { base = 16; i = 2; }
   else if (n >= 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) { base = 2; i = 2; }
@@ -1701,8 +1701,8 @@ static void ex_number (struct tok *t, struct num *r)   /* cpp_classify_number + 
   while (i < n) {
     int d = ex_digit (s[i], base);
     if (d < 0) break;
-    if (v > (~0UL - (unsigned long) d) / (unsigned long) base) over = 1;
-    v = v * (unsigned long) base + (unsigned long) d;
+    if (v > (~0ULL - (unsigned long long) d) / (unsigned long long) base) over = 1;
+    v = v * (unsigned long long) base + (unsigned long long) d;
     i++;
   }
   /* the suffix: u, l, ll (and ul ...), wb, uwb */
@@ -1720,7 +1720,7 @@ static void ex_number (struct tok *t, struct num *r)   /* cpp_classify_number + 
   }
   if (!ok) { error2 ("invalid suffix on integer constant ", t->text, t->len); return; }
   if (over) error ("integer constant is too large for its type");
-  else if (!uns && (long) v < 0) uns = 1;
+  else if (!uns && (long long) v < 0) uns = 1;
   r->v = v; r->uns = uns;
 }
 static int hexval (int c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; }
@@ -1730,7 +1730,7 @@ static void ex_char (struct tok *t, struct num *r)   /* cpp_interpret_charconst 
   int wide = t->typ != T_CHAR && t->typ != T_UTF8CHAR;
   long width = wide ? (t->typ == T_CHAR16 ? 16 : t->typ == T_CHAR32 ? 32 : pps->wchar_bits) : 8;
   int unsignedp;
-  unsigned long res = 0, c;
+  unsigned long long res = 0, c;
   long count = 0;
   while (*s != '\'') s++;
   s++;
@@ -1753,7 +1753,7 @@ static void ex_char (struct tok *t, struct num *r)   /* cpp_interpret_charconst 
         }
       } else {
         int x = *s++;
-        c = x == 'n' ? 10 : x == 't' ? 9 : x == 'r' ? 13 : x == 'a' ? 7 : x == 'b' ? 8 : x == 'f' ? 12 : x == 'v' ? 11 : x == 'e' || x == 'E' ? 27 : (unsigned long) x;
+        c = x == 'n' ? 10 : x == 't' ? 9 : x == 'r' ? 13 : x == 'a' ? 7 : x == 'b' ? 8 : x == 'f' ? 12 : x == 'v' ? 11 : x == 'e' || x == 'E' ? 27 : (unsigned long long) x;
       }
     } else if (wide && *s >= 0xc0 && utf8_len (s)) {
       int m = utf8_len (s), q;
@@ -1771,12 +1771,12 @@ static void ex_char (struct tok *t, struct num *r)   /* cpp_interpret_charconst 
     else unsignedp = t->typ == T_UTF8CHAR ? 1 : pps->uchar;
   }
   if (width < 64) {
-    unsigned long mask = (1UL << width) - 1;
-    if (unsignedp || !(res & (1UL << (width - 1)))) res &= mask;
+    unsigned long long mask = (1ULL << width) - 1;
+    if (unsignedp || !(res & (1ULL << (width - 1)))) res &= mask;
     else res |= ~mask;
   }
   r->v = res; r->uns = 0;
-  if (!unsignedp && width == 32 && (res & 0x80000000UL)) r->v = res | 0xffffffff00000000UL;
+  if (!unsignedp && width == 32 && (res & 0x80000000ULL)) r->v = res | 0xffffffff00000000ULL;
   if (wide && unsignedp) r->uns = 0;
 }
 static void ex_defined (struct ex *e, struct num *r)   /* parse_defined */
@@ -1853,15 +1853,15 @@ static int prec (int ty)
 static void ex_binop (int op, struct num *a, struct num *b)
 {
   int uns = a->uns || b->uns;
-  unsigned long x = a->v, y = b->v;
+  unsigned long long x = a->v, y = b->v;
   if (op == T_MULT) { a->v = x * y; a->uns = uns; }
   else if (op == T_DIV || op == T_MOD) {
     if (y == 0) { if (!pps->skip_eval) error ("division by zero in #if"); a->v = 0; a->uns = uns; return; }
     if (uns) a->v = op == T_DIV ? x / y : x % y;
     else {
-      long sx = (long) x, sy = (long) y;
+      long long sx = (long long) x, sy = (long long) y;
       if (sy == -1) a->v = op == T_DIV ? 0 - x : 0;
-      else a->v = (unsigned long) (op == T_DIV ? sx / sy : sx % sy);
+      else a->v = (unsigned long long) (op == T_DIV ? sx / sy : sx % sy);
     }
     a->uns = uns;
   }
@@ -1869,16 +1869,16 @@ static void ex_binop (int op, struct num *a, struct num *b)
   else if (op == T_MINUS) { a->v = x - y; a->uns = uns; }
   else if (op == T_LSHIFT || op == T_RSHIFT) {
     /* the count's sign decides, the left operand's type the result's */
-    long n = (long) y; int left = op == T_LSHIFT;
+    long long n = (long long) y; int left = op == T_LSHIFT;
     if (!b->uns && n < 0) { left = !left; n = -n; }
-    if (b->uns && (long) y < 0) n = 64;
+    if (b->uns && (long long) y < 0) n = 64;
     if (left) a->v = n >= 64 ? 0 : x << n;
     else if (a->uns) a->v = n >= 64 ? 0 : x >> n;
-    else { long sx = (long) x; a->v = (unsigned long) (n >= 64 ? (sx < 0 ? -1 : 0) : sx >> n); }
+    else { long long sx = (long long) x; a->v = (unsigned long long) (n >= 64 ? (sx < 0 ? -1 : 0) : sx >> n); }
   }
   else if (op == T_LESS || op == T_GREATER || op == T_LESS_EQ || op == T_GREATER_EQ) {
     int lt, gt;
-    if (uns) { lt = x < y; gt = x > y; } else { lt = (long) x < (long) y; gt = (long) x > (long) y; }
+    if (uns) { lt = x < y; gt = x > y; } else { lt = (long long) x < (long long) y; gt = (long long) x > (long long) y; }
     a->v = op == T_LESS ? lt : op == T_GREATER ? gt : op == T_LESS_EQ ? !gt : !lt;
     a->uns = 0;
   }
