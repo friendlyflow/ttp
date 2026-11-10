@@ -748,8 +748,8 @@ static int cl_builtin_listed (char *name)
 }
 static int cl_ovf_ok (char *name, char *sig)
 {
-  static char *addv[] = { "u64 u64 u64", "i128 i128 i128", "u32 u32 u32", "u32 u32 u64", "u32 u64 u64", "u64 int u32", "u64 u64 int", "int int int", "long int long", "long long long", "u64 u32 u64", "u64 int u64", 0 };
-  static char *mulv[] = { "u64 u64 u64", "u32 u64 u64", "u64 int u32", "int int int", "long long long", 0 };
+  static char *addv[] = { "u64 u64 u64", "i128 i128 i128", "u32 u32 u32", "u32 u32 u64", "u32 u64 u64", "u64 int u32", "u64 u64 int", "int int int", "long int long", "long long long", "u64 u32 u64", "u64 int u64", "long int int", "long u64 long", 0 };
+  static char *mulv[] = { "u64 u64 u64", "u32 u64 u64", "u64 int u32", "int int int", "long long long", "long int long", 0 };
   static char *subv[] = { "long long long", "int long int", "long int long", "i128 i128 i128", "int i128 i128", "int int int", "int long long", "u64 u64 u64", 0 };
   long i = 0;
   char **a = addv;
