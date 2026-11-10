@@ -1734,32 +1734,49 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 	@cat $(TBUILD)/$(AREA).table
 .PHONY: tests-ref
 
-# ---- a locale of files, against all of glibc in ff --------------------------
-# progs/locale.c: setlocale (LC_ALL, "C.UTF-8"), MB_CUR_MAX and the
-# multibyte conversions in it, built as glibc's tests' programs are (csema -l
-# against FF/glibc, ttpc) and by gcc against libc.a; both run with LOCPATH
-# a folder of C.utf8, made from glibc's own locale source by nixpkgs'
-# localedef of glibc 2.44 (LOCALEDEF, nix develop's), and must print what
-# progs/locale.expect says. Needs all of glibc in ff (make FF/glibc/index.ff),
-# so a target of its own, not a ports-check step.
+# ---- programs against all of glibc in ff ------------------------------------
+# A program of one or more units (ALLPROG_<name>: progs/<unit>.c), built as
+# glibc's tests' programs are, csema -l of its units against FF/glibc and
+# ttpc, and by gcc against libc.a; both must print what progs/<name>.expect
+# says (its first line: exit N). Needs all of glibc in ff (make
+# FF/glibc/index.ff), so targets of their own, not ports-check steps:
+#   locale  setlocale (LC_ALL, "C.UTF-8"), MB_CUR_MAX and the multibyte
+#           conversions in it; run with LOCPATH a folder of C.utf8, made from
+#           glibc's own locale source by nixpkgs' localedef of glibc 2.44
+#           (LOCALEDEF, nix develop's)
+#   enums   two units with a function's own enum constant of one name and
+#           two values (vfprintf-internal.c's buf_length, 256 and 64)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check
+ALLPROGS := locale enums
+ALLPROG_locale := locale
+ALLPROG_enums := enums-a enums-b
+ALLPROGENV_locale = LOCPATH=$(BUILD)/locales
+ALLPROGDEPS_locale = $(BUILD)/locales/C.utf8/LC_CTYPE
 LOCALEDEF ?= $(error LOCALEDEF is not set: run this in `nix develop`)
 $(BUILD)/locales/C.utf8/LC_CTYPE:
 	mkdir -p $(BUILD)/locales
 	I18NPATH=$(GLIBC_SRC)/localedata $(LOCALEDEF) -c --no-archive -i C -f UTF-8 $(BUILD)/locales/C.utf8 || test -e $@
-$(FF)/locale-all.ff: $(FF)/locale-prog.i $(FF)/glibc/index.ff $(CSEMA) $(CSVIEW)
-	$(RUN) -v 9000000 -t 300 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(FF)/glibc/index.ff -J $(FF)/glibc.statics $(if $(GLIBC_START),,-T) \
-	    $< -- main > $(FF)/locale-all.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(FF)/locale-all.ff.txt > $@
-$(FF)/locale-all: $(FF)/locale-all.ff $(FF)/glibc/index.ff $(TTPC) $(SHARED)
-	$(RUN) -t 900 $(TTPC_RUN) $(TTPCFLAGS_tests) $(SHARED) $< $@ > $@.lst
-locale-check: $(FF)/locale.ref $(FF)/locale-all progs/locale.expect $(BUILD)/locales/C.utf8/LC_CTYPE
-	@tail -n +2 progs/locale.expect > $(FF)/locale.want
-	@for b in locale.ref locale-all; do \
-	    s=0; LOCPATH=$(BUILD)/locales $(RUN) -t 60 qemu-$(GTARGET) $(FF)/$$b > $(FF)/$$b.out || s=$$?; \
-	    test $$s -eq 0 || { echo "locale-check: $$b: exit status $$s"; exit 1; }; \
-	    cmp -s $(FF)/$$b.out $(FF)/locale.want || { echo "locale-check: $$b: wrong output"; diff $(FF)/$$b.out $(FF)/locale.want | head; exit 1; }; \
+define allprog
+$$(FF)/$(1)-all.ff: $$(ALLPROG_$(1):%=$$(FF)/%-prog.i) $$(FF)/glibc/index.ff $$(CSEMA) $$(CSVIEW)
+	$$(RUN) -v 9000000 -t 300 $$(CPRUN) $$(CSEMA) -l $$(CSFLAGS) -P glibc -I $$(FF)/glibc/index.ff -J $$(FF)/glibc.statics $$(if $$(GLIBC_START),,-T) \
+	    $$(foreach u,$$(ALLPROG_$(1)),-O $$(FF)/$$(u)-prog.i) -- main > $$(FF)/$(1)-all.ff.txt
+	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1)-all.ff.txt > $$@
+$$(FF)/$(1)-all: $$(FF)/$(1)-all.ff $$(FF)/glibc/index.ff $$(TTPC) $$(SHARED)
+	$$(RUN) -t 900 $$(TTPC_RUN) $$(TTPCFLAGS_tests) $$(SHARED) $$< $$@ > $$@.lst
+$$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(OBJ)/libc.a
+	mkdir -p $$(FF)
+	for u in $$(ALLPROG_$(1)); do $$(RUN) -t 120 $$(GLIBC_CC) -O2 -fno-builtin $$(PROGFLAGS) -c progs/$$$$u.c -o $$(FF)/$$$$u.ref.o || exit 1; done
+	$$(RUN) -t 120 $$(GLIBC_CC) -static -nostdlib -o $$@ $$(OBJ)/csu/crt1.o $$(OBJ)/csu/crti.o $$(CRTBEGIN) \
+	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
+$(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all progs/$(1).expect $$(ALLPROGDEPS_$(1))
+	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); tail -n +2 progs/$(1).expect > $$(FF)/$(1)-all.want; \
+	for b in $(1)-all.ref $(1)-all; do \
+	    s=0; $$(ALLPROGENV_$(1)) $$(RUN) -t 60 qemu-$$(GTARGET) $$(FF)/$$$$b > $$(FF)/$$$$b.out || s=$$$$?; \
+	    test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b: exit status $$$$s, not $$$$want"; exit 1; }; \
+	    cmp -s $$(FF)/$$$$b.out $$(FF)/$(1)-all.want || { echo "$(1)-check: $$$$b: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1)-all.want | head; exit 1; }; \
 	done
-	@echo "locale-check: gcc + libc.a and ttpc + all of glibc in ff agree on $(GTARGET): C.UTF-8's data installed and used"
-.PHONY: locale-check
+	@echo "$(1)-check: gcc + libc.a and ttpc + all of glibc in ff agree on $$(GTARGET)"
+.PHONY: $(1)-check
+endef
+$(foreach p,$(ALLPROGS),$(eval $(call allprog,$(p))))
