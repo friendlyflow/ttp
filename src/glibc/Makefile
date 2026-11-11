@@ -1711,24 +1711,58 @@ $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC) $(SHARED)
 # where glibc's source has one; under qemu on each of CPUS, or natively
 # where the machine is GTARGET (an x86_64 machine's x86_64: one run each)
 TRUN = $(if $(filter $(shell uname -m),$(GTARGET)),native native,qemu-$(GTARGET) $(CPUS))
+
+# Both builds of a test run in the environment glibc's make check gives
+# it, run-program-env: LOCPATH the locales the area's tests use, made as
+# make check makes them (its LOCALES, by glibc's gen-locale.sh from glibc's
+# localedata with the reference build's localedef), GCONV_PATH the
+# reference build's iconvdata, LC_ALL=C. Without them a test of a locale
+# failed alike in both builds and was "equal". (The tests' own -ENV of the
+# three areas are libc_malloc_debug.so's MALLOC_TRACE, LD_PRELOAD, which a
+# static program does not read: not set.) Each area its own locales, as
+# make check subdirs=AREA has them, TBUILD/loc/AREA/localedata; localedef
+# runs through a copy of the reference's ld.so without the RUNPATH nix's
+# gcc gave it (ld.so asserts it has none), under qemu where GTARGET is not
+# the machine's. The locales are the same on all four targets, byte for
+# byte (each little-endian; localedef writes 32-bit words whatever the
+# word size): each target makes its own all the same.
+TLOCDIR = $(abspath $(TBUILD))/loc/$(AREA)
+TLOCALES = $(if $(AREA),$(shell perl tests.pl locales $(GLIBC_SRC)/$(AREA)/Makefile))
+TLOCLD = $(abspath $(TBUILD))/loc/ld.so
+TNOTHING :=
+TLIBPATH = $(subst $(TNOTHING) $(TNOTHING),:,$(foreach d,. math elf dlfcn nss nis rt resolv support nptl,$(abspath $(OBJ))/$(d)))
+TENV = GCONV_PATH=$(abspath $(OBJ))/iconvdata LOCPATH=$(TLOCDIR)/localedata LC_ALL=C
+TLOCQEMU = $(if $(filter $(shell uname -m),$(GTARGET)),,qemu-$(GTARGET))
+$(TLOCLD): $(OBJ)/elf/ld.so
+	mkdir -p $(@D)
+	cp $< $@.tmp
+	patchelf --remove-rpath $@.tmp
+	mv $@.tmp $@
+$(TLOCDIR)/localedata/%/LC_CTYPE: $(TLOCLD) $(OBJ)/locale/localedef
+	mkdir -p $(TLOCDIR)/localedata
+	cd $(GLIBC_SRC)/localedata && $(SHELL) gen-locale.sh $(TLOCDIR)/ env '$(TENV)' \
+	    '$(SHELL) $(abspath ../compiler/gen/slot.sh) -n -v 8000000 -t 600 $(TLOCQEMU) $(TLOCLD) --library-path $(TLIBPATH) $(abspath $(OBJ))/locale/localedef' $@
+tests-locales: $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
+.PHONY: tests-locales
 TSTEP = $(MAKE) --no-print-directory $(TFF)/$*$(1) > $(TFF)/$*.$(2).log 2>&1 || \
 	{ echo "not yet: $(3): $$(perl tests.pl why $(TFF)/$*.$(2).log)" > $@; exit 0; }
 # (and what its steps' outputs depend on, ttpc's and csema's: each step is
 # a make of its own, so that one that fails is the result's reason)
-$(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) $(SHARED) $(CSEMA) $(CSVIEW) tests.pl
+$(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) $(SHARED) $(CSEMA) $(CSVIEW) tests.pl $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
 	@mkdir -p $(TFF)
 	@if test -n "$(filter $*,$(TBROKEN))"; then echo "not yet: glibc's build did not make it (TOBJ/$(AREA).log)" > $@; exit 0; fi; \
 	$(call TSTEP,.ref,ref,gcc's link); \
 	$(call TSTEP,-prog.ff,c2ff,c2ff); \
 	$(call TSTEP,-prog,ttpc,ttpc); \
 	in=$(GLIBC_SRC)/$(AREA)/$*.input; test -e $$in || in=/dev/null; \
-	perl tests.pl run $(TFF) $* $$in $(RUN) -t 600 -- $(TRUN) > $@
+	perl tests.pl run $(TFF) $* $$in $(TENV) $(RUN) -t 600 -- $(TRUN) > $@
 
 # (the .mk first: where glibc's tests build failed, it stops here, before
 # a make of each test would try that build again)
 tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 	@test -n "$(AREA)" || { echo "tests-ref: which area? make tests-ref AREA=string"; exit 1; }
 	@test -s $(TBUILD)/$(AREA).mk || { echo "tests-ref: no $(TBUILD)/$(AREA).mk"; exit 1; }
+	@$(MAKE) --no-print-directory tests-locales
 	@$(MAKE) --no-print-directory $(TESTS:%=$(TFF)/%.result)
 	@perl tests.pl table $(AREA) $(GTARGET) $(TFF) $(TESTS) > $(TBUILD)/$(AREA).table
 	@cat $(TBUILD)/$(AREA).table
