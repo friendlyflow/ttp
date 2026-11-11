@@ -259,7 +259,7 @@ static char *cl_tag (struct cs_rec *r)
     cl_set (&C->wanttag, key);
     f = cl_get (&C->tagname, key);
     if (f) return f;
-    if (cl_has (&C->var, nm) || cl_has (&C->fn, nm) || cl_has (&C->alias, nm) || cl_val (&C->localname, nm) || cl_is_fieldname (cl_ffname (nm)) || cl_val (&C->treedefs, cl_ffname (nm))) {
+    if (cl_has (&C->var, nm) || cl_has (&C->fn, nm) || cl_has (&C->alias, nm) || cl_has (&C->enumval, nm) || cl_val (&C->localname, nm) || cl_is_fieldname (cl_ffname (nm)) || cl_val (&C->treedefs, cl_ffname (nm))) {
       f = cl_cat3 (nm, " ", kind);
       if (C->treedefs.count) f = cl_cat (f, " prog");
     }

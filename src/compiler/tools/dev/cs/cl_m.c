@@ -246,7 +246,7 @@ static void cl_enum_node (char *tag, struct cs_rec *d)
   if (!name) {
     /* its name, where no ctype gave it yet */
     char *nm = tag + 5;
-    if (cl_has (&C->var, nm) || cl_has (&C->fn, nm) || cl_has (&C->alias, nm) || cl_val (&C->localname, nm) || cl_is_fieldname (cl_ffname (nm)) || cl_val (&C->treedefs, cl_ffname (nm))) {
+    if (cl_has (&C->var, nm) || cl_has (&C->fn, nm) || cl_has (&C->alias, nm) || cl_has (&C->enumval, nm) || cl_val (&C->localname, nm) || cl_is_fieldname (cl_ffname (nm)) || cl_val (&C->treedefs, cl_ffname (nm))) {
       name = cl_cat (nm, " enum");
       if (C->treedefs.count) name = cl_cat (name, " prog");
     }

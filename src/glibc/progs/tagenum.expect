@@ -1,0 +1,2 @@
+exit 0
+same 1 0 0, pattern 1 2, sizeof 8
