@@ -1,0 +1,5 @@
+license
+  GPL-3.0-or-later AND GPL-3.0-only
+  findutils-4.11.0 in ff: GNU findutils' own C (find, xargs, locate, frcode) and gnulib's C it is built with, translated by ttp (csema -l). It is GPL-3.0-or-later, findutils' COPYING.
+  Each page holds the license header of each source file it is made of, as the file has it (gnulib's files: some are LGPL-2.1-or-later or another license compatible with it).
+  What ttp writes for it is GPL-3.0-only, Copyright (C) 2026 Nico Verrijdt: see ttp's LICENSE.

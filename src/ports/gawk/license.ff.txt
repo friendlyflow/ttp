@@ -1,0 +1,5 @@
+license
+  GPL-3.0-or-later AND GPL-3.0-only
+  gawk-5.4.1 in ff: GNU awk's own C and the gnulib C it is built with (support/), translated by ttp (csema -l). It is GPL-3.0-or-later, gawk's COPYING.
+  Each page holds the license header of each source file it is made of, as the file has it (gnulib's files: some are LGPL-2.1-or-later or another license compatible with it).
+  What ttp writes for it is GPL-3.0-only, Copyright (C) 2026 Nico Verrijdt: see ttp's LICENSE.

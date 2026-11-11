@@ -1,0 +1,5 @@
+license
+  GPL-3.0-or-later AND GPL-3.0-only
+  bc-1.08.2 in ff: GNU bc's own C (bc and dc, and their lib), translated by ttp (csema -l). It is GPL-3.0-or-later, bc's COPYING.
+  Each page holds the license header of each source file it is made of, as the file has it.
+  What ttp writes for it is GPL-3.0-only, Copyright (C) 2026 Nico Verrijdt: see ttp's LICENSE.
