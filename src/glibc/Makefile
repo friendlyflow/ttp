@@ -1750,9 +1750,12 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           two values (vfprintf-internal.c's buf_length, 256 and 64)
 #   tagenum a struct's tag that is an enum constant's name too (gnulib's
 #           exclude.c's exclude_pattern, grep)
+#   nss     getpwnam, getpwuid, getgrgid of root (this machine's /etc/passwd
+#           and /etc/group): nss's tables of names and per_database_defaults
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check
-ALLPROGS := locale enums tagenum
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check
+ALLPROGS := locale enums tagenum nss
+ALLPROG_nss := nss
 ALLPROG_locale := locale
 ALLPROG_enums := enums-a enums-b
 ALLPROG_tagenum := tagenum

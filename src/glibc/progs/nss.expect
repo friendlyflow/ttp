@@ -1,0 +1,4 @@
+exit 0
+getpwnam root: uid 0 gid 0 dir /root
+getpwuid 0: root
+getgrgid 0: root

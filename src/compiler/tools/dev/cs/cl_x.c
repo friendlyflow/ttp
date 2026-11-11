@@ -1998,6 +1998,16 @@ static void cl_init_item (struct cs_ex *n, struct cl_list *o)
     else cl_push (o, cl_n (":"));
     return;
   }
+  /* a byte's item in a global that is an enum constant: its number (glibc nss's
+     per_database_defaults); a leaf there is text to ttpc, whatever it names */
+  if (C->in_global && (cs_kind (n->t) == TY_CHAR || cs_kind (n->t) == TY_SCHAR || cs_kind (n->t) == TY_UCHAR)) {
+    struct cs_ex *x = s;
+    while (x->k == E_PAREN || x->k == E_ICE) x = cl_strip (cl_k (x, 0));
+    if (x->k == E_REF && x->d && x->d->k == DK_ENUMC) {
+      if (x->d->uns) cl_push (o, cl_n (cl_unum ((unsigned long long) x->d->val))); else cl_push (o, cl_num_node (x->d->val));
+      return;
+    }
+  }
   {
     struct cl_list *e = cl_l ();
     cl_itemx (n, e);
