@@ -554,7 +554,9 @@ $(I)/gccq/gccq.s: progs/gccq.c
 	mkdir -p $(@D)
 	{ $(GLIBC_CC) -E -g $< | grep '^# [0-9]* "'; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $<; } > $@
 .PRECIOUS: $(I)/gccq/%.s
-$(I)/gccq/%.s: $(I)/libgcc/_%.i
+# (a static pattern: as a pattern rule it lost to $(I)/%.s, mki's, whenever
+# _%.i was not made yet, as in a fresh BUILD: mki had no command for gccq/multc3.o)
+$(I)/gccq/multc3.s $(I)/gccq/divtc3.s: $(I)/gccq/%.s: $(I)/libgcc/_%.i
 	mkdir -p $(@D)
 	{ grep '^# [0-9]* "' $<; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $< | sed 's/\<__$*\>/__gcc_$*/g'; } > $@
 ASMS_gccrt_aarch64 := $(LIBGCC_ASM_aarch64:%=libgcc/%)
@@ -1767,3 +1769,50 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 	@perl tests.pl table $(AREA) $(GTARGET) $(TFF) $(TESTS) > $(TBUILD)/$(AREA).table
 	@cat $(TBUILD)/$(AREA).table
 .PHONY: tests-ref
+
+# ---- programs against all of glibc in ff ------------------------------------
+# A program of one or more units (ALLPROG_<name>: progs/<unit>.c), built as
+# glibc's tests' programs are, csema -l of its units against FF/glibc and
+# ttpc, and by gcc against libc.a; both must print what progs/<name>.expect
+# says (its first line: exit N). Needs all of glibc in ff (make
+# FF/glibc/index.ff), so targets of their own, not ports-check steps:
+#   locale  setlocale (LC_ALL, "C.UTF-8"), MB_CUR_MAX and the multibyte
+#           conversions in it; run with LOCPATH a folder of C.utf8, made from
+#           glibc's own locale source by nixpkgs' localedef of glibc 2.44
+#           (LOCALEDEF, nix develop's)
+#   enums   two units with a function's own enum constant of one name and
+#           two values (vfprintf-internal.c's buf_length, 256 and 64)
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check
+ALLPROGS := locale enums
+ALLPROG_locale := locale
+ALLPROG_enums := enums-a enums-b
+ALLPROGENV_locale = LOCPATH=$(BUILD)/locales
+ALLPROGDEPS_locale = $(BUILD)/locales/C.utf8/LC_CTYPE
+LOCALEDEF ?= $(error LOCALEDEF is not set: run this in `nix develop`)
+$(BUILD)/locales/C.utf8/LC_CTYPE:
+	mkdir -p $(BUILD)/locales
+	I18NPATH=$(GLIBC_SRC)/localedata $(LOCALEDEF) -c --no-archive -i C -f UTF-8 $(BUILD)/locales/C.utf8 || test -e $@
+define allprog
+$$(FF)/$(1)-all.ff: $$(ALLPROG_$(1):%=$$(FF)/%-prog.i) $$(FF)/glibc/index.ff $$(CSEMA) $$(CSVIEW)
+	$$(RUN) -v 9000000 -t 300 $$(CPRUN) $$(CSEMA) -l $$(CSFLAGS) -P glibc -I $$(FF)/glibc/index.ff -J $$(FF)/glibc.statics $$(if $$(GLIBC_START),,-T) \
+	    $$(foreach u,$$(ALLPROG_$(1)),-O $$(FF)/$$(u)-prog.i) -- main > $$(FF)/$(1)-all.ff.txt
+	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1)-all.ff.txt > $$@
+$$(FF)/$(1)-all: $$(FF)/$(1)-all.ff $$(FF)/glibc/index.ff $$(TTPC) $$(SHARED)
+	$$(RUN) -t 900 $$(TTPC_RUN) $$(TTPCFLAGS_tests) $$(SHARED) $$< $$@ > $$@.lst
+$$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(OBJ)/libc.a
+	mkdir -p $$(FF)
+	for u in $$(ALLPROG_$(1)); do $$(RUN) -t 120 $$(GLIBC_CC) -O2 -fno-builtin $$(PROGFLAGS) -c progs/$$$$u.c -o $$(FF)/$$$$u.ref.o || exit 1; done
+	$$(RUN) -t 120 $$(GLIBC_CC) -static -nostdlib -o $$@ $$(OBJ)/csu/crt1.o $$(OBJ)/csu/crti.o $$(CRTBEGIN) \
+	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
+$(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all progs/$(1).expect $$(ALLPROGDEPS_$(1))
+	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); tail -n +2 progs/$(1).expect > $$(FF)/$(1)-all.want; \
+	for b in $(1)-all.ref $(1)-all; do \
+	    s=0; $$(ALLPROGENV_$(1)) $$(RUN) -t 60 qemu-$$(GTARGET) $$(FF)/$$$$b > $$(FF)/$$$$b.out || s=$$$$?; \
+	    test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b: exit status $$$$s, not $$$$want"; exit 1; }; \
+	    cmp -s $$(FF)/$$$$b.out $$(FF)/$(1)-all.want || { echo "$(1)-check: $$$$b: wrong output"; diff $$(FF)/$$$$b.out $$(FF)/$(1)-all.want | head; exit 1; }; \
+	done
+	@echo "$(1)-check: gcc + libc.a and ttpc + all of glibc in ff agree on $$(GTARGET)"
+.PHONY: $(1)-check
+endef
+$(foreach p,$(ALLPROGS),$(eval $(call allprog,$(p))))

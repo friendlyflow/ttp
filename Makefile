@@ -28,11 +28,15 @@
 #   make c2ff-crosscheck  after a ports-check, before ports goes into main:
 #                   the frozen gen/c2ff.pl and csema -l, the translator, give
 #                   the same pages on each target's milestones
+#   make ports-sed  GNU sed in ff (src/ports/sed, port.mk) on each target:
+#                   gcc's build, cpp's .i against gcc's, csema -l and ttpc
+#                   against all of glibc in ff, sed's test suite with both
+#                   programs (PORT_TARGETS; an hour a target the first time)
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
 
-.PHONY: all os compiler os-test os-console compiler-test compiler-check bootstrap gcroots git-setup lane patch ports-check clean
+.PHONY: all os compiler os-test os-console compiler-test compiler-check bootstrap gcroots git-setup lane patch ports-check ports-sed clean
 
 all: os compiler
 
@@ -80,7 +84,7 @@ bootstrap:
 # a gc root, ~/.cache/ttp/gcroots/<name>, which `make gcroots` points at
 # what the flake names now.
 GCROOTS := $(HOME)/.cache/ttp/gcroots
-GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS LIBGCC_HEADERS_aarch64 LIBGCC_HEADERS_x86_64 LIBGCC_HEADERS_arm
+GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS LIBGCC_HEADERS_aarch64 LIBGCC_HEADERS_x86_64 LIBGCC_HEADERS_arm SED_SRC
 gcroots:
 	@mkdir -p $(GCROOTS)
 	@for v in $(GCROOT_VARS); do \
@@ -317,6 +321,17 @@ c2ff-crosscheck:
 	done; test -n "$$ok"
 .PHONY: c2ff-crosscheck
 
+# GNU sed in ff (src/ports/sed): each target's steps in turn, after bootstrap
+# and the tools (csema, cpp); the table of each in CHECKLOG/sed-<target>.table,
+# which fails where a test's result differs between gcc's sed and ttpc's
+PORT_TARGETS ?= x86_64 riscv64 aarch64 arm
+ports-sed:
+	@mkdir -p $(CHECKLOG); ok=1; for t in $(PORT_TARGETS); do \
+	    if $(MAKE) --no-print-directory -C src/ports/sed GTARGET=$$t ref units ff licenses check > $(CHECKLOG)/sed-$$t.log 2>&1; \
+	    then cp $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/ports/sed/$$t/check.table $(CHECKLOG)/sed-$$t.table; echo "sed $$t: $$(head -1 $(CHECKLOG)/sed-$$t.table)"; \
+	        grep -q "differ 0, missing 0" $(CHECKLOG)/sed-$$t.table || ok=; \
+	    else echo "FAIL sed $$t, log $(CHECKLOG)/sed-$$t.log"; ok=; fi; \
+	done; test -n "$$ok"
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean
 	$(MAKE) -C src/compiler BUILD=$(BUILD)/compiler clean

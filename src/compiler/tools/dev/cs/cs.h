@@ -120,4 +120,5 @@ void cl_finish (void);
 void cl_options2 (char *program, char *indexf, int start, char **zero, long nzero, char **weak, long nweak, int keep_going);
 void cl_statics_file (char *f);
 void cl_statics_out (char *f);
+void cl_tree (char *name, char *spdx, char *copying, char *build, int groups);
 void cs_run (struct node *root, unsigned char *src, long n, long skip, int target, int mode, char *name);

@@ -216,13 +216,16 @@ int csema_main (int argc0, char **argv0)
   char *page = "glibc", *gsrc = 0, *lsrc = 0, *shared = 0, *iname = 0, *program = 0, *indexf = 0, *staticsf = 0, *staticsout = 0;
   char **zero = alloc (argc * sizeof (char *)), **weak = alloc (argc * sizeof (char *));
   long nzero = 0, nweak = 0;
-  int start = 0, keep_going = 0;
+  int start = 0, keep_going = 0, pagegiven = 0;
+  char *tree = 0, *tree_spdx = 0, *tree_copying = 0, *tree_build = 0;
   while (a < argc && argv[a][0] == '-') {
     /* (-O belongs to the file after it: tst-printf-format-*'s first object lost it, its destructor no root) */
     if (same ((unsigned char *) argv[a], 2, "-O")) break;
     if (same ((unsigned char *) argv[a], 2, "-d")) mode = 1;
     else if (same ((unsigned char *) argv[a], 2, "-l")) mode = 2;
-    else if (same ((unsigned char *) argv[a], 2, "-p") && a + 1 < argc) page = argv[++a];
+    else if (same ((unsigned char *) argv[a], 2, "-p") && a + 1 < argc) { page = argv[++a]; pagegiven = 1; }
+    else if (same ((unsigned char *) argv[a], 2, "-B") && a + 1 < argc) tree_build = argv[++a];
+    else if (same ((unsigned char *) argv[a], 2, "-N") && a + 3 < argc) { tree = argv[a + 1]; tree_spdx = argv[a + 2]; tree_copying = argv[a + 3]; a += 3; }
     else if (same ((unsigned char *) argv[a], 2, "-s") && a + 1 < argc) gsrc = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-g") && a + 1 < argc) lsrc = argv[++a];
     else if (same ((unsigned char *) argv[a], 2, "-S") && a + 1 < argc) shared = argv[++a];
@@ -252,7 +255,9 @@ int csema_main (int argc0, char **argv0)
   }
   if (mode == 2) {
     /* csema -l [-t target] [-p page] [-n name.i] -s GLIBC_SRC [-g LIBGCC_SRC] -S shared.ff file.i root ...: the C layer of what the roots reach from one unit;
-       csema -l ... [-O] file.i[=name.i] ... -- root ...: from many, as c2ff.pl's tu.json=tu.i ... -- root ... (-O: the next is an object, its constructors roots) */
+       csema -l ... [-O] file.i[=name.i] ... -- root ...: from many, as c2ff.pl's tu.json=tu.i ... -- root ... (-O: the next is an object, its constructors roots);
+       -N name spdx copying: the files under -s are of the tree name (a program's: sed-4.10), spdx and copying a file's of no header of its own; -B dir: its build's folder, the files it makes (shown as build/...);
+       -p page with -P: a program's definitions in groups by folder, page folder:, each with its files' headers, as a page's (the root's license is the caller's) */
     long dd = a, i;
     if (a + 1 >= argc || !shared) { err_str ("usage: csema -l [-t target] [-p page] [-n name.i] -s glibc-src [-g libgcc-src] -S shared.ff file.i root ...\n"); cp_exit (2); }
     /* (an empty one is none) */
@@ -264,6 +269,7 @@ int csema_main (int argc0, char **argv0)
       cl_options2 (program, indexf, start, zero, nzero, weak, nweak, keep_going);
       cl_statics_file (staticsf);
       cl_statics_out (staticsout);
+      cl_tree (tree, tree_spdx, tree_copying, tree_build, pagegiven && program);
       if (!iname) iname = argv[a];
       cl_new_unit (iname, 0);
       one_unit (argv[a], iname, target, mode);
@@ -273,6 +279,7 @@ int csema_main (int argc0, char **argv0)
       cl_options2 (program, indexf, start, zero, nzero, weak, nweak, keep_going);
       cl_statics_file (staticsf);
       cl_statics_out (staticsout);
+      cl_tree (tree, tree_spdx, tree_copying, tree_build, pagegiven && program);
       i = a;
       while (i < dd) {
         char *f = argv[i], *nm = f;
