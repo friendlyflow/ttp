@@ -141,6 +141,8 @@ static char *cl_spdx (char *h)
       int dup = 0;
       if (cl_ihas (blk, "special exception") && cl_ihas (blk, "Bison parser skeleton") && nids) { ids[nids - 1] = cl_cat (ids[nids - 1], " WITH Bison-exception-2.2"); continue; }
       id = cl_spdx_one (blk);
+      /* (a note on a license named before it: gawk's random.c, on BSD's advertising clause, rescinded) */
+      if (!id && nids && cl_ihas (blk, "advertising clause")) continue;
       if (!id) return 0;
       while (k < nids) { if (cl_eq (ids[k], id)) dup = 1; k++; }
       if (!dup && nids < 16) { ids[nids] = id; nids++; }
@@ -299,6 +301,8 @@ static char *cl_marker_name (unsigned char *s, long n, long *next_at, char *num)
   }
   return r;
 }
+static int cl_has_slash (char *p) { while (*p) { if (*p == '/') return 1; p++; } return 0; }
+static char *cl_base (char *p) { char *b = p; while (*p) { if (*p == '/') b = p + 1; p++; } return b; }
 static char *cl_source_of (char **cdirp)
 {
   unsigned char *s = T->src + T->skip;
@@ -373,7 +377,10 @@ static struct cl_header *cl_header_of (void)
         long b = q + 2, c = b;
         while (c < e && s[c] != '"') c++;
         if (c < e && c - 2 >= b && s[c - 2] == '.' && (s[c - 1] == 'c' || s[c - 1] == 'S')) {
-          char *f = cl_resolve (cdir, cl_copy (s + b, c - b));
+          char *f = cl_copy (s + b, c - b);
+          /* (a #line of the source's own, a generated file's: flex's scan.c, bison's bc.c, a bare name, is the source) */
+          if (src && !cl_has_slash (f) && cl_eq (f, cl_base (src))) f = src;
+          else f = cl_resolve (cdir, f);
           if (!cl_val (&seen, f)) {
             char *h;
             cl_set (&seen, f);
