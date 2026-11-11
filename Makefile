@@ -160,7 +160,7 @@ PC_STEPS := bootstrap tools compiler-check units-riscv64 $(foreach m,$(PC_MS),$(
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm \
 	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
-	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t) roundnames-$(t) cpp-$(t))
+	$(foreach t,riscv64 aarch64 x86_64 arm,stdbit-$(t) textcount-$(t) roundnames-$(t) cpp-$(t) textnames-$(t))
 # $(call pc_step,name,command): the step, PASS or FAIL in CHECKLOG/name.result,
 # with its time and how much of it its commands waited for a slot
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
@@ -286,6 +286,16 @@ pc-check-O-x86_64: $(PC_X64:%=pc-%-x86_64)
 	$(call pc_step,check-O-x86_64,$(call PC_GLIBC,x86_64) check-O)
 pc-check-O-arm: $(PC_ARM:%=pc-%-arm)
 	$(call pc_step,check-O-arm,$(call PC_GLIBC,arm) check-O)
+# the text items of byte arrays that are names too (src/glibc's
+# textnames-check), each target's milestones' trees, seconds each
+pc-textnames-riscv64: $(PC_MS:%=pc-%-check)
+	$(call pc_step,textnames-riscv64,$(call PC_GLIBC) textnames-check)
+pc-textnames-aarch64: $(PC_A64:%=pc-%-aarch64)
+	$(call pc_step,textnames-aarch64,$(call PC_GLIBC,aarch64) textnames-check)
+pc-textnames-x86_64: $(PC_X64:%=pc-%-x86_64)
+	$(call pc_step,textnames-x86_64,$(call PC_GLIBC,x86_64) textnames-check)
+pc-textnames-arm: $(PC_ARM:%=pc-%-arm)
+	$(call pc_step,textnames-arm,$(call PC_GLIBC,arm) textnames-check)
 # C23's bit functions (progs/stdbit.c) on each target
 define pc_stdbit
 pc-stdbit-$(1): pc-units-$(1)

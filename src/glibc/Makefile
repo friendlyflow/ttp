@@ -1008,6 +1008,21 @@ glibc-roundtrip:
 
 .PHONY: strlen-check asm-check glibc-roundtrip
 
+# The text items of byte arrays in globals that are also a name the tree
+# defines (../compiler/gen/textnames.pl): each one judged in
+# textnames-known.txt, a new one fails. Each tree of FF on its own (a
+# milestone's page and its programs), all of glibc in ff (FF/glibc) as one,
+# where they are made.
+textnames-check:
+	@ok=1; for f in $(wildcard $(FF)/*.ff); do \
+	    out=$$(perl ../compiler/gen/textnames.pl -k textnames-known.txt $$f) || { echo "$$out" | grep '^NEW' | sed "s|^|$$f: |"; ok=; }; \
+	done; \
+	if test -e $(FF)/glibc/index.ff; then \
+	    out=$$(perl ../compiler/gen/textnames.pl -k textnames-known.txt $(FF)/glibc/*.ff) || { echo "$$out" | grep '^NEW' | sed "s|^|$(FF)/glibc: |"; ok=; }; \
+	fi; \
+	echo "textnames-check: $(words $(wildcard $(FF)/*.ff)) trees$(if $(wildcard $(FF)/glibc/index.ff), and all of glibc in ff)$$(test -n "$$ok" && echo ", none not judged")"; test -n "$$ok"
+.PHONY: textnames-check
+
 # The licenses (../compiler/gen/licenses.pl): glibc's trees here (their
 # pages' licenses: builtins, atomics), and of a milestone its tree, its
 # folder (each file and the index) and its program, each with its license
