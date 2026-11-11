@@ -1755,7 +1755,7 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 # A program of one or more units (ALLPROG_<name>: progs/<unit>.c), built as
 # glibc's tests' programs are, csema -l of its units against FF/glibc and
 # ttpc, and by gcc against libc.a; both must print what progs/<name>.expect
-# says (its first line: exit N). Needs all of glibc in ff (make
+# (or progs/<name>.<target>.expect: arm's ovf) says (its first line: exit N). Needs all of glibc in ff (make
 # FF/glibc/index.ff), so targets of their own, not ports-check steps:
 #   locale  setlocale (LC_ALL, "C.UTF-8"), MB_CUR_MAX and the multibyte
 #           conversions in it; run with LOCPATH a folder of C.utf8, made from
@@ -1768,9 +1768,12 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   nss     getpwnam, getpwuid, getgrgid of root (this machine's /etc/passwd
 #           and /etc/group): nss's tables of names and per_database_defaults
 #   typename  a variable named type under sizeof (coreutils' stat.c)
+#   ovf     the overflow builtins of gnulib's ckd_add, ckd_sub, ckd_mul in
+#           findutils, grep, coreutils, at the edges of their types
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check
-ALLPROGS := locale enums tagenum nss typename
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check
+ALLPROGS := locale enums tagenum nss typename ovf
+ALLPROG_ovf := ovf
 ALLPROG_typename := typename
 ALLPROG_nss := nss
 ALLPROG_locale := locale
@@ -1794,8 +1797,8 @@ $$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(OBJ)/libc.a
 	for u in $$(ALLPROG_$(1)); do $$(RUN) -t 120 $$(GLIBC_CC) -O2 -fno-builtin $$(PROGFLAGS) -c progs/$$$$u.c -o $$(FF)/$$$$u.ref.o || exit 1; done
 	$$(RUN) -t 120 $$(GLIBC_CC) -static -nostdlib -o $$@ $$(OBJ)/csu/crt1.o $$(OBJ)/csu/crti.o $$(CRTBEGIN) \
 	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
-$(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all progs/$(1).expect $$(ALLPROGDEPS_$(1))
-	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); tail -n +2 progs/$(1).expect > $$(FF)/$(1)-all.want; \
+$(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all $$(call expect,$(1)) $$(ALLPROGDEPS_$(1))
+	@want=$$$$(head -n 1 $$(call expect,$(1)) | cut -d" " -f2); tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1)-all.want; \
 	for b in $(1)-all.ref $(1)-all; do \
 	    s=0; $$(ALLPROGENV_$(1)) $$(RUN) -t 60 qemu-$$(GTARGET) $$(FF)/$$$$b > $$(FF)/$$$$b.out || s=$$$$?; \
 	    test $$$$s -eq $$$$want || { echo "$(1)-check: $$$$b: exit status $$$$s, not $$$$want"; exit 1; }; \

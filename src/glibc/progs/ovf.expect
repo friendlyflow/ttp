@@ -1,0 +1,21 @@
+exit 0
+add int int long: 4294967294 0
+add int int long: -2147483649 0
+mul ull int ull: 9223372032559808512 0
+mul ull int ull: 1099511627776 0
+mul ull int ull: 18446744073709551613 1
+mul ull int ull: 0 0
+mul ull int ull: 18446744073709551615 0
+mul ull int ull: 18446744073709551614 1
+add int long int: -2147483644 1
+add int long int: -2147483643 0
+add int long long: -9223372036854775808 1
+add int long long: 9223372036854775806 0
+add u64 int long: -9223372036854775808 1
+add u64 int long: 9223372036854775807 0
+add u64 int long: -2 1
+sub long int int: 2147483647 1
+sub long int int: 2147483647 0
+mul u64 u64 long: 9223372034707292160 0
+mul u64 u64 long: -9223372036854775808 1
+mul u64 u64 long: 1 1

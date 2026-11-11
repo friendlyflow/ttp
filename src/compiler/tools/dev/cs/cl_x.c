@@ -748,18 +748,18 @@ static int cl_builtin_listed (char *name)
 }
 static int cl_ovf_ok (char *name, char *sig)
 {
-  static char *addv[] = { "u64 u64 u64", "i128 i128 i128", "u32 u32 u32", "u32 u32 u64", "u32 u64 u64", "u64 int u32", "u64 u64 int", "int int int", "long int long", "long long long", "u64 u32 u64", "u64 int u64", "long int int", "long u64 long", 0 };
-  static char *mulv[] = { "u64 u64 u64", "u32 u64 u64", "u64 int u32", "int int int", "long long long", "long int long", 0 };
-  static char *subv[] = { "long long long", "int long int", "long int long", "i128 i128 i128", "int i128 i128", "int int int", "int long long", "u64 u64 u64", 0 };
+  static char *addv[] = { "u64 u64 u64", "i128 i128 i128", "u32 u32 u32", "u32 u32 u64", "u32 u64 u64", "u64 int u32", "u64 u64 int", "int int int", "long int long", "long long long", "u64 u32 u64", "u64 int u64", "long int int", "long u64 long", "int int long", "int long int", "int long long", "u64 int long", 0 };
+  static char *mulv[] = { "u64 u64 u64", "u32 u64 u64", "u64 int u32", "int int int", "long long long", "long int long", "u64 int u64", "u64 u64 long", 0 };
+  static char *subv[] = { "long long long", "int long int", "long int long", "i128 i128 i128", "int i128 i128", "int int int", "int long long", "u64 u64 u64", "long int int", 0 };
   long i = 0;
   char **a = addv;
   if (cl_eq (name, "__builtin_mul_overflow")) a = mulv;
   else if (cl_eq (name, "__builtin_sub_overflow")) a = subv;
   while (a[i]) { if (cl_eq (sig, a[i])) return 1; i++; }
   if (C->target == 3) {
-    if (cl_eq (name, "__builtin_mul_overflow") && (cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "u32 int u32") || cl_eq (sig, "i64 int i64"))) return 1;
-    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "int u32 int") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "i64 int i64"))) return 1;
-    if (cl_eq (name, "__builtin_sub_overflow") && (cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "int i64 i64") || cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "i64 i64 long"))) return 1;
+    if (cl_eq (name, "__builtin_mul_overflow") && (cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "u32 int u32") || cl_eq (sig, "i64 int i64") || cl_eq (sig, "u32 u32 int") || cl_eq (sig, "i64 i64 i64"))) return 1;
+    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "int u32 int") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "i64 int i64") || cl_eq (sig, "u32 int int") || cl_eq (sig, "int int i64") || cl_eq (sig, "i64 int int") || cl_eq (sig, "int i64 i64") || cl_eq (sig, "int i64 int"))) return 1;
+    if (cl_eq (name, "__builtin_sub_overflow") && (cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "int i64 i64") || cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "i64 i64 long") || cl_eq (sig, "int long i64") || cl_eq (sig, "i64 int i64") || cl_eq (sig, "i64 int int") || cl_eq (sig, "int i64 int"))) return 1;
   }
   return 0;
 }
