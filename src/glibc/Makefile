@@ -768,7 +768,7 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_a
 	$$(RUN) $$(call csmem,$(1)) -t 600 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
 	    -- @$$(FF)/$(1).rootlist $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
-	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) | sed 's/^/  /' >> $$(FF)/$(1).asm.page.txt)
+	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) > $$(FF)/$(1).asm.hdr && sed 's/^/  /' $$(FF)/$(1).asm.hdr >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
 	    $$(RUN) -t 60 perl $$(S2FF) --items $$(foreach p,$$(PLT_$$(GTARGET)),--plt $$(p)) $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
@@ -1472,7 +1472,7 @@ $(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)
 	    @$(FF)/glibc.csunits -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.csema.err \
 	    || { tail -5 $(FF)/glibc.csema.err; exit 1; }
 	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
-	perl ../compiler/gen/s2ff.pl --header $(GLIBC_ASM:%=$(I)/%.s) | sed 's/^/  /' >> $(FF)/glibc.asm.page.txt
+	perl ../compiler/gen/s2ff.pl --header $(GLIBC_ASM:%=$(I)/%.s) > $(FF)/glibc.asm.hdr && sed 's/^/  /' $(FF)/glibc.asm.hdr >> $(FF)/glibc.asm.page.txt
 	for a in $(GLIBC_ASM); do \
 	    then=; test $$a = csu/crti && test -n "$(GLIBC_THEN)" && then="--then $(I)/csu/crtn$(SSRC) $(I)/csu/crtn.dump"; \
 	    $(RUN) -t 60 perl $(S2FF) --items $(foreach p,$(PLT_$(GTARGET)),--plt $(p)) $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
@@ -1601,7 +1601,9 @@ $(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builti
 	$(RUN) $(call csmem,libgcc) -t 900 $(call cstrans,libgcc) -k -p gcc @$(FF)/libgcc.csunits -- @$(FF)/libgcc.roots \
 	    >> $(FF)/libgcc.ff.txt 2> $(FF)/libgcc.csema.err || { tail -5 $(FF)/libgcc.csema.err; exit 1; }
 	echo 'gcc asm:' > $(FF)/libgcc.asm.page.txt
-	perl ../compiler/gen/s2ff.pl --header $(LIBGCC_ASM:%=$(LI)/%.s) | sed 's/^/  /' >> $(FF)/libgcc.asm.page.txt
+	@# (s2ff --header's stop stops the page, as in the milestones' and glibc's: through
+	@# a pipe into sed it did not, and a page without the asm's license was written)
+	perl ../compiler/gen/s2ff.pl --header $(LIBGCC_ASM:%=$(LI)/%.s) > $(FF)/libgcc.asm.hdr && sed 's/^/  /' $(FF)/libgcc.asm.hdr >> $(FF)/libgcc.asm.page.txt
 	for a in $(LIBGCC_ASM); do \
 	    $(RUN) -t 60 perl $(S2FF) --items $(LI)/$$a$(SSRC) $(LI)/$$a.dump > $(FF)/libgcc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/libgcc.asm.txt >> $(FF)/libgcc.asm.page.txt; \
