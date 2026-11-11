@@ -1783,10 +1783,14 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   enums   two units with a function's own enum constant of one name and
 #           two values (vfprintf-internal.c's buf_length, 256 and 64)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check
-ALLPROGS := locale enums
+#   anonrec one macro that makes anonymous records of other fields on one
+#           line (tst-strtod4.c's TEST_STRTOD): each its own type
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check anonrec-check
+ALLPROGS := locale enums anonrec
 ALLPROG_locale := locale
 ALLPROG_enums := enums-a enums-b
+ALLPROG_anonrec := anonrec
 ALLPROGENV_locale = LOCPATH=$(BUILD)/locales
 ALLPROGDEPS_locale = $(BUILD)/locales/C.utf8/LC_CTYPE
 LOCALEDEF ?= $(error LOCALEDEF is not set: run this in `nix develop`)
