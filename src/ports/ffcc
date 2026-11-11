@@ -1,0 +1,80 @@
+#!/bin/sh
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+#
+# ffcc: the C compiler of a port's reference build (port.mk), gcc as it is
+# (FFCC_GCC), which also records what each compile and link was, so that
+# the ff build can do the same from the same C, with no log of the
+# package's own to parse. With FFCC_REC set (the build, not configure's
+# tests), for every object it makes, ROOT/x.o (FFCC_ROOT: the build's top):
+#
+#   REC/u/x.cmd     the folder it ran in, then its arguments, one a line
+#   REC/u/x.i       its C, preprocessed: the same command with -E for -c
+#                   (and without -M...: those write the dependency files)
+#   REC/u/x.s       the same for an object of a .S: its asm, preprocessed
+#   REC/build.log   each command, gcc's full path first (as glibc's
+#                   build.log: src/glibc/predef.pl reads it)
+#
+# and for every program it links, ROOT/p: REC/l/p.cmd, as an object's.
+# Each compile's -E runs after the compile, which alone decides the exit
+# status; a failed -E stops the build (its record would be missing).
+set -u
+gcc=${FFCC_GCC:?ffcc: FFCC_GCC is not set}
+"$gcc" "$@" || exit $?
+test -n "${FFCC_REC:-}" || exit 0
+root=${FFCC_ROOT:?ffcc: FFCC_ROOT is not set}
+
+# what the command is: -c (an object), -E/-S/-M alone (nothing to record),
+# or a link; its output and its source
+mode=link out= src= skip=
+for a in "$@"; do
+    if test -n "$skip"; then
+        test "$skip" = o && out=$a
+        skip=; continue
+    fi
+    case $a in
+        -c) mode=obj ;;
+        -E|-S|-M|-MM) exit 0 ;;
+        -o) skip=o ;;
+        -o*) out=${a#-o} ;;
+        -MF|-MT|-MQ|-I|-D|-U|-include|-isystem|-iquote|-idirafter|-x) skip=1 ;;
+        -*) ;;
+        *.c|*.S) src=$a ;;
+    esac
+done
+case $mode in
+    obj)
+        test -n "$src" || exit 0
+        if test -z "$out"; then out=$(basename "$src"); out=${out%.*}.o; fi ;;
+    link)
+        test -n "$out" || out=a.out ;;
+esac
+case $out in /*) abs=$out ;; *) abs=$(pwd)/$out ;; esac
+case $abs in
+    "$root"/*) rel=${abs#"$root"/} ;;
+    *) exit 0 ;;
+esac
+dir=u; test "$mode" = link && dir=l
+test "$mode" = obj && rel=${rel%.o}
+mkdir -p "$FFCC_REC/$dir/$(dirname "$rel")"
+{ pwd; for a in "$@"; do printf '%s\n' "$a"; done; } > "$FFCC_REC/$dir/$rel.cmd"
+printf '%s' "$gcc" >> "$FFCC_REC/build.log"
+for a in "$@"; do printf ' %s' "$a" >> "$FFCC_REC/build.log"; done
+printf '\n' >> "$FFCC_REC/build.log"
+test "$mode" = obj || exit 0
+
+# the same command with -E for -c, into the record, without -o and -M...
+pp=$FFCC_REC/u/$rel.i
+case $src in *.S) pp=$FFCC_REC/u/$rel.s ;; esac
+first=1 skip=
+for a in "$@"; do
+    if test -n "$first"; then set --; first=; fi
+    if test -n "$skip"; then skip=; continue; fi
+    case $a in
+        -c) set -- "$@" -E ;;
+        -o|-MF|-MT|-MQ) skip=1 ;;
+        -o*|-MD|-MMD|-MP|-MF*|-MT*|-MQ*) ;;
+        *) set -- "$@" "$a" ;;
+    esac
+done
+"$gcc" "$@" -o "$pp" || { echo "ffcc: gcc -E failed for $rel" >&2; exit 1; }

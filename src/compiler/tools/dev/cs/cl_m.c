@@ -131,6 +131,16 @@ static void cl_reach (void)
       cl_out (v);
       continue;
     }
+    /* an absolute symbol of a unit's top-level asm (cl_asm_absdefs): a char of its value there */
+    if (cl_get (&C->absdef, name)) {
+      struct cl_list *x = cl_l ();
+      struct node *vn = cl_get (&C->absdef, name);
+      cl_enter ((struct cl_unit *) cl_get (&C->absdef, cl_cat (name, " unit")));
+      cl_w (x, "char");
+      cl_push (x, cl_n ((char *) vn->text));
+      cl_out (cl_nl (cl_cat (cl_ffname (name), ":"), x));
+      continue;
+    }
     cl_enter (0);
     d = cl_get (&C->weak, name);
     if (d && cl_val (&C->treedefs, cl_ffname (name))) continue;
@@ -502,6 +512,19 @@ static void cl_run (void)
   cl_enter (u);
   cl_pass ();
 }
+/* (-T) a program's own _start: exit (main ()) */
+static void cl_write_start (void)
+{
+  struct cl_list *sc, *sv;
+  if (!C->start) return;
+  sc = cl_l ();
+  sv = cl_l ();
+  cl_push (sc, cl_n ("SYS_exit"));
+  cl_push (sc, cl_n ("main"));
+  cl_push (sv, cl_n ("void"));
+  cl_push (sv, cl_nl ("syscall", sc));
+  cl_write_txt (cl_nl ("_start:", sv), 0);
+}
 /* the license of each file a page is made of, one per file, by the file's name (Header.pm's license_nodes) */
 static void cl_license_nodes_of (struct cl_list *units, struct cl_list *o)
 {
@@ -608,7 +631,7 @@ void cl_finish (void)
   cl_newwords (all);
   {
     struct cl_list *ty = cl_slice (all, 0, nt);
-    if (C->program) {
+    if (C->program && !C->groups) {
       struct cl_header *hx;
       long q = 0;
       cl_enter (C->units[0]);
@@ -618,18 +641,12 @@ void cl_finish (void)
       while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; }
       q = 0;
       while (q < nout) { cl_write_txt (all->v[nt + q], 0); q++; }
-      if (C->start) {
-        struct cl_list *sc = cl_l ();
-        struct cl_list *sv = cl_l ();
-        cl_push (sc, cl_n ("SYS_exit"));
-        cl_push (sc, cl_n ("main"));
-        cl_push (sv, cl_n ("void"));
-        cl_push (sv, cl_nl ("syscall", sc));
-        cl_write_txt (cl_nl ("_start:", sv), 0);
-      }
+      cl_write_start ();
       out_flush ();
       return;
     }
+    /* (-p with -P: a program of many files, sed's: the include, then its groups as a page's) */
+    if (C->program) cl_write_txt (cl_n1 ("include", cl_n (C->program)), 0);
     {
       /* (by directory, not by unit: each function's comment names its unit) */
       struct cl_map by, inunits, seen;
@@ -661,7 +678,9 @@ void cl_finish (void)
         }
         i++;
       }
-      cl_write_txt (cl_group (cl_cat (C->page, " types"), ty), 0);
+      /* (a program's types at its top, as a program's of one file: ttpc sees no enum constant of a group's type on the program page) */
+      if (C->program) { long q = 0; while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; } }
+      else cl_write_txt (cl_group (cl_cat (C->page, " types"), ty), 0);
       while (g < ng) {
         struct cl_list *lic = cl_l ();
         cl_license_nodes_of (cl_get (&inunits, order[g]), lic);
@@ -671,6 +690,7 @@ void cl_finish (void)
       }
     }
   }
+  if (C->program) cl_write_start ();
   out_flush ();
 }
 /* --index: the names the program's tree defines, and the records its types page defines */
@@ -728,6 +748,7 @@ static void cl_read_index (void)
 }
 void cl_statics_file (char *f) { C->staticsf = f; }
 void cl_statics_out (char *f) { C->staticsout = f; }
+void cl_tree (char *name, char *spdx, char *copying, char *build, int groups) { C->tree = name; C->tree_spdx = spdx; C->tree_copying = copying; C->tree_build = build; C->groups = groups; }
 void cl_options2 (char *program, char *indexf, int start, char **zero, long nzero, char **weak, long nweak, int keep_going)
 {
   long i = 0;

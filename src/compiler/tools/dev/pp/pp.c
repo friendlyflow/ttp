@@ -202,7 +202,8 @@ struct pst {
   struct tok **run; long rc, rroom, la;
   struct tok *pool; long npool;
   /* names */
-  struct hnode *n_defined, *n_va_args, *n_va_opt, *n_pragma;
+  struct hnode *n_defined, *n_va_args, *n_va_opt, *n_pragma, *n_true, *n_false;
+  int true_false;   /* C23 on (gcc 16's default, gnu23): true and false are 1 and 0 in #if (libcpp's true_false) */
   struct pragma *pragmas;
   struct pushed *pushed;
   struct optset *optstack;
@@ -1818,6 +1819,7 @@ static void ex_unary (struct ex *e, struct num *r)
   if (ty >= T_CHAR && ty <= T_UTF8CHAR) { ex_char (t, r); ex_next (e); return; }
   if (ty == T_NAME) {
     if (t->node == pps->n_defined) { ex_defined (e, r); ex_next (e); return; }
+    if (pps->true_false && t->node == pps->n_true) r->v = 1;
     ex_next (e);
     return;
   }
@@ -2980,7 +2982,7 @@ struct opts {
   char **incs; long nincs;           /* -include, in order */
   char **defs; int *defk; long ndefs; /* -D (1), -U (0), in order */
   char **iq, **ib, **is, **ia; long niq, nib, nis, nia;
-  int nostdinc, g;
+  int nostdinc, g, notf;
   char **sd; int *sdk; long nsd;   /* gcc's own include directories, their kinds (--predef's sysdir) */
   char *preinc;
   unsigned char *key; long klen;
@@ -3053,6 +3055,13 @@ static void parse_opts (struct opts *o, int argc, char **argv)
     if (is ((unsigned char *) a, slen (a), "-nostdinc")) { o->nostdinc = 1; continue; }
     if (a[1] == 'g') { o->g = !is ((unsigned char *) a, slen (a), "-g0"); continue; }
     if (starts (a, "-fno-builtin-")) continue;
+    if (starts (a, "-std=") || starts (a, "-ansi")) {
+      /* (the last -std: true and false in #if from C23 on, as libcpp's lang_defaults) */
+      char *v = a + 5;
+      o->notf = !(starts (a, "-std=") && (is ((unsigned char *) v, slen (v), "c23") || is ((unsigned char *) v, slen (v), "gnu23") || is ((unsigned char *) v, slen (v), "c2x")
+                  || is ((unsigned char *) v, slen (v), "gnu2x") || is ((unsigned char *) v, slen (v), "c2y") || is ((unsigned char *) v, slen (v), "gnu2y")
+                  || is ((unsigned char *) v, slen (v), "iso9899:2024")));
+    }
     if (a[1] == 'f' || a[1] == 'm' || a[1] == 'O' || starts (a, "-std=") || starts (a, "-ansi")) { key_add (o, a); continue; }
     fatal2 ("unknown option ", (unsigned char *) a, slen (a));
   }
@@ -3332,6 +3341,9 @@ int cpp_main (int argc, char **argv)
   get_cwd (argv + argc + 1);
   builtins ();
   pps->n_defined = lookup_s ("defined");
+  pps->n_true = lookup_s ("true");
+  pps->n_false = lookup_s ("false");
+  pps->true_false = !o->notf && !pps->lang_asm;   /* (not in assembler: CLK_ASM's lang_defaults) */
   pps->n_va_args = lookup_s ("__VA_ARGS__");
   pps->n_va_opt = lookup_s ("__VA_OPT__");
   init_pragmas ();
