@@ -748,8 +748,8 @@ static int cl_builtin_listed (char *name)
 }
 static int cl_ovf_ok (char *name, char *sig)
 {
-  static char *addv[] = { "u64 u64 u64", "i128 i128 i128", "u32 u32 u32", "u32 u32 u64", "u32 u64 u64", "u64 int u32", "u64 u64 int", "int int int", "long int long", "long long long", "u64 u32 u64", "u64 int u64", 0 };
-  static char *mulv[] = { "u64 u64 u64", "u32 u64 u64", "u64 int u32", "int int int", "long long long", 0 };
+  static char *addv[] = { "u64 u64 u64", "i128 i128 i128", "u32 u32 u32", "u32 u32 u64", "u32 u64 u64", "u64 int u32", "u64 u64 int", "int int int", "long int long", "long long long", "u64 u32 u64", "u64 int u64", "long int int", "long u64 long", 0 };
+  static char *mulv[] = { "u64 u64 u64", "u32 u64 u64", "u64 int u32", "int int int", "long long long", "long int long", 0 };
   static char *subv[] = { "long long long", "int long int", "long int long", "i128 i128 i128", "int i128 i128", "int int int", "int long long", "u64 u64 u64", 0 };
   long i = 0;
   char **a = addv;
@@ -757,8 +757,8 @@ static int cl_ovf_ok (char *name, char *sig)
   else if (cl_eq (name, "__builtin_sub_overflow")) a = subv;
   while (a[i]) { if (cl_eq (sig, a[i])) return 1; i++; }
   if (C->target == 3) {
-    if (cl_eq (name, "__builtin_mul_overflow") && (cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "u32 int u32"))) return 1;
-    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "i64 int i64"))) return 1;
+    if (cl_eq (name, "__builtin_mul_overflow") && (cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "u32 int u32") || cl_eq (sig, "i64 int i64"))) return 1;
+    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "int u32 int") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "i64 int i64"))) return 1;
     if (cl_eq (name, "__builtin_sub_overflow") && (cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "int i64 i64") || cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "i64 i64 long"))) return 1;
   }
   return 0;
@@ -2432,6 +2432,14 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
     {
       struct cl_list *x = cl_l ();
       if (n->a) cl_stmt (n->a, x);
+      /* (a label whose first statement is a number, gnulib's lock_unlock as ((void) 0): an empty statement
+         before it, or ttpc reads name: number as a declaration without its type) */
+      if (x->n && !x->v[0]->count && x->v[0]->len && cl_digit (x->v[0]->text[0])) {
+        struct cl_list *y = cl_l ();
+        cl_push (y, cl_n (""));
+        cl_append (y, x);
+        x = y;
+      }
       cl_push (o, cl_nl (l, x));
     }
     return;

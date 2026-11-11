@@ -157,11 +157,41 @@ static void cl_anon_fields (struct cs_rec *r, char *rname)
     i = i->nxt;
   }
 }
+static char *cl_unit_name (void);
 static void cl_index_enum (struct cs_rec *d)
 {
   char *tag = 0;
   long i = 0;
   long long v = -1;
+  /* an enum constant another unit has of another value: an anonymous enum's constants are then named
+     with this unit (vfprintf-internal.c's local enum { buf_length = 256 / sizeof (CHAR_T) }: 256 in
+     the narrow unit, 64 in the wide one, which took 256); a named enum's is only said (left as it was) */
+  while (i < d->nenums) {
+    char *c = cl_dn (d->enums[i]);
+    if (cl_has (&C->enumval, c) && cl_find (&C->enumval, c)->num != d->enums[i]->val) break;
+    i++;
+  }
+  if (i < d->nenums && !d->tag && !d->td && C->cu) {
+    long j = 0;
+    err_str ("csema: an enum constant of another value than another unit's, named with its unit: ");
+    err_str (cl_dn (d->enums[i]));
+    err_str (" in ");
+    err_str (cl_unit_name ());
+    err_str ("\n");
+    while (j < d->nenums) {
+      char *nn = cl_cat3 (cl_dn (d->enums[j]), " ", cl_unit_name ());
+      d->enums[j]->name = (unsigned char *) nn;
+      d->enums[j]->nlen = cstrlen (nn);
+      j++;
+    }
+  } else if (i < d->nenums) {
+    err_str ("csema: an enum constant of another value than another unit's, not renamed: ");
+    err_str (cl_dn (d->enums[i]));
+    err_str (" in ");
+    err_str (cl_unit_name ());
+    err_str ("\n");
+  }
+  i = 0;
   if (d->tag) tag = cl_cat ("enum ", cl_copy (d->tag, d->tlen));
   else if (d->nenums) tag = cl_cat3 ("enum ", cl_dn (d->enums[0]), " enum");
   if (!tag) return;
@@ -501,6 +531,51 @@ static int cl_section_name_ok (char *s)
   return 1;
 }
 /* asm ("memset = __memset_generic") at the top of a unit: its calls of memset are of __memset_generic */
+/* a top-level asm's lines ".globl N" and ".set N, V" or "N = V", V a number: an absolute symbol the unit defines
+   (localeinfo.h's _NL_CURRENT_DEFINE_ABS: lc-ctype.c's _nl_current_LC_CTYPE_used, whose address setlocale tests);
+   N is then defined in this unit, a char of value V: its address not 0, as the linker's would be */
+static char *cl_asm_word (char *s, long *at)
+{
+  long b, e;
+  while (s[*at] == ' ' || s[*at] == '\t') (*at)++;
+  b = *at;
+  while (cl_alpha (s[*at]) || cl_digit (s[*at]) || s[*at] == '_' || s[*at] == '.' || s[*at] == '$') (*at)++;
+  e = *at;
+  return cl_copy ((unsigned char *) s + b, e - b);
+}
+static void cl_asm_absdefs (char *s)
+{
+  struct cl_map globl;
+  long at = 0;
+  globl.tab = 0; globl.count = 0;
+  while (s[at]) {
+    long e = at, p = at;
+    char *w, *nm = 0, *v = 0;
+    /* (the asm's text as written: its \\n two bytes) */
+    while (s[e] && s[e] != '\n' && s[e] != ';' && !(s[e] == '\\' && s[e + 1] == 'n')) e++;
+    w = cl_asm_word (s, &p);
+    if (cl_eq (w, ".globl") || cl_eq (w, ".global")) { char *g = cl_asm_word (s, &p); if (g[0]) cl_set (&globl, g); }
+    else if (cl_eq (w, ".set") || cl_eq (w, ".equ")) {
+      nm = cl_asm_word (s, &p);
+      while (s[p] == ' ' || s[p] == '\t') p++;
+      if (s[p] == ',') { p++; v = cl_asm_word (s, &p); }
+    } else if (w[0]) {
+      long q = p;
+      while (s[q] == ' ' || s[q] == '\t') q++;
+      if (s[q] == '=') { q++; nm = w; v = cl_asm_word (s, &q); p = q; }
+    }
+    if (nm && v && v[0] && cl_digit (v[0]) && cl_val (&globl, nm)) {
+      long q = 0, ok = 1;
+      while (v[q]) { if (!cl_digit (v[q])) ok = 0; q++; }
+      while (s[p] == ' ' || s[p] == '\t') p++;
+      if (ok && p == e) cl_put (&C->absdef, nm, cl_nl (v, cl_l ()));
+      if (ok && p == e) cl_put (&C->absdef, cl_cat (nm, " unit"), (void *) C->cu);
+    }
+    at = e;
+    if (s[at] == '\\') at++;
+    if (s[at]) at++;
+  }
+}
 static void cl_file_asm (struct node *n)
 {
   struct cs_buf b;
@@ -514,6 +589,7 @@ static void cl_file_asm (struct node *n)
     i++;
   }
   s = cl_copy (b.p, b.n);
+  cl_asm_absdefs (s);
   i = 0;
   while (s[i] == ' ' || s[i] == '\t') i++;
   j = i;

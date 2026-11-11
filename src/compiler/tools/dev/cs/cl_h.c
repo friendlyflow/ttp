@@ -327,14 +327,16 @@ static char *cl_shown (char *p)
 {
   if (C->glibc_src && cl_starts (p, cl_cat (C->glibc_src, "/"))) return p + cstrlen (C->glibc_src) + 1;
   if (C->libgcc_src && cl_starts (p, cl_cat (C->libgcc_src, "/"))) return p + cstrlen (C->libgcc_src) + 1;
+  if (C->tree_build && cl_starts (p, cl_cat (C->tree_build, "/"))) return cl_cat ("build/", p + cstrlen (C->tree_build) + 1);
   return p;
 }
-static char *cl_tree_name (char *p) { return cs_pick (cl_is_gcc_file (p), "gcc-16.2.0", "glibc-2.44"); }
+static char *cl_glibc_tree (void) { return cs_pick (C->tree != 0, C->tree, "glibc-2.44"); }
+static char *cl_tree_name (char *p) { return cs_pick (cl_is_gcc_file (p), "gcc-16.2.0", cl_glibc_tree ()); }
 static char *cl_unit_label (void)
 {
   char *cdir, *s = cl_source_of (&cdir);
   if (s) return cl_tree_name (s);
-  return "glibc-2.44";
+  return cl_glibc_tree ();
 }
 static char *cl_file_text (char *f)
 {
@@ -418,8 +420,8 @@ static struct cl_header *cl_header_of (void)
     at = e + 1;
     lineno++;
   }
-  x->name = "glibc-2.44";
-  x->spdx = "LGPL-2.1-or-later";
+  x->name = cl_glibc_tree ();
+  x->spdx = cs_pick (C->tree != 0, C->tree_spdx, "LGPL-2.1-or-later");
   if (!src) {
     x->file = "<stdin>";
     x->lines = alloc (2 * sizeof (char *));
@@ -438,6 +440,7 @@ static struct cl_header *cl_header_of (void)
   x->file = cl_shown (src);
   x->lines = alloc (2 * sizeof (char *));
   x->lines[0] = cs_pick (cl_is_gcc_file (src), "no header of its own; gcc-16.2.0 COPYING3 and COPYING.RUNTIME", "no header of its own; glibc-2.44 COPYING.LIB");
+  if (C->tree && !cl_is_gcc_file (src)) x->lines[0] = cl_cat3 ("no header of its own; ", C->tree, cl_cat (" ", C->tree_copying));
   x->nlines = 1;
   return x;
 }

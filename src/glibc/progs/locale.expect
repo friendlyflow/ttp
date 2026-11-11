@@ -1,0 +1,10 @@
+exit 0
+setlocale: C.UTF-8
+MB_CUR_MAX: 6
+mbrtowc: 1 U+0061
+mbrtowc: 2 U+03a6
+mbrtowc: 3 U+20ac
+mbstowcs: 3
+wctomb: 3 e2 82 ac
+setlocale: C, MB_CUR_MAX: 1
+mbstowcs: -1

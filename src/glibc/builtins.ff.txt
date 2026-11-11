@@ -1378,6 +1378,105 @@ builtins:
         long
       p
   comment
+    gnulib's ckd_add and ckd_mul (intprops-internal.h: gcc's type-generic builtins), as sed's C has them: the exact result in an i128, *r that as r's type holds it, and whether that is not the exact result.
+    __builtin_add_overflow of a long and an int into an int (sed's match_regex), of a long and a u64 into a long (get_backup_file_name); __builtin_mul_overflow of a long and an int into a long (in_integer).
+  __builtin_add_overflow long int int:
+    int
+    a:
+      long
+    b:
+      int
+    r:
+      int
+      * pointer
+    s:
+      i128
+      cast
+        i128
+      a
+      +
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    s
+    return
+      s
+      !=
+      cast
+        i128
+      cast
+        int
+      s
+  __builtin_add_overflow long u64 long:
+    int
+    a:
+      long
+    b:
+      u64
+    r:
+      long
+      * pointer
+    s:
+      i128
+      cast
+        i128
+      a
+      +
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    s
+    return
+      s
+      !=
+      cast
+        i128
+      cast
+        long
+      s
+  __builtin_mul_overflow long int long:
+    int
+    a:
+      long
+    b:
+      int
+    r:
+      long
+      * pointer
+    p:
+      i128
+      cast
+        i128
+      a
+      *
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    p
+    return
+      p
+      !=
+      cast
+        i128
+      cast
+        long
+      p
+  comment
     gcc's builtins on a float16 (libgcc's __mulhc3, __divhc3), from its bits.
   __builtin_isnan float16:
     int

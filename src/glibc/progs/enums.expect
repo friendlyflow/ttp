@@ -1,0 +1,4 @@
+exit 0
+narrow: buf_length 256, sizeof buf 256, sum -128
+wide: buf_length 64, sizeof buf 256, sum 2144
+narrow 256 wide 64
