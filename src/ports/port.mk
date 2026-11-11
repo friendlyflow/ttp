@@ -16,9 +16,9 @@
 #                  of its archives; each one's .i by cpp (ff) from the same
 #                  command (PB/ff/i), compared with gcc's byte for byte
 #   make ff        csema -l over those units into the program's tree
-#                  (PB/ff/PKG.ff: its license at the root, a group per folder
+#                  (PB/ff/NAME.ff: its license at the root, a group per folder
 #                  with each file's header), then ttpc with glibc in ff
-#                  (GB/ff/glibc, src/glibc's all of glibc) -> PB/ff/PKG
+#                  (GB/ff/glibc, src/glibc's all of glibc) -> PB/ff/NAME
 #   make check     the package's own test suite (make check) twice, with
 #                  gcc's program and with ttpc's in its place: the results
 #                  test by test (PB/check.table), equal or not
@@ -33,9 +33,16 @@
 # csema -l under a minute, ttpc a minute; its test suite natively a minute,
 # under qemu a few. So not a ports-check step: the top Makefile's ports-sed.
 #
+# A package of several programs (PKG_PROGRAMS: each one's path in the
+# build, its NAME the last part: bc/bc dc/dc) has a tree and a program of
+# ttpc's for each; PKG_PROGRAM is the one of a package of one.
+#
 # Builds in PB (~/.cache/ttp/build/<worktree>/ports/PKG/GTARGET), glibc's
 # side in GB (the worktree's glibc BUILD of that target, as ports-check's
-# GBUILD). Under qemu-user on the targets that are not the machine's: the
+# GBUILD). GLIBC_FROM=<another worktree's GBUILD>: its sysroot and all of
+# glibc in ff are taken from there, only read (never made or remade here:
+# they must be of the same csema and glibc in ff as this worktree's); the
+# locales are still this GBUILD's. Under qemu-user on the targets that are not the machine's: the
 # programs the test suite runs (the package's and its test helpers) are
 # run by a binfmt-less wrapper, see QWRAP.
 GTARGET ?= x86_64
@@ -45,7 +52,14 @@ GBUILD ?= $(HOME)/.cache/ttp/build/$(WT)/glibc
 GB := $(GBUILD)$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))
 GREF := $(HOME)/.cache/ttp/glibc-gcc16$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET))/obj
 PB ?= $(HOME)/.cache/ttp/build/$(WT)/ports/$(PKG)/$(GTARGET)
-SYSROOT := $(GB)/sysroot
+GLIBC_FROM ?=
+GBF := $(if $(GLIBC_FROM),$(GLIBC_FROM)$(if $(filter-out riscv64,$(GTARGET)),/$(GTARGET)),$(GB))
+SYSROOT := $(GBF)/sysroot
+PKG_PROGRAMS ?= $(PKG_PROGRAM)
+NAMES := $(notdir $(PKG_PROGRAMS))
+PKG_FIRST := $(firstword $(PKG_PROGRAMS))
+# (a name's program: $(call progof,NAME))
+progof = $(filter %/$(1) $(1),$(PKG_PROGRAMS))
 REC := $(PB)/rec
 PFF := $(PB)/ff
 SRCDIR := $(PB)/src
@@ -106,6 +120,7 @@ GLIBCMAKE = $(MAKE) --no-print-directory -C $(TOP)/src/glibc BUILD=$(GB) $(if $(
 # nix gc may have taken; the manual's install runs it)
 sysroot: $(SYSROOT)/.installed
 $(SYSROOT)/.installed:
+	$(if $(GLIBC_FROM),{ echo "port.mk: no sysroot in GLIBC_FROM's $(GBF)"; exit 1; })
 	test -e $(GREF)/libc.a || { echo "port.mk: no reference glibc $(GREF)"; exit 1; }
 	rm -rf $(GB)/sysroot.obj $(SYSROOT); mkdir -p $(GB)
 	cp -a $(GREF)/. $(GB)/sysroot.obj
@@ -113,7 +128,15 @@ $(SYSROOT)/.installed:
 	    || { tail -30 $(GB)/sysroot.log; exit 1; }
 	rm -rf $(GB)/sysroot.obj
 	ls $(SYSROOT)/usr/lib*/libc.a $(SYSROOT)/usr/lib*/*/libc.a 2> /dev/null | grep -q . || { echo "port.mk: no libc.a in $(SYSROOT)"; exit 1; }
+	$(SYSROOTSCRIPTS)
 	touch $@
+# (the linker scripts installed, x86_64's libm.a: GROUP ( /usr/lib64/libm-2.44.a
+# /usr/lib64/libmvec.a ), their paths made the sysroot's, which gcc is not
+# told of: gawk links -lm)
+SYSROOTSCRIPTS = for f in $$(grep -l -s '^/\* GNU ld script' $(SYSROOT)/usr/lib*/*.a $(SYSROOT)/usr/lib*/*/*.a); do \
+	    sed -i 's| /usr/lib| $(SYSROOT)/usr/lib|g' $$f || exit 1; done
+sysroot-scripts:
+	$(SYSROOTSCRIPTS)
 
 # ---- the locales a test suite asks for (PKG_LOCALES: source:charmap:name),
 # made from glibc's own locale sources (as the sysroot has them) by nixpkgs'
@@ -133,7 +156,7 @@ $(LOCALES)/.made-$(PKG): $(SYSROOT)/.installed
 	touch $@
 
 # ---- the reference build, gcc's, and ffcc's record of it
-ref: $(REFDIR)/$(PKG_PROGRAM)
+ref: $(REFDIR)/$(PKG_FIRST)
 $(SRCDIR)/configure: $(PKG_SRC)
 	rm -rf $(SRCDIR); mkdir -p $(SRCDIR)
 	tar -xf $(PKG_SRC) -C $(SRCDIR) --strip-components=1
@@ -143,18 +166,24 @@ $(REFDIR)/config.status: $(SRCDIR)/configure $(SYSROOT)/.installed $(FFCC)
 	cd $(REFDIR) && $(RUN) -t 1800 $(SRCDIR)/configure --host=$(TRIPLE) $(PKG_CONFIGURE) \
 	    CC=$(FFCC) CPPFLAGS="$(PKG_CPPFLAGS)" LDFLAGS="$(PKG_LDFLAGS)" AR=$(XPRE)ar RANLIB=$(XPRE)ranlib > configure.log 2>&1 \
 	    || { tail -30 configure.log; exit 1; }
-$(REFDIR)/$(PKG_PROGRAM): $(REFDIR)/config.status
+$(REFDIR)/$(PKG_FIRST): $(REFDIR)/config.status
 	rm -rf $(REC); mkdir -p $(REC)
-	cd $(REFDIR) && FFCC_REC=$(REC) $(RUN) -t 3600 $(SUBMAKE) -j$(JOBS) > build.log 2>&1 || { tail -30 build.log; exit 1; }
-	test -e $(REC)/l/$(PKG_PROGRAM).cmd || { echo "port.mk: ffcc has no record of $(PKG_PROGRAM)'s link"; exit 1; }
-	cp -p $@ $@.gcc
+	cd $(REFDIR) && FFCC_REC=$(REC) $(RUN) -t 3600 $(SUBMAKE) -j$(JOBS) $(PKG_BUILDFLAGS) > build.log 2>&1 || { tail -30 build.log; exit 1; }
+	for p in $(PKG_PROGRAMS); do \
+	    test -e $(REC)/l/$$p.cmd || { echo "port.mk: ffcc has no record of $$p's link"; exit 1; }; \
+	    cp -p $(REFDIR)/$$p $(REFDIR)/$$p.gcc; \
+	done
 
-# ---- the program's units: its link's objects (-O: their constructors are
-# roots) and its archives' members, each one's .i by cpp from its command
+# ---- each program's units: its link's objects (-O: their constructors are
+# roots) and its archives' members (PFF/NAME.units); each unit of them all
+# (PFF/units) by cpp from its command, its .i compared with gcc's
 # (from the link's record, not the program: the check puts another in its place)
-$(PFF)/units: $(REC)/l/$(PKG_PROGRAM).cmd ../units.sh
+$(PFF)/%.units: $(REC)/l/$(PKG_FIRST).cmd ../units.sh
 	mkdir -p $(PFF)
-	sh ../units.sh $(REFDIR) $(REC) $(REC)/l/$(PKG_PROGRAM).cmd > $@.tmp
+	sh ../units.sh $(REFDIR) $(REC) $(REC)/l/$(call progof,$*).cmd > $@.tmp
+	mv $@.tmp $@
+$(PFF)/units: $(NAMES:%=$(PFF)/%.units)
+	sed 's/^-O //' $^ | sort -u > $@.tmp
 	mv $@.tmp $@
 units: $(PFF)/units.same
 $(PFF)/units.same: $(PFF)/units ../cppunits.sh $(PREDEF) | $(CPP)
@@ -167,26 +196,28 @@ $(PFF)/units.same: $(PFF)/units ../cppunits.sh $(PREDEF) | $(CPP)
 CSFLAGS = -t $(GTARGET) -s $(SRCDIR) -S $(TOP)/src/compiler/shared.ff
 # (all of glibc in ff, src/glibc's, in GB: its obj the reference's, as
 # ports-check's pc-gbuild links it)
-$(REC)/l/$(PKG_PROGRAM).cmd: | $(REFDIR)/$(PKG_PROGRAM)
-# (src/glibc's make decides whether it is up to date: csema, the units, ...)
-$(GB)/ff/glibc/index.ff: FORCE
+$(REC)/l/$(PKG_FIRST).cmd: | $(REFDIR)/$(PKG_FIRST)
+# (src/glibc's make decides whether it is up to date: csema, the units, ...;
+# GLIBC_FROM's is only there)
+$(GBF)/ff/glibc/index.ff: $(if $(GLIBC_FROM),,FORCE)
+	$(if $(GLIBC_FROM),{ echo "port.mk: no glibc in ff in GLIBC_FROM's $(GBF)"; exit 1; })
 	test -e $(GB)/obj || { mkdir -p $(GB) && ln -sfn $$(readlink -f $(GREF)) $(GB)/obj; }
 	$(GLIBCMAKE) -j3 $@
-ff: $(PFF)/$(PKG)
-$(PFF)/$(PKG).ff: $(PFF)/units.same $(GB)/ff/glibc/index.ff $(CSEMA) $(CURDIR)/license.ff.txt
-	ln -sfn $(GB)/ff/glibc $(PFF)/glibc
-	cp $(CURDIR)/license.ff.txt $(PFF)/$(PKG).ff.txt
-	sed 's|^\(-O \)\?\(.*\)$$|\1$(PFF)/i/\2.i=\2.i|' $(PFF)/units | tr ' ' '\n' > $(PFF)/$(PKG).csunits
-	$(RUN) -v 9000000 -t 1800 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -p $(PKG) -N $(PKG)-$(PKG_VERSION) $(PKG_LICENSE) COPYING -B $(REFDIR) \
-	    -P glibc -I $(GB)/ff/glibc/index.ff -J $(GB)/ff/glibc.statics @$(PFF)/$(PKG).csunits -- main >> $(PFF)/$(PKG).ff.txt 2> $(PFF)/$(PKG).csema.err \
-	    || { tail -5 $(PFF)/$(PKG).csema.err; exit 1; }
-	perl $(TOP)/src/compiler/gen/fftext.pl ff $(PFF)/$(PKG).ff.txt > $@
-$(PFF)/$(PKG): $(PFF)/$(PKG).ff $(TTPC) $(SHARED)
-	$(RUN) -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
+ff: $(NAMES:%=$(PFF)/%)
+$(PFF)/%.ff: $(PFF)/units.same $(PFF)/%.units $(GBF)/ff/glibc/index.ff $(CSEMA) $(CURDIR)/license.ff.txt
+	ln -sfn $(GBF)/ff/glibc $(PFF)/glibc
+	cp $(CURDIR)/license.ff.txt $(PFF)/$*.ff.txt
+	sed 's|^\(-O \)\?\(.*\)$$|\1$(PFF)/i/\2.i=\2.i|' $(PFF)/$*.units | tr ' ' '\n' > $(PFF)/$*.csunits
+	$(RUN) -v 9000000 -t 3600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -p $* -N $(PKG)-$(PKG_VERSION) $(PKG_LICENSE) COPYING -B $(REFDIR) \
+	    -P glibc -I $(GBF)/ff/glibc/index.ff -J $(GBF)/ff/glibc.statics @$(PFF)/$*.csunits -- main >> $(PFF)/$*.ff.txt 2> $(PFF)/$*.csema.err \
+	    || { tail -5 $(PFF)/$*.csema.err; exit 1; }
+	perl $(TOP)/src/compiler/gen/fftext.pl ff $(PFF)/$*.ff.txt > $@
+$(NAMES:%=$(PFF)/%): $(PFF)/%: $(PFF)/%.ff $(TTPC) $(SHARED)
+	$(RUN) -t 3600 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
 # (the tree's license at its root; its groups hold each file's header, as
 # a program's tree, not a library's pages: its types are at the top)
-licenses: $(PFF)/$(PKG).ff
-	perl $(TOP)/src/compiler/gen/licenses.pl $(CURDIR)/license.ff.txt $(PFF)/$(PKG).ff
+licenses: $(NAMES:%=$(PFF)/%.ff)
+	for n in $(NAMES); do perl $(TOP)/src/compiler/gen/licenses.pl $(CURDIR)/license.ff.txt $(PFF)/$$n.ff || exit 1; done
 
 # ---- the check: the package's test suite with gcc's program, then ttpc's
 # (each run's logs kept: PB/check-gcc, PB/check-ff); the table of both
@@ -196,28 +227,36 @@ licenses: $(PFF)/$(PKG).ff
 # program of the target in the build runs under qemu-user (../qwrap.sh:
 # each a script that execs qemu, no binfmt needed), for the run only.
 QEMU := $(if $(NATIVE),,qemu-$(GTARGET))
+# what make check is (PKG_CHECKTARGET), how long it may take, and the files
+# of its results kept (by find's tests; automake's .trs and .log by default)
+# (PKG_CHECKRUN: the command of the run, in the build's folder, where it is
+# not make's: $* is gcc or ff, the run's results go in PB/check-$*)
+PKG_CHECKTARGET ?= check
+PKG_CHECKRUN ?= $(SUBMAKE) -j$(JOBS) $(PKG_CHECKTARGET) $(PKG_BUILDFLAGS) $(PKG_CHECKFLAGS)
+PKG_CHECKSECS ?= 3600
+PKG_CHECKFILES ?= -name '*.trs' -o -name '*.log'
 QWRAP = $(if $(QEMU),sh ../qwrap.sh $(1) $(REFDIR) "$(QEMU) $(QEMUFLAGS)",:)
 check: $(PB)/check.table
-$(PB)/check-%.done: $(REFDIR)/$(PKG_PROGRAM) $(if $(PKG_LOCALES),$(LOCALES)/.made-$(PKG))
-	@echo "check: make check with $*'s $(PKG_PROGRAM)"
-	cp $(if $(filter ff,$*),$(PFF)/$(PKG),$(REFDIR)/$(PKG_PROGRAM).gcc) $(REFDIR)/$(PKG_PROGRAM)
-	touch $(REFDIR)/$(PKG_PROGRAM)
+$(PB)/check-%.done: $(REFDIR)/$(PKG_FIRST) $(if $(PKG_LOCALES),$(LOCALES)/.made-$(PKG))
+	@echo "check: make check with $*'s $(NAMES)"
+	for p in $(PKG_PROGRAMS); do \
+	    cp $(if $(filter ff,$*),$(PFF)/$$(basename $$p),$(REFDIR)/$$p.gcc) $(REFDIR)/$$p && touch $(REFDIR)/$$p || exit 1; \
+	done
 	rm -rf $(PB)/check-$*; mkdir -p $(PB)/check-$*
-	cd $(REFDIR) && $(RUN) -t 1800 $(SUBMAKE) -j$(JOBS) $(PKG_CHECKPROGS) > $(PB)/check-$*/build.log 2>&1
+	cd $(REFDIR) && $(RUN) -t 1800 $(SUBMAKE) -j$(JOBS) $(PKG_BUILDFLAGS) $(PKG_CHECKPROGS) > $(PB)/check-$*/build.log 2>&1
 	$(call QWRAP,wrap)
-	-cd $(REFDIR) && LOCPATH=$(LOCALES) $(RUN) -t 3600 $(SUBMAKE) -j$(JOBS) check $(PKG_CHECKFLAGS) > $(PB)/check-$*/make.log 2>&1
+	-cd $(REFDIR) && LOCPATH=$(LOCALES) $(RUN) -t $(PKG_CHECKSECS) $(PKG_CHECKRUN) > $(PB)/check-$*/make.log 2>&1
 	$(call QWRAP,unwrap)
-	cp $(REFDIR)/$(PKG_PROGRAM).gcc $(REFDIR)/$(PKG_PROGRAM)
-	touch $(REFDIR)/$(PKG_PROGRAM)
-	cd $(REFDIR) && find . \( -name '*.trs' -o -name '*.log' \) -newer $(PB)/check-$*/build.log | tar -cf - -T - | tar -xf - -C $(PB)/check-$*
+	for p in $(PKG_PROGRAMS); do cp $(REFDIR)/$$p.gcc $(REFDIR)/$$p && touch $(REFDIR)/$$p; done
+	cd $(REFDIR) && find . \( $(PKG_CHECKFILES) \) -newer $(PB)/check-$*/build.log | tar -cf - -T - | tar -xf - -C $(PB)/check-$*
 	touch $@
-$(PB)/check-ff.done: $(PFF)/$(PKG) $(PB)/check-gcc.done
-$(PB)/check.table: $(PB)/check-gcc.done $(PB)/check-ff.done ../checktable.sh
-	sh ../checktable.sh $(PB)/check-gcc $(PB)/check-ff > $@
+$(PB)/check-ff.done: $(NAMES:%=$(PFF)/%) $(PB)/check-gcc.done
+$(PB)/check.table: $(PB)/check-gcc.done $(PB)/check-ff.done ../checktable.sh $(PKG_RESULTS)
+	sh ../checktable.sh $(PB)/check-gcc $(PB)/check-ff $(PKG_RESULTS) > $@
 	head -1 $@
 
 # ---- cpp's predefined macros for this package's commands (src/glibc/predef.pl)
-predef:
+predef: $(PFF)/units
 	@set -e; d=$(PB)/predef; rm -rf $$d; mkdir -p $$d; : > $$d/queries; \
 	for pass in 1 2 3 4 5; do \
 	    perl $(TOP)/src/glibc/predef.pl $(GCC) --queries $$d/queries $(REC)/build.log > $$d/predef.txt; \

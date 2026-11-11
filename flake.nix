@@ -117,6 +117,8 @@
             perf
             gdb
             lazygit # git in the terminal
+            lzip # src/ports: bc's tarball is a .tar.lz
+            dejagnu # src/ports: findutils' tests of find, xargs and locate (runtest)
           ]) ++ (glibcTools pkgs) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
 
           # For src/glibc: the pinned source, the kernel's headers, and the
@@ -143,6 +145,11 @@
           # For src/ports (programs of the outside world in ff): each
           # package's source as this nixpkgs has it, upstream's tarball
           SED_SRC = "${pkgs.gnused.src}";
+          GREP_SRC = "${pkgs.gnugrep.src}";
+          BC_SRC = "${pkgs.bc.src}";
+          GAWK_SRC = "${pkgs.gawk.src}";
+          FINDUTILS_SRC = "${pkgs.findutils.src}";
+          COREUTILS_SRC = "${pkgs.coreutils.src}";
           # the locales a package's tests ask for, made by a localedef of
           # glibc 2.44 (the reference's version; its own localedef is a
           # dynamic program of that build's, not runnable here)

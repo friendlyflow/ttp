@@ -7,7 +7,8 @@
 # wrap moves each program of the build (DIR, an ELF executable) to
 # NAME.qbin and puts in its place a script that runs it under qemu-user,
 # its argv[0] the base of the name it was called by (-0: as PATH gives it
-# natively; both runs of a check are wrapped the same); unwrap puts them
+# natively; both runs of a check are wrapped the same; called by a symlink,
+# the program the link leads to: coreutils' one program); unwrap puts them
 # back. The scripts are newer than the objects: make takes them as made.
 set -eu
 what=$1 dir=$2 qemu=$3
@@ -16,7 +17,7 @@ wrap)
     find "$dir" -type f -perm -u+x ! -name '*.qbin' ! -name '*.so*' | while IFS= read -r f; do
         test "$(head -c 4 "$f" | od -An -tx1 | tr -d ' ')" = 7f454c46 || continue
         mv "$f" "$f.qbin"
-        printf '#!/bin/sh\nexec %s -0 "${0##*/}" "$0.qbin" "$@"\n' "$qemu" > "$f"
+        printf '#!/bin/sh\nexec %s -0 "${0##*/}" "$(readlink -f "$0").qbin" "$@"\n' "$qemu" > "$f"
         chmod +x "$f"
     done ;;
 unwrap)

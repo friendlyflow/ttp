@@ -32,11 +32,13 @@
 #                   gcc's build, cpp's .i against gcc's, csema -l and ttpc
 #                   against all of glibc in ff, sed's test suite with both
 #                   programs (PORT_TARGETS; an hour a target the first time)
+#   make ports-grep, ports-bc, ports-gawk, ports-findutils, ports-coreutils
+#                   the same for each of those (src/ports/<name>)
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
 
-.PHONY: all os compiler os-test os-console compiler-test compiler-check bootstrap gcroots git-setup lane patch ports-check ports-sed clean
+.PHONY: all os compiler os-test os-console compiler-test compiler-check bootstrap gcroots git-setup lane patch ports-check clean
 
 all: os compiler
 
@@ -84,7 +86,7 @@ bootstrap:
 # a gc root, ~/.cache/ttp/gcroots/<name>, which `make gcroots` points at
 # what the flake names now.
 GCROOTS := $(HOME)/.cache/ttp/gcroots
-GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS LIBGCC_HEADERS_aarch64 LIBGCC_HEADERS_x86_64 LIBGCC_HEADERS_arm SED_SRC
+GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS LIBGCC_HEADERS_aarch64 LIBGCC_HEADERS_x86_64 LIBGCC_HEADERS_arm SED_SRC GREP_SRC BC_SRC GAWK_SRC FINDUTILS_SRC COREUTILS_SRC
 gcroots:
 	@mkdir -p $(GCROOTS)
 	@for v in $(GCROOT_VARS); do \
@@ -321,16 +323,21 @@ c2ff-crosscheck:
 	done; test -n "$$ok"
 .PHONY: c2ff-crosscheck
 
-# GNU sed in ff (src/ports/sed): each target's steps in turn, after bootstrap
-# and the tools (csema, cpp); the table of each in CHECKLOG/sed-<target>.table,
-# which fails where a test's result differs between gcc's sed and ttpc's
+# A program of the outside world in ff (src/ports/<name>: sed, grep, ...):
+# each target's steps in turn, after bootstrap and the tools (csema, cpp);
+# the table of each in CHECKLOG/<name>-<target>.table, which fails where a
+# test's result differs between gcc's program and ttpc's. PORT_FLAGS goes
+# to each port's make (GLIBC_FROM=..., see src/ports/port.mk).
+PORTS := sed grep bc gawk findutils coreutils
 PORT_TARGETS ?= x86_64 riscv64 aarch64 arm
-ports-sed:
+PORT_FLAGS ?=
+.PHONY: $(PORTS:%=ports-%)
+$(PORTS:%=ports-%): ports-%:
 	@mkdir -p $(CHECKLOG); ok=1; for t in $(PORT_TARGETS); do \
-	    if $(MAKE) --no-print-directory -C src/ports/sed GTARGET=$$t ref units ff licenses check > $(CHECKLOG)/sed-$$t.log 2>&1; \
-	    then cp $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/ports/sed/$$t/check.table $(CHECKLOG)/sed-$$t.table; echo "sed $$t: $$(head -1 $(CHECKLOG)/sed-$$t.table)"; \
-	        grep -q "differ 0, missing 0" $(CHECKLOG)/sed-$$t.table || ok=; \
-	    else echo "FAIL sed $$t, log $(CHECKLOG)/sed-$$t.log"; ok=; fi; \
+	    if $(MAKE) --no-print-directory -C src/ports/$* GTARGET=$$t $(PORT_FLAGS) ref units ff licenses check > $(CHECKLOG)/$*-$$t.log 2>&1; \
+	    then cp $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/ports/$*/$$t/check.table $(CHECKLOG)/$*-$$t.table; echo "$* $$t: $$(head -1 $(CHECKLOG)/$*-$$t.table)"; \
+	        grep -q "differ 0, missing 0" $(CHECKLOG)/$*-$$t.table || ok=; \
+	    else echo "FAIL $* $$t, log $(CHECKLOG)/$*-$$t.log"; ok=; fi; \
 	done; test -n "$$ok"
 clean:
 	$(MAKE) -C src/os BUILD=$(BUILD)/os clean

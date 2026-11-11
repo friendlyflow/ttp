@@ -58,9 +58,10 @@ dir=u; test "$mode" = link && dir=l
 test "$mode" = obj && rel=${rel%.o}
 mkdir -p "$FFCC_REC/$dir/$(dirname "$rel")"
 { pwd; for a in "$@"; do printf '%s\n' "$a"; done; } > "$FFCC_REC/$dir/$rel.cmd"
-printf '%s' "$gcc" >> "$FFCC_REC/build.log"
-for a in "$@"; do printf ' %s' "$a" >> "$FFCC_REC/build.log"; done
-printf '\n' >> "$FFCC_REC/build.log"
+# (the line written at once: the compiles of a make -j write it together)
+line=$gcc
+for a in "$@"; do line="$line $a"; done
+printf '%s\n' "$line" >> "$FFCC_REC/build.log"
 test "$mode" = obj || exit 0
 
 # the same command with -E for -c, into the record, without -o and -M...
