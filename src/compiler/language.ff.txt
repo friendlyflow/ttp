@@ -34,6 +34,7 @@ ff, the language ttpc compiles
       a group (a definition whose children are all definitions) is seen by the whole program, on every page, the program page's too: its definitions after the page's own top-level names, before the other pages; a nested function's children stay local
       a section is a group of groups: calling it puts the definitions of its groups in scope
       the C of a definition page (a library) looks a name up in its function's scopes, then the program page, then its own group, then the other pages in their order: two pages may each have a tok
+      an enum constant of another page hides no definition that comes before that page: the program's code sees the program page's definitions and its groups' enum constants first, library code its own group's; library code never sees the program page's enum constants (they have no linkage)
       a function whose name is only digits (0: 1: 2: ...) is a layer, the overflow of its parent past the 255 children a node holds: its children count as the parent's, in every scope, code and labels too
         a layer may hold layers, each level 255 more children
         a layer is never a name itself
