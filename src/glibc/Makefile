@@ -1767,9 +1767,11 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           exclude.c's exclude_pattern, grep)
 #   nss     getpwnam, getpwuid, getgrgid of root (this machine's /etc/passwd
 #           and /etc/group): nss's tables of names and per_database_defaults
+#   typename  a variable named type under sizeof (coreutils' stat.c)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check
-ALLPROGS := locale enums tagenum nss
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check
+ALLPROGS := locale enums tagenum nss typename
+ALLPROG_typename := typename
 ALLPROG_nss := nss
 ALLPROG_locale := locale
 ALLPROG_enums := enums-a enums-b

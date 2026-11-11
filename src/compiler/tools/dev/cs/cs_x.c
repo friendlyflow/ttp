@@ -797,7 +797,8 @@ static struct cs_ex *cs_size_of (struct node *n)
   if (same (n->text, n->len, "sizeof")) { cs_named (e, "sizeof"); isal = 0; }
   else if (same (n->text, n->len, "_Alignof") || same (n->text, n->len, "alignof")) cs_named (e, "alignof");
   else cs_named (e, "__alignof");
-  if (cs_is (k, "type")) { t = cs_type_in_ex (k); e->lhsty = t; }
+  /* (a type name has its specifiers under it: a variable named type, coreutils stat.c's sizeof type * 8, is a leaf) */
+  if (cs_is (k, "type") && k->count) { t = cs_type_in_ex (k); e->lhsty = t; }
   else {
     struct cs_ex *a = cs_ex_of (k);
     cs_add (e, a);

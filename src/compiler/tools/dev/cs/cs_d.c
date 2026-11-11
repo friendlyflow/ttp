@@ -440,7 +440,7 @@ static struct cs_ty *cs_type_of_specs (struct node *s, struct cs_spec *spc)
     else if (cs_is (w, "typeof") || cs_is (w, "__typeof") || cs_is (w, "__typeof__") || cs_is (w, "typeof_unqual") || cs_is (w, "__typeof_unqual__")) {
       struct node *kid = w->kids[0];
       struct cs_ty *x, *sugt;
-      if (cs_is (kid, "type")) x = cs_type_of_name (kid);
+      if (cs_is (kid, "type") && kid->count) x = cs_type_of_name (kid);
       else { struct cs_ex *e = cs_ex_of (kid); x = e->t; if (e->k == E_REF && e->d && e->d->k == DK_FUNC && e->d->builtin) x = e->d->t; }
       if (w->text[w->len - 1] == 'l' || w->text[w->len - 3] == 'q') x = cs_unqual (x);
       sugt = cs_ty_new (TY_TYPEOF);
@@ -449,12 +449,12 @@ static struct cs_ty *cs_type_of_specs (struct node *s, struct cs_spec *spc)
     }
     else if (cs_is (w, "_Alignas") || cs_is (w, "alignas")) {
       struct node *kid = w->kids[0];
-      if (cs_is (kid, "type")) spc->algn = cs_ty_align (cs_type_of_name (kid));
+      if (cs_is (kid, "type") && kid->count) spc->algn = cs_ty_align (cs_type_of_name (kid));
       else { long long v = 0; cs_eval (cs_ex_of (kid), &v); spc->algn = v; }
       {
         /* (T3c: as c2ff.pl reads a type's from the text: nothing but spaces before its parenthesis, none in it; else the largest) */
         long long v = spc->algn;
-        if (cs_is (kid, "type")) {
+        if (cs_is (kid, "type") && kid->count) {
           unsigned char *p = w->text + w->len;
           while (*p == ' ' || *p == '\t' || *p == '\n') p++;
           if (*p != '(') v = T->maxalign;
