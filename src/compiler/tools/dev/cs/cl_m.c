@@ -219,6 +219,8 @@ static void cl_record_node (char *tag, struct cs_rec *d, char *kind)
   if (d && d->tdalign) { if (!hasal || d->tdalign > alnv) alnv = d->tdalign; hasal = 1; }
   if (zalign) { if (!hasal || zalign > alnv) alnv = zalign; hasal = 1; }
   cl_w (x, kind);
+  /* (a packed record, C's packed attribute after its braces: packed right after its kind) */
+  if (d && d->packed) cl_push (x, cl_n ("packed"));
   if (hasal) cl_push (x, cl_n1 ("align", cl_num_node (alnv)));
   while (i < nf) {
     struct cl_list *y = cl_l ();
@@ -233,6 +235,8 @@ static void cl_record_node (char *tag, struct cs_rec *d, char *kind)
         if (s->k == TY_TYPEDEF && s->algn) { if (s->algn > fal && s->algn > cs_ty_align (s->to)) fal = s->algn; break; }
         s = s->to;
       }
+      /* (a packed field, C's packed attribute: packed first, then its align) */
+      if (f->packed) cl_push (y, cl_n ("packed"));
       if (fal) cl_push (y, cl_n1 ("align", cl_num_node (fal)));
     }
     cl_ctype (f->t, y);

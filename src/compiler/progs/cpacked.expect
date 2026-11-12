@@ -13,3 +13,4 @@ ok a packed u32
 ok a packed double
 ok an array's packed u64
 ok and its u16 at an odd place
+ok a packed double in arithmetic straight from its field

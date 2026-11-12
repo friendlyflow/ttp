@@ -12,12 +12,18 @@
    and through csema --start with ttpc on every target. And a field of a
    typedef aligned more than its type (arm's __jmp_buf, int [64] aligned
    (8): struct __jmp_buf_tag was 388 bytes for gcc's 392, found by
-   datacheck): csema writes the field's align. */
+   datacheck): csema writes the field's align. And packed: a packed field
+   (resolv.h's __glibc_extension_index, an unsigned long long aligned to 4
+   by it on arm), a packed record, an array of them, read and written. */
 
 struct pair { long a; char *p; };
 struct two { unsigned long x, y; };
 typedef int three[3] __attribute__ ((aligned (8)));
 struct tdal { char c; three a; };
+struct pkf { char c; unsigned long long x __attribute__ ((packed)); int y; };
+struct pkr { char c; unsigned short s; unsigned long long q; double d; } __attribute__ ((packed));
+struct pkr pkarr[3];
+struct pkf pkone = { 1, 0x0123456789abcdefULL, 5 };
 
 const unsigned int size_pair = sizeof (struct pair);
 unsigned long size_long = sizeof (long);
@@ -42,5 +48,13 @@ main (void)
   f += sizeof (struct tdal) != 24;
   f += __builtin_offsetof (struct tdal, a) != 8;
   f += size_tdal != 24;
+  f += sizeof (struct pkf) != 16 || __builtin_offsetof (struct pkf, x) != 1 || _Alignof (struct pkf) != 4;
+  f += sizeof (struct pkr) != 19 || __builtin_offsetof (struct pkr, d) != 11 || _Alignof (struct pkr) != 1;
+  f += pkone.x != one * 0x0123456789abcdefULL || pkone.y != 5;
+  pkarr[1].q = one * 0x1122334455667788ULL;
+  pkarr[2].s = one * 4660;
+  pkarr[2].d = one * 2.5;
+  f += pkarr[1].q != 0x1122334455667788ULL || pkarr[2].s != 4660 || (long) (pkarr[2].d * 2) != 5;
+  f += (char *) &pkarr[2] - (char *) &pkarr[0] != 38;
   return f;
 }
