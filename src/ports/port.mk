@@ -194,6 +194,9 @@ $(PFF)/units.same: $(PFF)/units ../cppunits.sh $(PREDEF) | $(CPP)
 
 # ---- the ff build: csema -l, then ttpc against all of glibc in ff
 CSFLAGS = -t $(GTARGET) -s $(SRCDIR) -S $(TOP)/src/compiler/shared.ff
+# (PKG_CSHEAP: GB of address space for csema's heap, in a file, -M, as all
+# of glibc's in src/glibc: coreutils' 500 units need more than 9 GB)
+PKG_CSHEAP ?=
 # (all of glibc in ff, src/glibc's, in GB: its obj the reference's, as
 # ports-check's pc-gbuild links it)
 $(REC)/l/$(PKG_FIRST).cmd: | $(REFDIR)/$(PKG_FIRST)
@@ -208,7 +211,7 @@ $(PFF)/%.ff: $(PFF)/units.same $(PFF)/%.units $(GBF)/ff/glibc/index.ff $(CSEMA) 
 	ln -sfn $(GBF)/ff/glibc $(PFF)/glibc
 	cp $(CURDIR)/license.ff.txt $(PFF)/$*.ff.txt
 	sed 's|^\(-O \)\?\(.*\)$$|\1$(PFF)/i/\2.i=\2.i|' $(PFF)/$*.units | tr ' ' '\n' > $(PFF)/$*.csunits
-	$(RUN) -v 9000000 -t 3600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -p $* -N $(PKG)-$(PKG_VERSION) $(PKG_LICENSE) COPYING -B $(REFDIR) \
+	$(RUN) -v $(if $(PKG_CSHEAP),70000000,9000000) -t 3600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) $(if $(PKG_CSHEAP),-M $(PFF)/$*.heap $(PKG_CSHEAP)) -p $* -N $(PKG)-$(PKG_VERSION) $(PKG_LICENSE) COPYING -B $(REFDIR) \
 	    -P glibc -I $(GBF)/ff/glibc/index.ff -J $(GBF)/ff/glibc.statics @$(PFF)/$*.csunits -- main >> $(PFF)/$*.ff.txt 2> $(PFF)/$*.csema.err \
 	    || { tail -5 $(PFF)/$*.csema.err; exit 1; }
 	perl $(TOP)/src/compiler/gen/fftext.pl ff $(PFF)/$*.ff.txt > $@

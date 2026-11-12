@@ -33,5 +33,6 @@ PKG_CONFIGURE := --disable-nls --without-selinux --disable-acl --disable-xattr -
 # expensive, skip on both runs
 PKG_CHECKFLAGS := SUBDIRS=.
 PKG_CHECKSECS := 14400
+PKG_CSHEAP := 64
 PKG_LOCALES := en_US:UTF-8:en_US.utf8 fr_FR:UTF-8:fr_FR.utf8 fr_FR:ISO-8859-1:fr_FR.iso88591
 include ../port.mk
