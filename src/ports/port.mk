@@ -109,6 +109,7 @@ RUN := $(SLOT) -v $(CAPKB)
 # carries GTARGET, PKG, ... down into it) and at most 4 jobs
 SUBMAKE := env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL -u MAKEOVERRIDES make
 JOBS ?= 4
+GLIBCJ ?= 3
 NATIVE := $(filter $(shell uname -m),$(GTARGET))
 GLIBCMAKE = $(MAKE) --no-print-directory -C $(TOP)/src/glibc BUILD=$(GB) $(if $(filter-out riscv64,$(GTARGET)),GTARGET=$(GTARGET))
 
@@ -205,7 +206,7 @@ $(REC)/l/$(PKG_FIRST).cmd: | $(REFDIR)/$(PKG_FIRST)
 $(GBF)/ff/glibc/index.ff: $(if $(GLIBC_FROM),,FORCE)
 	$(if $(GLIBC_FROM),{ echo "port.mk: no glibc in ff in GLIBC_FROM's $(GBF)"; exit 1; })
 	test -e $(GB)/obj || { mkdir -p $(GB) && ln -sfn $$(readlink -f $(GREF)) $(GB)/obj; }
-	$(GLIBCMAKE) -j3 $@
+	$(GLIBCMAKE) -j$(GLIBCJ) $@
 ff: $(NAMES:%=$(PFF)/%)
 $(PFF)/%.ff: $(PFF)/units.same $(PFF)/%.units $(GBF)/ff/glibc/index.ff $(CSEMA) $(CURDIR)/license.ff.txt
 	ln -sfn $(GBF)/ff/glibc $(PFF)/glibc
