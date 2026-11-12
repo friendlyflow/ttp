@@ -1008,6 +1008,48 @@ glibc-roundtrip:
 
 .PHONY: strlen-check asm-check glibc-roundtrip
 
+# The data of all of glibc (datacheck.pl): the bytes ttpc emits for each
+# global and static that gcc's objects of glibc define, against gcc's, a
+# word that is an address by what it points to. The round trip checks the
+# ff against the C; this, what ttpc makes of the ff. Its program
+# (DCDIR/all.i, datacheck.pl --program) takes the address of every global
+# of glibc's in ff by main's code, but of what reaches a name csema left
+# out or DCSKIP (what ttpc cannot compile yet), so ttpc (-g, its .symtab)
+# compiles all of glibc that reaches: each global, and the statics of each
+# function it reaches. DCFF: another build's FF, read only (its glibc.ff.txt,
+# glibc/index.ff, glibc.statics, glibc.csema.err). It passes when the
+# differences are exactly its list, dcknown-$(GTARGET).txt (a judged name,
+# its digest, kind and reason), and fails naming each new one and each
+# listed one that no longer differs. Needs all of glibc in ff: a target of
+# its own, run before ports goes into main (the root's make datacheck).
+#   make GTARGET=x86_64 BUILD=... datacheck [DCFF=another build's FF]
+DCFF ?= $(FF)
+DCDIR ?= $(BUILD)/datacheck
+DCKNOWN ?= dcknown-$(GTARGET).txt
+# what ttpc cannot compile yet: it stops, mostly without the function's
+# name; each a definition's name of glibc.ff.txt, what reaches it is left out
+#   sincosf_poly, sinf_poly  x86_64's sinf, cosf, sincosf: "cannot compile: p"
+#   statx_convert_timestamp  "cannot compile: statx_convert_timestamp"
+#   write_hist               "text needs char * pointer: GMON_TAG_TIME_HIST"
+#   __initstate_r            "used before it is declared: state" (buf->state,
+#                            a local state later in the function)
+DCSKIP_x86_64 := sincosf_poly sinf_poly
+DCSKIP := $(DCSKIP_$(GTARGET)) statx_convert_timestamp write_hist __initstate_r
+$(DCDIR)/all.i: datacheck.pl $(if $(filter $(FF),$(DCFF)),$(FF)/glibc/index.ff) $(OBJ)/libc.a
+	mkdir -p $(DCDIR)
+	perl allobjs.pl $(OBJ) > $(DCDIR)/objs
+	perl datacheck.pl --target $(GTARGET) $(DCSKIP:%=--skip %) --program $(DCFF) $(OBJ) $(DCDIR)/objs > $@
+$(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW)
+	ln -sfn $(abspath $(DCFF))/glibc $(DCDIR)/glibc
+	$(RUN) -v 9000000 -t 600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(DCFF)/glibc/index.ff -J $(DCFF)/glibc.statics -T \
+	    -O $< -- main > $(DCDIR)/all.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(DCDIR)/all.ff.txt > $@
+$(DCDIR)/all: $(DCDIR)/all.ff $(TTPC) $(SHARED)
+	$(RUN) -v 8000000 -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
+datacheck: $(DCDIR)/all datacheck.pl
+	@perl datacheck.pl --target $(GTARGET) --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
+.PHONY: datacheck
+
 # The licenses (../compiler/gen/licenses.pl): glibc's trees here (their
 # pages' licenses: builtins, atomics), and of a milestone its tree, its
 # folder (each file and the index) and its program, each with its license
