@@ -213,6 +213,7 @@ ff, the language ttpc compiles
             24
       align / n, first under a field's name and before its type, places the field at a multiple of n, its record as aligned at least (C's aligned attribute)
       align / n right after struct or union aligns the record itself, its size a multiple of n; align only raises an alignment, as C's does
+      packed, first under a field's name and before its type, aligns the field to 1 (C's packed attribute on a field: no padding before it); packed right after struct or union, every field of it, so the record aligned to 1 (C's packed record); an align with it raises the alignment still
       example
         mcontext:
           struct
