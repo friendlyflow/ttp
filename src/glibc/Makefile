@@ -1794,11 +1794,14 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           (LOCALEDEF, nix develop's)
 #   enums   two units with a function's own enum constant of one name and
 #           two values (vfprintf-internal.c's buf_length, 256 and 64)
+#   statics two units each with a writable static of one name and text (a
+#           counter each, glibc's locks) and a const one, which may be shared
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check
-ALLPROGS := locale enums
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check
+ALLPROGS := locale enums statics
 ALLPROG_locale := locale
 ALLPROG_enums := enums-a enums-b
+ALLPROG_statics := statics-a statics-b
 ALLPROGENV_locale = LOCPATH=$(BUILD)/locales
 ALLPROGDEPS_locale = $(BUILD)/locales/C.utf8/LC_CTYPE
 LOCALEDEF ?= $(error LOCALEDEF is not set: run this in `nix develop`)
