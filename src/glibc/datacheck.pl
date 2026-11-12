@@ -395,7 +395,7 @@ sub gtarget {
         return { zero => 1, desc => "$y->{name} (undefined)", name => $y->{name} } unless $d;
         return gnamed($d->[0], $d->[1], $add);
     }
-    if ($y->{type} == 3) {       # a section's symbol: what holds the offset
+    if ($y->{type} == 3 || $y->{name} =~ /^\.L/) {       # a section's symbol (or a local label, riscv64's .LC0): what holds the offset
         my $off = $y->{value} + $add;
         my $s = gsym_at($o, $y->{shndx}, $off);
         return gnamed($o, $s->[0], $s->[1]) if $s && $s->[0]{size} > 0;
@@ -433,10 +433,12 @@ sub glit {
         unless ($marks{$o}) {
             my %m;
             for my $y (@{ $E->{sym} }) { push @{ $m{ $y->{shndx} } }, $y->{value} if $y->{shndx} && $y->{shndx} < 0xff00 && $y->{type} != 3 }
-            for my $rs (values %{ $E->{rel} }) {
-                for my $r (@$rs) {
+            for my $si (keys %{ $E->{rel} }) {
+                for my $r (@{ $E->{rel}{$si} }) {
                     my $y = $E->{sym}[ $r->{sym} ];
-                    push @{ $m{ $y->{shndx} } }, $y->{value} + ($r->{rela} ? $r->{add} : 0) if $y->{type} == 3;
+                    # (arm's REL: the addend is the word in place)
+                    my $add = $r->{rela} ? $r->{add} : unpack('l<', substr($E->{b}, $E->{sh}[$si]{offset} + $r->{off}, 4));
+                    push @{ $m{ $y->{shndx} } }, $y->{value} + $add if $y->{type} == 3;
                 }
             }
             $marks{$o} = { map { $_ => [sort { $a <=> $b } @{ $m{$_} }] } keys %m };

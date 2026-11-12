@@ -1035,7 +1035,7 @@ DCKNOWN ?= dcknown-$(GTARGET).txt
 #                            a local state later in the function)
 DCSKIP_x86_64 := sincosf_poly sinf_poly
 DCSKIP := $(DCSKIP_$(GTARGET)) statx_convert_timestamp write_hist __initstate_r
-$(DCDIR)/all.i: datacheck.pl $(if $(filter $(FF),$(DCFF)),$(FF)/glibc/index.ff) $(OBJ)/libc.a
+$(DCDIR)/all.i: datacheck.pl $(if $(wildcard $(DCFF)/glibc/index.ff),,$(FF)/glibc/index.ff) $(OBJ)/libc.a
 	mkdir -p $(DCDIR)
 	perl allobjs.pl $(OBJ) > $(DCDIR)/objs
 	perl datacheck.pl --target $(GTARGET) $(DCSKIP:%=--skip %) --program $(DCFF) $(OBJ) $(DCDIR)/objs > $@

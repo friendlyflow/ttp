@@ -28,6 +28,8 @@
 #   make c2ff-crosscheck  after a ports-check, before ports goes into main:
 #                   the frozen gen/c2ff.pl and csema -l, the translator, give
 #                   the same pages on each target's milestones
+#   make datacheck  before ports goes into main: the bytes of every global
+#                   of glibc in ff as ttpc emits them, against gcc's libc.a
 #   make ports-sed  GNU sed in ff (src/ports/sed, port.mk) on each target:
 #                   gcc's build, cpp's .i against gcc's, csema -l and ttpc
 #                   against all of glibc in ff, sed's test suite with both
@@ -321,6 +323,22 @@ c2ff-crosscheck:
 	    then echo "PASS c2ff-crosscheck $$t"; else echo "FAIL c2ff-crosscheck $$t, log $(CHECKLOG)/c2ff-$$t.log"; ok=; fi; \
 	done; test -n "$$ok"
 .PHONY: c2ff-crosscheck
+
+# The data of all of glibc (src/glibc's datacheck): the bytes ttpc emits for
+# each global and static of glibc in ff against gcc's libc.a objects, each
+# target in turn, on the BUILDs of all of glibc (GBUILD's FF, or DCFF_<target>:
+# another build's FF, read only). Not a step of ports-check: it needs all of
+# glibc in ff (hours the first time); some 3 minutes a target once that is
+# made. Run it before ports goes into main. Its output in CHECKLOG/datacheck-<target>.log.
+DC_TARGETS ?= x86_64 riscv64 aarch64 arm
+datacheck:
+	@mkdir -p $(CHECKLOG); ok=1; for t in $(DC_TARGETS); do \
+	    d=$(GBUILD)$$(test $$t = riscv64 || echo /$$t); ff=$$(eval echo \$${DCFF_$$t:-$$d/ff}); \
+	    if $(MAKE) --no-print-directory -C src/glibc BUILD=$$d GTARGET=$$t DCFF=$$ff datacheck > $(CHECKLOG)/datacheck-$$t.log 2>&1; \
+	    then echo "PASS datacheck $$t:$$(grep "^datacheck ($$t): [0-9]* compared" $(CHECKLOG)/datacheck-$$t.log | cut -d: -f2-)"; \
+	    else echo "FAIL datacheck $$t, log $(CHECKLOG)/datacheck-$$t.log"; ok=; fi; \
+	done; test -n "$$ok"
+.PHONY: datacheck
 
 # GNU sed in ff (src/ports/sed): each target's steps in turn, after bootstrap
 # and the tools (csema, cpp); the table of each in CHECKLOG/sed-<target>.table,
