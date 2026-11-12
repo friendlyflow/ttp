@@ -50,14 +50,14 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata cenum
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(wildcard tools/*.ff) $(wildcard isa/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
-	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff language.ff
+	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff progs/cenumdefs.ff language.ff
 P := $(BUILD)/progs
 
 # The trees as the frozen ttpcs read them (stage0 and the seeds of the
@@ -382,7 +382,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata
+CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata cenum
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # x86_64's long double is the x87's (gen/patches/x87.pl): the tests of
@@ -903,13 +903,20 @@ vpath %.c ../glibc/progs progs/abi
 $(TL)/cparse/in/%.i: %.c
 	@mkdir -p $(dir $@)
 	$(CPCC) -E $< -o $@
-$(CPREF)/result: $(CPUNITS) $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint gen/cparsecheck.sh
+# (the list of the units, written only when it changes: a unit that comes
+# after a result makes the refs again, though its .c may be older than them)
+CPLIST := $(TL)/cparse/units.list
+$(CPLIST): FORCE
+	@mkdir -p $(dir $@); echo '$(CPUNITS)' | cmp -s - $@ || echo '$(CPUNITS)' > $@
+FORCE:
+.PHONY: FORCE
+$(CPREF)/result: $(CPUNITS) $(CPLIST) $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint gen/cparsecheck.sh
 	sh gen/cparsecheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint $(CPCC) $(CPREF) $(CPUNITS) || { rm -f $@; exit 1; }
 # csema on the same units against clang (riscv64's semantics; clang from
 # nix develop): this machine's build first, every target's the same lines
 CSREF := $(TL)/csema/ref
 CSCLANG = $(C2FF_CLANG) -x c -include ../glibc/clang-prelude.h -Xclang -ast-dump=json -Xclang -fdump-record-layouts -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w
-$(CSREF)/result: $(CPUNITS) $(TL)/$(TOOLT)/csema gen/csemacheck.sh gen/clangsema.pl gen/csemacmp.pl
+$(CSREF)/result: $(CPUNITS) $(CPLIST) $(TL)/$(TOOLT)/csema gen/csemacheck.sh gen/clangsema.pl gen/csemacmp.pl
 	@test -n "$(C2FF_CLANG)" || { echo "csema's check needs clang: run it in nix develop"; exit 1; }
 	KEEP=1 CLANG="$(CSCLANG)" sh gen/csemacheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/csema $(CSREF) $(CPUNITS) || { rm -f $@; exit 1; }
 
@@ -944,7 +951,10 @@ $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $(CSLIB) tools/csema.ff $$< $$@ > $$@.lst
 	chmod +x $$@
 
-tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/result
+# (the units themselves too: each is a secondary file (.SECONDARY), so one
+# that is missing did not make the refs' result older than its .c, and
+# cparsecheck then could not open it: a progs/*.c that came after a result)
+tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/result $(CPUNITS)
 	cd $(SHAV) && $(RUN_$(1)) $(abspath $(TL))/$(1)/sha256sum $(SHAVFILES) > ../$(1).sha
 	cmp $(TL)/$(1).sha $(SHAV)/want
 	@echo "tools-check-$(1): sha256 agrees with NIST's vectors and Digest::SHA"
