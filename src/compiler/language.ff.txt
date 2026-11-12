@@ -289,6 +289,7 @@ ff, the language ttpc compiles
       no items: zero
       one item on a scalar or an address: its value, converted to the type
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
+      a global's struct that ends in an array without a count takes as many elements as its items reach, each whole (C's flexible array member, as gcc lays it out)
       a field or element that is a struct, union or array takes a : holding its items, as C's inner braces; what has no item is zero, in a local too
       an empty : is a zero struct, union or array, as C's {}
       an empty node (no content, no children: fftext writes it \\e, an indented line of only spaces reads as one) is an empty part wherever an empty : is one
