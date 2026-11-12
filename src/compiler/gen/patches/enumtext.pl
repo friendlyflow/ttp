@@ -5,7 +5,10 @@
 # initialized with one stopped ttpc ("text needs char * pointer:
 # GMON_TAG_TIME_HIST", glibc's gmon write_hist: u_char tag =
 # GMON_TAG_TIME_HIST; found by src/glibc's datacheck). Now istext asks
-# enumconst too. Test cenumtext (4 targets).
+# enumconst too; and stmt, which took a leaf istext called text for a value
+# and any other unknown leaf for a call, takes an enum constant for a value
+# as before (glibc's &__io_vtables[IO_COOKIE_JUMPS]: the index a : of the
+# constant alone). Test cenumtext (4 targets).
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 edit(\$t, 'istext', asm(8, "
@@ -20,5 +23,16 @@ edit(\$t, 'istext', asm(8, "
     lbu NODE_content_len s4 a1
     call enumconst
     bnez L1 a0
+"));
+edit(\$t, 'stmt', asm(10, "
+    call istext
+    bnez L8 a0
+") => asm(10, "
+    call istext
+    bnez L8 a0
+    ld NODE_content s4 a0
+    lbu NODE_content_len s4 a1
+    call enumconst
+    bnez L8 a0
 "));
 save();

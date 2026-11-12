@@ -1029,12 +1029,11 @@ DCKNOWN ?= dcknown-$(GTARGET).txt
 # what ttpc cannot compile yet: it stops, mostly without the function's
 # name; each a definition's name of glibc.ff.txt, what reaches it is left out
 #   sincosf_poly, sinf_poly  x86_64's sinf, cosf, sincosf: "cannot compile: p"
-#   statx_convert_timestamp  "cannot compile: statx_convert_timestamp"
-#   write_hist               "text needs char * pointer: GMON_TAG_TIME_HIST"
-#   __initstate_r            "used before it is declared: state" (buf->state,
-#                            a local state later in the function)
+#                            (v2df_t's arithmetic)
+#   statx_convert_timestamp  "cannot compile: statx_convert_timestamp" (a
+#                            call that returns a struct as a local struct's item)
 DCSKIP_x86_64 := sincosf_poly sinf_poly
-DCSKIP := $(DCSKIP_$(GTARGET)) statx_convert_timestamp write_hist __initstate_r
+DCSKIP := $(DCSKIP_$(GTARGET)) statx_convert_timestamp
 $(DCDIR)/all.i: datacheck.pl $(if $(wildcard $(DCFF)/glibc/index.ff),,$(FF)/glibc/index.ff) $(OBJ)/libc.a
 	mkdir -p $(DCDIR)
 	perl allobjs.pl $(OBJ) > $(DCDIR)/objs
