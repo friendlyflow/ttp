@@ -33,7 +33,7 @@
 #
 # A static is found by ttpc's name for it: a file's static "x" is "x" or, where
 # two units have one, "x unit"; a function's static (gcc's "x.N") is "f x"
-# (f a function of the same object; "f x'" a second x in f). Where an object
+# (f a function of the same object; "f x 2" or "f x'" a second x in f). Where an object
 # has more than one candidate for gcc's x.N, the DWARF of gcc's object says
 # which function's x it is (readelf --debug-dump=info).
 #
@@ -50,7 +50,7 @@ use Digest::SHA qw(sha1_hex);
 use FindBin;
 use lib "$FindBin::Bin/../compiler/gen";
 
-my ($target, $known, $report, $verbose, $program, @skip);
+my ($target, $known, $report, $verbose, $program, @skip, $index);
 while (@ARGV && $ARGV[0] =~ /^--/) {
     my $o = shift;
     if ($o eq '--target') { $target = shift }
@@ -59,6 +59,7 @@ while (@ARGV && $ARGV[0] =~ /^--/) {
     elsif ($o eq '--verbose') { $verbose = 1 }
     elsif ($o eq '--program') { $program = shift }
     elsif ($o eq '--skip') { push @skip, shift }
+    elsif ($o eq '--index') { $index = shift }
     else { die "datacheck: unknown option $o\n" }
 }
 my ($elfpath, $objdir, $objlist) = defined $program ? (undef, @ARGV) : @ARGV;
@@ -198,6 +199,28 @@ for my $o (@objs) {
         push @gsyms, [$o, $y];
     }
 }
+# the names glibc in ff defines (--index: its folder's index.ff)
+my %inames;
+if (defined $index && !defined $program) {
+    require FF;
+    my ($ix) = grep { $_->{content} eq "index:" } map { @{ $_->{children} } } FF::read_ff(slurp($index));
+    die "datacheck: $index: no index:\n" unless $ix;
+    # (not a type's name: a unit's struct is named with its unit too)
+    for my $e (FF::kids($ix)) {
+        (my $n = $e->{content}) =~ s/:$//;
+        my ($f) = map { $_->{content} } FF::kids($e);
+        $inames{$n} = 1 unless ($f // '') eq 'types.ff';
+    }
+}
+# how many objects have a file's static of each name (not a function's x.N)
+my (%glocn, %isC);
+for my $o (keys %G) {
+    # (a C object has its .c as a FILE symbol; an asm one none)
+    $isC{$o} = grep { $_->{type} == 4 && $_->{name} =~ /\.c$/ } @{ $G{$o}{sym} };
+    next unless $isC{$o};
+    my %n = map { $_->{name} => 1 } grep { $_->{bind} == 0 && ($_->{type} == 1 || $_->{type} == 2) && $_->{shndx} && $_->{name} !~ /\.\d+$/ } @{ $G{$o}{sym} };
+    $glocn{$_}++ for keys %n;
+}
 # a global's definition a program has: the first strong one, else the first
 sub gfirst { my ($n) = @_; my $d = $gdef{$n} or return; (grep { $_->[1]{bind} == 1 } @$d)[0] // $d->[0] }
 
@@ -312,7 +335,7 @@ sub dwarf {
     my ($o) = @_;
     return $dwarf{$o} if $dwarf{$o};
     my %d;
-    open my $h, '-|', $readelf, '--debug-dump=info', "$objdir/$o.o" or die "datacheck: readelf: $!\n";
+    open my $h, '-|', "$readelf --debug-dump=info '$objdir/$o.o' 2> /dev/null" or die "datacheck: readelf: $!\n";
     my (@stack, $cur);
     while (<$h>) {
         if (/^\s*<(\d+)><\w+>: Abbrev Number: (\d+)(?: \((DW_TAG_\w+)\))?/) {
@@ -344,33 +367,44 @@ sub tnames {
     if ($n =~ /^(.+)\.(\d+)$/) {
         my $v = $1;
         my @c;
+        # (f: a function of the object, or the DWARF's function of x.N, which
+        # gcc may have inlined everywhere: no symbol of its own)
+        my $df;
         for my $tn (keys %tloc) {
-            my @w = grep { !m{/} || 0 } split / /, $tn;
+            my @w = grep { !m{/} } split / /, $tn;
             my ($unit) = grep { m{/} } split / /, $tn;
             next if defined $unit && $unit ne $o;
-            next unless @w == 2 && $w[1] =~ /^\Q$v\E'*$/ && $ofuncs{$o}{ $w[0] };
+            # (f x, f x', or f x 2 for a second x of f)
+            next unless (@w == 2 || @w == 3 && $w[2] =~ /^\d+$/) && $w[1] =~ /^\Q$v\E'*$/;
+            $df //= dwarf($o)->{$v}{ $y->{value} } // '' unless $ofuncs{$o}{ $w[0] };
+            next unless $ofuncs{$o}{ $w[0] } || $w[0] eq ($df // '');
             push @c, map { [$_, $w[0]] } @{ $tloc{$tn} };
         }
-        if (@c > 1) {
-            # the DWARF's function of this x.N
+        # the function whose x.N it is, by the DWARF (where gcc has more
+        # than one x.N of the object, or ttpc more than one f x): its x,
+        # x', x'' ... are the candidates, compared each (main loop)
+        my $more = grep { /^\Q$v\E\.\d+$/ } map { $_->{name} } @{ $G{$o}{sym} };
+        if (@c > 1 || $more > 1) {
             my $f = dwarf($o)->{$v}{ $y->{value} };
-            my @f = defined $f ? grep { $_->[1] eq $f } @c : ();
-            if (@f > 1) {
-                # x and x' in one function: in the order gcc numbers them (.N)
-                my @same = sort { $a->[0]{name} cmp $b->[0]{name} } @f;   # x, x', x''
-                my @gn = sort { $a <=> $b } map { /\.(\d+)$/ ? $1 : () } grep { /^\Q$v\E\.\d+$/ && (dwarf($o)->{$v}{ gsym_byname($o, $_)->{value} } // '') eq $f } map { $_->{name} } @{ $G{$o}{sym} };
-                my ($N) = $n =~ /\.(\d+)$/;
-                my ($k) = grep { $gn[$_] == $N } 0 .. $#gn;
-                @f = defined $k && $same[$k] ? ($same[$k]) : ();
-            }
-            @c = @f;
+            @c = defined $f ? grep { $_->[1] eq $f } @c : ();
         }
         return map { $_->[0] } @c;
     }
     my @c = (@{ $tloc{"$n $o"} // [] });
-    @c = @{ $tloc{$n} // [] } unless @c;
+    # (ttpc's plain x, a C object's static x that csema did not name with its
+    # unit: where the index (--index, glibc in ff's) has no "x unit", or
+    # without an index where only one C object has a static x; csema gives
+    # the units whose static x has the same text one x, the first's. asm's
+    # statics have names of their own.)
+    my $plain = $isC{$o} && !@c && (%inames ? !$inames{"$n $o"} : ($glocn{$n} // 0) == 1);
+    @c = @{ $tloc{$n} // [] } if $plain;
+    # (the static x of units whose x has the same text is one, x' where
+    # another definition of the tree is named x: their locks)
+    @c = @{ $tloc{"$n'"} // [] } if $plain && !@c;
     # (a static that ttpc has as a global: a name of ff's that is unique)
-    @c = ($tglob{$n}) if !@c && $tglob{$n} && !$gdef{$n};
+    @c = ($tglob{$n}) if $plain && !@c && $tglob{$n} && !$gdef{$n};
+    @c = ($tglob{"$n'"}) if $plain && !@c && $tglob{"$n'"};
+    @c = ($tglob{"$n'"}) if $plain && !@c && $tglob{"$n'"};
     @c;
 }
 sub gsym_byname { my ($o, $n) = @_; (grep { $_->{name} eq $n } @{ $G{$o}{sym} })[0] }
@@ -399,6 +433,10 @@ sub gtarget {
         my $off = $y->{value} + $add;
         my $s = gsym_at($o, $y->{shndx}, $off);
         return gnamed($o, $s->[0], $s->[1]) if $s && $s->[0]{size} > 0;
+        # (one past the end of an object: C's &a[n], random's end_ptr)
+        oinfo($o);
+        my ($e) = $E->{sh}[ $y->{shndx} ]{flags} & 0x20 ? () : grep { $_->{size} > 0 && $_->{value} + $_->{size} == $off && $_->{type} == 1 } @{ $osec{$o}{ $y->{shndx} } // [] };
+        return gnamed($o, $e, $e->{size}) if $e;
         return glit($o, $y->{shndx}, $off);
     }
     if ($y->{bind} != 0) { my $d = gfirst($y->{name}); return gnamed($d->[0], $d->[1], $add) }
@@ -411,8 +449,9 @@ sub gnamed {
     oinfo($o);
     my @a = grep { $_->{value} == $y->{value} && $_->{type} == $y->{type} && $_->{size} == $y->{size} } @{ $osec{$o}{ $y->{shndx} } // [] };
     @a = ($y) unless @a;
-    my %t = map { $_->{name} => 1 } map { tnames($o, $_) } @a;
-    { names => [sort keys %t], off => $add, func => $y->{type} == 2, desc => $y->{name} . ($add ? "+$add" : '') . ($y->{bind} ? '' : " ($o)") };
+    my @ts = map { tnames($o, $_) } @a;
+    my %t = map { $_->{name} => 1 } @ts;
+    { names => [sort keys %t], syms => \@ts, off => $add, func => $y->{type} == 2, desc => $y->{name} . ($add ? "+$add" : '') . ($y->{bind} ? '' : " ($o)") };
 }
 # a literal of gcc's at a section's offset, to its end: a string's NUL (a
 # .rodata.strN.N: N bytes of 0), else the next place the object names in
@@ -485,6 +524,8 @@ sub cmprange {
             # (arm: a Thumb function's address has bit 0 set in gcc's)
             my $ok = $ts && grep({ $_ eq $ts->[0]{name} } @{ $gt->{names} })
                 && ($arm && $gt->{func} ? ($ts->[1] | 1) == ($gt->{off} | 1) : $ts->[1] == $gt->{off});
+            # (or the address of that symbol of ttpc's + the offset: one past its end)
+            $ok ||= grep { $_->{value} + $gt->{off} == $ta } @{ $gt->{syms} };
             push @diff, "+$p: ttpc " . tdesc($ta) . ", gcc $gt->{desc}" . (@{ $gt->{names} } ? '' : ' (no name in ttpc\'s program)') unless $ok;
             next;
         }
@@ -544,6 +585,7 @@ for my $g (@gsyms) {
     }
     if ($sec->{name} =~ /^\.gnu\.warning/) { notcomp($id, 'a link warning (.gnu.warning)'); next }
     if ($n =~ /^DW\.ref\./) { notcomp($id, "gcc's own (DW.ref: its unwind tables' word of the personality routine)"); next }
+    if ($n =~ /^\./) { notcomp($id, "gcc's own (a local label's constant: .LC, .FLT)"); next }
     if (my $w = gccown($n)) { notcomp($id, "gcc's own ($w: ttpc's is a literal, compared where it is pointed to)"); next }
     if ($sec->{flags} & 4) { notcomp($id, 'code (a symbol in an executable section)'); next }
     my @t = tnames($o, $y);
@@ -551,19 +593,26 @@ for my $g (@gsyms) {
         notcomp($id, $y->{bind} ? "not in ttpc's program (not reached, or not in ff)" : "a static ttpc's program has no name for (not reached, not in ff, or gcc's own)");
         next;
     }
-    if (@t > 1) { notcomp($id, 'more than one of ttpc\'s statics may be it', join(', ', map { $_->{name} } @t)); next }
-    my $t = $t[0];
-    next if $done{"$t->{name}\0$t->{value}"}++;
+    # (several candidates: x, x', x'' of one function; equal if one is)
+    my ($t, @diff);
+    my $sz = $y->{size};
+    for my $c (@t) {
+        next if $done{"$c->{name}\0$c->{value}"};
+        my @d;
+        # ttpc's .symtab gives each object its place up to the next name's (the
+        # literals of its initializer, which ttpc puts right after it, are in
+        # it): a size short of gcc's is a difference, a longer one is not
+        my $m = $c->{size} < $sz ? $c->{size} : $sz;
+        push @d, "size: ttpc's place is $c->{size} bytes, gcc's object $sz (the next name of ttpc's: " . tdesc($c->{value} + $c->{size}) . ")" if $c->{size} < $sz;
+        push @d, cmprange($o, $y->{shndx}, $y->{value}, $c->{value}, $m, 0);
+        if (!@d) { $t = $c; @diff = (); last }
+        if (!$t) { $t = $c; @diff = @d }
+    }
+    if (!$t) { notcomp($id, "ttpc's is compared already (csema's one static of units of the same text, or x and x' both compared)", join(', ', map { $_->{name} } @t)); next }
+    $done{"$t->{name}\0$t->{value}"}++ if !@diff || @t == 1;
+    push @diff, '(' . scalar(@t) . " candidates of ttpc's, none the same)" if @diff && @t > 1;
     $count{compared}++;
     $count{"compared $kind"}++;
-    my @diff;
-    # ttpc's .symtab gives each object its place up to the next name's (the
-    # literals of its initializer, which ttpc puts right after it, are in
-    # it): a size short of gcc's is a difference, a longer one is not
-    my $sz = $y->{size};
-    my $m = $t->{size} < $sz ? $t->{size} : $sz;
-    push @diff, "size: ttpc's place is $t->{size} bytes, gcc's object $sz (the next name of ttpc's: " . tdesc($t->{value} + $t->{size}) . ")" if $t->{size} < $sz;
-    push @diff, cmprange($o, $y->{shndx}, $y->{value}, $t->{value}, $m, 0);
     if (@diff) {
         $count{differ}++;
         $count{"differ $kind"}++;

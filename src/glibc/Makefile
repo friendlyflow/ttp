@@ -1046,7 +1046,7 @@ $(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW)
 $(DCDIR)/all: $(DCDIR)/all.ff $(TTPC) $(SHARED)
 	$(RUN) -v 8000000 -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
 datacheck: $(DCDIR)/all datacheck.pl
-	@perl datacheck.pl --target $(GTARGET) --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
+	@perl datacheck.pl --target $(GTARGET) --index $(DCFF)/glibc/index.ff --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
 .PHONY: datacheck
 
 # The licenses (../compiler/gen/licenses.pl): glibc's trees here (their
