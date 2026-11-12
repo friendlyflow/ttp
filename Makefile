@@ -296,10 +296,11 @@ pc-textcount-$(1): pc-units-$(1)
 	$$(call pc_step,textcount-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) textcount-check textcount-roundtrip)
 endef
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_textcount,$(t))))
-# where one name or one place stands for two things (progs/roundnames.c, progs/units-a.c and -b.c) on each target
+# where one name or one place stands for two things (progs/roundnames.c, progs/units-a.c and -b.c) on each target,
+# and a global of sizeof (progs/globsize.c)
 define pc_roundnames
 pc-roundnames-$(1): pc-units-$(1) pc-compiler-check
-	$$(call pc_step,roundnames-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) roundnames-check roundnames-roundtrip units-check)
+	$$(call pc_step,roundnames-$(1),$$(call PC_GLIBC,$(filter-out riscv64,$(1))) roundnames-check roundnames-roundtrip units-check globsize-check)
 endef
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_roundnames,$(t))))
 # the C preprocessor in ff (cpp, made by the tools step) against gcc -E on

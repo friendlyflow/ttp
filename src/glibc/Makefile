@@ -1282,7 +1282,11 @@ units-crosscheck: units-check
 # progs/textcount.c, the same way: a string literal's prefix and a
 # variable-length array's count, which c2ff reads from clang's text, on every
 # target, with its round trip.
-OWNSTART := generic stdbit textcount roundnames
+# progs/globsize.c, the same way: a global whose value is sizeof or alignof
+# of a type, alone or a field's, which csema writes in a : (not in
+# c2ff-crosscheck: the frozen c2ff.pl writes it bare, which ttpc takes for a
+# function).
+OWNSTART := generic stdbit textcount roundnames globsize
 $(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
 	mkdir -p $(FF)
 	{ cat license.ff.txt; $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } > $(FF)/$*.ff.txt
@@ -1291,6 +1295,7 @@ $(eval $(call check,generic))
 $(eval $(call check,stdbit))
 $(eval $(call check,textcount))
 $(eval $(call check,roundnames))
+$(eval $(call check,globsize))
 GENERIC_FNS := main levels second add2 via_comma two_paths vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
@@ -1335,7 +1340,7 @@ CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
 c2ff-passes: $(CHECK_OBJS:%=$(I)/%.json)
 	$(RUN) -t 1800 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i)
 c2ff-pages: $(CHECK_MS:%=c2ff-page-%)
-C2FF_OWN = $(filter-out $(if $(filter arm,$(GTARGET)),generic),$(OWNSTART))
+C2FF_OWN = $(filter-out globsize $(if $(filter arm,$(GTARGET)),generic),$(OWNSTART))
 c2ff-progs: $(CHECK_MS:%=c2ff-prog-%) $(C2FF_OWN:%=c2ff-prog-%) $(patsubst %,c2ff-unit-%,$(filter generic textcount roundnames,$(C2FF_OWN)))
 c2ff-crosscheck: c2ff-pages c2ff-progs clayer-check units-crosscheck
 	@echo "c2ff-crosscheck ($(GTARGET)): c2ff.pl and csema -l give the same pages: $(words $(CHECK_MS)) milestones, their programs and units"
