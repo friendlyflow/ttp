@@ -31,6 +31,7 @@ struct cl_state {
   struct cl_map fn, var, alias, ifunc, weak, regvar, section;
   struct cl_map rec, enumd, anon_tag, anon_name, tagname, wanttag, tdone, enumof, enumval, enumref, enumused;
   struct cl_map treefile, treepage;
+  struct cl_map extown;         /* a program's external that a name of the tree (a static of glibc's) made take its unit's name: that name in every unit */
   struct cl_map lastdecl, typedefs, localname, fieldname, own, done, fntype, reserved, renamed, text_item, asmfn, asmsig, ctor, pragma_weak, left_out;
   long nfieldrec, nrec;
   struct node **todo; long ntodo, roomtodo, attodo;

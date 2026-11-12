@@ -1770,9 +1770,12 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   typename  a variable named type under sizeof (coreutils' stat.c)
 #   ovf     the overflow builtins of gnulib's ckd_add, ckd_sub, ckd_mul in
 #           findutils, grep, coreutils, at the edges of their types
+#   extown  a program's external global and function, named as a static of
+#           glibc's (state, pop), defined in one unit and used in another
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check
-ALLPROGS := locale enums tagenum nss typename ovf
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check
+ALLPROGS := locale enums tagenum nss typename ovf extown
+ALLPROG_extown := extown-a extown-b
 ALLPROG_ovf := ovf
 ALLPROG_typename := typename
 ALLPROG_nss := nss

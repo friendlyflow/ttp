@@ -35,7 +35,7 @@ static char *cl_ffname (char *n)
   return cl_cat (n, "'");
 }
 static char *cl_dn (struct cs_decl *d) { return cl_copy (d->name, d->nlen); }
-static char *cl_own (char *n) { char *o = cl_get (&C->own, n); if (o) return o; return n; }
+static char *cl_own (char *n) { char *o = cl_get (&C->own, n); if (o) return o; o = cl_get (&C->extown, n); if (o) return o; return n; }
 static void cl_want (char *n)
 {
   if (cl_val (&C->done, n)) return;
@@ -685,6 +685,7 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
   if (C->treedefs.count && (d->sc == SC_STATIC || cl_val (&C->treestatic, cl_ffname (name))) && cl_val (&C->treedefs, cl_ffname (name))) {
     k = cl_cat3 (name, " ", cl_unit_name ());
     cl_put (&C->own, name, k);
+    if (d->sc != SC_STATIC) cl_put (&C->extown, name, k);
     return k;
   }
   old = cl_get (map, name);
