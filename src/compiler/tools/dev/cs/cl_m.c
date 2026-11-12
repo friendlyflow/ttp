@@ -679,7 +679,20 @@ void cl_finish (void)
         i++;
       }
       /* (a program's types at its top, as a program's of one file: ttpc sees no enum constant of a group's type on the program page) */
-      if (C->program) { long q = 0; while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; } }
+      /* (more types than the root holds with the groups beside them, gawk's: in layers of 255, 0: 1:, which every scope sees through) */
+      if (C->program && ty->n <= 255 - ng - 8) { long q = 0; while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; } }
+      else if (C->program) {
+        long q = 0, k = 0;
+        while (q < ty->n) {
+          long e = q + 255;
+          struct cl_list *y = cl_l ();
+          if (e > ty->n) e = ty->n;
+          cl_layers (cl_slice (ty, q, e), y);
+          cl_write_txt (cl_layer_node (k, y), 0);
+          k++;
+          q = e;
+        }
+      }
       else cl_write_txt (cl_group (cl_cat (C->page, " types"), ty), 0);
       while (g < ng) {
         struct cl_list *lic = cl_l ();
