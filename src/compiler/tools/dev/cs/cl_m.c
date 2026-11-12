@@ -224,7 +224,17 @@ static void cl_record_node (char *tag, struct cs_rec *d, char *kind)
     struct cl_list *y = cl_l ();
     char *fnm;
     f = fds[i];
-    if (f->hasaln) cl_push (y, cl_n1 ("align", cl_num_node (f->alnmax)));
+    {
+      /* (and a field whose type is a typedef aligned more than its type: arm's __jmp_buf, int [64]
+         aligned (8), in struct __jmp_buf_tag, gcc's 392 bytes; ff names the typedef's type) */
+      long long fal = f->hasaln ? f->alnmax : 0;
+      struct cs_ty *s = f->t;
+      while (s && cs_sugar (s)) {
+        if (s->k == TY_TYPEDEF && s->algn) { if (s->algn > fal && s->algn > cs_ty_align (s->to)) fal = s->algn; break; }
+        s = s->to;
+      }
+      if (fal) cl_push (y, cl_n1 ("align", cl_num_node (fal)));
+    }
     cl_ctype (f->t, y);
     if (f->width >= 0) {
       if (f->width == 0) cl_fail ("a bitfield of width 0", 0);
