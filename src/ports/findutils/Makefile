@@ -25,7 +25,9 @@ PKG_CONFIGURE := --disable-nls --without-selinux \
 # the tests: tests/ (automake's) and the DejaGnu suites of find, xargs and
 # locate (runtest: nix develop's dejagnu; nixpkgs runs them not), not
 # gnulib's tests of its modules nor lib/'s; their helper built before the run
-PKG_CHECKFLAGS := 'SUBDIRS=find xargs locate'
+# (each folder's make check, then the top's own tests: SUBDIRS on make's
+# command line would go down into find/ too)
+PKG_CHECKRUN = sh -c '$(SUBMAKE) -j$(JOBS) -C find check; $(SUBMAKE) -j$(JOBS) -C xargs check; $(SUBMAKE) -j$(JOBS) -C locate check; $(SUBMAKE) -j$(JOBS) check-TESTS'
 PKG_CHECKPROGS := tests/xargs/test-sigusr
 PKG_CHECKFILES := -name '*.trs' -o -name '*.log' -o -name '*.sum'
 PKG_RESULTS := $(CURDIR)/results.sh
