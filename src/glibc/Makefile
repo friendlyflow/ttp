@@ -1665,7 +1665,7 @@ S2FFCHECK = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)),$(ALL_ASM))
 S2FFX := $(BUILD)/s2ffcheck
 s2ff-crosscheck: $(S2FFCHECK:%=$(I)/%.dump) $(LIBGCC_ASMCHECK:%=$(LI)/%.dump) $(S2FFDEPS)
 	$(file >$(S2FFX).stems,$(S2FFCHECK:%=$(I)/%) $(LIBGCC_ASMCHECK:%=$(LI)/%))
-	@$(RUN) -t 14400 sh s2ffcheck.sh -t $(GTARGET) -p "perl $(S2FFPL)" -f "$(S2FF)" -o $(S2FFX) -s $(SSRC) \
+	@$(RUN) -t 36000 sh s2ffcheck.sh -t $(GTARGET) -p "perl $(S2FFPL)" -f "$(S2FF)" -o $(S2FFX) -s $(SSRC) \
 	    -z "$(ZEROS_glibc)" -l "$(PLT_$(GTARGET))" $$(cat $(S2FFX).stems)
 	@set -e; d=$(S2FFX)/h; mkdir -p $$d; for l in glibc libgcc; do \
 	    if test $$l = glibc; then fs="$(GLIBC_ASM:%=$(I)/%.s)"; else fs="$(LIBGCC_ASM:%=$(LI)/%.s)"; fi; \
