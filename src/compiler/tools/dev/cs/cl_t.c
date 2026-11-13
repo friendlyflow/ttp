@@ -677,12 +677,14 @@ static void cl_static_ctor (struct cl_unit *v, char *name, char *ok)
   while (i < v->ctors.n) { if (cl_eq ((char *) v->ctors.v[i]->text, name)) v->ctors.v[i] = cl_n (ok); i++; }
 }
 static int cl_extern_inline (struct cs_decl *d) { return (d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN; }
+static int cl_tree_type (char *n) { char *f = cl_get (&C->treefile, n); return f && cl_eq (f, "types.ff"); }
 /* the name a static takes that another unit defines otherwise: its own, named with the unit (own_name) */
 static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
 {
   struct cs_decl *old;
   char *k;
-  if (C->treedefs.count && (d->sc == SC_STATIC || cl_val (&C->treestatic, cl_ffname (name))) && cl_val (&C->treedefs, cl_ffname (name))) {
+  /* (a static, or a name of the tree's that is a static there or a type there: bc's flex yyalloc, glibc's union yyalloc) */
+  if (C->treedefs.count && (d->sc == SC_STATIC || cl_val (&C->treestatic, cl_ffname (name)) || cl_tree_type (cl_ffname (name))) && cl_val (&C->treedefs, cl_ffname (name))) {
     k = cl_cat3 (name, " ", cl_unit_name ());
     cl_put (&C->own, name, k);
     if (d->sc != SC_STATIC) cl_put (&C->extown, name, k);
