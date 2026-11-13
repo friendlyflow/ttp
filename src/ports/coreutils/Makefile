@@ -34,5 +34,8 @@ PKG_CONFIGURE := --disable-nls --without-selinux --disable-acl --disable-xattr -
 PKG_CHECKFLAGS := SUBDIRS=.
 PKG_CHECKSECS := 14400
 PKG_CSHEAP := 64
+# (factor's longlong.h without its inline asm: its C, which csema translates;
+# the asm of each target is what ttpc's C layer has no form for yet)
+PKG_DEFINES := -DNO_ASM
 PKG_LOCALES := en_US:UTF-8:en_US.utf8 fr_FR:UTF-8:fr_FR.utf8 fr_FR:ISO-8859-1:fr_FR.iso88591
 include ../port.mk

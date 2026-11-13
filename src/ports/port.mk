@@ -165,7 +165,7 @@ $(SRCDIR)/configure: $(PKG_SRC)
 $(REFDIR)/config.status: $(SRCDIR)/configure $(SYSROOT)/.installed $(FFCC)
 	rm -rf $(REFDIR) $(REC); mkdir -p $(REFDIR)
 	cd $(REFDIR) && $(RUN) -t 1800 $(SRCDIR)/configure --host=$(TRIPLE) $(PKG_CONFIGURE) \
-	    CC=$(FFCC) CPPFLAGS="$(PKG_CPPFLAGS)" LDFLAGS="$(PKG_LDFLAGS)" AR=$(XPRE)ar RANLIB=$(XPRE)ranlib > configure.log 2>&1 \
+	    CC=$(FFCC) CPPFLAGS="$(PKG_CPPFLAGS) $(PKG_DEFINES)" LDFLAGS="$(PKG_LDFLAGS)" AR=$(XPRE)ar RANLIB=$(XPRE)ranlib > configure.log 2>&1 \
 	    || { tail -30 configure.log; exit 1; }
 $(REFDIR)/$(PKG_FIRST): $(REFDIR)/config.status
 	rm -rf $(REC); mkdir -p $(REC)
@@ -195,6 +195,9 @@ $(PFF)/units.same: $(PFF)/units ../cppunits.sh $(PREDEF) | $(CPP)
 
 # ---- the ff build: csema -l, then ttpc against all of glibc in ff
 CSFLAGS = -t $(GTARGET) -s $(SRCDIR) -S $(TOP)/src/compiler/shared.ff
+# (PKG_DEFINES: the package's own -D for both builds, gcc's and ttpc's, as
+# configure takes them in CPPFLAGS: coreutils' -DNO_ASM, longlong.h's C)
+PKG_DEFINES ?=
 # (PKG_CSHEAP: GB of address space for csema's heap, in a file, -M, as all
 # of glibc's in src/glibc: coreutils' 500 units need more than 9 GB)
 PKG_CSHEAP ?=
