@@ -674,6 +674,47 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 -__LIBGCC_TRAMPOLINE_SIZE__
 -__LIBGCC_VTABLE_USES_DESCRIPTORS__
 -__NO_INLINE__
+predef -x assembler-with-cpp
++#define __ASSEMBLER__ 1
++#define __PIE__ 2
++#define __pie__ 2
+-__LIBGCC_BF_MANT_DIG__
+-__LIBGCC_BITINT_LIMB_WIDTH__
+-__LIBGCC_BITINT_ORDER__
+-__LIBGCC_CTORS_SECTION_ASM_OP__
+-__LIBGCC_DF_EPSILON__
+-__LIBGCC_DF_EXCESS_PRECISION__
+-__LIBGCC_DF_FUNC_EXT__
+-__LIBGCC_DF_MANT_DIG__
+-__LIBGCC_DF_MAX__
+-__LIBGCC_DF_MIN__
+-__LIBGCC_DTORS_SECTION_ASM_OP__
+-__LIBGCC_DWARF_CIE_DATA_ALIGNMENT__
+-__LIBGCC_DWARF_FRAME_REGISTERS__
+-__LIBGCC_EH_FRAME_SECTION_NAME__
+-__LIBGCC_EH_RETURN_STACKADJ_RTX__
+-__LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__
+-__LIBGCC_HAS_DF_MODE__
+-__LIBGCC_HAS_SF_MODE__
+-__LIBGCC_HAVE_HWDBL__
+-__LIBGCC_HAVE_LIBATOMIC
+-__LIBGCC_HF_MANT_DIG__
+-__LIBGCC_INIT_ARRAY_SECTION_ASM_OP__
+-__LIBGCC_SF_EPSILON__
+-__LIBGCC_SF_EXCESS_PRECISION__
+-__LIBGCC_SF_FUNC_EXT__
+-__LIBGCC_SF_MANT_DIG__
+-__LIBGCC_SF_MAX__
+-__LIBGCC_SF_MIN__
+-__LIBGCC_STACK_GROWS_DOWNWARD__
+-__LIBGCC_STACK_POINTER_REGNUM__
+-__LIBGCC_TEXT_SECTION_ASM_OP__
+-__LIBGCC_TRAMPOLINE_SIZE__
+-__LIBGCC_VTABLE_USES_DESCRIPTORS__
+-__OPTIMIZE__
+-__STDC_UTF_16__
+-__STDC_UTF_32__
+-__STDC_VERSION__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -fPIC -fexceptions -fasynchronous-unwind-tables
 +#define __EXCEPTIONS 1
 +#define __GNUC_GNU_INLINE__ 1
@@ -802,6 +843,11 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 -__LIBGCC_TRAMPOLINE_SIZE__
 -__LIBGCC_VTABLE_USES_DESCRIPTORS__
 -__NO_INLINE__
+predef -x assembler-with-cpp -O2 -O2 -fPIC -fno-inline -fbuilding-libgcc -fno-stack-protector -fPIC -fno-inline
++#define __ASSEMBLER__ 1
+-__STDC_UTF_16__
+-__STDC_UTF_32__
+-__STDC_VERSION__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE
 +#define __GNUC_GNU_INLINE__ 1
 +#define __PIE__ 2
@@ -1075,6 +1121,47 @@ predef -O2 -O2 -fPIC -fno-inline -fbuilding-libgcc -fno-stack-protector -fPIC -f
 +#define __FLT16_MIN_EXP__ (-13)
 +#define __FLT16_MIN__ 6.1035156250000000e-5F16
 +#define __FLT16_NORM_MAX__ 6.5504000000000000e+4F16
+predef -x assembler-with-cpp -fno-stack-protector
++#define __ASSEMBLER__ 1
++#define __PIE__ 2
++#define __pie__ 2
+-__LIBGCC_BF_MANT_DIG__
+-__LIBGCC_BITINT_LIMB_WIDTH__
+-__LIBGCC_BITINT_ORDER__
+-__LIBGCC_CTORS_SECTION_ASM_OP__
+-__LIBGCC_DF_EPSILON__
+-__LIBGCC_DF_EXCESS_PRECISION__
+-__LIBGCC_DF_FUNC_EXT__
+-__LIBGCC_DF_MANT_DIG__
+-__LIBGCC_DF_MAX__
+-__LIBGCC_DF_MIN__
+-__LIBGCC_DTORS_SECTION_ASM_OP__
+-__LIBGCC_DWARF_CIE_DATA_ALIGNMENT__
+-__LIBGCC_DWARF_FRAME_REGISTERS__
+-__LIBGCC_EH_FRAME_SECTION_NAME__
+-__LIBGCC_EH_RETURN_STACKADJ_RTX__
+-__LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__
+-__LIBGCC_HAS_DF_MODE__
+-__LIBGCC_HAS_SF_MODE__
+-__LIBGCC_HAVE_HWDBL__
+-__LIBGCC_HAVE_LIBATOMIC
+-__LIBGCC_HF_MANT_DIG__
+-__LIBGCC_INIT_ARRAY_SECTION_ASM_OP__
+-__LIBGCC_SF_EPSILON__
+-__LIBGCC_SF_EXCESS_PRECISION__
+-__LIBGCC_SF_FUNC_EXT__
+-__LIBGCC_SF_MANT_DIG__
+-__LIBGCC_SF_MAX__
+-__LIBGCC_SF_MIN__
+-__LIBGCC_STACK_GROWS_DOWNWARD__
+-__LIBGCC_STACK_POINTER_REGNUM__
+-__LIBGCC_TEXT_SECTION_ASM_OP__
+-__LIBGCC_TRAMPOLINE_SIZE__
+-__LIBGCC_VTABLE_USES_DESCRIPTORS__
+-__OPTIMIZE__
+-__STDC_UTF_16__
+-__STDC_UTF_32__
+-__STDC_VERSION__
 predef -O2 -O2 -fPIC -fno-inline -fbuilding-libgcc -fno-stack-protector -fPIC -fno-inline -fexceptions -fvisibility=hidden
 +#define __EXCEPTIONS 1
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIC -fexceptions -fexceptions -ftls-model=initial-exec

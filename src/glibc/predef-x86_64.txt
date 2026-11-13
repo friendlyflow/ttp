@@ -403,6 +403,20 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 #define __SIZE_MAX__ 0xffffffffffffffffUL
 #define __UINT_FAST8_TYPE__ unsigned char
 #define __ATOMIC_ACQ_REL 4
+predef -x assembler-with-cpp
++#define __ASSEMBLER__ 1
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __NO_INLINE__ 1
++#define __PIE__ 2
++#define __pie__ 2
+-__GNUC_GNU_INLINE__
+-__OPTIMIZE__
+-__ROUNDING_MATH__
+-__STDC_UTF_16__
+-__STDC_UTF_32__
+-__STDC_VERSION__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -ftls-model=initial-exec
 +#define __PIE__ 2
 +#define __pie__ 2
@@ -560,6 +574,20 @@ predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc 
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE
 +#define __PIE__ 2
 +#define __pie__ 2
+predef -x assembler-with-cpp -fno-stack-protector
++#define __ASSEMBLER__ 1
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __NO_INLINE__ 1
++#define __PIE__ 2
++#define __pie__ 2
+-__GNUC_GNU_INLINE__
+-__OPTIMIZE__
+-__ROUNDING_MATH__
+-__STDC_UTF_16__
+-__STDC_UTF_32__
+-__STDC_VERSION__
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIC -fexceptions -fasynchronous-unwind-tables -ftls-model=initial-exec
 +#define __EXCEPTIONS 1
 predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -fexceptions -fasynchronous-unwind-tables -ftls-model=initial-exec
@@ -610,6 +638,77 @@ predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftra
 +#define __SSSE3__ 1
 +#define __XSAVE__ 1
 +#define __pie__ 2
+predef -x assembler-with-cpp -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk
++#define __ASSEMBLER__ 1
++#define __CET__ 3
++#define __CHAR8_TYPE__ unsigned char
++#define __GCC_ATOMIC_CHAR8_T_LOCK_FREE 2
++#define __GNUC_STDC_INLINE__ 1
++#define __LIBGCC_BF_EPSILON__ __BFLT16_EPSILON__
++#define __LIBGCC_BF_EXCESS_PRECISION__ 1
++#define __LIBGCC_BF_FUNC_EXT__ bf16
++#define __LIBGCC_BF_MANT_DIG__ 8
++#define __LIBGCC_BF_MAX__ __BFLT16_MAX__
++#define __LIBGCC_BF_MIN__ __BFLT16_MIN__
++#define __LIBGCC_BITINT_LIMB_WIDTH__ 64
++#define __LIBGCC_BITINT_ORDER__ __ORDER_LITTLE_ENDIAN__
++#define __LIBGCC_DF_EPSILON__ __DBL_EPSILON__
++#define __LIBGCC_DF_EXCESS_PRECISION__ 0
++#define __LIBGCC_DF_FUNC_EXT__ 
++#define __LIBGCC_DF_MANT_DIG__ 53
++#define __LIBGCC_DF_MAX__ __DBL_MAX__
++#define __LIBGCC_DF_MIN__ __DBL_MIN__
++#define __LIBGCC_DWARF_CIE_DATA_ALIGNMENT__ -8
++#define __LIBGCC_DWARF_FRAME_REGISTERS__ 17
++#define __LIBGCC_EH_FRAME_SECTION_NAME__ ".eh_frame"
++#define __LIBGCC_EH_RETURN_STACKADJ_RTX__ 1
++#define __LIBGCC_EH_TABLES_CAN_BE_READ_ONLY__ 1
++#define __LIBGCC_HAS_BF_MODE__ 1
++#define __LIBGCC_HAS_DF_MODE__ 1
++#define __LIBGCC_HAS_HF_MODE__ 1
++#define __LIBGCC_HAS_SF_MODE__ 1
++#define __LIBGCC_HAS_TF_MODE__ 1
++#define __LIBGCC_HAS_XF_MODE__ 1
++#define __LIBGCC_HAVE_HWDBL__ 1
++#define __LIBGCC_HAVE_LIBATOMIC 0
++#define __LIBGCC_HF_EPSILON__ __FLT16_EPSILON__
++#define __LIBGCC_HF_EXCESS_PRECISION__ 1
++#define __LIBGCC_HF_FUNC_EXT__ f16
++#define __LIBGCC_HF_MANT_DIG__ 11
++#define __LIBGCC_HF_MAX__ __FLT16_MAX__
++#define __LIBGCC_HF_MIN__ __FLT16_MIN__
++#define __LIBGCC_INIT_ARRAY_SECTION_ASM_OP__ 1
++#define __LIBGCC_SF_EPSILON__ __FLT_EPSILON__
++#define __LIBGCC_SF_EXCESS_PRECISION__ 0
++#define __LIBGCC_SF_FUNC_EXT__ f
++#define __LIBGCC_SF_MANT_DIG__ 24
++#define __LIBGCC_SF_MAX__ __FLT_MAX__
++#define __LIBGCC_SF_MIN__ __FLT_MIN__
++#define __LIBGCC_STACK_GROWS_DOWNWARD__ 1
++#define __LIBGCC_STACK_POINTER_REGNUM__ 7
++#define __LIBGCC_TEXT_SECTION_ASM_OP__ "\t.text"
++#define __LIBGCC_TF_EPSILON__ __FLT128_EPSILON__
++#define __LIBGCC_TF_EXCESS_PRECISION__ 0
++#define __LIBGCC_TF_FUNC_EXT__ f128
++#define __LIBGCC_TF_MANT_DIG__ 113
++#define __LIBGCC_TF_MAX__ __FLT128_MAX__
++#define __LIBGCC_TF_MIN__ __FLT128_MIN__
++#define __LIBGCC_TRAMPOLINE_SIZE__ 28
++#define __LIBGCC_VTABLE_USES_DESCRIPTORS__ 0
++#define __LIBGCC_XF_EPSILON__ __LDBL_EPSILON__
++#define __LIBGCC_XF_EXCESS_PRECISION__ 0
++#define __LIBGCC_XF_FUNC_EXT__ l
++#define __LIBGCC_XF_MANT_DIG__ 64
++#define __LIBGCC_XF_MAX__ __LDBL_MAX__
++#define __LIBGCC_XF_MIN__ __LDBL_MIN__
++#define __PIC__ 1
++#define __SHSTK__ 1
++#define __pic__ 1
+-__GNUC_GNU_INLINE__
+-__ROUNDING_MATH__
+-__STDC_UTF_16__
+-__STDC_UTF_32__
+-__STDC_VERSION__
 predef -O2 -O2 -fpic -mlong-double-80 -fcf-protection -mshstk -fbuilding-libgcc -fno-stack-protector -fpic -mlong-double-80 -fcf-protection -mshstk -msse2 -fvisibility=hidden
 +#define __CET__ 3
 +#define __CHAR8_TYPE__ unsigned char

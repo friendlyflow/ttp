@@ -50,7 +50,7 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cenum
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata cenum
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
@@ -382,7 +382,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cenum
+CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups cjitdata cenum
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # x86_64's long double is the x87's (gen/patches/x87.pl): the tests of
@@ -866,10 +866,16 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # src/glibc's clayer-check compare the two unit by unit, byte for byte;
 # tools-check: each target's build writes the same (the machine's build).
 # The C preprocessor (T3, so that gcc -E can go): tools/cpp.ff and its
-# _start, cpp-start.ff (TOOLLIB alone, not CLIB: c.ff's names are not its), gcc 16's -E byte for byte from gcc's options and a file of the
+# _start, cpp-start.ff (on TOOLLIB and CLIB, c.ff's runtime cp_*: cpp's C finds
+# its own tok, text, base first, as library C looks in its own group first), gcc 16's -E byte for byte from gcc's options and a file of the
 # target's predefined macros (src/glibc/predef-<target>.txt); tools-check
 # runs each target's build on progs/pp (made by gcc: its expected .i), and
 # src/glibc's cpp-check on every unit of a glibc build against gcc's .i.
+# src/glibc's mki.pl and src/libgcc's in ff (T4): tools/mki.ff and its
+# _start, mki-start.ff (as cpp's, on TOOLLIB and CLIB), the same commands
+# (--dry, --show) and files; tools-check runs each target's build and the
+# Perl on progs/mki's logs, src/glibc's mki-crosscheck on all of glibc's
+# and libgcc's objects.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -878,7 +884,7 @@ TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.f
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
 CSLIB := tools/csem.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -897,13 +903,20 @@ vpath %.c ../glibc/progs progs/abi
 $(TL)/cparse/in/%.i: %.c
 	@mkdir -p $(dir $@)
 	$(CPCC) -E $< -o $@
-$(CPREF)/result: $(CPUNITS) $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint gen/cparsecheck.sh
+# (the list of the units, written only when it changes: a unit that comes
+# after a result makes the refs again, though its .c may be older than them)
+CPLIST := $(TL)/cparse/units.list
+$(CPLIST): FORCE
+	@mkdir -p $(dir $@); echo '$(CPUNITS)' | cmp -s - $@ || echo '$(CPUNITS)' > $@
+FORCE:
+.PHONY: FORCE
+$(CPREF)/result: $(CPUNITS) $(CPLIST) $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint gen/cparsecheck.sh
 	sh gen/cparsecheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/cparse $(TL)/$(TOOLT)/cprint $(CPCC) $(CPREF) $(CPUNITS) || { rm -f $@; exit 1; }
 # csema on the same units against clang (riscv64's semantics; clang from
 # nix develop): this machine's build first, every target's the same lines
 CSREF := $(TL)/csema/ref
 CSCLANG = $(C2FF_CLANG) -x c -include ../glibc/clang-prelude.h -Xclang -ast-dump=json -Xclang -fdump-record-layouts -fsyntax-only --target=riscv64-linux-gnu -std=gnu11 -fgnu89-inline -w
-$(CSREF)/result: $(CPUNITS) $(TL)/$(TOOLT)/csema gen/csemacheck.sh gen/clangsema.pl gen/csemacmp.pl
+$(CSREF)/result: $(CPUNITS) $(CPLIST) $(TL)/$(TOOLT)/csema gen/csemacheck.sh gen/clangsema.pl gen/csemacmp.pl
 	@test -n "$(C2FF_CLANG)" || { echo "csema's check needs clang: run it in nix develop"; exit 1; }
 	KEEP=1 CLANG="$(CSCLANG)" sh gen/csemacheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/csema $(CSREF) $(CPUNITS) || { rm -f $@; exit 1; }
 
@@ -923,9 +936,14 @@ $(TL)/$(1)/cparse $(TL)/$(1)/cprint: $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(CLIB)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $$< $$@ > $$@.lst
 	chmod +x $$@
 
-$(TL)/$(1)/cpp: tools/cpp.ff tools/cpp-start.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
+$(TL)/$(1)/cpp: tools/cpp.ff tools/cpp-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
-	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) tools/cpp.ff tools/cpp-start.ff $$@ > $$@.lst
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/cpp.ff tools/cpp-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/mki: tools/mki.ff tools/mki-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/mki.ff tools/mki-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
@@ -933,7 +951,10 @@ $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) $(CSLIB) tools/csema.ff $$< $$@ > $$@.lst
 	chmod +x $$@
 
-tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/result
+# (the units themselves too: each is a secondary file (.SECONDARY), so one
+# that is missing did not make the refs' result older than its .c, and
+# cparsecheck then could not open it: a progs/*.c that came after a result)
+tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/result $(CPUNITS)
 	cd $(SHAV) && $(RUN_$(1)) $(abspath $(TL))/$(1)/sha256sum $(SHAVFILES) > ../$(1).sha
 	cmp $(TL)/$(1).sha $(SHAV)/want
 	@echo "tools-check-$(1): sha256 agrees with NIST's vectors and Digest::SHA"
@@ -1038,7 +1059,21 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	$(RUN_$(1)) $(TL)/$(1)/cpp $$(PPTF) $$(PPKEY) -o $(TL)/$(1).tf-gnu11.i
 	cmp $(TL)/$(1).tf-gnu11.i progs/pp/tf-gnu11.i
 	@echo "tools-check-$(1): cpp writes what gcc -E writes of progs/pp"
+	@for m in --dry --show "--show --cpp CPP --predef PRE --out o"; do \
+	    perl ../glibc/mki.pl $$$$m progs/mki/obj progs/mki/src $$(MKITEST)> $(TL)/$(1).mki.p 2> $(TL)/$(1).mki.pe; echo "exit $$$$?" >> $(TL)/$(1).mki.pe; \
+	    $(RUN_$(1)) $(TL)/$(1)/mki $$$$m progs/mki/obj progs/mki/src $$(MKITEST)> $(TL)/$(1).mki.f 2> $(TL)/$(1).mki.fe; echo "exit $$$$?" >> $(TL)/$(1).mki.fe; \
+	    cmp $(TL)/$(1).mki.p $(TL)/$(1).mki.f && cmp $(TL)/$(1).mki.pe $(TL)/$(1).mki.fe || { echo "tools-check-$(1): mki $$$$m is not mki.pl's"; exit 1; }; \
+	    perl ../libgcc/mki.pl $$$$m progs/mki/lgcc OUT $$(MKILTEST)> $(TL)/$(1).mki.p 2> $(TL)/$(1).mki.pe; echo "exit $$$$?" >> $(TL)/$(1).mki.pe; \
+	    $(RUN_$(1)) $(TL)/$(1)/mki --libgcc $$$$m progs/mki/lgcc OUT $$(MKILTEST)> $(TL)/$(1).mki.f 2> $(TL)/$(1).mki.fe; echo "exit $$$$?" >> $(TL)/$(1).mki.fe; \
+	    cmp $(TL)/$(1).mki.p $(TL)/$(1).mki.f && cmp $(TL)/$(1).mki.pe $(TL)/$(1).mki.fe || { echo "tools-check-$(1): mki --libgcc $$$$m is not ../libgcc/mki.pl's"; exit 1; }; \
+	done
+	@echo "tools-check-$(1): mki and mki --libgcc say what mki.pl and ../libgcc/mki.pl say of progs/mki's logs (--dry, --show, --cpp)"
 endef
+# mki on a glibc build's log of each kind of command (C, .os, a .S, a
+# syscall stub from (echo ...) | gcc, an -aux.S of -S, misc's dummy.o, an
+# object named twice, one with no command) and a libgcc build's
+MKITEST := string/a.o string/c.o string/b.o io/chdir.o stdio-common/errlist-data.o dummy.o missing/x.o
+MKILTEST := _muldi3.o save-restore.o cas_1_1.o x.o
 $(foreach t,riscv64 $(HOSTS),$(eval $(call tooltarget,$(t))))
 
 # NIST's vectors (FIPS 180-2, appendix B: abc, 448 and 896 bits, a million

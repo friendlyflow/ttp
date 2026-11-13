@@ -1,0 +1,5 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+mki [--dry] [--show] [--log FILE]... [--cpp TOOL --predef FILE [--out DIR]] OBJ SRC OBJECT...: an object of the reference glibc's .i (or an asm object's .s), its command from build.log run again with -E or with cpp in gcc's place;
+mki --libgcc [--dry] [--show] [--cpp TOOL --predef FILE] [--out DIR] BUILD OUT OBJECT...: the same of the reference libgcc's objects;
+src/glibc/mki.pl and src/libgcc/mki.pl in ff, the same commands and files (make mki-crosscheck compares them; dev source: tools/dev/mki)
