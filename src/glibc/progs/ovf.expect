@@ -7,6 +7,11 @@ mul ull int ull: 18446744073709551613 1
 mul ull int ull: 0 0
 mul ull int ull: 18446744073709551615 0
 mul ull int ull: 18446744073709551614 1
+add ull int unsigned char: 255 0
+add ull int unsigned char: 0 1
+add ull int unsigned char: 255 1
+add ull int unsigned char: 0 1
+add ull int unsigned char: 200 0
 add int long int: -2147483644 1
 add int long int: -2147483643 0
 add int long long: -9223372036854775808 1
@@ -19,3 +24,15 @@ sub long int int: 2147483647 0
 mul u64 u64 long: 9223372034707292160 0
 mul u64 u64 long: -9223372036854775808 1
 mul u64 u64 long: 1 1
+add u64 long u64: 18446744073709551614 0
+add u64 long u64: 0 1
+add u64 long u64: 18446744073709551615 1
+mul int int long: 4611686018427387904 0
+mul int int long: -6442450941 0
+mul u64 long long: 0 0
+mul u64 long long: -9223372036854775808 1
+mul u64 long long: -9223372036854775808 0
+mul u64 long long: -15 0
+sub long long int: 0 0
+sub long long int: 0 1
+sub long long int: 2147483644 1

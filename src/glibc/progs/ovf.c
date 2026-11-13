@@ -34,6 +34,11 @@ main (void)
   TU (mul, ull, int, ull, 0, -5);
   TU (mul, ull, int, ull, ULLONG_MAX, 1);
   TU (mul, ull, int, ull, ULLONG_MAX, 2);
+  TU (add, ull, int, unsigned char, 250, 5);
+  TU (add, ull, int, unsigned char, 250, 6);
+  TU (add, ull, int, unsigned char, 3, -4);
+  TU (add, ull, int, unsigned char, ULLONG_MAX, 1);
+  TU (add, ull, int, unsigned char, 300, -100);
 #if LONG_MAX > INT_MAX
   T (add, int, long, int, 5, (long) INT_MAX);
   T (add, int, long, int, -5, (long) INT_MIN + 10);
@@ -47,6 +52,18 @@ main (void)
   T (mul, u64, u64, long, 0x80000000UL, 0xffffffffUL);
   T (mul, u64, u64, long, 0x100000000UL, 0x80000000UL);
   T (mul, u64, u64, long, ULONG_MAX, ULONG_MAX);
+  TU (add, u64, long, u64, ULONG_MAX, -1);
+  TU (add, u64, long, u64, ULONG_MAX, 1);
+  TU (add, u64, long, u64, 5, -6);
+  T (mul, int, int, long, INT_MIN, INT_MIN);
+  T (mul, int, int, long, INT_MAX, -3);
+  T (mul, u64, long, long, ULONG_MAX, 0);
+  T (mul, u64, long, long, 1UL << 62, 2);
+  T (mul, u64, long, long, 1UL << 62, -2);
+  T (mul, u64, long, long, 3, -5);
+  T (sub, long, long, int, LONG_MIN, LONG_MIN);
+  T (sub, long, long, int, 0, LONG_MIN);
+  T (sub, long, long, int, -5, (long) INT_MAX);
 #else
   T (add, unsigned int, int, int, 0x7fffffffU, 0);
   T (add, unsigned int, int, int, 0x80000000U, -1);
@@ -73,6 +90,24 @@ main (void)
   T (mul, long long, long long, long long, -1, LLONG_MIN);
   T (mul, long long, long long, long long, LLONG_MIN, -1);
   T (mul, long long, long long, long long, 0, LLONG_MIN);
+  T (mul, int, int, long long, INT_MIN, INT_MIN);
+  TU (mul, unsigned int, unsigned int, ull, 0xffffffffU, 0xffffffffU);
+  T (add, long long, unsigned int, long long, LLONG_MAX - 5, 5);
+  T (add, long long, unsigned int, long long, LLONG_MAX - 5, 6);
+  T (add, long long, unsigned int, long long, LLONG_MIN, 0xffffffffU);
+  TU (add, ull, long long, ull, ULLONG_MAX, -1);
+  TU (add, ull, long long, ull, ULLONG_MAX, 1);
+  TU (add, ull, long long, ull, 5, -6);
+  TU (add, ull, long long, ull, 0x8000000000000000ULL, LLONG_MIN);
+  T (add, ull, int, long long, 0x7fffffffffffffffULL, 1);
+  T (add, ull, int, long long, 0x8000000000000000ULL, -1);
+  T (add, ull, int, long long, 0x8000000000000000ULL, 0);
+  T (mul, ull, long long, long long, 1ULL << 62, 2);
+  T (mul, ull, long long, long long, 1ULL << 62, -2);
+  T (mul, ull, long long, long long, 1ULL << 63, -1);
+  T (mul, ull, long long, long long, (1ULL << 63) + 1, -1);
+  T (mul, ull, long long, long long, 3, -5);
+  T (mul, ull, long long, long long, 0, LLONG_MIN);
 #endif
   return 0;
 }

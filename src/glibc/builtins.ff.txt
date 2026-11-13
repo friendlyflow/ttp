@@ -1674,6 +1674,206 @@ builtins:
         long
       s
   comment
+    coreutils' gnulib ckd_add, ckd_sub, ckd_mul on the 64-bit targets (stty's apply_settings, factor, numfmt, ...), exactly in an i128 as those above.
+  __builtin_add_overflow u64 long u64:
+    int
+    a:
+      u64
+    b:
+      long
+    r:
+      u64
+      * pointer
+    s:
+      i128
+      cast
+        i128
+      a
+      +
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      u64
+    s
+    return
+      s
+      !=
+      cast
+        i128
+      cast
+        u64
+      s
+  __builtin_mul_overflow int int long:
+    int
+    a:
+      int
+    b:
+      int
+    r:
+      long
+      * pointer
+    s:
+      i128
+      cast
+        i128
+      a
+      *
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    s
+    return
+      s
+      !=
+      cast
+        i128
+      cast
+        long
+      s
+  __builtin_mul_overflow u64 long long:
+    int
+    a:
+      u64
+    b:
+      long
+    r:
+      long
+      * pointer
+    s:
+      i128
+      cast
+        i128
+      a
+      *
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    s
+    return
+      s
+      !=
+      cast
+        i128
+      cast
+        long
+      s
+  __builtin_sub_overflow long long int:
+    int
+    a:
+      long
+    b:
+      long
+    r:
+      int
+      * pointer
+    s:
+      i128
+      cast
+        i128
+      a
+      -
+      cast
+        i128
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    s
+    return
+      s
+      !=
+      cast
+        i128
+      cast
+        int
+      s
+  comment
+    __builtin_add_overflow of a u64 and an int into a u8 (coreutils' stty, apply_settings), on every target: the sum as a pair, hi an i64 and lo a u64, and whether a u8 holds it.
+  __builtin_add_overflow u64 int u8:
+    int
+    a:
+      u64
+    b:
+      int
+    r:
+      u8
+      * pointer
+    alo:
+      u64
+      cast
+        u64
+      a
+    ahi:
+      i64
+      0
+    blo:
+      u64
+      cast
+        u64
+      b
+    bhi:
+      i64
+      0
+    if
+      b
+      <
+      0
+      bhi
+      =
+      -1
+    lo:
+      u64
+      alo
+      +
+      blo
+    c:
+      i64
+      0
+    if
+      lo
+      <
+      alo
+      c
+      =
+      1
+    hi:
+      i64
+      ahi
+      +
+      bhi
+      +
+      c
+    r
+    * pointer
+    =
+    cast
+      u8
+    lo
+    return
+      hi
+      !=
+      0
+      ||
+      lo
+      >
+      255
+  comment
     __builtin_mul_overflow of a u64 and an int into a u64 (gnulib's xstrtoumax, findutils), on every target: the product wrapped, and whether it is not the exact one: a negative b with a not 0, or dividing it back by b not giving a.
   __builtin_mul_overflow u64 int u64:
     int
