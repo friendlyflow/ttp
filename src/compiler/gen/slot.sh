@@ -83,12 +83,43 @@ scoped() {
 test -n "${TTP_SLOT:-}" && run "$@"
 test -n "$noslot" && run "$@"
 
+# The heat brake. The spare SSD (label ttpdata, a Samsung 980 without a
+# heatsink) locked up on 2026-11-11 after hours of heavy writes with its
+# controller at about 85 °C. Before a command takes a slot, its hottest
+# sensor is read; at TTP_HEATSTOP (78) °C or more the command waits until it
+# is below TTP_HEATGO (70) °C. What already runs goes on; a small command
+# (-n) and a nested one never wait. With no sensor there is no brake.
+# TTP_HEATFILE names one file to read instead (millidegrees), for a test.
+heat() {
+    if test -n "${TTP_HEATFILE:-}"; then
+        h=$(cat "$TTP_HEATFILE" 2> /dev/null) || return 1
+    else
+        d=$(readlink -f /dev/disk/by-label/ttpdata 2> /dev/null) || return 1
+        d=$(basename "$d" | sed 's/n[0-9]*p[0-9]*$//')
+        h=0
+        for f in /sys/class/nvme/"$d"/hwmon*/temp*_input; do
+            test -r "$f" || continue
+            v=$(cat "$f") && test "$v" -gt "$h" && h=$v
+        done
+        test "$h" -gt 0 || return 1
+    fi
+    echo $((h / 1000))
+}
+brake() {
+    t=$(heat) || return 0
+    test "$t" -ge "${TTP_HEATSTOP:-78}" || return 0
+    echo "slot.sh: the SSD is at $t °C, waiting until it is below ${TTP_HEATGO:-70} °C" >&2
+    while t=$(heat) && test "$t" -ge "${TTP_HEATGO:-70}"; do sleep 5; done
+    echo "slot.sh: the SSD is at $t °C, going on" >&2
+}
+
 dir=${TTP_SLOTS:-$HOME/.cache/ttp}
 n=${TTP_NSLOTS:-3}
 mkdir -p "$dir"
 waited=
 start=$(date +%s)
 while :; do
+    brake
     i=1
     while test $i -le $n; do
         exec 9>> "$dir/slot.$i"

@@ -1,0 +1,4 @@
+gcc -O2 -fPIC -DL_muldi3 -c ../../gcc/libgcc2.c -o _muldi3.o -MT _muldi3.o -MD -MP -MF _muldi3.dep
+gcc -O2 -fPIC -xassembler-with-cpp -c ../save-restore.S -o save-restore.o -MT save-restore.o -MD -MP -MF save-restore.dep
+gcc -O2 -fPIC -c lse.S -o cas_1_1.o \
+ -DL_cas -DSIZE=1 -MT cas_1_1.o -MD -MP -MF cas_1_1.dep
