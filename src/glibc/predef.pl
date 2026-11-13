@@ -18,7 +18,8 @@
 #
 # OPTIONS is a command's options but its files, -I, -D, -U, -include and
 # their kin, -W, -M, -g, -nostdinc and -fno-builtin-* (cpp makes the same
-# key of them). QUERIES is what cpp --collect wrote of the units (the names
+# key of them); an object of asm's (a .S, -x assembler-with-cpp) begins
+# with -x assembler-with-cpp, gcc's macros for assembler (__ASSEMBLER__). QUERIES is what cpp --collect wrote of the units (the names
 # __has_builtin and its kin ask for, the states of the target pragmas):
 # make predef runs it until there are no more.
 #
@@ -44,7 +45,7 @@ sub key_of {   # (as cpp's parse_opts)
     for (my $i = 0; $i < @a; $i++) {
         my $x = $a[$i];
         if ($x =~ /^-(o|I|D|U|isystem|iquote|idirafter|include|imacros|MF|MT|MQ|x)$/) { $i++; next }
-        next if $x !~ /^-/ || $x =~ /^-(I|D|U|W|w|M|x|g|fno-builtin-)/ || $x =~ /^-(pipe|c|E|S|v|nostdinc)$/;
+        next if $x !~ /^-/ || $x eq '-' || $x =~ /^-(I|D|U|W|w|M|x|g|fno-builtin-)/ || $x =~ /^-(pipe|c|E|S|v|nostdinc)$/;
         return undef if $x =~ /^-[Bf]?(plugin|specs)/;
         if ($x =~ /^-(f|m|O|std=|ansi)/) { push @key, $x; next }
         die "predef: an option cpp does not know: $x\n";
@@ -58,10 +59,13 @@ for my $log (@logs) {
     $all =~ s/\\\n/ /g;
     for my $c (split /\n/, $all) {
         $c =~ s/^\s+//;
+        # (a syscall stub's (echo ...) | gcc ... -x assembler-with-cpp -)
+        $c =~ s/^\(echo .*?\)\s*\|\s*(?=\/)//;
         next unless $c =~ m{^/\S*gcc\s};
         next unless ($c =~ / -c / && $c =~ / -o \S+\.o[sS]? /) || ($c =~ / -S(\s|$)/ && $c =~ / -o \S+-aux\.S /);
-        next if $c =~ / -x ?assembler/ || ($c =~ /\.S\s/ && $c !~ /-aux\.S\s/);
         my $k = key_of($c);
+        # an object of asm (-x assembler-with-cpp, or a .S but the -aux.S that -S writes): its own set
+        $k = "-x assembler-with-cpp" . ($k ne '' ? " $k" : '') if defined $k && ($c =~ / -x ?assembler-with-cpp/ || ($c =~ /\.S\s/ && $c !~ / -S(\s|$)/));
         $count{$k}++ if defined $k;
     }
 }
@@ -70,7 +74,7 @@ push @keys, @extra;
 @keys = grep { !$seen{$_}++ } @keys;
 die "predef: no commands\n" unless @keys;
 
-sub defs { my ($key, $file) = @_; $file //= '/dev/null'; my @l = `$gcc -dM -E -nostdinc $key -x c $file`; die "predef: gcc failed: $key\n" if $?; chomp @l; @l }
+sub defs { my ($key, $file) = @_; $file //= '/dev/null'; my $x = $key =~ /^-x assembler-with-cpp/ ? '' : ' -x c'; my @l = `$gcc -dM -E -nostdinc $key$x $file`; die "predef: gcc failed: $key\n" if $?; chomp @l; @l }
 sub name { $_[0] =~ /^#define (\S+?)(\(|\s|$)/ ? $1 : die "predef: not a #define: $_[0]\n" }
 sub delta { my ($b, $d) = @_; my $o = '';
     for my $n (sort keys %$d) { $o .= "+$d->{$n}\n" if !exists $b->{$n} || $b->{$n} ne $d->{$n} }

@@ -10,10 +10,12 @@
 #   perl mki.pl <libgcc build dir> <out dir> _muldc3.o unwind-dw2.o ...
 #   perl mki.pl --dry <libgcc build dir> <out dir> _muldc3.o ...
 #
-# --dry only prints the file each object would get (its .i or .s). --cpp
+# --dry only prints the file each object would get (its .i or .s); --show
+# each command as it would run, then the file, running none (as
+# src/glibc/mki.pl --show). --cpp
 # TOOL --predef FILE runs the C preprocessor in ff (src/compiler/tools/
-# cpp.ff) in gcc's place, as src/glibc/mki.pl --cpp; --out DIR writes into
-# DIR in place of the out dir.
+# cpp.ff) in gcc's place, as src/glibc/mki.pl --cpp (an asm object's .s
+# too); --out DIR writes into DIR in place of the out dir.
 #
 #   perl mki.pl --cpp TOOL --predef FILE [--out DIR] <libgcc build dir> <out dir> _muldc3.o ...
 #
@@ -22,10 +24,10 @@ use strict;
 use warnings;
 use File::Path qw(make_path);
 
-my ($dry, $cpp, $predef, $outdir);
-while (@ARGV && $ARGV[0] =~ /^--(dry|cpp|predef|out)$/) {
+my ($dry, $show, $cpp, $predef, $outdir);
+while (@ARGV && $ARGV[0] =~ /^--(dry|show|cpp|predef|out)$/) {
     shift @ARGV;
-    if ($1 eq 'dry') { $dry = 1 } elsif ($1 eq 'cpp') { $cpp = shift @ARGV } elsif ($1 eq 'predef') { $predef = shift @ARGV } else { $outdir = shift @ARGV }
+    if ($1 eq 'dry') { $dry = 1 } elsif ($1 eq 'show') { $show = 1 } elsif ($1 eq 'cpp') { $cpp = shift @ARGV } elsif ($1 eq 'predef') { $predef = shift @ARGV } else { $outdir = shift @ARGV }
 }
 die "usage: mki.pl [--dry] [--cpp tool --predef file [--out dir]] <libgcc build dir> <out dir> <object>...\n" unless @ARGV >= 3;
 die "mki: --cpp needs --predef\n" if $cpp && !$predef;
@@ -51,8 +53,7 @@ for my $o (@want) {
     my $ext = $c =~ / -xassembler-with-cpp / || $c =~ / -c \S+\.S\b/ ? 's' : 'i';
     (my $i = "$out/$o") =~ s/\.o$/.$ext/;
     if ($dry) { print "$i\n"; next }
-    if ($cpp && $ext ne 'i') { warn "mki: $o: asm, which --cpp does not preprocess yet\n"; $bad = 1; next }
-    make_path($out);
+    make_path($out) unless $show;
     $c =~ s/ -c / -E / or die "mki: $o: no -c in its command\n";
     $c =~ s/ -o \S+\.o / -o $i /;
     $c =~ s/ -MT \S+ -MD -MP -MF \S+//;
@@ -62,6 +63,7 @@ for my $o (@want) {
     # store paths (BUILD/gcroots keeps them): one that is gone cannot run
     my @gone = grep { !-e $_ } $c =~ m{(/nix/store/[a-z0-9]{32}-[^/\s'"]+)}g;
     die "mki: $o: build.log's command names " . join(', ', @gone) . ", gone (nix gc): make libgcc-ref again, into a new BUILD\n" if @gone;
+    if ($show) { print "cd '$dir' && $c\n$i\n"; next }
     if (system('sh', '-c', "cd '$dir' && $c") != 0) { warn "mki: $o: the compiler failed\n"; $bad = 1; next }
     print "$i\n";
 }

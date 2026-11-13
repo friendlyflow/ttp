@@ -4,8 +4,9 @@
 #
 # cppcheck.sh: the C preprocessor in ff (src/compiler/tools/cpp.ff) against
 # gcc -E, unit by unit, byte for byte: each unit's .i made by cpp from the
-# command of the reference build (mki.pl --cpp, PREDEF its predefined
-# macros) against gcc's .i, REF/x.i (made by mki.pl), or with -g gcc's made
+# command of the reference build (mki --cpp, PREDEF its predefined macros;
+# an asm object's .s, -x assembler-with-cpp) against gcc's .i or .s,
+# REF/x.i (made by mki), or with -g gcc's made
 # here and now (the cross-check over all of glibc: nothing kept but the
 # list). OUT/result: same, differ or fail for each unit; OUT/d/x.diff the
 # first lines of each difference. Exit 1 if one differs or failed.
@@ -14,13 +15,14 @@
 #
 # TOOL may be a command with its runner (qemu-riscv64 cpp). Units are named
 # as their objects without .o (string/strlen); -l LOG takes the commands
-# from LOG instead of build.log (mki.pl --log: glibc's tests). -k MKI: its
-# mki.pl (libgcc's: ../libgcc/mki.pl, OBJ its build dir, SRC its out dir).
+# from LOG instead of build.log (mki --log: glibc's tests). -k MKI: the
+# command of mki (tools/mki.ff, as the Makefile's MKI; libgcc's: MKI
+# --libgcc, OBJ its build dir, SRC its out dir); else mki.pl.
 set -eu
 gcc= jobs=1 logs= mki=
 while :; do
     case "${1:-}" in
-    -k) mki=$(readlink -f "$2"); shift 2 ;;
+    -k) mki=$2; shift 2 ;;
     -g) gcc=1; shift ;;
     -j) jobs=$2; shift 2 ;;
     -l) logs="$logs --log $2"; shift 2 ;;
@@ -29,7 +31,7 @@ while :; do
 done
 tool=$1 predef=$(readlink -f "$2") obj=$3 src=$4 out=$5 ref=$6
 shift 6
-test -n "$mki" || mki=$(cd "$(dirname "$0")" && pwd)/mki.pl
+test -n "$mki" || mki="perl $(cd "$(dirname "$0")" && pwd)/mki.pl"
 case "$out" in /*) ;; *) out=$PWD/$out ;; esac
 rm -rf "$out"
 mkdir -p "$out/chunks"
@@ -37,10 +39,12 @@ for u in "$@"; do echo "$u.o"; done | split -l 40 - "$out/chunks/c"
 export gcc tool predef obj src out ref mki logs
 work() {
     b=$(basename "$1")
-    if test -n "$gcc"; then perl "$mki" $logs --out "$out/g.$b" "$obj" "$src" $(cat "$1") > /dev/null 2> "$out/g.$b.err" || true; r=$out/g.$b; else r=$ref; fi
-    perl "$mki" $logs --cpp "$tool" --predef "$predef" --out "$out/c.$b" "$obj" "$src" $(cat "$1") > /dev/null 2> "$out/c.$b.err" || true
+    if test -n "$gcc"; then $mki $logs --out "$out/g.$b" "$obj" "$src" $(cat "$1") > /dev/null 2> "$out/g.$b.err" || true; r=$out/g.$b; else r=$ref; fi
+    $mki $logs --cpp "$tool" --predef "$predef" --out "$out/c.$b" "$obj" "$src" $(cat "$1") > /dev/null 2> "$out/c.$b.err" || true
     for o in $(cat "$1"); do
         i=${o%.o}.i
+        # (an object of asm: its .s)
+        if test -e "$r/${o%.o}.s" || test -e "$out/c.$b/${o%.o}.s"; then i=${o%.o}.s; fi
         if ! test -s "$r/$i"; then echo "noref $i"
         elif ! test -s "$out/c.$b/$i"; then echo "fail $i"
         elif cmp -s "$r/$i" "$out/c.$b/$i"; then echo "same $i"
