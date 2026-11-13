@@ -90,6 +90,8 @@ static char *cl_spdx_one (char *h)
     }
   }
   if (cl_ihas (t, "The Inner Net License, Version 2.00")) lic = "Inner-Net-2.0";
+  /* (BLAKE2's reference code, coreutils' src/blake2: any of three, at the user's option) */
+  else if (cl_ihas (t, "under the terms of the CC0, the OpenSSL Licence, or the Apache Public License 2.0, at your option")) lic = "(CC0-1.0 OR OpenSSL OR Apache-2.0)";
   else if (cl_ihas (t, "GNU Lesser General Public License") || cl_ihas (t, "GNU Library General Public License")) {
     char *v = cl_version_after (t, "Lesser General Public License", 1);
     char *w = cl_version_after (t, "Library General Public License", 1);

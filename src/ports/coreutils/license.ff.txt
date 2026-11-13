@@ -1,5 +1,5 @@
 license
   GPL-3.0-or-later AND GPL-3.0-only
   coreutils-9.11 in ff: GNU coreutils' own C (all its tools in one program) and gnulib's C it is built with, translated by ttp (csema -l). It is GPL-3.0-or-later, coreutils' COPYING.
-  Each page holds the license header of each source file it is made of, as the file has it (gnulib's files: some are LGPL-2.1-or-later or another license compatible with it).
+  Each page holds the license header of each source file it is made of, as the file has it (gnulib's files: some are LGPL-2.1-or-later or another license compatible with it; src/blake2's, BLAKE2's reference code: CC0-1.0 OR OpenSSL OR Apache-2.0).
   What ttp writes for it is GPL-3.0-only, Copyright (C) 2026 Nico Verrijdt: see ttp's LICENSE.
