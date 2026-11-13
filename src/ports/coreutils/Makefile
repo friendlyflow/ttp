@@ -26,7 +26,13 @@ PKG_CONFIGURE := --disable-nls --without-selinux --disable-acl --disable-xattr -
     --without-libgmp --without-openssl --enable-single-binary=symlinks \
     --enable-install-program=arch,kill,uptime --enable-no-install-program=stdbuf gl_cv_have_proc_uptime=yes \
     gt_cv_locale_fr=fr_FR.ISO-8859-1 gt_cv_locale_fr_utf8=fr_FR.UTF-8 \
-    gl_cv_func_working_mktime=yes
+    gl_cv_func_working_mktime=yes \
+    utils_cv_avx2_intrinsic_exists=no utils_cv_avx2_pclmul_intrinsic_exists=no \
+    utils_cv_avx512_intrinsic_exists=no utils_cv_avx512_pclmul_intrinsic_exists=no \
+    utils_cv_pclmul_intrinsic_exists=no utils_cv_neon_intrinsic_exists=no utils_cv_vmull_intrinsic_exists=no
+# (no SIMD variants of cksum and wc: they pick one at run time by
+# __builtin_cpu_supports, gcc's cpu model, which glibc in ff has not; the
+# plain C of each for both programs)
 # (mktime: as ../findutils/Makefile says)
 # the test suite: coreutils' own (tests/, by the top Makefile), not gnulib's
 # tests of its modules (gnulib-tests/); those that need root, or are
