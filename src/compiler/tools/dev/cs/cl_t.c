@@ -691,6 +691,17 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
     return k;
   }
   old = cl_get (map, name);
+  /* (a static whose name another unit has for the other kind, a function's and a global's: coreutils'
+     single program has cksum.c's static function output_file and dd.c's static output_file; one name, one
+     of them left out, the other's uses called it: the static takes its unit's name) */
+  if (!old && d->sc == SC_STATIC && C->treedefs.count) {
+    struct cs_decl *o2 = cl_get (map == &C->fn ? &C->var : &C->fn, name);
+    if (o2 && o2->unit != C->cu) {
+      char *kk = cl_cat3 (name, " ", cl_unit_name ());
+      cl_put (&C->own, name, kk);
+      return kk;
+    }
+  }
   if (!old) return name;
   if (old->unit == C->cu || (d->sc != SC_STATIC && old->sc != SC_STATIC)) return name;
   /* (a static and another unit's external of one name are two things: the external has the name, the static its unit's: elf/dl-gcs.c's warn) */

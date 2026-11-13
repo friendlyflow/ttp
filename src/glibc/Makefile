@@ -1829,9 +1829,11 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   gsizeof a global whose first item is a sizeof (gnulib's quotearg.c slotvec0)
 #   structlit  a struct set from a compound literal (gnulib's parse-datetime.y)
 #   condchain  a table of items each a chain of 64 conditionals (gnulib's base64.c)
+#   statkind  two units' statics of one name, a function and a global (coreutils)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind
+ALLPROG_statkind := statkind-a statkind-b
 ALLPROG_condchain := condchain
 ALLPROG_gsizeof := gsizeof
 ALLPROG_structlit := structlit
