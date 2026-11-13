@@ -14,5 +14,5 @@ find . -name '*.trs' | sort | while read -r t; do
 done
 find . -name '*.sum' | sort | while read -r s; do
     d=${s#./}; d=${d%/*}
-    sed -n "s|^\(PASS\|FAIL\|XPASS\|XFAIL\|UNRESOLVED\|UNTESTED\|UNSUPPORTED\|KFAIL\|KPASS\): \(.*\)$|$d:\2 \1|p" "$s" | tr ' ' '_' | sed 's/_\([A-Z]*\)$/ \1/'
+    sed -n -E "s#^(PASS|FAIL|XPASS|XFAIL|UNRESOLVED|UNTESTED|UNSUPPORTED|KFAIL|KPASS): (.*)\$#$d:\2 \1#p" "$s" | tr ' ' '_' | sed 's/_\([A-Z]*\)$/ \1/'
 done
