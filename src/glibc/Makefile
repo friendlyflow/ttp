@@ -1828,9 +1828,11 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   gencond _Generic of a conditional (gnulib's string.h strchr, time_rz.c)
 #   gsizeof a global whose first item is a sizeof (gnulib's quotearg.c slotvec0)
 #   structlit  a struct set from a compound literal (gnulib's parse-datetime.y)
+#   condchain  a table of items each a chain of 64 conditionals (gnulib's base64.c)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain
+ALLPROG_condchain := condchain
 ALLPROG_gsizeof := gsizeof
 ALLPROG_structlit := structlit
 ALLPROG_gencond := gencond

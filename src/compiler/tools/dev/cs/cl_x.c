@@ -1878,7 +1878,13 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     cl_push (o, cl_n ("?"));
     cl_operand (cl_k (n, 1), 4, 0, o);
     cl_push (o, cl_n (":"));
-    cl_operand (cl_k (n, 2), 3, 1, o);
+    /* (a long chain of conditionals in a :, a node holding 255: gnulib base64.c's B64 (x), a ? : of each
+       of the 64 letters, an item of a table; a short one as it was, in a row) */
+    {
+      struct cl_list *t = cl_l ();
+      cl_operand (cl_k (n, 2), 3, 1, t);
+      if (t->n > 200) cl_push (o, cl_nl (":", t)); else cl_append (o, t);
+    }
     return;
   }
   if (k == E_STMTX) {
