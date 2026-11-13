@@ -2040,6 +2040,14 @@ static void cl_init (struct cs_ex *n, struct cl_list *o)
   str = cl_bare_string (n);
   if (str) { cl_array_text (str, o); return; }
   if (cl_char_enum (n, o)) return;
+  /* (a struct's or a union's from a compound literal of it, gnulib parse-datetime.y's
+     relative_time rel_time_0 = (relative_time) { 0, ... }: its items, the declaration's own; as
+     one item, a : of the literal, ttpc set the first field to the temporary's address) */
+  {
+    struct cs_ex *x = cl_strip (n);
+    while (x->k == E_PAREN) x = cl_strip (cl_k (x, 0));
+    if (x->k == E_CLIT && (cs_kind (n->t) == TY_STRUCT || cs_kind (n->t) == TY_UNION) && (cs_kind (x->t) == TY_STRUCT || cs_kind (x->t) == TY_UNION) && cl_strip (cl_k (x, 0))->k == E_INIT) { cl_init_items (cl_strip (cl_k (x, 0)), o); return; }
+  }
   cl_itemx (n, o);
 }
 static struct node *cl_align_node (int has, long long v)
