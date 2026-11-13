@@ -63,6 +63,10 @@ static int cl_scalar_word (char *s)
 static void cl_item (struct cl_list *l, struct cl_list *o)
 {
   if (l->n && cl_isop ((char *) l->v[0]->text) && !l->v[0]->count) { cl_push (o, cl_nl (":", l)); return; }
+  /* (a global's item that is a sizeof or an alignof: in a :, an item's form; as it was, a global of a
+     struct whose first item it was became a function to ttpc: gnulib quotearg.c's slotvec0 =
+     { sizeof slot0, slot0 }, find's, xargs' and locate's quoting wrote into their code) */
+  if (C->in_global && l->n == 1 && l->v[0]->count && (cl_is (l->v[0], "sizeof") || cl_is (l->v[0], "alignof"))) { cl_push (o, cl_nl (":", l)); return; }
   cl_append (o, l);
 }
 static void cl_itemx (struct cs_ex *e, struct cl_list *o) { cl_item (cl_ex (e), o); }
