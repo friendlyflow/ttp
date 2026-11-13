@@ -876,6 +876,9 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # (--dry, --show) and files; tools-check runs each target's build and the
 # Perl on progs/mki's logs, src/glibc's mki-crosscheck on all of glibc's
 # and libgcc's objects.
+# gen/s2ff.pl in ff (T4b): tools/s2ff.ff and its _start, s2ff-start.ff (as
+# mki's), the same output, messages and status; src/glibc's s2ff-crosscheck
+# runs both on every asm object of glibc and libgcc.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -884,7 +887,7 @@ TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.f
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
 CSLIB := tools/csem.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki s2ff
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -944,6 +947,11 @@ $(TL)/$(1)/cpp: tools/cpp.ff tools/cpp-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(B
 $(TL)/$(1)/mki: tools/mki.ff tools/mki-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/mki.ff tools/mki-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/s2ff: tools/s2ff.ff tools/s2ff-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/s2ff.ff tools/s2ff-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
@@ -1218,6 +1226,14 @@ copies-check: $(CT)/unlicense $(CT)/trim $(CT)/frozen $(CT)/mkhost $(CT)/mkwhole
 refresh: $(CT)/mkff
 	$(RUNT) $(CT)/mkff > $(SHARED).tmp && mv $(SHARED).tmp $(SHARED)
 	perl gen/mkgnuff.pl > $(X86GNU).tmp && mv $(X86GNU).tmp $(X86GNU)
+	@set -e; for t in $(DECTAB); do \
+	    perl gen/mkdectab.pl $$t > isa/$$t.dec.ff.txt.tmp && mv isa/$$t.dec.ff.txt.tmp isa/$$t.dec.ff.txt; \
+	    perl gen/fftext.pl ff isa/$$t.dec.ff.txt > isa/$$t.dec.ff.tmp && mv isa/$$t.dec.ff.tmp isa/$$t.dec.ff; done
+
+# s2ff's decoding tables of arm and x86_64 asm (isa/<target>.dec.ff and its
+# .ff.txt, gen/mkdectab.pl): what isa/arm.pl and isa/x86_64.pl fill for the
+# host tools and the shared page leaves out (ttpc needs none of it).
+DECTAB := arm x86_64
 
 # The committed shared.ff and x86_64gnu.ff are what refresh makes of their
 # sources (made again in a folder of their own): a source changed without
@@ -1229,7 +1245,9 @@ refresh-check: $(CT)/mkff
 	cmp $$d/$(SHARED) $(SHARED) || { echo "refresh-check: $(SHARED) is not what make refresh makes of shared.ff.txt, macros/ and isa/"; exit 1; }; \
 	perl gen/mkgnuff.pl > $$d/$(X86GNU); \
 	cmp $$d/$(X86GNU) $(X86GNU) || { echo "refresh-check: $(X86GNU) is not what make refresh makes of isa/x86_64gnu.pl"; exit 1; }; \
-	echo "refresh-check: $(SHARED) and $(X86GNU) are what make refresh makes"
+	for t in $(DECTAB); do perl gen/mkdectab.pl $$t > $$d/$$t.dec.ff.txt; perl gen/fftext.pl ff $$d/$$t.dec.ff.txt > $$d/$$t.dec.ff; \
+	    cmp $$d/$$t.dec.ff.txt isa/$$t.dec.ff.txt && cmp $$d/$$t.dec.ff isa/$$t.dec.ff || { echo "refresh-check: isa/$$t.dec.ff is not what make refresh makes of isa/$$t.pl"; exit 1; }; done; \
+	echo "refresh-check: $(SHARED), $(X86GNU) and $(DECTAB:%=isa/%.dec.ff) are what make refresh makes"
 
 # A change of ttpc is a patch script (gen/patches/*.pl, see gen/patchlib.pl),
 # committed with the tree it changes, so that it can be replayed when a

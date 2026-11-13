@@ -1,0 +1,85 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+_start:
+  void
+  comment
+    the same in every tool (tools/rt.ff): the runtime's state, then main with argc and argv, the output flushed; here on the program page, as compile time in library C does not work yet
+  rt init
+  stack:
+    long
+    * pointer
+    0
+  :
+    compile time
+    comment
+      the stack the program began with (argc, argv, ...): the FP of _start plus its target's cc_entryoff
+    if
+      target
+      ==
+      riscv64
+      emit
+        stack
+        =
+        cast
+          long
+          * pointer
+        :
+          s0
+          +
+          16
+    else if
+      target
+      ==
+      x86_64
+      emit
+        stack
+        =
+        cast
+          long
+          * pointer
+        :
+          rbp
+          +
+          16
+    else if
+      target
+      ==
+      aarch64
+      emit
+        stack
+        =
+        cast
+          long
+          * pointer
+        :
+          x29
+          +
+          16
+    else
+      emit
+        stack
+        =
+        cast
+          long
+          * pointer
+        :
+          r11
+          +
+          8
+  status:
+    long
+    main
+      stack
+      * pointer
+      cast
+        char
+        * pointer
+        * pointer
+      :
+        stack
+        +
+        1
+  out flush
+  syscall
+    SYS_exit
+    status

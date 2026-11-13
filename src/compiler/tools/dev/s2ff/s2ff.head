@@ -1,0 +1,5 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+s2ff [--page name | --items | --size | --facts FILE] file.s file.dump: the functions of a preprocessed .S file (the .s its build assembled), each an asm function of ttpc's C layer, from the .s and what GNU as made of it (its objdump);
+s2ff --header file.s ...: the license of each one's file, for the top of their page;
+gen/s2ff.pl in ff, the same output, messages and status (make s2ff-crosscheck compares them; dev source: tools/dev/s2ff)

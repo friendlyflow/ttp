@@ -1,0 +1,63 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+comment
+  s2ff's own runtime (its dev source declares it), beside tools/c.ff's cp_* on tools/rt.ff: raw syscalls, each result the kernel's, a negative errno when it fails
+s2_open:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      0
+      0
+s2_exists:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  comment
+    an O_PATH descriptor of path (0x200000 on the four targets), as -e and Cwd::abs_path see it: the file there, links followed
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      2097152
+      0
+s2_read:
+  long
+  fd:
+    long
+  buf:
+    u8
+    * pointer
+  n:
+    long
+  return
+    syscall
+      SYS_read
+      fd
+      buf
+      n
+s2_close:
+  long
+  fd:
+    long
+  return
+    syscall
+      SYS_close
+      fd
