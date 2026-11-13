@@ -1,0 +1,30 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/i/csu/start.ref.o:     file format elf64-littleriscv
+
+
+Disassembly of section .text:
+
+0000000000000000 <_start>:
+   0:	00000097          	auipc	ra,0x0
+   4:	000080e7          	jalr	ra,0(ra) # 0 <_start>
+   8:	87aa                	c.mv	a5,a0
+   a:	00000517          	auipc	a0,0x0
+   e:	00050513          	addi	a0,a0,0 # a <_start+0xa>
+  12:	6582                	c.ldsp	a1,0(sp)
+  14:	0030                	c.addi4spn	a2,sp,8
+  16:	ff017113          	andi	sp,sp,-16
+  1a:	4681                	c.li	a3,0
+  1c:	4701                	c.li	a4,0
+  1e:	880a                	c.mv	a6,sp
+  20:	00000097          	auipc	ra,0x0
+  24:	000080e7          	jalr	ra,0(ra) # 20 <_start+0x20>
+  28:	9002                	c.ebreak
+
+000000000000002a <__wrap_main>:
+  2a:	00000317          	auipc	t1,0x0
+  2e:	00030067          	jalr	zero,0(t1) # 2a <__wrap_main>
+
+0000000000000032 <load_gp>:
+  32:	00000197          	auipc	gp,0x0
+  36:	00018193          	addi	gp,gp,0 # 32 <load_gp>
+  3a:	8082                	c.jr	ra

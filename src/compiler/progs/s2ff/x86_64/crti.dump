@@ -1,0 +1,17 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/x86_64/i/csu/crti.ref.o:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+0000000000000000 <_init>:
+   0:	48 83 ec 08          	sub    $0x8,%rsp
+   4:	48 8b 05 00 00 00 00 	mov    0x0(%rip),%rax        # b <_init+0xb>
+   b:	48 85 c0             	test   %rax,%rax
+   e:	74 02                	je     12 <_init+0x12>
+  10:	ff d0                	call   *%rax
+
+Disassembly of section .fini:
+
+0000000000000000 <_fini>:
+   0:	48 83 ec 08          	sub    $0x8,%rsp

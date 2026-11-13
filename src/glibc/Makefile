@@ -676,13 +676,29 @@ $(I)/%.s: $(OBJ)/libc.a | $(MKIT) $(CPP) $(PREDEF)
 # (.Ls, s2ff-aarch64.pl --locals) is assembled with -L, which keeps local
 # labels, and dumped with its relocations and symbols. Its .text is the
 # same bytes as glibc's own object's (asm-check compares them too).
-S2FF_riscv64 := ../compiler/gen/s2ff.pl
-S2FF_aarch64 := ../compiler/gen/s2ff-aarch64.pl
-S2FF_arm := ../compiler/gen/s2ff-arm.pl
+# s2ff is tools/s2ff.ff (S2FFT, CPTOOLS/s2ff as mki and csema: ports-check's
+# tools step makes it), gen/s2ff.pl, s2ff-aarch64.pl and s2ff-arm.pl in ff
+# (--target, the same output, messages and status); it reads the target's
+# forms from the shared page and, for arm and x86_64, the tables
+# ../compiler/isa/<target>.dec.ff (and x86_64gnu.ff). The Perl (S2FFPL) stays
+# behind s2ff-crosscheck, which compares them on every asm object.
+S2FFPL_riscv64 := ../compiler/gen/s2ff.pl
+S2FFPL_aarch64 := ../compiler/gen/s2ff-aarch64.pl
+S2FFPL_arm := ../compiler/gen/s2ff-arm.pl
+S2FFPL := $(or $(S2FFPL_$(GTARGET)),../compiler/gen/s2ff.pl)
+S2FFT := $(CPTOOLS)/s2ff
+S2FFTAB_arm := ../compiler/isa/arm.dec.ff
+S2FFTAB_x86_64 := ../compiler/isa/x86_64.dec.ff ../compiler/x86_64gnu.ff
+S2FFOPT_arm := --tables $(abspath ../compiler/isa/arm.dec.ff)
+S2FFOPT_x86_64 := --tables $(abspath ../compiler/isa/x86_64.dec.ff) --gnu $(abspath ../compiler/x86_64gnu.ff)
+S2FF = $(CPRUN) $(abspath $(S2FFT)) --target $(GTARGET) --shared $(abspath ../compiler/shared.ff) $(S2FFOPT_$(GTARGET))
+# (--header, the license of each file: s2ff.pl's, on every target)
+S2FFH = $(CPRUN) $(abspath $(S2FFT)) --header
+# what an s2ff's output is made of
+S2FFDEPS := $(S2FFT) ../compiler/shared.ff $(S2FFTAB_$(GTARGET))
 # (the asm's branches to an ifunc through a stub, builtins-arm.ff.txt's __ff_plt_<name>:
 # memmove.S's bls memcpy, as ld's stub in gcc's; every forward memmove hung)
 PLT_arm := memcpy
-S2FF := $(or $(S2FF_$(GTARGET)),../compiler/gen/s2ff.pl)
 # the file s2ff reads: riscv64 the .s itself, aarch64 the .Ls (not .L.s:
 # that would be an .s of an object x.L, which mki.pl would be asked for)
 SSRC_riscv64 := .s
@@ -691,8 +707,10 @@ SSRC := $(or $(SSRC_$(GTARGET)),.s)
 ASREF_aarch64 := -Wa,-L
 DUMPOPT_aarch64 := -r -t -M no-aliases
 
-$(I)/%.Ls: $(I)/%.s $(S2FF_aarch64)
-	perl $(S2FF_aarch64) --locals $< > $@
+# (s2ff only orders it: what --locals writes does not change with the tool,
+# s2ff-crosscheck shows it)
+$(I)/%.Ls: $(I)/%.s | $(S2FFDEPS)
+	$(S2FF) --locals $< > $@.tmp && mv $@.tmp $@
 
 $(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
 	$(RUN) -t 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
@@ -760,7 +778,7 @@ endef
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
-$$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt ../compiler/gen/s2ff.pl $$(S2FF) ../compiler/gen/Header.pm
+$$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt $$(S2FFDEPS)
 	mkdir -p $$(FF)
 	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
 	$$(file >$$(FF)/$(1).csunits,$$(foreach o,$$(OBJS_all_$(1)),$$(call csread,$$(o))$$(nl)))
@@ -768,10 +786,10 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_a
 	$$(RUN) $$(call csmem,$(1)) -t 600 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
 	    -- @$$(FF)/$(1).rootlist $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
-	$$(if $$(ASMS_all_$(1)),perl ../compiler/gen/s2ff.pl --header $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) > $$(FF)/$(1).asm.hdr && sed 's/^/  /' $$(FF)/$(1).asm.hdr >> $$(FF)/$(1).asm.page.txt)
+	$$(if $$(ASMS_all_$(1)),$$(S2FFH) $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) > $$(FF)/$(1).asm.hdr && sed 's/^/  /' $$(FF)/$(1).asm.hdr >> $$(FF)/$(1).asm.page.txt)
 	for a in $$(ASMS_all_$(1)); do \
 	    then=; test $$$$a = csu/crti && then="--then $$(I)/csu/crtn$$(SSRC) $$(I)/csu/crtn.dump"; \
-	    $$(RUN) -t 60 perl $$(S2FF) --items $$(foreach p,$$(PLT_$$(GTARGET)),--plt $$(p)) $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
+	    $$(RUN) -t 60 $$(S2FF) --items $$(foreach p,$$(PLT_$$(GTARGET)),--plt $$(p)) $$(if $$(filter aarch64 x86_64 arm,$$(GTARGET)),$$(foreach z,$$(call with_start,ZEROS,$(1)),--zero $$(z))) $$(I)/$$$$a$$(SSRC) $$(I)/$$$$a.dump $$$$then > $$(FF)/$(1).asm.txt || exit 1; \
 	    sed 's/^/  /' $$(FF)/$(1).asm.txt >> $$(FF)/$(1).asm.page.txt; \
 	done
 	$$(if $$(ASMS_all_$(1)),$$(LAYERS) $$(FF)/$(1).asm.page.txt >> $$(FF)/$(1).ff.txt)
@@ -830,11 +848,10 @@ ASMTRAP_x86_64 := int3
 ASMHDR_x86_64 := 120
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
-# (x86_64's s2ff also reads the forms of isa/, ttpc also x86_64gnu.ff)
-S2FFDEPS_x86_64 := ../compiler/gen/s2ffx86.pm ../compiler/isa/x86_64.pl ../compiler/isa/x86_64gnu.pl
-$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FF) $(S2FFDEPS_$(GTARGET)) $(SHARED) $(TTPC)
+# (x86_64's s2ff also reads isa/x86_64.dec.ff, both x86_64gnu.ff)
+$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC)
 	@rm -f $@; a=$(I)/$*; \
-	{ perl $(S2FF) --facts $$a.facts $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
+	{ $(S2FF) --facts $$a.facts $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
 	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
 	$(RUN) -n -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
@@ -1465,17 +1482,17 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
+$(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt $(S2FFDEPS)
 	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
 	$(file >$(FF)/glibc.csunits,$(foreach o,$(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)) $(LIBGCC_glibc:%=libgcc/%),$(call csread,$(o))$(nl)))
 	$(SLOT) $(call csmem,glibc) -t 3600 $(call cstrans,glibc) -k -K $(FF)/glibc.statics $(foreach z,$(ZEROS_glibc),-Z $(z)) $(foreach w,$(WEAKS_glibc),-W $(w)) \
 	    @$(FF)/glibc.csunits -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.csema.err \
 	    || { tail -5 $(FF)/glibc.csema.err; exit 1; }
 	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
-	perl ../compiler/gen/s2ff.pl --header $(GLIBC_ASM:%=$(I)/%.s) > $(FF)/glibc.asm.hdr && sed 's/^/  /' $(FF)/glibc.asm.hdr >> $(FF)/glibc.asm.page.txt
+	$(S2FFH) $(GLIBC_ASM:%=$(I)/%.s) > $(FF)/glibc.asm.hdr && sed 's/^/  /' $(FF)/glibc.asm.hdr >> $(FF)/glibc.asm.page.txt
 	for a in $(GLIBC_ASM); do \
 	    then=; test $$a = csu/crti && test -n "$(GLIBC_THEN)" && then="--then $(I)/csu/crtn$(SSRC) $(I)/csu/crtn.dump"; \
-	    $(RUN) -t 60 perl $(S2FF) --items $(foreach p,$(PLT_$(GTARGET)),--plt $(p)) $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
+	    $(RUN) -t 60 $(S2FF) --items $(foreach p,$(PLT_$(GTARGET)),--plt $(p)) $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
@@ -1595,7 +1612,7 @@ $(FF)/libgcc.roots $(FF)/libgcc.units &: $(FF)/libgcc.lists $(LIBGCC_C:%=$(LI)/%
 	for o in $(LIBGCC_C); do $(XPRE)nm --defined-only -g $(LOBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done | sort -u > $(FF)/libgcc.roots
 	for o in $(LIBGCC_C); do echo "$(LI)/$$o.json=$(LI)/$$o.i"; done > $(FF)/libgcc.units
 
-$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt ../compiler/gen/s2ff.pl $(S2FF) ../compiler/gen/Header.pm
+$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt $(S2FFDEPS)
 	cp ../libgcc/license.ff.txt $(FF)/libgcc.ff.txt
 	$(file >$(FF)/libgcc.csunits,$(foreach o,$(LIBGCC_C),$(LI)/$(o).i$(nl)))
 	$(RUN) $(call csmem,libgcc) -t 900 $(call cstrans,libgcc) -k -p gcc @$(FF)/libgcc.csunits -- @$(FF)/libgcc.roots \
@@ -1603,9 +1620,9 @@ $(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builti
 	echo 'gcc asm:' > $(FF)/libgcc.asm.page.txt
 	@# (s2ff --header's stop stops the page, as in the milestones' and glibc's: through
 	@# a pipe into sed it did not, and a page without the asm's license was written)
-	perl ../compiler/gen/s2ff.pl --header $(LIBGCC_ASM:%=$(LI)/%.s) > $(FF)/libgcc.asm.hdr && sed 's/^/  /' $(FF)/libgcc.asm.hdr >> $(FF)/libgcc.asm.page.txt
+	$(S2FFH) $(LIBGCC_ASM:%=$(LI)/%.s) > $(FF)/libgcc.asm.hdr && sed 's/^/  /' $(FF)/libgcc.asm.hdr >> $(FF)/libgcc.asm.page.txt
 	for a in $(LIBGCC_ASM); do \
-	    $(RUN) -t 60 perl $(S2FF) --items $(LI)/$$a$(SSRC) $(LI)/$$a.dump > $(FF)/libgcc.asm.txt || exit 1; \
+	    $(RUN) -t 60 $(S2FF) --items $(LI)/$$a$(SSRC) $(LI)/$$a.dump > $(FF)/libgcc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/libgcc.asm.txt >> $(FF)/libgcc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/libgcc.asm.page.txt >> $(FF)/libgcc.ff.txt
@@ -1634,6 +1651,29 @@ libgcc-asm-check: $(LIBGCC_ASMCHECK:%=$(LI)/%.asmok)
 	@for a in $(LIBGCC_ASMCHECK); do cat $(LI)/$$a.asmok; done
 libgcc-checks: libgcc-roundtrip libgcc-licenses libgcc-asm-check
 .PHONY: libgcc-ref libgcc-checks libgcc-licenses libgcc-roundtrip libgcc-asm-check
+
+# ---- s2ff, the Perl's cross-check (here: it needs ALL_ASM and LIBGCC_ASMCHECK) ----
+# s2ff-crosscheck: tools/s2ff.ff (S2FF) against the Perl (S2FFPL) on every
+# asm object of glibc (but x86_64's libmvec, which neither takes yet) and
+# libgcc's (LIBGCC_ASMCHECK), each run as the build runs it (s2ffcheck.sh:
+# --facts, --items, --size, the page, --items with the pages' --zero and
+# --plt; aarch64's --skip and --locals, x86_64's --align; crti with crtn's
+# --then), then --header of glibc's and libgcc's lists: output, messages,
+# status and facts byte for byte. Run it before ports goes into main, with
+# mki-crosscheck and cpp-crosscheck.
+S2FFCHECK = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)),$(ALL_ASM))
+S2FFX := $(BUILD)/s2ffcheck
+s2ff-crosscheck: $(S2FFCHECK:%=$(I)/%.dump) $(LIBGCC_ASMCHECK:%=$(LI)/%.dump) $(S2FFDEPS)
+	$(file >$(S2FFX).stems,$(S2FFCHECK:%=$(I)/%) $(LIBGCC_ASMCHECK:%=$(LI)/%))
+	@$(RUN) -t 14400 sh s2ffcheck.sh -t $(GTARGET) -p "perl $(S2FFPL)" -f "$(S2FF)" -o $(S2FFX) -s $(SSRC) \
+	    -z "$(ZEROS_glibc)" -l "$(PLT_$(GTARGET))" $$(cat $(S2FFX).stems)
+	@set -e; d=$(S2FFX)/h; mkdir -p $$d; for l in glibc libgcc; do \
+	    if test $$l = glibc; then fs="$(GLIBC_ASM:%=$(I)/%.s)"; else fs="$(LIBGCC_ASM:%=$(LI)/%.s)"; fi; \
+	    s=0; perl ../compiler/gen/s2ff.pl --header $$fs > $$d/p.out 2> $$d/p.err || s=$$?; echo "exit $$s" >> $$d/p.err; \
+	    s=0; $(S2FFH) $$fs > $$d/f.out 2> $$d/f.err || s=$$?; echo "exit $$s" >> $$d/f.err; \
+	    cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.err $$d/f.err || { echo "s2ff-crosscheck: --header of $$l's asm differs ($$d)"; exit 1; }; \
+	    echo "s2ff-crosscheck: --header of $$l's $$(echo $$fs | wc -w) asm files the same"; done
+.PHONY: s2ff-crosscheck
 
 # ---- glibc's own tests -----------------------------------------------------------
 # The tests of an area of glibc (AREA: one of its directories, string,

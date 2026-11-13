@@ -1076,6 +1076,13 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	    cmp $(TL)/$(1).mki.p $(TL)/$(1).mki.f && cmp $(TL)/$(1).mki.pe $(TL)/$(1).mki.fe || { echo "tools-check-$(1): mki --libgcc $$$$m is not ../libgcc/mki.pl's"; exit 1; }; \
 	done
 	@echo "tools-check-$(1): mki and mki --libgcc say what mki.pl and ../libgcc/mki.pl say of progs/mki's logs (--dry, --show, --cpp)"
+	@set -e; for t in riscv64 aarch64 arm x86_64; do \
+	    tb=; case $$$$t in aarch64) pl=s2ff-aarch64.pl; ss=.Ls ;; arm) pl=s2ff-arm.pl; ss=.s; tb="--tables isa/arm.dec.ff" ;; \
+	        x86_64) pl=s2ff.pl; ss=.s; tb="--tables isa/x86_64.dec.ff --gnu $(X86GNU)" ;; *) pl=s2ff.pl; ss=.s ;; esac; \
+	    sh ../glibc/s2ffcheck.sh -x -t $$$$t -p "perl gen/$$$$pl" -f "$(RUN_$(1)) $(TL)/$(1)/s2ff --target $$$$t --shared shared.ff $$$$tb" \
+	        -o $(TL)/$(1).s2ff/$$$$t -s $$$$ss -z "__rseq_size __rseq_offset" -l "$$$$(test $$$$t = arm && echo memcpy)" \
+	        $$$$(ls progs/s2ff/$$$$t/*.dump | sed 's/\.dump$$$$//') > $(TL)/$(1).s2ff.$$$$t.log || { cat $(TL)/$(1).s2ff.$$$$t.log; exit 1; }; done
+	@echo "tools-check-$(1): s2ff says what gen/s2ff.pl, s2ff-aarch64.pl and s2ff-arm.pl say of progs/s2ff's asm (each target's, every way the build runs them, and runs that stop)"
 endef
 # mki on a glibc build's log of each kind of command (C, .os, a .S, a
 # syscall stub from (echo ...) | gcc, an -aux.S of -S, misc's dummy.o, an

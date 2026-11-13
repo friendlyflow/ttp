@@ -1,0 +1,112 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/x86_64/i/string/strlen-sse2.ref.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <__strlen_sse2>:
+   0:	66 0f ef c0          	pxor   %xmm0,%xmm0
+   4:	66 0f ef c9          	pxor   %xmm1,%xmm1
+   8:	66 0f ef d2          	pxor   %xmm2,%xmm2
+   c:	66 0f ef db          	pxor   %xmm3,%xmm3
+  10:	48 89 f8             	mov    %rdi,%rax
+  13:	48 89 f9             	mov    %rdi,%rcx
+  16:	48 81 e1 ff 0f 00 00 	and    $0xfff,%rcx
+  1d:	48 81 f9 cf 0f 00 00 	cmp    $0xfcf,%rcx
+  24:	77 6a                	ja     90 <__strlen_sse2+0x90>
+  26:	f3 0f 6f 20          	movdqu (%rax),%xmm4
+  2a:	66 0f 74 e0          	pcmpeqb %xmm0,%xmm4
+  2e:	66 0f d7 d4          	pmovmskb %xmm4,%edx
+  32:	85 d2                	test   %edx,%edx
+  34:	74 04                	je     3a <__strlen_sse2+0x3a>
+  36:	0f bc c2             	bsf    %edx,%eax
+  39:	c3                   	ret
+  3a:	48 83 e0 f0          	and    $0xfffffffffffffff0,%rax
+  3e:	66 0f 74 48 10       	pcmpeqb 0x10(%rax),%xmm1
+  43:	66 0f 74 50 20       	pcmpeqb 0x20(%rax),%xmm2
+  48:	66 0f 74 58 30       	pcmpeqb 0x30(%rax),%xmm3
+  4d:	66 0f d7 d1          	pmovmskb %xmm1,%edx
+  51:	66 44 0f d7 c2       	pmovmskb %xmm2,%r8d
+  56:	66 0f d7 cb          	pmovmskb %xmm3,%ecx
+  5a:	48 c1 e2 10          	shl    $0x10,%rdx
+  5e:	48 c1 e1 10          	shl    $0x10,%rcx
+  62:	4c 09 c1             	or     %r8,%rcx
+  65:	48 c1 e1 20          	shl    $0x20,%rcx
+  69:	48 09 ca             	or     %rcx,%rdx
+  6c:	48 89 f9             	mov    %rdi,%rcx
+  6f:	48 31 c1             	xor    %rax,%rcx
+  72:	48 83 e0 c0          	and    $0xffffffffffffffc0,%rax
+  76:	48 d3 fa             	sar    %cl,%rdx
+  79:	48 85 d2             	test   %rdx,%rdx
+  7c:	0f 84 7e 00 00 00    	je     100 <__strlen_sse2+0x100>
+  82:	48 0f bc c2          	bsf    %rdx,%rax
+  86:	c3                   	ret
+  87:	66 0f 1f 84 00 00 00 00 00 	nopw   0x0(%rax,%rax,1)
+  90:	48 83 e0 c0          	and    $0xffffffffffffffc0,%rax
+  94:	66 0f 74 00          	pcmpeqb (%rax),%xmm0
+  98:	66 0f 74 48 10       	pcmpeqb 0x10(%rax),%xmm1
+  9d:	66 0f 74 50 20       	pcmpeqb 0x20(%rax),%xmm2
+  a2:	66 0f 74 58 30       	pcmpeqb 0x30(%rax),%xmm3
+  a7:	66 0f d7 f0          	pmovmskb %xmm0,%esi
+  ab:	66 0f d7 d1          	pmovmskb %xmm1,%edx
+  af:	66 44 0f d7 c2       	pmovmskb %xmm2,%r8d
+  b4:	66 0f d7 cb          	pmovmskb %xmm3,%ecx
+  b8:	48 c1 e2 10          	shl    $0x10,%rdx
+  bc:	48 c1 e1 10          	shl    $0x10,%rcx
+  c0:	48 09 f2             	or     %rsi,%rdx
+  c3:	4c 09 c1             	or     %r8,%rcx
+  c6:	48 c1 e1 20          	shl    $0x20,%rcx
+  ca:	48 09 ca             	or     %rcx,%rdx
+  cd:	48 89 f9             	mov    %rdi,%rcx
+  d0:	48 31 c1             	xor    %rax,%rcx
+  d3:	48 83 e0 c0          	and    $0xffffffffffffffc0,%rax
+  d7:	48 d3 fa             	sar    %cl,%rdx
+  da:	48 85 d2             	test   %rdx,%rdx
+  dd:	74 11                	je     f0 <__strlen_sse2+0xf0>
+  df:	48 0f bc c2          	bsf    %rdx,%rax
+  e3:	c3                   	ret
+  e4:	90                   	nop
+  e5:	66 66 2e 0f 1f 84 00 00 00 00 00 	data16 cs nopw 0x0(%rax,%rax,1)
+  f0:	66 0f ef c9          	pxor   %xmm1,%xmm1
+  f4:	66 0f ef d2          	pxor   %xmm2,%xmm2
+  f8:	66 0f ef db          	pxor   %xmm3,%xmm3
+  fc:	0f 1f 40 00          	nopl   0x0(%rax)
+ 100:	66 0f 6f 40 40       	movdqa 0x40(%rax),%xmm0
+ 105:	66 0f da 40 50       	pminub 0x50(%rax),%xmm0
+ 10a:	66 0f da 40 60       	pminub 0x60(%rax),%xmm0
+ 10f:	66 0f da 40 70       	pminub 0x70(%rax),%xmm0
+ 114:	66 0f 74 c3          	pcmpeqb %xmm3,%xmm0
+ 118:	66 0f d7 d0          	pmovmskb %xmm0,%edx
+ 11c:	85 d2                	test   %edx,%edx
+ 11e:	75 30                	jne    150 <__strlen_sse2+0x150>
+ 120:	48 83 e8 80          	sub    $0xffffffffffffff80,%rax
+ 124:	66 0f 6f 00          	movdqa (%rax),%xmm0
+ 128:	66 0f da 40 10       	pminub 0x10(%rax),%xmm0
+ 12d:	66 0f da 40 20       	pminub 0x20(%rax),%xmm0
+ 132:	66 0f da 40 30       	pminub 0x30(%rax),%xmm0
+ 137:	66 0f 74 c3          	pcmpeqb %xmm3,%xmm0
+ 13b:	66 0f d7 d0          	pmovmskb %xmm0,%edx
+ 13f:	85 d2                	test   %edx,%edx
+ 141:	75 11                	jne    154 <__strlen_sse2+0x154>
+ 143:	eb bb                	jmp    100 <__strlen_sse2+0x100>
+ 145:	66 66 2e 0f 1f 84 00 00 00 00 00 	data16 cs nopw 0x0(%rax,%rax,1)
+ 150:	48 83 c0 40          	add    $0x40,%rax
+ 154:	66 0f ef c0          	pxor   %xmm0,%xmm0
+ 158:	66 0f 74 00          	pcmpeqb (%rax),%xmm0
+ 15c:	66 0f 74 48 10       	pcmpeqb 0x10(%rax),%xmm1
+ 161:	66 0f 74 50 20       	pcmpeqb 0x20(%rax),%xmm2
+ 166:	66 0f 74 58 30       	pcmpeqb 0x30(%rax),%xmm3
+ 16b:	66 0f d7 f0          	pmovmskb %xmm0,%esi
+ 16f:	66 0f d7 d1          	pmovmskb %xmm1,%edx
+ 173:	66 44 0f d7 c2       	pmovmskb %xmm2,%r8d
+ 178:	66 0f d7 cb          	pmovmskb %xmm3,%ecx
+ 17c:	48 c1 e2 10          	shl    $0x10,%rdx
+ 180:	48 c1 e1 10          	shl    $0x10,%rcx
+ 184:	48 09 f2             	or     %rsi,%rdx
+ 187:	4c 09 c1             	or     %r8,%rcx
+ 18a:	48 c1 e1 20          	shl    $0x20,%rcx
+ 18e:	48 09 ca             	or     %rcx,%rdx
+ 191:	48 0f bc d2          	bsf    %rdx,%rdx
+ 195:	48 01 d0             	add    %rdx,%rax
+ 198:	48 29 f8             	sub    %rdi,%rax
+ 19b:	c3                   	ret

@@ -25,6 +25,8 @@
 #                   tree of src/compiler (see src/compiler/gen/patchlib.pl)
 #   make ports-check  every check of the ports branch, the independent ones
 #                   at once: PASS or FAIL and the time of each
+#   make crosschecks  after a ports-check, before ports goes into main: the
+#                     Perl that s2ff, mki and cpp in ff replaced, against them
 #   make c2ff-crosscheck  after a ports-check, before ports goes into main:
 #                   the frozen gen/c2ff.pl and csema -l, the translator, give
 #                   the same pages on each target's milestones
@@ -187,7 +189,7 @@ pc-compiler-check: pc-bootstrap pc-tools
 # makes it too, later); and the C preprocessor in ff, cpp, for the cpp steps
 PC_HOST := $(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 pc-tools: pc-bootstrap
-	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki)
+	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki $(BUILD)/compiler/tools/$(PC_HOST)/s2ff)
 	@grep -q '^PASS' $(CHECKLOG)/tools.result
 # the BUILDs, where they are not there yet
 pc-gbuild:
@@ -320,6 +322,18 @@ c2ff-crosscheck:
 	    then echo "PASS c2ff-crosscheck $$t"; else echo "FAIL c2ff-crosscheck $$t, log $(CHECKLOG)/c2ff-$$t.log"; ok=; fi; \
 	done; test -n "$$ok"
 .PHONY: c2ff-crosscheck
+
+# The cross-checks of the Perl the tools in ff replaced (src/glibc's
+# s2ff-crosscheck, mki-crosscheck and cpp-crosscheck) on the BUILDs of the
+# last ports-check, each target in turn, as c2ff-crosscheck: before ports
+# goes into main. Their output in CHECKLOG/<check>-<target>.log.
+XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck
+crosschecks:
+	@mkdir -p $(CHECKLOG); ok=1; for c in $(XCHECKS); do for t in riscv64 aarch64 x86_64 arm; do \
+	    if $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$$(test $$t = riscv64 || echo /$$t) GTARGET=$$t $$c > $(CHECKLOG)/$$c-$$t.log 2>&1; \
+	    then echo "PASS $$c $$t: $$(grep -h 'crosscheck' $(CHECKLOG)/$$c-$$t.log | tail -2 | tr '\n' ' ')"; else echo "FAIL $$c $$t, log $(CHECKLOG)/$$c-$$t.log"; ok=; fi; \
+	done; done; test -n "$$ok"
+.PHONY: crosschecks
 
 # GNU sed in ff (src/ports/sed): each target's steps in turn, after bootstrap
 # and the tools (csema, cpp); the table of each in CHECKLOG/sed-<target>.table,

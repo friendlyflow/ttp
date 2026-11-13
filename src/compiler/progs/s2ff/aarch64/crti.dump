@@ -1,0 +1,47 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/aarch64/i/csu/crti.ref.o:     file format elf64-littleaarch64
+
+SYMBOL TABLE:
+0000000000000000 l    d  .text	0000000000000000 .text
+0000000000000000 l    d  .data	0000000000000000 .data
+0000000000000000 l    d  .bss	0000000000000000 .bss
+0000000000000000 l     F .text	0000000000000014 call_weak_fn
+0000000000000010 l       .text	0000000000000000 .L1__1
+0000000000000000 l    d  .init	0000000000000000 .init
+0000000000000000 l    d  .fini	0000000000000000 .fini
+0000000000000000 l    d  .ARM.attributes	0000000000000000 .ARM.attributes
+0000000000000000  w      *UND*	0000000000000000 __gmon_start__
+0000000000000000 g     F .init	0000000000000000 .hidden _init
+0000000000000000 g     F .fini	0000000000000000 .hidden _fini
+
+
+
+Disassembly of section .text:
+
+0000000000000000 <call_weak_fn>:
+   0:	90000000 	adrp	x0, 0 <__gmon_start__>
+			0: R_AARCH64_ADR_GOT_PAGE	__gmon_start__
+   4:	f9400000 	ldr	x0, [x0]
+			4: R_AARCH64_LD64_GOT_LO12_NC	__gmon_start__
+   8:	b4000040 	cbz	x0, 10 <.L1__1>
+   c:	14000000 	b	0 <__gmon_start__>
+			c: R_AARCH64_JUMP26	__gmon_start__
+
+0000000000000010 <.L1__1>:
+  10:	d65f03c0 	ret
+
+Disassembly of section .init:
+
+0000000000000000 <_init>:
+   0:	d503233f 	hint	#0x19
+   4:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
+   8:	910003fd 	add	x29, sp, #0x0
+   c:	94000000 	bl	0 <_init>
+			c: R_AARCH64_CALL26	call_weak_fn
+
+Disassembly of section .fini:
+
+0000000000000000 <_fini>:
+   0:	d503233f 	hint	#0x19
+   4:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
+   8:	910003fd 	add	x29, sp, #0x0

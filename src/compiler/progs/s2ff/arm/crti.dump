@@ -1,0 +1,45 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/arm/i/csu/crti.ref.o:     file format elf32-littlearm
+
+SYMBOL TABLE:
+00000000 l    d  .text	00000000 .text
+00000000 l    d  .data	00000000 .data
+00000000 l    d  .bss	00000000 .bss
+00000000 l     F .text	00000000 call_weak_fn
+00000000 l    d  .init	00000000 .init
+00000000 l    d  .fini	00000000 .fini
+00000000 l    d  .ARM.attributes	00000000 .ARM.attributes
+00000000  w      *UND*	00000000 __gmon_start__
+00000000         *UND*	00000000 _GLOBAL_OFFSET_TABLE_
+00000000 g     F .init	00000000 .hidden _init
+00000000 g     F .fini	00000000 .hidden _fini
+
+
+
+Disassembly of section .text:
+
+00000000 <call_weak_fn>:
+   0:	e59f3014 	ldr	r3, [pc, #20]	@ 1c <call_weak_fn+0x1c>
+   4:	e59f2014 	ldr	r2, [pc, #20]	@ 20 <call_weak_fn+0x20>
+   8:	e08f3003 	add	r3, pc, r3
+   c:	e7932002 	ldr	r2, [r3, r2]
+  10:	e3520000 	cmp	r2, #0
+  14:	012fff1e 	bxeq	lr
+  18:	eafffffe 	b	0 <__gmon_start__>
+			18: R_ARM_JUMP24	__gmon_start__
+  1c:	0000000c 	.word	0x0000000c
+			1c: R_ARM_GOTPC	_GLOBAL_OFFSET_TABLE_
+  20:	00000000 	.word	0x00000000
+			20: R_ARM_GOT32	__gmon_start__
+
+Disassembly of section .init:
+
+00000000 <_init>:
+   0:	e92d4008 	push	{r3, lr}
+   4:	ebfffffe 	bl	0 <_init>
+			4: R_ARM_CALL	call_weak_fn
+
+Disassembly of section .fini:
+
+00000000 <_fini>:
+   0:	e92d4008 	push	{r3, lr}

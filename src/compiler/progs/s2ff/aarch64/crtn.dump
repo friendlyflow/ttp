@@ -1,0 +1,26 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/aarch64/i/csu/crtn.ref.o:     file format elf64-littleaarch64
+
+SYMBOL TABLE:
+0000000000000000 l    d  .text	0000000000000000 .text
+0000000000000000 l    d  .data	0000000000000000 .data
+0000000000000000 l    d  .bss	0000000000000000 .bss
+0000000000000000 l    d  .init	0000000000000000 .init
+0000000000000000 l    d  .fini	0000000000000000 .fini
+0000000000000000 l    d  .ARM.attributes	0000000000000000 .ARM.attributes
+
+
+
+Disassembly of section .init:
+
+0000000000000000 <.init>:
+   0:	a8c17bfd 	ldp	x29, x30, [sp], #16
+   4:	d50323bf 	hint	#0x1d
+   8:	d65f03c0 	ret
+
+Disassembly of section .fini:
+
+0000000000000000 <.fini>:
+   0:	a8c17bfd 	ldp	x29, x30, [sp], #16
+   4:	d50323bf 	hint	#0x1d
+   8:	d65f03c0 	ret
