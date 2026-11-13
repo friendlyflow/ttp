@@ -1958,6 +1958,20 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
   cl_fail ("the expression of kind", cl_num (k));
 }
 
+/* a byte's item that is an enum constant: its number, in a global and in a local
+   (glibc nss's per_database_defaults; gnulib modechange.c's char flag =
+   MODE_COPY_EXISTING): a leaf there is text to ttpc, whatever it names, in a
+   byte array of a global, and a local char's leaf ttpc looks up as text where
+   it sees no enum constant of the program page from a group's function */
+static int cl_char_enum (struct cs_ex *n, struct cl_list *o)
+{
+  struct cs_ex *x = cl_strip (n);
+  if (!(cs_kind (n->t) == TY_CHAR || cs_kind (n->t) == TY_SCHAR || cs_kind (n->t) == TY_UCHAR)) return 0;
+  while (x->k == E_PAREN || x->k == E_ICE) x = cl_strip (cl_k (x, 0));
+  if (x->k != E_REF || !x->d || x->d->k != DK_ENUMC) return 0;
+  if (x->d->uns) cl_push (o, cl_n (cl_unum ((unsigned long long) x->d->val))); else cl_push (o, cl_num_node (x->d->val));
+  return 1;
+}
 static void cl_init_item (struct cs_ex *n, struct cl_list *o);
 static void cl_init_items (struct cs_ex *l, struct cl_list *o)
 {
@@ -2000,16 +2014,7 @@ static void cl_init_item (struct cs_ex *n, struct cl_list *o)
     else cl_push (o, cl_n (":"));
     return;
   }
-  /* a byte's item in a global that is an enum constant: its number (glibc nss's
-     per_database_defaults); a leaf there is text to ttpc, whatever it names */
-  if (C->in_global && (cs_kind (n->t) == TY_CHAR || cs_kind (n->t) == TY_SCHAR || cs_kind (n->t) == TY_UCHAR)) {
-    struct cs_ex *x = s;
-    while (x->k == E_PAREN || x->k == E_ICE) x = cl_strip (cl_k (x, 0));
-    if (x->k == E_REF && x->d && x->d->k == DK_ENUMC) {
-      if (x->d->uns) cl_push (o, cl_n (cl_unum ((unsigned long long) x->d->val))); else cl_push (o, cl_num_node (x->d->val));
-      return;
-    }
-  }
+  if (cl_char_enum (n, o)) return;
   {
     struct cl_list *e = cl_l ();
     cl_itemx (n, e);
@@ -2026,6 +2031,7 @@ static void cl_init (struct cs_ex *n, struct cl_list *o)
   if (s->k == E_INIT) { cl_init_items (s, o); return; }
   str = cl_bare_string (n);
   if (str) { cl_array_text (str, o); return; }
+  if (cl_char_enum (n, o)) return;
   cl_itemx (n, o);
 }
 static struct node *cl_align_node (int has, long long v)
