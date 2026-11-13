@@ -1823,9 +1823,11 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   extown  a program's external global and function, named as a static of
 #           glibc's (state, pop), defined in one unit and used in another
 #   typefn  a program's function named as a type of glibc's (yyalloc)
+#   fnptr   a global pointer to a function, only called through, in another unit
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr
+ALLPROG_fnptr := fnptr-a fnptr-b
 ALLPROG_typefn := typefn
 ALLPROG_extown := extown-a extown-b
 ALLPROG_ovf := ovf

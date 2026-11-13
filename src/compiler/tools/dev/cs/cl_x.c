@@ -1199,6 +1199,8 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   }
   if (cl_starts (name, "__builtin_")) cl_fail ("the builtin", name);
   if (c->d->k == DK_FUNC) { name = cl_own (name); cl_want (name); }
+  /* (a call through a global's pointer, gawk's make_number = r_make_number: the global wanted, as any use of it) */
+  else if (c->d->k == DK_VAR && !c->d->local && !c->d->global && na) { name = cl_own (name); cl_want (name); }
   else if (!na) {
     struct cl_list *v = cl_ex (c);
     nd_add (v->v[0], cl_n ("."));
