@@ -151,7 +151,11 @@ GBUILD ?= $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/glibc
 GLIBC_REF := $(HOME)/.cache/ttp/glibc-gcc16
 PC_SLOT := sh src/compiler/gen/slot.sh -v 8000000 -t 3600
 PC_MS := $(shell sed -n 's/^MILESTONES := //p' src/glibc/Makefile)
-PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$(1)) $(if $(1),GTARGET=$(1))
+# (src/glibc runs the tools the tools step made, this BUILD's: mki, cpp, s2ff,
+# csema; every step that runs src/glibc waits for that step, through
+# pc-units-<target> or itself: a fresh BUILD's asm steps ran before mki was
+# made, 2026-11-13)
+PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$(1)) $(if $(1),GTARGET=$(1)) CPTOOLS=$(BUILD)/compiler/tools/$(PC_HOST)
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
 PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
@@ -257,7 +261,7 @@ endef
 $(foreach m,$(PC_X64),$(eval $(call pc_x64,$(m))))
 pc-generic-x86_64: pc-units-x86_64
 	$(call pc_step,generic-x86_64,$(call PC_GLIBC,x86_64) generic-check generic-roundtrip)
-pc-asm-x86_64: pc-bootstrap pc-gbuild
+pc-asm-x86_64: pc-bootstrap pc-tools pc-gbuild
 	$(call pc_step,asm-x86_64,$(call PC_GLIBC,x86_64) asm-check)
 pc-libgcc-x86_64: pc-units-x86_64
 	$(call pc_step,libgcc-x86_64,$(call PC_GLIBC,x86_64) libgcc-licenses libgcc-asm-check)
@@ -274,7 +278,7 @@ endef
 $(foreach m,$(PC_ARM),$(eval $(call pc_arm,$(m))))
 pc-libgcc-arm: pc-units-arm
 	$(call pc_step,libgcc-arm,$(call PC_GLIBC,arm) libgcc-licenses libgcc-asm-check)
-pc-asm-arm: pc-bootstrap pc-gbuild
+pc-asm-arm: pc-bootstrap pc-tools pc-gbuild
 	$(call pc_step,asm-arm,$(call PC_GLIBC,arm) asm-check)
 # -O (ttpc's peephole): each target's milestones built with -O, after
 # their checks (src/glibc's check-O)
