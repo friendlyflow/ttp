@@ -1941,7 +1941,11 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
   if (k == E_GENERIC) {
     struct cl_list *g = cl_l ();
     long q = 0;
-    cl_push (g, cl_atom (cl_k (n, 0)));
+    struct cs_ex *x0 = cl_k (n, 0);
+    /* (a conditional, gnulib's string.h macros' 1 ? (s) : (void *) 99: its C type, a cast to it, where ttpc
+       types a ? : by its first value's: time_rz.c's strchr of a char *, no association of char *) */
+    if (cl_strip (x0)->k == E_COND) { struct cl_list *c = cl_l (); cl_push (c, cl_cast_node (cl_ct (x0->t), cl_ex (x0))); cl_push (g, cl_nl (":", c)); }
+    else cl_push (g, cl_atom (x0));
     while (q < n->nk - 1) {
       char *w = "default:";
       long p = 1;

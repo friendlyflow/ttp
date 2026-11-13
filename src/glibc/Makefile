@@ -1825,9 +1825,11 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   typefn  a program's function named as a type of glibc's (yyalloc)
 #   fnptr   a global pointer to a function, only called through, in another unit
 #   charenum  a local char set from an enum constant (gnulib's modechange.c)
+#   gencond _Generic of a conditional (gnulib's string.h strchr, time_rz.c)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond
+ALLPROG_gencond := gencond
 ALLPROG_charenum := charenum
 ALLPROG_fnptr := fnptr-a fnptr-b
 ALLPROG_typefn := typefn
