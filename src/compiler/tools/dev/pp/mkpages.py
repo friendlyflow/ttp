@@ -35,7 +35,8 @@ start = [ren(n) for n in parse(open('start.txt').read().split('\n'))]
 out = []
 for n in [['comment', [[l, []] for l in lines('cpp.head')]], ['cpp:', layers(shim + types + defs('cpp pp.i'))]]: emit(n, 0, out)
 open('cpp.ff.txt', 'w').write('\n'.join(out) + '\n')
-# _start on a page of its own after it: ttpc does not find a group's function from a top-level node of the group's page
+# _start on a page of its own after it (it was a workaround: a group's cpp_main was unknown to it, now progroups.pl; and the JIT of its
+# compile time placed the page's globals in the host's image, now jitdata.pl; so it could be on cpp.ff's page now)
 out = []
 for n in [['comment', [['the start of cpp (tools/cpp.ff), on its own page', []]]]] + start: emit(n, 0, out)
 open('cpp-start.ff.txt', 'w').write('\n'.join(out) + '\n')

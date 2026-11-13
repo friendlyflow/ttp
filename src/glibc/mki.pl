@@ -26,13 +26,15 @@
 #   perl mki.pl --cpp TOOL --predef FILE [--out DIR] <obj dir> <glibc source> string/strlen.o ...
 #
 # --dry only prints the file each object would get (its .i or .s), making
-# none: which objects are C and which asm. --log (once or more) reads the
+# none: which objects are C and which asm. --show prints each command as it
+# would run (cd 'DIR' && ...), then the file, running none (mki-crosscheck
+# compares it with tools/mki.ff's, src/compiler/tools/dev/mki). --log (once or more) reads the
 # commands from that log of the build instead of build.log: glibc's tests
 # and libsupport, which `make check` compiles (tests-ref). --cpp runs the C
 # preprocessor in ff (src/compiler/tools/cpp.ff) in gcc's place, with the
-# same options and FILE's predefined macros (predef-<target>.txt); --out
-# writes the .i into DIR instead of the build's i/ (a comparison's). An
-# object of asm has no .s from it (not yet): mki.pl says so and fails.
+# same options and FILE's predefined macros (predef-<target>.txt), an
+# object of asm's .s too (its -x assembler-with-cpp); --out writes the .i
+# or .s into DIR instead of the build's i/ (a comparison's).
 #
 # A host tool (core Perl only).
 use strict;
@@ -41,10 +43,10 @@ use File::Path qw(make_path);
 use File::Basename qw(dirname);
 use Cwd ();
 
-my ($dry, @logs, $cpp, $predef, $outdir);
-while (@ARGV && $ARGV[0] =~ /^--(dry|log|cpp|predef|out)$/) {
+my ($dry, $show, @logs, $cpp, $predef, $outdir);
+while (@ARGV && $ARGV[0] =~ /^--(dry|show|log|cpp|predef|out)$/) {
     shift @ARGV;
-    if ($1 eq 'dry') { $dry = 1 } elsif ($1 eq 'log') { push @logs, shift @ARGV }
+    if ($1 eq 'dry') { $dry = 1 } elsif ($1 eq 'show') { $show = 1 } elsif ($1 eq 'log') { push @logs, shift @ARGV }
     elsif ($1 eq 'cpp') { $cpp = shift @ARGV } elsif ($1 eq 'predef') { $predef = shift @ARGV } else { $outdir = shift @ARGV }
 }
 die "usage: mki.pl [--dry] [--log file]... [--cpp tool --predef file [--out dir]] <obj dir> <glibc source> <object>...\n" unless @ARGV >= 3;
@@ -116,14 +118,14 @@ for my $o (@want) {
     my $ext = !$gen{$o} && $c =~ m{\.S\s| -x assembler-with-cpp } ? "s" : "i";
     (my $i = ($outdir // "$build/i") . "/$o") =~ s/\.o[sS]?$/.$ext/;
     if ($dry) { print "$i\n"; next }
-    if ($cpp && $ext ne 'i') { warn "mki: $o: asm, which --cpp does not preprocess yet\n"; $bad = 1; next }
-    make_path(dirname($i));
+    make_path(dirname($i)) unless $show;
     $c =~ s/ -c / -E / or $c =~ s/ -S(\s|$)/ -E$1/;
     $c =~ s/ -o \S+\.(?:o[sS]?|S) / -o $i /;
 
     $c =~ s/ -MD -MP -MF \S+ -MT \S+//;
     # (the preprocessor in ff in the compiler's place)
-    if ($cpp) { $c =~ s{^\s*(\S+)}{$cpp --predef=$predef} or die "mki: $o: no compiler in its command\n" }
+    # (a syscall stub's command is (echo ...) | gcc ... -x assembler-with-cpp -: the compiler after the pipe)
+    if ($cpp) { ($c =~ /^\(echo / ? $c =~ s{\)\s*\|\s*(\S+)}{) | $cpp --predef=$predef} : $c =~ s{^\s*(\S+)}{$cpp --predef=$predef}) or die "mki: $o: no compiler in its command\n" }
     # build.log names the compiler and the kernel's headers by their store
     # paths: after a nixpkgs update moved them and nix gc took the old ones,
     # the command cannot run again, and the shell would only say "No such
@@ -140,6 +142,7 @@ for my $o (@want) {
     }
     # (libg.a's dummy.o, at the top of the build, is made in misc)
     my $dir = "$src/" . ($o =~ m{^soft-fp/} ? "math" : $o !~ m{/} ? "misc" : $o =~ s{/.*}{}r);
+    if ($show) { print "cd '$dir' && $c\n$i\n"; next }
     if (system('sh', '-c', "cd '$dir' && $c") != 0) { warn "mki: $o: the compiler failed\n"; $bad = 1; next }
     if ($ext eq 'i' && $c !~ / -U__SIZEOF_INT128__ / && do { open my $h, '<', $i; local $/; <$h> =~ /^typedef unsigned (?:__int128|_BitInt\(128\)) u128;$/m }) {
         $c =~ s/ -o / -U__SIZEOF_INT128__ -U__BITINT_MAXWIDTH__ -o /;

@@ -189,7 +189,7 @@ pc-compiler-check: pc-bootstrap pc-tools
 # makes it too, later); and the C preprocessor in ff, cpp, for the cpp steps
 PC_HOST := $(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 pc-tools: pc-bootstrap
-	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp)
+	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki)
 	@grep -q '^PASS' $(CHECKLOG)/tools.result
 # the BUILDs, where they are not there yet
 pc-gbuild:

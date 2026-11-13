@@ -1,0 +1,14 @@
+make[2]: Entering directory 'string'
+gcc ../string/a.c -c -std=gnu11 -O2 -I../include -o progs/mki/obj/string/a.o -MD -MP -MF progs/mki/obj/string/a.o.dt -MT progs/mki/obj/string/a.o
+gcc ../string/a.c -c -std=gnu11 -O2 -I../include -fPIC -o progs/mki/obj/string/a.os -MD -MP -MF progs/mki/obj/string/a.os.dt -MT progs/mki/obj/string/a.os
+gcc ../string/c.c -c -std=gnu11 -O2 -fPIC -DSHARED -o progs/mki/obj/string/c.os -MD -MP -MF progs/mki/obj/string/c.os.dt -MT progs/mki/obj/string/c.os
+gcc ../sysdeps/x/b.S -c -I../include -DASSEMBLER -g -Werror=undef -Wa,--noexecstack -o progs/mki/obj/string/b.o -MD -MP -MF progs/mki/obj/string/b.o.dt -MT progs/mki/obj/string/b.o
+(echo '#define SYSCALL_NAME chdir'; \
+ echo '#define SYSCALL_NARGS 1'; \
+ echo '#include <syscall-template.S>'; \
+ echo 'weak_alias (__chdir, chdir)'; \
+) | gcc -c -I../include -DASSEMBLER -g -o progs/mki/obj/io/chdir.o -x assembler-with-cpp - -MD -MP -MF progs/mki/obj/io/chdir.o.dt -MT progs/mki/obj/io/chdir.o 
+gcc errlist-data-gen.c -S -std=gnu11 -O2 -o progs/mki/obj/stdio-common/errlist-data-aux.S -MD -MP -MF progs/mki/obj/stdio-common/errlist-data-aux.S.dt
+gcc ../sysdeps/generic/errlist-data.S -c -DASSEMBLER -o progs/mki/obj/stdio-common/errlist-data.o -MD -MP -MF progs/mki/obj/stdio-common/errlist-data.o.dt -MT progs/mki/obj/stdio-common/errlist-data.o
+gcc dummy.c -c -O2 -o progs/mki/obj/dummy.o -MD -MP -MF progs/mki/obj/dummy.o.dt -MT progs/mki/obj/dummy.o
+gcc ../string/a.c -c -O0 -o progs/mki/obj/string/a.o -MD -MP -MF progs/mki/obj/string/a2.o.dt -MT progs/mki/obj/string/a.o
