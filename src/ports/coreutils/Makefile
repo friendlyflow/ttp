@@ -30,7 +30,9 @@ PKG_CONFIGURE := --disable-nls --without-selinux --disable-acl --disable-xattr -
     utils_cv_avx2_intrinsic_exists=no utils_cv_avx2_pclmul_intrinsic_exists=no \
     utils_cv_avx512_intrinsic_exists=no utils_cv_avx512_pclmul_intrinsic_exists=no \
     utils_cv_pclmul_intrinsic_exists=no utils_cv_neon_intrinsic_exists=no utils_cv_vmull_intrinsic_exists=no \
-    gl_cv_crc_pclmul=no
+    gl_cv_crc_pclmul=no ac_cv_header_stdcountof_h=no
+# (gnulib's countof as its own sizeof / sizeof, not gcc 16's <stdcountof.h>,
+# whose _Countof (C2y's) the C in ff has no form for yet)
 # (no SIMD variants of cksum and wc: they pick one at run time by
 # __builtin_cpu_supports, gcc's cpu model, which glibc in ff has not; the
 # plain C of each for both programs)
