@@ -4,3 +4,5 @@ ok and from a variable
 ok a union field from a variable
 ok the fields around them
 ok elements of an array of structs
+ok a compound literal's struct place from a variable
+ok and from a call

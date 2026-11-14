@@ -410,7 +410,7 @@ ff, the language ttpc compiles
       a struct name as a value, its items the siblings after it, one for each of its places, is a temporary of that type (a compound literal, C's (point){1, 2} is point, 1, 2): its named fields, an anonymous member's in place, padding none; zeros written out
       a union name as a value, then a field's name, then its item, is one of a union: (union val){ .str = "x" } is val, str, x
       an array node with its count as a value, its count's items after it, is a temporary array, its value its address (C's (char *[]){ "sh", 0 } is (array / char / * pointer / 2), sh, 0)
-      a place that is a struct, a union or an array takes its own type and its items in turn, as nested braces
+      a place that is a struct, a union or an array takes its own type and its items in turn, as nested braces, or an expression of its type, a copy of it; another item stops
       example
         s:
           long
