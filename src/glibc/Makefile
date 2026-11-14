@@ -1925,13 +1925,15 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   condchain  a table of items each a chain of 64 conditionals (gnulib's base64.c)
 #   statkind  two units' statics of one name, a function and a global (coreutils)
 #   enumown two units' named enums of one tag, other constants (coreutils' ls.c, copy.h)
+#   structitem  a local struct's field set from a struct variable (coreutils' timeout.c)
 #   statics two units each with a writable static of one name and text (a
 #           counter each, glibc's locks) and a const one, which may be shared
 #   anonrec one macro that makes anonymous records of other fields on one
 #           line (tst-strtod4.c's TEST_STRTOD): each its own type
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec structitem
+ALLPROG_structitem := structitem
 ALLPROG_statics := statics-a statics-b
 ALLPROG_anonrec := anonrec
 ALLPROG_enumown := enumown-a enumown-b
