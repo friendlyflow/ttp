@@ -166,12 +166,18 @@ static void cl_index_enum (struct cs_rec *d)
   /* an enum constant another unit has of another value: an anonymous enum's constants are then named
      with this unit (vfprintf-internal.c's local enum { buf_length = 256 / sizeof (CHAR_T) }: 256 in
      the narrow unit, 64 in the wide one, which took 256); a named enum's is only said (left as it was) */
+  /* (this unit's own named enum, met again: its own tag, its constants already named) */
+  if (d->tag && C->cu && cl_get (&C->ownrec, cl_cat ("enum ", cl_copy (d->tag, d->tlen)))) {
+    tag = cl_get (&C->ownrec, cl_cat ("enum ", cl_copy (d->tag, d->tlen)));
+    i = d->nenums;
+  } else
   while (i < d->nenums) {
     char *c = cl_dn (d->enums[i]);
     if (cl_has (&C->enumval, c) && cl_find (&C->enumval, c)->num != d->enums[i]->val) break;
     i++;
   }
-  if (i < d->nenums && !d->tag && !d->td && C->cu) {
+  if (tag) ;
+  else if (i < d->nenums && !d->tag && !d->td && C->cu) {
     long j = 0;
     err_str ("csema: an enum constant of another value than another unit's, named with its unit: ");
     err_str (cl_dn (d->enums[i]));
@@ -184,6 +190,25 @@ static void cl_index_enum (struct cs_rec *d)
       d->enums[j]->nlen = cstrlen (nn);
       j++;
     }
+  } else if (i < d->nenums && d->tag && C->cu && C->treedefs.count) {
+    /* (a named enum another unit has otherwise, in a program: this unit's own, its constants and its tag
+       named with the unit: coreutils' one program has copy.h's enum Dereference_symlink, DEREF_UNDEFINED = 1,
+       and ls.c's, = 0 and one more, DEREF_COMMAND_LINE_SYMLINK_TO_DIR, which was in no tree) */
+    long j = 0;
+    char *key = cl_cat ("enum ", cl_copy (d->tag, d->tlen)), *ownk = cl_cat3 (key, " ", cl_unit_name ());
+    err_str ("csema: a named enum another unit has otherwise, its constants and tag named with its unit: ");
+    err_str (key);
+    err_str (" in ");
+    err_str (cl_unit_name ());
+    err_str ("\n");
+    while (j < d->nenums) {
+      char *nn = cl_cat3 (cl_dn (d->enums[j]), " ", cl_unit_name ());
+      d->enums[j]->name = (unsigned char *) nn;
+      d->enums[j]->nlen = cstrlen (nn);
+      j++;
+    }
+    cl_put (&C->ownrec, key, ownk);
+    tag = ownk;
   } else if (i < d->nenums) {
     err_str ("csema: an enum constant of another value than another unit's, not renamed: ");
     err_str (cl_dn (d->enums[i]));
@@ -192,7 +217,8 @@ static void cl_index_enum (struct cs_rec *d)
     err_str ("\n");
   }
   i = 0;
-  if (d->tag) tag = cl_cat ("enum ", cl_copy (d->tag, d->tlen));
+  if (tag) ;
+  else if (d->tag) tag = cl_cat ("enum ", cl_copy (d->tag, d->tlen));
   else if (d->nenums) tag = cl_cat3 ("enum ", cl_dn (d->enums[0]), " enum");
   if (!tag) return;
   cl_set_enumd (tag, d);
