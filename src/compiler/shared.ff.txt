@@ -125,6 +125,9 @@ comment
   as the AAPCS's base standard has them (C's pcs ("aapcs"): libgcc's __aeabi_d2lz ...), as a variadic function does; elsewhere it changes nothing.
 base pcs:
 comment
+  packed: C, first under a field's name, before its type: the field aligned to 1 (C's packed attribute on a field); right after struct or union, every field of the record, so the record aligned to 1 (C's packed record). An align raises it still.
+packed:
+comment
   cleanup f: C, first under a local, before its type (after its align): at every exit of the local's block the function f is called with the local's address, newest first (C's cleanup attribute).
   The exits: the block's end, a return (after its value), a break, continue or goto out of it.
 cleanup:

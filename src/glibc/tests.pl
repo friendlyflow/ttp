@@ -13,10 +13,15 @@
 #       libsupport (SUPPORT), all relative to the obj dir, without .o
 #   perl tests.pl why <log>
 #       the line of a step's log that says why it failed
-#   perl tests.pl run <dir> <test> <input> <slot command> -- <qemu> <cpu>...
+#   perl tests.pl locales <area Makefile>
+#       the locales glibc's make check makes for the area's tests (its
+#       LOCALES, gen-locales.mk's), one per line
+#   perl tests.pl run <dir> <test> <input> [NAME=VALUE...] <slot command> -- <qemu> <cpu>...
 #       runs dir/test.ref (gcc's) and dir/test-prog (ttpc's) on each cpu
 #       (qemu -cpu; natively where <qemu> is native, its cpu native), in
-#       dir/test.run, stdin from <input>, and prints the
+#       dir/test.run, stdin from <input>, each with the environment
+#       variables NAME=VALUE (glibc's run-program-env: its LOCPATH,
+#       GCONV_PATH, LC_ALL=C), and prints the
 #       result: "equal: ..." where every run exits with the same status
 #       and prints the same (stdout and stderr), else "differ: ..."
 #       (an address printed, 0x and 6 hex digits or more, compares as any
@@ -132,8 +137,23 @@ sub same {
 }
 sub status_word { my ($s) = @_; $s == 0 ? 'PASS' : $s == 77 ? 'UNSUPPORTED' : $s >= 128 ? 'FAIL, signal ' . ($s - 128) : 'FAIL' }
 
+if ($cmd eq 'locales') {
+    my ($mk) = @ARGV;
+    open my $h, '<', $mk or die "tests: cannot open $mk: $!\n";
+    my $c = do { local $/; <$h> };
+    $c =~ s/\\\n/ /g;
+    # (LOCALES := a b \ c ... # LOCALES: the comment ends it)
+    my ($l) = $c =~ /^LOCALES\s*:?=([^\n]*)/m;
+    defined $l or exit 0;
+    $l =~ s/#.*//;
+    print "$_\n" for split ' ', $l;
+    exit 0;
+}
+
 if ($cmd eq 'run') {
     my ($dir, $t, $input) = splice @ARGV, 0, 3;
+    my %env;
+    $env{$1} = $2 while @ARGV && $ARGV[0] =~ /^([A-Z_][A-Z0-9_]*)=(.*)$/s && shift @ARGV;
     my @slot;
     push @slot, shift @ARGV while @ARGV && $ARGV[0] ne '--';
     shift @ARGV;
@@ -157,6 +177,7 @@ if ($cmd eq 'run') {
                 open STDIN, '<', $input or die "tests: cannot open $input: $!\n";
                 open STDOUT, '>', "$out.out" or die;
                 open STDERR, '>', "$out.err" or die;
+                $ENV{$_} = $env{$_} for keys %env;
                 $ENV{TMPDIR} = Cwd::abs_path('.');
                 $ENV{TIMEOUTFACTOR} = 10;
                 # (natively where the machine is the target: no qemu, one run each)
@@ -205,4 +226,4 @@ if ($cmd eq 'table') {
     exit 0;
 }
 
-die "usage: tests.pl mk|why|run|table ...\n";
+die "usage: tests.pl mk|why|locales|run|table ...\n";

@@ -1031,6 +1031,61 @@ textnames-check:
 	echo "textnames-check: $(words $(wildcard $(FF)/*.ff)) trees$(if $(wildcard $(FF)/glibc/index.ff), and all of glibc in ff)$$(test -n "$$ok" && echo ", none not judged")"; test -n "$$ok"
 .PHONY: textnames-check
 
+# The data of all of glibc (datacheck.pl): the bytes ttpc emits for each
+# global and static that gcc's objects of glibc define, against gcc's, a
+# word that is an address by what it points to. The round trip checks the
+# ff against the C; this, what ttpc makes of the ff. Its program
+# (DCDIR/all.i, datacheck.pl --program) takes the address of every global
+# of glibc's in ff by main's code, but of what reaches a name csema left
+# out or DCSKIP (what ttpc cannot compile yet), so ttpc (-g, its .symtab)
+# compiles all of glibc that reaches: each global, and the statics of each
+# function it reaches. DCFF: another build's FF, read only (its glibc.ff.txt,
+# glibc/index.ff, glibc.statics, glibc.csema.err). It passes when the
+# differences are exactly its list, dcknown-$(GTARGET).txt (a judged name,
+# its digest, kind and reason), and fails naming each new one and each
+# listed one that no longer differs. Needs all of glibc in ff: a target of
+# its own, run before ports goes into main (the root's make datacheck).
+#   make GTARGET=x86_64 BUILD=... datacheck [DCFF=another build's FF]
+DCFF ?= $(FF)
+DCDIR ?= $(BUILD)/datacheck
+DCKNOWN ?= dcknown-$(GTARGET).txt
+# what ttpc cannot compile yet: it stops, mostly without the function's
+# name; each a definition's name of glibc.ff.txt, what reaches it is left out
+#   sincosf_poly, sinf_poly  x86_64's sinf, cosf, sincosf: "cannot compile: p"
+#                            (v2df_t's arithmetic)
+#   statx_convert_timestamp  "cannot compile: statx_convert_timestamp" (a
+#                            call that returns a struct as a local struct's item)
+#   __backtrace              arm's: "cannot compile: :", a call through
+#                            ((void) link, &_Unwind_Backtrace), an asm
+#                            function there (libgcc's libunwind.S), which has
+#                            no C type
+#   __fma_vpfv4, __fmaf_vpfv4, __ieee754_sqrt, __sqrtf  arm's: "unknown
+#                            function: __builtin_fma" (and fmaf, sqrt, sqrtf: no
+#                            builtins of them on arm yet: VFP's vfma, vsqrt)
+#   DCASM_arm                arm's: "unknown function: vldr.f32" (the asm
+#                            statements of __feraiseexcept, a form ttpc's arm
+#                            has not yet)
+DCSKIP_x86_64 := sincosf_poly sinf_poly
+DCSKIP_arm = __backtrace __fma_vpfv4 __fmaf_vpfv4 __ieee754_sqrt __sqrtf $(DCASM_arm)
+DCASM_arm := _asm_ldc_p10_cr0_1_cdp_p10_8_cr0_cr0_cr0_0_mrc_p10_7_0_cr1_cr0_0_r_m \
+	_asm_ldc_p10_cr0_1_ldcl_p10_cr0_2_cdp_p10_3_cr0_cr0_cr0_1_mrc_p10_7_0_cr1_cr0_0_r_mm \
+	_asm_ldc_p10_cr0_1_ldcl_p10_cr0_2_cdp_p10_8_cr0_cr0_cr0_1_mrc_p10_7_0_cr1_cr0_0_r_mm
+DCSKIP := $(DCSKIP_$(GTARGET)) statx_convert_timestamp
+$(DCDIR)/all.i: datacheck.pl $(if $(wildcard $(DCFF)/glibc/index.ff),,$(FF)/glibc/index.ff) $(OBJ)/libc.a
+	mkdir -p $(DCDIR)
+	perl allobjs.pl $(OBJ) > $(DCDIR)/objs
+	perl datacheck.pl --target $(GTARGET) $(DCSKIP:%=--skip %) --program $(DCFF) $(OBJ) $(DCDIR)/objs > $@
+$(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW)
+	ln -sfn $(abspath $(DCFF))/glibc $(DCDIR)/glibc
+	$(RUN) -v 9000000 -t 600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(DCFF)/glibc/index.ff -J $(DCFF)/glibc.statics -T \
+	    -O $< -- main > $(DCDIR)/all.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(DCDIR)/all.ff.txt > $@
+$(DCDIR)/all: $(DCDIR)/all.ff $(TTPC) $(SHARED)
+	$(RUN) -v 8000000 -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
+datacheck: $(DCDIR)/all datacheck.pl
+	@perl datacheck.pl --target $(GTARGET) --index $(DCFF)/glibc/index.ff --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
+.PHONY: datacheck
+
 # The licenses (../compiler/gen/licenses.pl): glibc's trees here (their
 # pages' licenses: builtins, atomics), and of a milestone its tree, its
 # folder (each file and the index) and its program, each with its license
@@ -1303,7 +1358,11 @@ units-crosscheck: units-check
 # progs/textcount.c, the same way: a string literal's prefix and a
 # variable-length array's count, which c2ff reads from clang's text, on every
 # target, with its round trip.
-OWNSTART := generic stdbit textcount roundnames
+# progs/globsize.c, the same way: a global whose value is sizeof or alignof
+# of a type, alone or a field's, which csema writes in a : (not in
+# c2ff-crosscheck: the frozen c2ff.pl writes it bare, which ttpc takes for a
+# function).
+OWNSTART := generic stdbit textcount roundnames globsize
 $(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
 	mkdir -p $(FF)
 	{ cat license.ff.txt; $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } > $(FF)/$*.ff.txt
@@ -1312,6 +1371,7 @@ $(eval $(call check,generic))
 $(eval $(call check,stdbit))
 $(eval $(call check,textcount))
 $(eval $(call check,roundnames))
+$(eval $(call check,globsize))
 GENERIC_FNS := main levels second add2 via_comma two_paths vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
@@ -1356,7 +1416,7 @@ CHECK_ASMS = $(sort $(foreach m,$(CHECK_MS),$(ASMS_all_$(m))))
 c2ff-passes: $(CHECK_OBJS:%=$(I)/%.json)
 	$(RUN) -t 1800 perl ../compiler/gen/c2ff.pl --pass --target $(GTARGET) $(foreach o,$(CHECK_OBJS),$(I)/$(o).json=$(I)/$(o).i)
 c2ff-pages: $(CHECK_MS:%=c2ff-page-%)
-C2FF_OWN = $(filter-out $(if $(filter arm,$(GTARGET)),generic),$(OWNSTART))
+C2FF_OWN = $(filter-out globsize $(if $(filter arm,$(GTARGET)),generic),$(OWNSTART))
 c2ff-progs: $(CHECK_MS:%=c2ff-prog-%) $(C2FF_OWN:%=c2ff-prog-%) $(patsubst %,c2ff-unit-%,$(filter generic textcount roundnames,$(C2FF_OWN)))
 c2ff-crosscheck: c2ff-pages c2ff-progs clayer-check units-crosscheck
 	@echo "c2ff-crosscheck ($(GTARGET)): c2ff.pl and csema -l give the same pages: $(words $(CHECK_MS)) milestones, their programs and units"
@@ -1778,24 +1838,58 @@ $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC) $(SHARED)
 # where glibc's source has one; under qemu on each of CPUS, or natively
 # where the machine is GTARGET (an x86_64 machine's x86_64: one run each)
 TRUN = $(if $(filter $(shell uname -m),$(GTARGET)),native native,qemu-$(GTARGET) $(CPUS))
+
+# Both builds of a test run in the environment glibc's make check gives
+# it, run-program-env: LOCPATH the locales the area's tests use, made as
+# make check makes them (its LOCALES, by glibc's gen-locale.sh from glibc's
+# localedata with the reference build's localedef), GCONV_PATH the
+# reference build's iconvdata, LC_ALL=C. Without them a test of a locale
+# failed alike in both builds and was "equal". (The tests' own -ENV of the
+# three areas are libc_malloc_debug.so's MALLOC_TRACE, LD_PRELOAD, which a
+# static program does not read: not set.) Each area its own locales, as
+# make check subdirs=AREA has them, TBUILD/loc/AREA/localedata; localedef
+# runs through a copy of the reference's ld.so without the RUNPATH nix's
+# gcc gave it (ld.so asserts it has none), under qemu where GTARGET is not
+# the machine's. The locales are the same on all four targets, byte for
+# byte (each little-endian; localedef writes 32-bit words whatever the
+# word size): each target makes its own all the same.
+TLOCDIR = $(abspath $(TBUILD))/loc/$(AREA)
+TLOCALES = $(if $(AREA),$(shell perl tests.pl locales $(GLIBC_SRC)/$(AREA)/Makefile))
+TLOCLD = $(abspath $(TBUILD))/loc/ld.so
+TNOTHING :=
+TLIBPATH = $(subst $(TNOTHING) $(TNOTHING),:,$(foreach d,. math elf dlfcn nss nis rt resolv support nptl,$(abspath $(OBJ))/$(d)))
+TENV = GCONV_PATH=$(abspath $(OBJ))/iconvdata LOCPATH=$(TLOCDIR)/localedata LC_ALL=C
+TLOCQEMU = $(if $(filter $(shell uname -m),$(GTARGET)),,qemu-$(GTARGET))
+$(TLOCLD): $(OBJ)/elf/ld.so
+	mkdir -p $(@D)
+	cp $< $@.tmp
+	patchelf --remove-rpath $@.tmp
+	mv $@.tmp $@
+$(TLOCDIR)/localedata/%/LC_CTYPE: $(TLOCLD) $(OBJ)/locale/localedef
+	mkdir -p $(TLOCDIR)/localedata
+	cd $(GLIBC_SRC)/localedata && $(SHELL) gen-locale.sh $(TLOCDIR)/ env '$(TENV)' \
+	    '$(SHELL) $(abspath ../compiler/gen/slot.sh) -n -v 8000000 -t 600 $(TLOCQEMU) $(TLOCLD) --library-path $(TLIBPATH) $(abspath $(OBJ))/locale/localedef' $@
+tests-locales: $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
+.PHONY: tests-locales
 TSTEP = $(MAKE) --no-print-directory $(TFF)/$*$(1) > $(TFF)/$*.$(2).log 2>&1 || \
 	{ echo "not yet: $(3): $$(perl tests.pl why $(TFF)/$*.$(2).log)" > $@; exit 0; }
 # (and what its steps' outputs depend on, ttpc's and csema's: each step is
 # a make of its own, so that one that fails is the result's reason)
-$(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) $(SHARED) $(CSEMA) $(CSVIEW) tests.pl
+$(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) $(SHARED) $(CSEMA) $(CSVIEW) tests.pl $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
 	@mkdir -p $(TFF)
 	@if test -n "$(filter $*,$(TBROKEN))"; then echo "not yet: glibc's build did not make it (TOBJ/$(AREA).log)" > $@; exit 0; fi; \
 	$(call TSTEP,.ref,ref,gcc's link); \
 	$(call TSTEP,-prog.ff,c2ff,c2ff); \
 	$(call TSTEP,-prog,ttpc,ttpc); \
 	in=$(GLIBC_SRC)/$(AREA)/$*.input; test -e $$in || in=/dev/null; \
-	perl tests.pl run $(TFF) $* $$in $(RUN) -t 600 -- $(TRUN) > $@
+	perl tests.pl run $(TFF) $* $$in $(TENV) $(RUN) -t 600 -- $(TRUN) > $@
 
 # (the .mk first: where glibc's tests build failed, it stops here, before
 # a make of each test would try that build again)
 tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 	@test -n "$(AREA)" || { echo "tests-ref: which area? make tests-ref AREA=string"; exit 1; }
 	@test -s $(TBUILD)/$(AREA).mk || { echo "tests-ref: no $(TBUILD)/$(AREA).mk"; exit 1; }
+	@$(MAKE) --no-print-directory tests-locales
 	@$(MAKE) --no-print-directory $(TESTS:%=$(TFF)/%.result)
 	@perl tests.pl table $(AREA) $(GTARGET) $(TFF) $(TESTS) > $(TBUILD)/$(AREA).table
 	@cat $(TBUILD)/$(AREA).table
@@ -1831,9 +1925,15 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   condchain  a table of items each a chain of 64 conditionals (gnulib's base64.c)
 #   statkind  two units' statics of one name, a function and a global (coreutils)
 #   enumown two units' named enums of one tag, other constants (coreutils' ls.c, copy.h)
+#   statics two units each with a writable static of one name and text (a
+#           counter each, glibc's locks) and a const one, which may be shared
+#   anonrec one macro that makes anonymous records of other fields on one
+#           line (tst-strtod4.c's TEST_STRTOD): each its own type
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec
+ALLPROG_statics := statics-a statics-b
+ALLPROG_anonrec := anonrec
 ALLPROG_enumown := enumown-a enumown-b
 ALLPROG_statkind := statkind-a statkind-b
 ALLPROG_condchain := condchain

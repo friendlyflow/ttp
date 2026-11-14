@@ -1660,14 +1660,42 @@ c:
       lr
       r12
   cc_fadd_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vadd.f64
       d7
       d6
@@ -1684,14 +1712,42 @@ c:
       lr
       r0
   cc_fsub_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vsub.f64
       d7
       d6
@@ -1708,14 +1764,42 @@ c:
       lr
       r0
   cc_fmul_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vmul.f64
       d7
       d6
@@ -1732,14 +1816,42 @@ c:
       lr
       r0
   cc_fdiv_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vdiv.f64
       d7
       d6
@@ -1756,14 +1868,42 @@ c:
       lr
       r0
   cc_feq_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vcmp.f64
       d7
       d6
@@ -1778,14 +1918,42 @@ c:
       1
       r0
   cc_fne_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vcmp.f64
       d7
       d6
@@ -1800,14 +1968,42 @@ c:
       1
       r0
   cc_flt_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vcmp.f64
       d7
       d6
@@ -1822,14 +2018,42 @@ c:
       1
       r0
   cc_fgt_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vcmp.f64
       d7
       d6
@@ -1844,14 +2068,42 @@ c:
       1
       r0
   cc_fle_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vcmp.f64
       d7
       d6
@@ -1866,14 +2118,42 @@ c:
       1
       r0
   cc_fge_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r12
-      d6
-    vldr.64
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r12
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
+    push
+      0x4000
+    ldr
       0
       r0
-      d7
+      lr
+    vmov.sr
+      lr
+      s14
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s15
+    pop
+      0x4000
     vcmp.f64
       d7
       d6
@@ -1888,10 +2168,24 @@ c:
       1
       r0
   cc_fneg_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r0
-      d6
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
     vneg.f64
       d6
       d6
@@ -1944,10 +2238,24 @@ c:
       lr
       r0
   cc_cvt_l_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r0
-      d6
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
     vcvt.s32.f64
       d6
       s14
@@ -1973,10 +2281,24 @@ c:
       lr
       r0
   cc_cvt_lu_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r0
-      d6
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
     vcvt.u32.f64
       d6
       s14
@@ -2002,10 +2324,24 @@ c:
       lr
       r0
   cc_cvt_s_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r0
-      d6
+      lr
+    vmov.sr
+      lr
+      s12
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s13
+    pop
+      0x4000
     vcvt.f32.f64
       d6
       s14
@@ -3230,10 +3566,24 @@ c:
       s8
       r0
   cc_cvt_p_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r0
-      d0
+      lr
+    vmov.sr
+      lr
+      s0
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s1
+    pop
+      0x4000
     vabs.f64
       d0
       d1
@@ -3508,10 +3858,24 @@ c:
       s8
       r0
   cc_cvt_pu_dm:
-    vldr.64
+    push
+      0x4000
+    ldr
       0
       r0
-      d0
+      lr
+    vmov.sr
+      lr
+      s0
+    ldr
+      4
+      r0
+      lr
+    vmov.sr
+      lr
+      s1
+    pop
+      0x4000
     vabs.f64
       d0
       d1

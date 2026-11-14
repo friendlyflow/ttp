@@ -306,16 +306,18 @@ sub fields {
     my $pad = 0;
     for my $f (kids($r->{node})) {
         my $w = c($f);
-        next if $w eq 'struct' || $w eq 'union' || $w eq 'comment' || $w eq 'align';
+        next if $w eq 'struct' || $w eq 'union' || $w eq 'comment' || $w eq 'align' || ($w eq 'packed' && leaf($f));
         (my $fname = $w) =~ s/:$//;
         my @l = kids($f);
         my $i = 0;
-        # (align n first: C's aligned attribute)
-        my $al = @l && c($l[0]) eq 'align' && !leaf($l[0]) ? c((kids($l[0]))[0]) : undef;
-        $i = 1 if defined $al;
+        # (packed first: C's packed attribute; then align n: C's aligned attribute)
+        my $pk = @l && c($l[0]) eq 'packed' && leaf($l[0]) ? 1 : 0;
+        $i = $pk;
+        my $al = $i < @l && c($l[$i]) eq 'align' && !leaf($l[$i]) ? c((kids($l[$i]))[0]) : undef;
+        $i++ if defined $al;
         my $t = ptype(\@l, \$i);
         my $bits = $i < @l ? c($l[$i]) : undef;
-        push @f, { name => $fname, type => $t, bits => $bits, align => $al };
+        push @f, { name => $fname, type => $t, bits => $bits, align => $al, packed => $pk };
     }
     @f;
 }
@@ -1002,7 +1004,7 @@ sub rec_body {
         if ($f->{name} eq '' && $f->{type}[0] eq 'rec') { "$rec{ $f->{type}[1] }{kind} " . rec_body($f->{type}[1]) . ';' }
         else {
             my $nm = $f->{name} =~ /^padding \d+$/ && defined $f->{bits} ? '' : cid_local($f->{name});
-            cdecl($f->{type}, $nm) . (defined $f->{bits} ? " : $f->{bits}" : '') . (defined $f->{align} ? " __attribute__((aligned($f->{align})))" : '') . ';';
+            cdecl($f->{type}, $nm) . (defined $f->{bits} ? " : $f->{bits}" : '') . (defined $f->{align} ? " __attribute__((aligned($f->{align})))" : '') . ($f->{packed} ? ' __attribute__((packed))' : '') . ';';
         }
     } @fl) . ' }';
 }
@@ -1012,7 +1014,9 @@ sub emit_rec {
     rec_deps($r);
     # (a record's own align, after struct: C's aligned attribute after its braces)
     my ($al) = map { c((kids($_))[0]) } grep { c($_) eq 'align' && !leaf($_) } kids($rec{$r}{node});
-    cdeclares("$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . (defined $al ? " __attribute__((aligned($al)))" : '') . ';', cid($r));
+    # (and packed after struct or union: C's packed record)
+    my $pk = grep { c($_) eq 'packed' && leaf($_) } kids($rec{$r}{node});
+    cdeclares("$rec{$r}{kind} " . cid($r) . ' ' . rec_body($r) . ($pk ? ' __attribute__((packed))' : '') . (defined $al ? " __attribute__((aligned($al)))" : '') . ';', cid($r));
 }
 emit_rec($_) for grep { $rec{$_} } @order;
 # the globals
