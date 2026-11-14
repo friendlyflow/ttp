@@ -285,7 +285,7 @@ ff, the language ttpc compiles
     declarations
       name:, a type run, then its items; the type is required, nothing is derived from the value
       a local in a function, a global at the top of the page
-      a global's items are worked out while compiling: a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a : of one expression
+      a global's items are worked out while compiling: a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a sizeof or an alignof, a : of one expression
       with the target's sizes: sizeof and alignof of a long, a pointer or a long double are the program's (4, 4 and 8 on arm), though compile time runs on the host; the arithmetic is the host's, a long 64 bits
       no items: zero
       one item on a scalar or an address: its value, converted to the type
@@ -306,8 +306,7 @@ ff, the language ttpc compiles
           :
             3
             4
-      a page item whose items have children only as :, items, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
-      a page item whose first item with children after its type is a sizeof or an alignof stops ttpc: as a function it would begin with a statement that does nothing, and a global takes a sizeof in a : (: / sizeof / x)
+      a page item whose items have children only as :, items, sizeof, alignof, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64, aarch64, x86_64), else a global
       align / n, first under a global's name (before thread local or section), places the global at a multiple of n

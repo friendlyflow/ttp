@@ -1,6 +1,8 @@
 exit 0
-ok a global struct's sizeof field
+ok a struct global's sizeof without its : is the bytes of the one with it
+ok read as its field
 ok and the field after it
 ok through the global's address
-ok a u32 global's sizeof of a struct
+ok a u32 global's sizeof of a struct, both forms
 ok and its alignof
+ok a - and a sizeof
