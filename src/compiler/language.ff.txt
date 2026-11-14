@@ -307,6 +307,7 @@ ff, the language ttpc compiles
             3
             4
       a page item whose items have children only as :, items, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
+      a page item whose first item with children after its type is a sizeof or an alignof stops ttpc: as a function it would begin with a statement that does nothing, and a global takes a sizeof in a : (: / sizeof / x)
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64, aarch64, x86_64), else a global
       align / n, first under a global's name (before thread local or section), places the global at a multiple of n

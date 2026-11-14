@@ -1,0 +1,6 @@
+exit 0
+ok a global struct's sizeof field
+ok and the field after it
+ok through the global's address
+ok a u32 global's sizeof of a struct
+ok and its alignof
