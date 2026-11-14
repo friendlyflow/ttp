@@ -1,0 +1,6 @@
+exit 0
+ok a struct field from a call returning one
+ok and from a variable
+ok a union field from a variable
+ok the fields around them
+ok elements of an array of structs
