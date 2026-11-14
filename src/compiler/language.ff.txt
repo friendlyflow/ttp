@@ -419,7 +419,7 @@ ff, the language ttpc compiles
             1
             2
       a : holding a typed literal, then & address, is the address of a temporary holding it (C's &(long){30} is (: / L / 30) / & address); a : holding a compound literal, then & address, that temporary's address
-      a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy, an argument is the callee's own copy, a result is copied into space the caller keeps for it
+      a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy (one item; a : holding a compound literal of its type too, in a local, a local's field, a global or a global's field, there only of a struct of scalar fields), an argument is the callee's own copy, a result is copied into space the caller keeps for it
       example
         b:
           point
