@@ -563,7 +563,7 @@ static struct nd *pcsub (struct nd *n) { return nd_add (nd2 (s_of ("sub"), ndc (
 static struct nd *data_reloc (struct areloc *r, long v)
 {
   struct str *ty = r->rkind, *t = r->tgtset;
-  long a = v >= 2147483648L ? v - 4294967296L : v;
+  long a = v >= 2147483648LL ? v - 4294967296LL : v;
   struct str *gb = s_dup (abase);
   s_cat (gb, " got");
   if (s_is (ty, "R_ARM_ABS32")) return nd1 (s_of ("word"), aplus (a, asymbol (t)));

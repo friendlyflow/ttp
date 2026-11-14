@@ -369,7 +369,7 @@ static struct nd *short_ (struct made *mm, struct str *label)
   if (m (op, "^c\\.(ld|lw|fld)$")) { mem (O (o, 1)); return ins3 (op, LN (mem_off), LO (mem_base), LO (O (o, 0))); }
   if (m (op, "^c\\.(sd|sw|fsd)$")) { mem (O (o, 1)); return ins3 (op, LN (mem_off), LO (mem_base), LO (O (o, 0))); }
   if (m (op, "^c\\.(ldsp|lwsp|sdsp|swsp|fldsp|fsdsp)$")) { mem (O (o, 1)); return ins2 (op, LN (mem_off), LO (O (o, 0))); }
-  if (op_is (op, "c.lui")) { long v = num (O (o, 1)) << 12; if (v >= 2147483648L) v -= 4294967296L; return ins2 (op, LN (v), LO (O (o, 0))); }
+  if (op_is (op, "c.lui")) { long v = num (O (o, 1)) << 12; if (v >= 2147483648LL) v -= 4294967296LL; return ins2 (op, LN (v), LO (O (o, 0))); }
   if (op_is (op, "c.addi4spn")) return ins2 (op, LN (num (O (o, 2))), LO (O (o, 0)));
   if (op_is (op, "c.addi16sp")) return ins1 (op, LN (num (O (o, 1))));
   if (m (op, "^c\\.(nop|ebreak)$")) return ins0 (op);
@@ -382,7 +382,7 @@ static struct nd *canon (struct made *mm)
   struct vec *o;
   if (mm->bytes == 2) return short_ (mm, 0);
   o = split_ops (ssub (mm->args, "\\s*#.*$", "", ""));
-  if (op_is (mm->op, "lui")) { long v = num (O (o, 1)) << 12; if (v >= 2147483648L) v -= 4294967296L; return ins2 (S ("lui"), LN (v), LO (O (o, 0))); }
+  if (op_is (mm->op, "lui")) { long v = num (O (o, 1)) << 12; if (v >= 2147483648LL) v -= 4294967296LL; return ins2 (S ("lui"), LN (v), LO (O (o, 0))); }
   if (m (mm->op, "^(addi|addiw)$")) return ins3 (mm->op, LN (num (O (o, 2))), LO (O (o, 1)), LO (O (o, 0)));
   { struct str *x = s_of ("no ff form for "); s_app (x, mm->op); s_cat (x, " in a li"); fail_s (x); }
   return 0;
@@ -647,7 +647,7 @@ static void rv_main (void)
       into = into_of ();
       if (op_is (op, "li")) {
         long v = num (O (o, 1)), count = v >= -2048 && v < 2048 ? 1 : (v & 0xfff) == 0 ? 1 : 2;
-        if (!(v >= -2147483648L && v < 2147483648L)) { struct str *x = S ("li of "); s_app (x, s_num (v)); s_cat (x, ", wider than 32 bits"); fail_s (x); }
+        if (!(v >= -2147483648LL && v < 2147483648LL)) { struct str *x = S ("li of "); s_app (x, s_num (v)); s_cat (x, ", wider than 32 bits"); fail_s (x); }
         if (count == 1 && n_at < nmade && m (made[n_at]->op, "^(addi|c\\.li)$")) {
           mm = take ();
           nd_add (into, mm->bytes == 2 ? short_ (mm, 0) : full (op, o));

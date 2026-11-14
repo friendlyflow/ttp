@@ -471,7 +471,7 @@ static struct vec *bindop (struct str *k, struct str *s)
     a = alloc (sizeof (struct xalt)); xv_set (&a->val, v); a->leaf = LN (v); v_push (r, a);
     if (m (k, "^[iu]")) {
       long lim[3], q;
-      lim[0] = 4294967296L; lim[1] = 65536; lim[2] = 256;
+      lim[0] = 4294967296LL; lim[1] = 65536; lim[2] = 256;
       for (q = 0; q < 3; q++) if (v >= lim[q] / 2 && v < lim[q]) { a = alloc (sizeof (struct xalt)); xv_set (&a->val, v - lim[q]); a->leaf = LN (v - lim[q]); v_push (r, a); }
     }
     return r;
@@ -1559,7 +1559,7 @@ static void bn_set (struct bn *a, unsigned long v) { a->n = 0; while (v) { a->d[
 static void bn_mul (struct bn *a, unsigned long k) { unsigned long c = 0; long i; for (i = 0; i < a->n; i++) { unsigned long x = a->d[i] * k + c; a->d[i] = x & 0xffffffff; c = x >> 32; } while (c) { a->d[a->n++] = c & 0xffffffff; c = c >> 32; } }
 static void bn_add (struct bn *a, unsigned long k) { long i = 0; unsigned long c = k; while (c) { if (i == a->n) a->d[a->n++] = 0; c += a->d[i]; a->d[i] = c & 0xffffffff; c = c >> 32; i++; } }
 static int bn_cmp (struct bn *a, struct bn *b) { long i; if (a->n != b->n) return a->n < b->n ? -1 : 1; for (i = a->n - 1; i >= 0; i--) if (a->d[i] != b->d[i]) return a->d[i] < b->d[i] ? -1 : 1; return 0; }
-static void bn_sub (struct bn *a, struct bn *b) { long i; unsigned long br = 0; for (i = 0; i < a->n; i++) { unsigned long y = (i < b->n ? b->d[i] : 0) + br; if (a->d[i] >= y) { a->d[i] -= y; br = 0; } else { a->d[i] = a->d[i] + 4294967296UL - y; br = 1; } } while (a->n && !a->d[a->n - 1]) a->n--; }
+static void bn_sub (struct bn *a, struct bn *b) { long i; unsigned long br = 0; for (i = 0; i < a->n; i++) { unsigned long y = (i < b->n ? b->d[i] : 0) + br; if (a->d[i] >= y) { a->d[i] -= y; br = 0; } else { a->d[i] = a->d[i] + 4294967296ULL - y; br = 1; } } while (a->n && !a->d[a->n - 1]) a->n--; }
 static void bn_shl1 (struct bn *a) { bn_mul (a, 2); }
 static unsigned long dbl_bits (struct str *t)
 {
@@ -1626,7 +1626,7 @@ static unsigned long flt_bits (unsigned long d)
   if (fe <= 0 || fe >= 255) return sign << 31 | (fe >= 255 ? 0x7f800000UL : 0);
   r = mant >> 29;
   {
-    unsigned long rest = mant & ((1UL << 29) - 1), halfv = 1UL << 28;
+    unsigned long rest = mant & ((1ULL << 29) - 1), halfv = 1ULL << 28;
     if (rest > halfv || (rest == halfv && (r & 1))) r++;
     if (r >> 23) { r = 0; fe++; }
   }

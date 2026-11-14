@@ -528,7 +528,7 @@ static void a64_emit (struct a64m *mm)
       if (rt && s_is (rt, "R_AARCH64_ADR_PREL_PG_HI21")) { nd_add (ins, nd1 (s_of ("pagerel"), nd_new (rs))); continue; }
       if (rt && s_is (rt, "R_AARCH64_ADR_GOT_PAGE")) { struct str *x = s_of (".Lgot "); s_app (x, rs); h_set (a_got, rs, 1); nd_add (ins, nd1 (s_of ("pagerel"), nd_new (x))); continue; }
       if (rt) { struct str *x = s_of ("a relocation "); s_app (x, rt); s_cat (x, " in "); s_app (x, mm->op); fail_s (x); }
-      to = s_is (d->name, "adrp") ? (mm->addr & ~4095L) + val : mm->addr + val;
+      to = s_is (d->name, "adrp") ? (mm->addr & ~4095LL) + val : mm->addr + val;
       l = h_pv (labelat, key_of (mm->sec, to));
       if (!l) { struct str *x = s_dup (mm->op); s_cat (x, " "); s_app (x, mm->args); s_cat (x, ": no label at "); s_app (x, s_num (to)); fail_s (x); }
       nd_add (ins, nd1 (s_of (s_is (d->name, "adrp") ? "pagerel" : "rel"), nd_new (ffname (l))));
