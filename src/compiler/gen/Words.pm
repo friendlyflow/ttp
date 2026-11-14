@@ -84,7 +84,8 @@ sub field {
     my ($t, $f) = @_;
     my $name = $f->{content} =~ s/:$//r;
     my @run = kids($f);
-    # (an align n first is no part of the type)
+    # (a packed and an align n first are no part of the type)
+    shift @run if is_packed($run[0]);
     shift @run if is_align($run[0]);
     my $pad = $name =~ /^padding \d+$/ || $name eq '' && @run && leaf($run[0]) && $scalarword{ $run[0]{content} };
     { name => $name, run => \@run, pad => $pad ? 1 : 0, anon => $name eq '' && !$pad ? 1 : 0 };
@@ -424,9 +425,11 @@ sub newlist {
 }
 # a definition: its marks, its type run, then its items (a function's
 # parameters and statements)
-my %mark = map { $_ => 1 } ('thread local', 'weak', 'base pcs', 'function', 'ifunc', 'section', 'alias', 'asm', 'struct', 'union', 'enum');
+my %mark = map { $_ => 1 } ('thread local', 'weak', 'base pcs', 'function', 'ifunc', 'section', 'alias', 'asm', 'struct', 'union', 'enum', 'packed');
 # align n first: C's aligned attribute of a field or a global
 sub is_align { my ($n) = @_; $n && $n->{content} eq 'align' && @{ $n->{children} } == 1 && leaf($n->{children}[0]) }
+# packed first: C's packed attribute of a field, or after struct or union of a record
+sub is_packed { my ($n) = @_; $n && $n->{content} eq 'packed' && leaf($n) }
 # cleanup / f first under a local, after its align: C's cleanup attribute
 sub is_cleanup { my ($n) = @_; $n && $n->{content} eq 'cleanup' && @{ $n->{children} } == 1 && leaf($n->{children}[0]) }
 sub marks {
@@ -709,7 +712,13 @@ sub oldtype {
 sub olddef {
     my ($t, $k) = @_;
     # a struct's or a union's fields (: one of no name), their type runs
-    return (node($k->[0]{content}), map { is_align($_) ? $_ : node($_->{content}, is_align((kids($_))[0]) ? ((kids($_))[0], oldtype($t, [(kids($_))[1 .. $#{ $_->{children} }]])) : oldtype($t, [kids($_)])) } @$k[1 .. $#$k])
+    return (node($k->[0]{content}), map {
+            my @f = kids($_);
+            my @pre;
+            push @pre, shift @f if is_packed($f[0]);
+            push @pre, shift @f if is_align($f[0]);
+            is_align($_) || is_packed($_) ? $_ : node($_->{content}, @pre, oldtype($t, \@f))
+        } @$k[1 .. $#$k])
         if @$k && leaf($k->[0]) && $k->[0]{content} =~ /^(?:struct|union)$/;
     my $i = marks($k);
     return oldvals($t, $k) unless $i < @$k && is_typeword($t, $k->[$i]) && !(leaf($k->[0]) && $k->[0]{content} =~ /^(?:struct|union|enum)$/);

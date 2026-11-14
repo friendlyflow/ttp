@@ -715,7 +715,9 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
     cl_put (&C->own, name, k);
     return k;
   }
-  if (cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen) && !cl_names_otherwise (d->dtext, d->dlen, old->unit)) {
+  /* (one definition for the units whose static has the same text: a function's or read-only data's
+     alone; a writable static object is each unit's own, as C has it: glibc's units' static locks) */
+  if ((map == &C->fn || (cs_quals (d->t) & Q_CONST)) && cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen) && !cl_names_otherwise (d->dtext, d->dlen, old->unit)) {
     struct cl_shared *s = alloc (sizeof (struct cl_shared));
     s->key = (char *) C->cu;
     s->nxt = cl_get (&C->plainstatic, name);
@@ -988,6 +990,14 @@ static void cl_pass (void)
       name = cl_cat3 (cl_rec_kind (r), " ", name);
       if (!cl_has (&C->anon_tag, key)) {
         char *tag = cl_cat3 (cl_rec_kind (r), " ", name);
+        /* (another place of the same line, defined otherwise: a macro that
+           makes records of other fields on one line, tst-strtod4.c's
+           TEST_STRTOD of float, double, long double: named with its column) */
+        struct cs_rec *o = cl_get (&C->rec, tag);
+        if (o && o != r && !cl_same_def (r, o)) {
+          name = cl_cat3 (cl_rec_kind (r), " at ", key);
+          tag = cl_cat3 (cl_rec_kind (r), " ", name);
+        }
         cl_put (&C->anon_tag, key, tag);
         cl_put (&C->anon_name, key, name);
         cl_put_new (&C->rec, tag, r);
