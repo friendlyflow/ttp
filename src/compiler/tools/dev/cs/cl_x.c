@@ -1968,11 +1968,11 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
   cl_fail ("the expression of kind", cl_num (k));
 }
 
-/* a byte's item that is an enum constant: its number, in a global and in a local
-   (glibc nss's per_database_defaults; gnulib modechange.c's char flag =
-   MODE_COPY_EXISTING): a leaf there is text to ttpc, whatever it names, in a
-   byte array of a global, and a local char's leaf ttpc looks up as text where
-   it sees no enum constant of the program page from a group's function */
+/* a byte's item of a global's array that is an enum constant: its number (glibc
+   nss's per_database_defaults): a leaf there is text to ttpc, whatever it names
+   (textname.pl); a char's own, a local's or a global's, ttpc takes as the
+   constant (enumtext.pl: gnulib modechange.c's char flag = MODE_COPY_EXISTING,
+   charenum-check) */
 static int cl_char_enum (struct cs_ex *n, struct cl_list *o)
 {
   struct cs_ex *x = cl_strip (n);
@@ -2041,7 +2041,6 @@ static void cl_init (struct cs_ex *n, struct cl_list *o)
   if (s->k == E_INIT) { cl_init_items (s, o); return; }
   str = cl_bare_string (n);
   if (str) { cl_array_text (str, o); return; }
-  if (cl_char_enum (n, o)) return;
   /* (a struct's or a union's from a compound literal of it, gnulib parse-datetime.y's
      relative_time rel_time_0 = (relative_time) { 0, ... }: its items, the declaration's own; as
      one item, a : of the literal, ttpc set the first field to the temporary's address) */
