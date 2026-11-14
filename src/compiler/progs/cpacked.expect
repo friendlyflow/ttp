@@ -1,0 +1,16 @@
+exit 0
+ok sizeof of a record of packed fields
+ok and its alignment
+ok sizeof of a packed record
+ok and its alignment
+ok a record holding one, unpacked
+ok a packed u64 at 1
+ok a packed double at 13
+ok the third record's u64 at 27
+ok after a packed record a u32 at 24
+ok a packed u64 written and read through a copy
+ok a packed u32
+ok a packed double
+ok an array's packed u64
+ok and its u16 at an odd place
+ok a packed double in arithmetic straight from its field

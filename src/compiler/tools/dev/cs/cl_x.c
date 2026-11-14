@@ -2143,6 +2143,16 @@ static struct node *cl_decl (struct cs_decl *v, int global, char *name)
     i = cl_l ();
     cl_push (i, h);
   }
+  /* (a global's item that is sizeof or alignof of a type goes in a :: ttpc takes a page item whose
+     items have children other than a :'s, a cast's type ... for a function: _thread_db_sizeof_pthread) */
+  if (global) {
+    long k = 0;
+    while (k < i->n) {
+      struct node *x = i->v[k];
+      if (x->count && (cl_is (x, "sizeof") || cl_is (x, "alignof"))) { struct cl_list *w = cl_l (); cl_push (w, x); i->v[k] = cl_nl (":", w); }
+      k++;
+    }
+  }
   if ((cl_eq (j, "address char") || cl_eq (j, "address u8")) && i->n && (!i->v[0]->count || cl_is (i->v[0], "content") || cl_is (i->v[0], "address")) && !cl_bare_string (init)) {
     struct node *h = cl_nl (":", i);
     i = cl_l ();

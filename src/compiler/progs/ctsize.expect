@@ -1,0 +1,10 @@
+exit 0
+ok sizeof of long
+ok sizeof of a pointer
+ok a choice by sizeof of long
+ok sizeof of long times 3
+ok sizeof of a struct of a long and a pointer
+ok alignof of long
+ok alignof of a pointer
+ok alignof of long double
+ok sizeof of long double

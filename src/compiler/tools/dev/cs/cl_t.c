@@ -715,7 +715,9 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
     cl_put (&C->own, name, k);
     return k;
   }
-  if (cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen) && !cl_names_otherwise (d->dtext, d->dlen, old->unit)) {
+  /* (one definition for the units whose static has the same text: a function's or read-only data's
+     alone; a writable static object is each unit's own, as C has it: glibc's units' static locks) */
+  if ((map == &C->fn || (cs_quals (d->t) & Q_CONST)) && cl_same_text (d->dtext, d->dlen, old->dtext, old->dlen) && !cl_names_otherwise (d->dtext, d->dlen, old->unit)) {
     struct cl_shared *s = alloc (sizeof (struct cl_shared));
     s->key = (char *) C->cu;
     s->nxt = cl_get (&C->plainstatic, name);
