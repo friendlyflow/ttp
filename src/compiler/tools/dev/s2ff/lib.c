@@ -21,6 +21,13 @@ long s2_exists (char *path);
 long s2_read (long fd, unsigned char *buf, long n);
 long s2_close (long fd);
 
+/* Every long after this is 64 bits, on every target: the Perl's numbers
+   are (an address, a word of asm data, a hash), and c2ff writes long as the
+   target's long, 32 bits on arm (unsigned long as u64 always): a hash of
+   u64 cast to long went negative there and indexed outside its table. The
+   runtime above keeps its long. */
+#define long long long
+
 /* ---- strings */
 struct str { unsigned char *p; long n, room; };
 static long slen (char *s) { long n = 0; while (s[n]) n++; return n; }
