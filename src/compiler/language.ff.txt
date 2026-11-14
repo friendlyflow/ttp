@@ -291,7 +291,7 @@ ff, the language ttpc compiles
       one item on a scalar or an address: its value, converted to the type
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
       a global's struct that ends in an array without a count takes as many elements as its items reach, each whole (C's flexible array member, as gcc lays it out)
-      a field or element that is a struct, union or array takes a : holding its items, as C's inner braces; what has no item is zero, in a local too
+      a field or element that is a struct, union or array takes a : holding its items, as C's inner braces, in a local an expression of its type too, a copy of it (a call returning one, a variable); what has no item is zero, in a local too
       an empty : is a zero struct, union or array, as C's {}
       an empty node (no content, no children: fftext writes it \\e, an indented line of only spaces reads as one) is an empty part wherever an empty : is one
         an item of a global's or a local's list (a zero, a zero struct, union or array), for's parts, an empty statement; where a leaf is text (after cast / char / * pointer) it is the text "" still
