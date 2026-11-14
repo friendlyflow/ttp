@@ -386,7 +386,7 @@ ff, the language ttpc compiles
     functions
       name:, its return type run, its parameters, its statements
       a parameter is name: with a type run as its only children; no untyped leaf parameters
-      the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0)
+      the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0); _start, which nothing calls, takes none: such a local first in it stops ttpc
       a call is name with its arguments in order, the first 8 in the argument registers, the others on the stack; its value is what return gives
       a leaf ... after the parameters takes more arguments: va_list is a word, va_start ap points it at the first after the parameters, va_arg ap type takes one, va_end ap, va_copy to from
       an extra argument of a type kept in memory (a struct, long double) goes as its value, the address of its object; va_arg of that type is the object, which a declaration of it copies
