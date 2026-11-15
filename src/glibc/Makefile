@@ -1071,7 +1071,8 @@ $(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW)
 	$(RUN) -v 9000000 -t 600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(DCFF)/glibc/index.ff -J $(DCFF)/glibc.statics -T \
 	    -O $< -- main > $(DCDIR)/all.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(DCDIR)/all.ff.txt > $@
-$(DCDIR)/all: $(DCDIR)/all.ff $(TTPC) $(SHARED)
+# (and on the folder of glibc in ff the program reads lazily: its index)
+$(DCDIR)/all: $(DCDIR)/all.ff $(DCFF)/glibc/index.ff $(TTPC) $(SHARED)
 	$(RUN) -v 8000000 -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
 datacheck: $(DCDIR)/all datacheck.pl
 	@perl datacheck.pl --target $(GTARGET) --index $(DCFF)/glibc/index.ff --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
