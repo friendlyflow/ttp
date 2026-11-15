@@ -1079,7 +1079,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
      parameters than the tree's definition (tst-bz20544's __cxa_at_quick_exit
      of 3, glibc's of 2): C calls what the unit declared, and gcc passes them
      all, so through a pointer of the unit's type, which ttpc counts nothing of */
-  if (cl_own_proto_differs (c->d, name, na) || cl_asm_value_callee (c->d, name)) {
+  if (cl_own_proto_differs (c->d, name, na)) {
     struct cs_ex *to = cs_mk (E_CAST, callee->t, 0);
     struct cl_list *p;
     struct node *h;
@@ -1215,6 +1215,20 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     return;
   }
   if (cl_starts (name, "__builtin_")) cl_fail ("the builtin", name);
+  /* (after the builtins: fabs, copysign ... are gcc's) */
+  if (cl_asm_value_callee (c->d, cl_dn (c->d))) {
+    struct cs_ex *to = cs_mk (E_CAST, callee->t, 0);
+    struct cl_list *p;
+    struct node *h;
+    to->op = CK_BITCAST;
+    cs_add (to, callee);
+    p = cl_ex (to);
+    h = cl_one (p);
+    nd_add (h, cl_n ("."));
+    cl_add_all (h, cl_args (n, 1));
+    cl_push (o, h);
+    return;
+  }
   if (c->d->k == DK_FUNC) { name = cl_own (name); cl_want (name); }
   else if (!na) {
     struct cl_list *v = cl_ex (c);
