@@ -285,13 +285,13 @@ ff, the language ttpc compiles
     declarations
       name:, a type run, then its items; the type is required, nothing is derived from the value
       a local in a function, a global at the top of the page
-      a global's items are worked out while compiling: a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a : of one expression
+      a global's items are worked out while compiling: a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a sizeof or an alignof, a : of one expression
       with the target's sizes: sizeof and alignof of a long, a pointer or a long double are the program's (4, 4 and 8 on arm), though compile time runs on the host; the arithmetic is the host's, a long 64 bits
       no items: zero
       one item on a scalar or an address: its value, converted to the type
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
       a global's struct that ends in an array without a count takes as many elements as its items reach, each whole (C's flexible array member, as gcc lays it out)
-      a field or element that is a struct, union or array takes a : holding its items, as C's inner braces; what has no item is zero, in a local too
+      a field or element that is a struct, union or array takes a : holding its items, as C's inner braces, in a local an expression of its type too, a copy of it (a call returning one, a variable); what has no item is zero, in a local too
       an empty : is a zero struct, union or array, as C's {}
       an empty node (no content, no children: fftext writes it \\e, an indented line of only spaces reads as one) is an empty part wherever an empty : is one
         an item of a global's or a local's list (a zero, a zero struct, union or array), for's parts, an empty statement; where a leaf is text (after cast / char / * pointer) it is the text "" still
@@ -306,7 +306,7 @@ ff, the language ttpc compiles
           :
             3
             4
-      a page item whose items have children only as :, items, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
+      a page item whose items have children only as :, items, sizeof, alignof, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64, aarch64, x86_64), else a global
       align / n, first under a global's name (before thread local or section), places the global at a multiple of n
@@ -386,7 +386,7 @@ ff, the language ttpc compiles
     functions
       name:, its return type run, its parameters, its statements
       a parameter is name: with a type run as its only children; no untyped leaf parameters
-      the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0)
+      the parameters are the leading such nodes: a local first in a body with only its type is one more parameter, so give it a value (r:, point, 0); in _start such declarations are locals, as a later one with only its type is: nothing calls _start
       a call is name with its arguments in order, the first 8 in the argument registers, the others on the stack; its value is what return gives
       a leaf ... after the parameters takes more arguments: va_list is a word, va_start ap points it at the first after the parameters, va_arg ap type takes one, va_end ap, va_copy to from
       an extra argument of a type kept in memory (a struct, long double) goes as its value, the address of its object; va_arg of that type is the object, which a declaration of it copies
@@ -410,7 +410,7 @@ ff, the language ttpc compiles
       a struct name as a value, its items the siblings after it, one for each of its places, is a temporary of that type (a compound literal, C's (point){1, 2} is point, 1, 2): its named fields, an anonymous member's in place, padding none; zeros written out
       a union name as a value, then a field's name, then its item, is one of a union: (union val){ .str = "x" } is val, str, x
       an array node with its count as a value, its count's items after it, is a temporary array, its value its address (C's (char *[]){ "sh", 0 } is (array / char / * pointer / 2), sh, 0)
-      a place that is a struct, a union or an array takes its own type and its items in turn, as nested braces
+      a place that is a struct, a union or an array takes its own type and its items in turn, as nested braces, or an expression of its type, a copy of it; another item stops
       example
         s:
           long
@@ -419,7 +419,7 @@ ff, the language ttpc compiles
             1
             2
       a : holding a typed literal, then & address, is the address of a temporary holding it (C's &(long){30} is (: / L / 30) / & address); a : holding a compound literal, then & address, that temporary's address
-      a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy, an argument is the callee's own copy, a result is copied into space the caller keeps for it
+      a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy (one item; a : holding a compound literal of its type too, in a local, a local's field, a global or a global's field, there only of a struct of scalar fields), an argument is the callee's own copy, a result is copied into space the caller keeps for it
       example
         b:
           point

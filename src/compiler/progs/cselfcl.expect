@@ -1,0 +1,9 @@
+exit 0
+ok a struct local from a compound literal of its type in a :
+ok a : alone is still the first field's braces
+ok and a scalar first field's
+ok a union local from a compound literal of its type
+ok in an inner block
+ok a local's struct field from a compound literal of its type
+ok a global
+ok and a global's struct field
