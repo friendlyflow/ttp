@@ -1,0 +1,15 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/x86_64/i/csu/crtn.ref.o:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+0000000000000000 <.init>:
+   0:	48 83 c4 08          	add    $0x8,%rsp
+   4:	c3                   	ret
+
+Disassembly of section .fini:
+
+0000000000000000 <.fini>:
+   0:	48 83 c4 08          	add    $0x8,%rsp
+   4:	c3                   	ret

@@ -1,0 +1,22 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/arm/i/csu/crtn.ref.o:     file format elf32-littlearm
+
+SYMBOL TABLE:
+00000000 l    d  .text	00000000 .text
+00000000 l    d  .data	00000000 .data
+00000000 l    d  .bss	00000000 .bss
+00000000 l    d  .init	00000000 .init
+00000000 l    d  .fini	00000000 .fini
+00000000 l    d  .ARM.attributes	00000000 .ARM.attributes
+
+
+
+Disassembly of section .init:
+
+00000000 <.init>:
+   0:	e8bd8008 	pop	{r3, pc}
+
+Disassembly of section .fini:
+
+00000000 <.fini>:
+   0:	e8bd8008 	pop	{r3, pc}

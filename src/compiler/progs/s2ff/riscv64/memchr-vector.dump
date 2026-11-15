@@ -1,0 +1,21 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/i/string/memchr-vector.ref.o:     file format elf64-littleriscv
+
+
+Disassembly of section .text:
+
+0000000000000000 <__memchr_vector>:
+   0:	0c367057          	vsetvli	zero,a2,e8,m8,ta,ma
+   4:	03050007          	vle8ff.v	v0,(a0)
+   8:	6205c457          	vmseq.vx	v8,v0,a1
+   c:	4288a757          	vfirst.m	a4,v8
+  10:	00075963          	bge	a4,zero,22 <__memchr_vector+0x22>
+  14:	c20026f3          	csrrs	a3,vl,zero
+  18:	8e15                	c.sub	a2,a3
+  1a:	9536                	c.add	a0,a3
+  1c:	f275                	c.bnez	a2,0 <__memchr_vector>
+  1e:	4501                	c.li	a0,0
+  20:	8082                	c.jr	ra
+  22:	953a                	c.add	a0,a4
+  24:	8082                	c.jr	ra
+  26:	0001                	c.addi	zero,0

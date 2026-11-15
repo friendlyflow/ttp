@@ -1,0 +1,19 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/x86_64/i/csu/start.ref.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <_start>:
+   0:	31 ed                	xor    %ebp,%ebp
+   2:	49 89 d1             	mov    %rdx,%r9
+   5:	5e                   	pop    %rsi
+   6:	48 89 e2             	mov    %rsp,%rdx
+   9:	48 83 e4 f0          	and    $0xfffffffffffffff0,%rsp
+   d:	50                   	push   %rax
+   e:	54                   	push   %rsp
+   f:	45 31 c0             	xor    %r8d,%r8d
+  12:	31 c9                	xor    %ecx,%ecx
+  14:	48 8b 3d 00 00 00 00 	mov    0x0(%rip),%rdi        # 1b <_start+0x1b>
+  1b:	ff 15 00 00 00 00    	call   *0x0(%rip)        # 21 <_start+0x21>
+  21:	f4                   	hlt

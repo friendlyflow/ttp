@@ -1,0 +1,84 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/aarch64/i/string/memchr.ref.o:     file format elf64-littleaarch64
+
+SYMBOL TABLE:
+0000000000000000 l    d  .text	0000000000000000 .text
+0000000000000000 l    d  .data	0000000000000000 .data
+0000000000000000 l    d  .bss	0000000000000000 .bss
+00000000000000bc l       .text	0000000000000000 .Lnomatch
+0000000000000048 l       .text	0000000000000000 .Lstart_loop
+0000000000000074 l       .text	0000000000000000 .Lloop32_2
+0000000000000060 l       .text	0000000000000000 .Lloop32
+0000000000000094 l       .text	0000000000000000 .Lend
+0000000000000090 l       .text	0000000000000000 .Lend_2
+0000000000000000 l    d  .eh_frame	0000000000000000 .eh_frame
+0000000000000000 l    d  .ARM.attributes	0000000000000000 .ARM.attributes
+0000000000000000 g     F .text	00000000000000c4 __memchr
+0000000000000000  w    F .text	00000000000000c4 memchr
+
+
+
+Disassembly of section .text:
+
+0000000000000000 <__memchr>:
+   0:	d503245f 	hint	#0x22
+   4:	927cec03 	and	x3, x0, #0xfffffffffffffff0
+   8:	b40005a2 	cbz	x2, bc <.Lnomatch>
+   c:	4c407061 	ld1	{v1.16b}, [x3]
+  10:	4e010c20 	dup	v0.16b, w1
+  14:	6e208c22 	cmeq	v2.16b, v1.16b, v0.16b
+  18:	d37ef406 	ubfm	x6, x0, #62, #61
+  1c:	0f0c8443 	shrn	v3.8b, v2.8h, #4
+  20:	9e660065 	fmov	x5, d3
+  24:	9ac624a5 	lsrv	x5, x5, x6
+  28:	b4000105 	cbz	x5, 48 <.Lstart_loop>
+  2c:	dac000a5 	rbit	x5, x5
+  30:	dac010a5 	clz	x5, x5
+  34:	eb45085f 	subs	xzr, x2, x5, lsr #2
+  38:	8b450800 	add	x0, x0, x5, lsr #2
+  3c:	9a9f8000 	csel	x0, x0, xzr, hi	// hi = pmore
+  40:	d65f03c0 	ret
+  44:	d503201f 	hint	#0x0
+
+0000000000000048 <.Lstart_loop>:
+  48:	cb000067 	sub	x7, x3, x0
+  4c:	910044e7 	add	x7, x7, #0x11
+  50:	eb070044 	subs	x4, x2, x7
+  54:	54000343 	b.cc	bc <.Lnomatch>  // b.lo, b.ul, b.last
+  58:	362000e4 	tbz	w4, #4, 74 <.Lloop32_2>
+  5c:	d1004063 	sub	x3, x3, #0x10
+
+0000000000000060 <.Lloop32>:
+  60:	3cc20c61 	ldr	q1, [x3, #32]!
+  64:	6e208c22 	cmeq	v2.16b, v1.16b, v0.16b
+  68:	6e22a443 	umaxp	v3.16b, v2.16b, v2.16b
+  6c:	9e660065 	fmov	x5, d3
+  70:	b5000125 	cbnz	x5, 94 <.Lend>
+
+0000000000000074 <.Lloop32_2>:
+  74:	3dc00461 	ldr	q1, [x3, #16]
+  78:	6e208c22 	cmeq	v2.16b, v1.16b, v0.16b
+  7c:	f1008084 	subs	x4, x4, #0x20
+  80:	54000083 	b.cc	90 <.Lend_2>  // b.lo, b.ul, b.last
+  84:	6e22a443 	umaxp	v3.16b, v2.16b, v2.16b
+  88:	9e660065 	fmov	x5, d3
+  8c:	b4fffea5 	cbz	x5, 60 <.Lloop32>
+
+0000000000000090 <.Lend_2>:
+  90:	91004063 	add	x3, x3, #0x10
+
+0000000000000094 <.Lend>:
+  94:	0f0c8443 	shrn	v3.8b, v2.8h, #4
+  98:	cb000064 	sub	x4, x3, x0
+  9c:	9e660065 	fmov	x5, d3
+  a0:	cb040044 	sub	x4, x2, x4
+  a4:	dac000a5 	rbit	x5, x5
+  a8:	dac010a5 	clz	x5, x5
+  ac:	eb45089f 	subs	xzr, x4, x5, lsr #2
+  b0:	8b450860 	add	x0, x3, x5, lsr #2
+  b4:	9a9f8000 	csel	x0, x0, xzr, hi	// hi = pmore
+  b8:	d65f03c0 	ret
+
+00000000000000bc <.Lnomatch>:
+  bc:	d2800000 	movz	x0, #0x0
+  c0:	d65f03c0 	ret

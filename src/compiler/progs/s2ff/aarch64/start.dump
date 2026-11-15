@@ -1,0 +1,44 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/aarch64/i/csu/start.ref.o:     file format elf64-littleaarch64
+
+SYMBOL TABLE:
+0000000000000000 l    d  .text	0000000000000000 .text
+0000000000000000 l    d  .data	0000000000000000 .data
+0000000000000000 l    d  .bss	0000000000000000 .bss
+0000000000000034 l       .text	0000000000000000 __wrap_main
+0000000000000000 l    d  .eh_frame	0000000000000000 .eh_frame
+0000000000000000 l    d  .ARM.attributes	0000000000000000 .ARM.attributes
+0000000000000000 g     F .text	000000000000003c _start
+0000000000000000         *UND*	0000000000000000 __libc_start_main
+0000000000000000         *UND*	0000000000000000 abort
+0000000000000000         *UND*	0000000000000000 main
+0000000000000000 g       .data	0000000000000000 __data_start
+0000000000000000  w      .data	0000000000000000 data_start
+
+
+
+Disassembly of section .text:
+
+0000000000000000 <_start>:
+   0:	d503245f 	hint	#0x22
+   4:	d280001d 	movz	x29, #0x0
+   8:	d280001e 	movz	x30, #0x0
+   c:	aa0003e5 	orr	x5, xzr, x0
+  10:	f94003e1 	ldr	x1, [sp]
+  14:	910023e2 	add	x2, sp, #0x8
+  18:	910003e6 	add	x6, sp, #0x0
+  1c:	90000000 	adrp	x0, 0 <_start>
+			1c: R_AARCH64_ADR_PREL_PG_HI21	.text+0x34
+  20:	91000000 	add	x0, x0, #0x0
+			20: R_AARCH64_ADD_ABS_LO12_NC	.text+0x34
+  24:	d2800003 	movz	x3, #0x0
+  28:	d2800004 	movz	x4, #0x0
+  2c:	94000000 	bl	0 <__libc_start_main>
+			2c: R_AARCH64_CALL26	__libc_start_main
+  30:	94000000 	bl	0 <abort>
+			30: R_AARCH64_CALL26	abort
+
+0000000000000034 <__wrap_main>:
+  34:	d503245f 	hint	#0x22
+  38:	14000000 	b	0 <main>
+			38: R_AARCH64_JUMP26	main

@@ -1,0 +1,86 @@
+
+/home/nico/.cache/ttp/build/tools/glibc/arm/i/string/memchr_neon.ref.o:     file format elf32-littlearm
+
+SYMBOL TABLE:
+00000000 l    d  .text	00000000 .text
+00000000 l    d  .data	00000000 .data
+00000000 l    d  .bss	00000000 .bss
+00000000 l    d  .debug_frame	00000000 .debug_frame
+00000000 l    d  .ARM.attributes	00000000 .ARM.attributes
+00000000 g     F .text	000000e8 __memchr_neon
+
+
+
+Disassembly of section .text:
+
+00000000 <__memchr_neon>:
+   0:	2a07      	cmp	r2, #7
+   2:	d80a      	bhi.n	1a <__memchr_neon+0x1a>
+   4:	f001 01ff 	and.w	r1, r1, #255	@ 0xff
+   8:	3a01      	subs	r2, #1
+   a:	d36a      	bcc.n	e2 <__memchr_neon+0xe2>
+   c:	f810 3b01 	ldrb.w	r3, [r0], #1
+  10:	428b      	cmp	r3, r1
+  12:	d1f9      	bne.n	8 <__memchr_neon+0x8>
+  14:	f1a0 0001 	sub.w	r0, r0, #1
+  18:	4770      	bx	lr
+  1a:	eee0 1b10 	vdup.8	q0, r1
+  1e:	f240 2301 	movw	r3, #513	@ 0x201
+  22:	f6c0 0304 	movt	r3, #2052	@ 0x804
+  26:	ea4f 1c03 	mov.w	ip, r3, lsl #4
+  2a:	ec4c 3b16 	vmov	d6, r3, ip
+  2e:	ec4c 3b17 	vmov	d7, r3, ip
+  32:	f020 011f 	bic.w	r1, r0, #31
+  36:	f010 0c1f 	ands.w	ip, r0, #31
+  3a:	d01c      	beq.n	76 <__memchr_neon+0x76>
+  3c:	f921 223d 	vld1.8	{d2-d5}, [r1 :256]!
+  40:	f1ac 0320 	sub.w	r3, ip, #32
+  44:	18d2      	adds	r2, r2, r3
+  46:	ff02 2850 	vceq.i8	q1, q1, q0
+  4a:	ff04 4850 	vceq.i8	q2, q2, q0
+  4e:	ef02 2156 	vand	q1, q1, q3
+  52:	ef04 4156 	vand	q2, q2, q3
+  56:	ef02 2b13 	vpadd.i8	d2, d2, d3
+  5a:	ef04 4b15 	vpadd.i8	d4, d4, d5
+  5e:	ef02 2b14 	vpadd.i8	d2, d2, d4
+  62:	ef02 2b12 	vpadd.i8	d2, d2, d2
+  66:	ee12 0b10 	vmov.32	r0, d2[0]
+  6a:	fa20 f00c 	lsr.w	r0, r0, ip
+  6e:	fa00 f00c 	lsl.w	r0, r0, ip
+  72:	d927      	bls.n	c4 <__memchr_neon+0xc4>
+  74:	bb68      	cbnz	r0, d2 <__memchr_neon+0xd2>
+  76:	ed2d 8b04 	vpush	{d8-d9}
+  7a:	bf00      	nop
+  7c:	f3af 8000 	nop.w
+  80:	f921 223d 	vld1.8	{d2-d5}, [r1 :256]!
+  84:	3a20      	subs	r2, #32
+  86:	ff02 2850 	vceq.i8	q1, q1, q0
+  8a:	ff04 4850 	vceq.i8	q2, q2, q0
+  8e:	d907      	bls.n	a0 <__memchr_neon+0xa0>
+  90:	ef22 8154 	vorr	q4, q1, q2
+  94:	ef28 8119 	vorr	d8, d8, d9
+  98:	ec53 0b18 	vmov	r0, r3, d8
+  9c:	4318      	orrs	r0, r3
+  9e:	d0ef      	beq.n	80 <__memchr_neon+0x80>
+  a0:	ecbd 8b04 	vpop	{d8-d9}
+  a4:	ef02 2156 	vand	q1, q1, q3
+  a8:	ef04 4156 	vand	q2, q2, q3
+  ac:	ef02 2b13 	vpadd.i8	d2, d2, d3
+  b0:	ef04 4b15 	vpadd.i8	d4, d4, d5
+  b4:	ef02 2b14 	vpadd.i8	d2, d2, d4
+  b8:	ef02 2b12 	vpadd.i8	d2, d2, d2
+  bc:	ee12 0b10 	vmov.32	r0, d2[0]
+  c0:	b178      	cbz	r0, e2 <__memchr_neon+0xe2>
+  c2:	d806      	bhi.n	d2 <__memchr_neon+0xd2>
+  c4:	f1c2 0200 	rsb	r2, r2, #0
+  c8:	fa00 f002 	lsl.w	r0, r0, r2
+  cc:	40d0      	lsrs	r0, r2
+  ce:	bf08      	it	eq
+  d0:	2100      	moveq	r1, #0
+  d2:	fa90 f0a0 	rbit	r0, r0
+  d6:	f1a1 0120 	sub.w	r1, r1, #32
+  da:	fab0 f080 	clz	r0, r0
+  de:	4408      	add	r0, r1
+  e0:	4770      	bx	lr
+  e2:	f04f 0000 	mov.w	r0, #0
+  e6:	4770      	bx	lr
