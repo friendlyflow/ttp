@@ -629,7 +629,7 @@ LINKED_aarch64 := string stdlib ldouble malloc stdio floats args unwind gccrt
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
 LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 # (arm the same way: start.S, crti.S and crtn.S through s2ff-arm, as aarch64's)
-LINKED_arm := string stdlib ldouble malloc stdio floats args unwind gccrt
+LINKED_arm := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -888,6 +888,9 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 # (x86_64's gnuc with libm.a too: gcc calls fma and fmaf there, which it
 # makes no instruction of without FMA, as glibc's own libm is built)
 REFLIBS_gnuc_x86_64 = $(OBJ)/math/libm.a
+# (arm's too: its glibc is built for vfpv3-d16, where gcc calls fma and
+# fmaf, whose ifunc takes VFPv4's vfma where the CPU has it)
+REFLIBS_gnuc_arm = $(OBJ)/math/libm.a
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
