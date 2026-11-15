@@ -1,0 +1,8 @@
+comment
+  asmd: vadd.f64 d0, d0, d0; bx lr
+asmd:
+  asm
+  word
+    0xee300b00
+  word
+    0xe12fff1e

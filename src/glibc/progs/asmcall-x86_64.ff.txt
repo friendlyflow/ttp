@@ -1,0 +1,39 @@
+comment
+  asmd: addsd %xmm0, %xmm0; asmld: fldt 8(%rsp); fadd %st(0), %st; asmf: addss %xmm0, %xmm0; each then ret
+asmd:
+  asm
+  byte
+    0xf2
+  byte
+    0x0f
+  byte
+    0x58
+  byte
+    0xc0
+  ret
+asmld:
+  asm
+  byte
+    0xdb
+  byte
+    0x6c
+  byte
+    0x24
+  byte
+    0x08
+  byte
+    0xd8
+  byte
+    0xc0
+  ret
+asmf:
+  asm
+  byte
+    0xf3
+  byte
+    0x0f
+  byte
+    0x58
+  byte
+    0xc0
+  ret

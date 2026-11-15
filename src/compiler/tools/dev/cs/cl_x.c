@@ -1029,6 +1029,23 @@ static int cl_own_proto_differs (struct cs_decl *d, char *name, long nargs)
   np = cl_tree_nparams (name);
   return np >= 0 && np != nargs;
 }
+/* a function of no C (an asm function: glibc's .S, s2ff's) whose declaration returns a value that is no integer
+   or pointer (a float, a double, a long double, a complex, a struct): C calls an asm function's name as a long
+   (rax, a0, x0, r0), so through a pointer of the declaration's type, whose call takes its result where the
+   target's ABI returns it (st0 or xmm0, fa0, d0, s0/d0 or r0 r1 ...): __powl_helper's __ieee754_expl. A
+   program's: a name of its tree's asm page (--index) */
+static int cl_asm_value_callee (struct cs_decl *d, char *name)
+{
+  struct cs_ty *f = cs_canon (d->t), *r;
+  if (d->k != DK_FUNC || f->k != TY_FUNC || cl_starts (name, "__builtin_") || cl_has (&C->fn, name)) return 0;
+  r = cs_canon (f->to);
+  if (cs_is_void (r) || cs_is_int (r) || cs_is_ptr (r)) return 0;
+  if (C->treedefs.count) {
+    char *tf = cl_get (&C->treefile, cl_ffname (name));
+    if (!tf || !cl_starts (tf, "asm")) return 0;
+  }
+  return 1;
+}
 static void cl_call (struct cs_ex *n, struct cl_list *o)
 {
   struct cs_ex *callee = cl_k (n, 0), *c = cl_strip (callee);
@@ -1062,7 +1079,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
      parameters than the tree's definition (tst-bz20544's __cxa_at_quick_exit
      of 3, glibc's of 2): C calls what the unit declared, and gcc passes them
      all, so through a pointer of the unit's type, which ttpc counts nothing of */
-  if (cl_own_proto_differs (c->d, name, na)) {
+  if (cl_own_proto_differs (c->d, name, na) || cl_asm_value_callee (c->d, name)) {
     struct cs_ex *to = cs_mk (E_CAST, callee->t, 0);
     struct cl_list *p;
     struct node *h;

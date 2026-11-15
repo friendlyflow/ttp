@@ -1,0 +1,8 @@
+comment
+  asmd: fadd.d fa0, fa0, fa0; ret
+asmd:
+  asm
+  word
+    0x02a57553
+  word
+    0x00008067

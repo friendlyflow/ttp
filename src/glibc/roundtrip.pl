@@ -440,7 +440,14 @@ sub str {
 }
 sub is_atomiccall { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') =~ /^__atomic_\w+_\d+$/ }
 sub is_mempcpy { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') eq '__builtin_mempcpy' }
-sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $d = (strip((kids($s))[0]) // {})->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
+sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $f = strip((kids($s))[0]) // {}; $f = fnaddr($f) // $f; my $d = $f->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
+# &f of a function f: its reference (a cast of it stripped before)
+sub fnaddr {
+    my ($c) = @_;
+    return undef unless ($c->{kind} // '') eq 'UnaryOperator' && $c->{opcode} eq '&';
+    my $r = strip((kids($c))[0]) // {};
+    ($r->{kind} // '') eq 'DeclRefExpr' && ($r->{referencedDecl}{kind} // '') eq 'FunctionDecl' ? $r : undef;
+}
 # (arm's syscall, whose value c2ff has as a long, glibc's an int: its
 # conversions to either are not compared)
 sub is_syscallv {
@@ -498,6 +505,10 @@ sub call {
     my ($callee, @args) = kids($n);
     my $c = strip($callee);
     $c = strip((kids($c))[0]) while $c->{kind} eq 'UnaryOperator' && $c->{opcode} eq '*';
+    # (csema's call of an asm function whose value is no integer or pointer,
+    # through its address cast to the declaration's pointer type, (*(T) &f)
+    # (x), is the call f (x): the same prototype converts the arguments)
+    $c = fnaddr($c) // $c;
     my $name = $c->{kind} eq 'DeclRefExpr' && ($c->{referencedDecl}{kind} // '') eq 'FunctionDecl' ? name_of($c->{referencedDecl}) : undef;
     if (defined $name) {
         if ($side eq 'glibc') {
