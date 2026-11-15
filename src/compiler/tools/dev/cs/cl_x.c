@@ -1172,7 +1172,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   }
 
   if (C->target == 1 && !na && cl_eq (name, "__builtin_ia32_rdsspq")) { cl_push (o, cl_n1 (name, cl_n ("0"))); return; }
-  if (C->target == 1 && (cl_eq (name, "__builtin_ia32_rdsspq") || cl_eq (name, "__builtin_ia32_incsspq") || cl_eq (name, "__builtin___clear_cache") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_signbitf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_ia32_pmovmskb128") || cl_eq (name, "__builtin_ia32_pshufb128"))) { cl_push (o, cl_call_node (name, n)); return; }
+  if (C->target == 1 && (cl_eq (name, "__builtin_ia32_rdsspq") || cl_eq (name, "__builtin_ia32_incsspq") || cl_eq (name, "__builtin___clear_cache") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_signbitf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_ia32_pmovmskb128") || cl_eq (name, "__builtin_ia32_pshufb128") || cl_eq (name, "__builtin_ia32_cvtpd2ps") || cl_eq (name, "__builtin_sqrtl"))) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 1 && !na && (cl_eq (name, "__builtin_ia32_rdtsc") || cl_eq (name, "__builtin_ia32_pause") || cl_eq (name, "__builtin_ia32_xbegin") || cl_eq (name, "__builtin_ia32_xend") || cl_eq (name, "__builtin_ia32_xtest"))) { cl_push (o, cl_n (name)); return; }
   if (C->target == 1 && na == 3 && (cl_eq (name, "_mm_cmpistri") || cl_eq (name, "_mm_cmpistrc") || cl_eq (name, "_mm_cmpistrz"))) {
 

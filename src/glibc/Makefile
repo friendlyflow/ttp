@@ -1938,8 +1938,15 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   anonrec one macro that makes anonymous records of other fields on one
 #           line (tst-strtod4.c's TEST_STRTOD): each its own type
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check
-ALLPROGS := locale enums statics anonrec
+#   x87math x86_64's libm where glibc's C has x87 asm and gcc's x87 builtins
+#           (exp, pow ... at their special cases, the x87's exception masks,
+#           floorl, the narrowing functions, sqrtl, powl) and those forms in
+#           its own C; gcc's with libm.a too (ALLPROGLIBS); x86_64 only
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check
+ALLPROGS := locale enums statics anonrec x87math
+ALLPROG_x87math := x87math
+ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_locale := locale
 ALLPROG_enums := enums-a enums-b
 ALLPROG_statics := statics-a statics-b
@@ -1961,7 +1968,7 @@ $$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(OBJ)/libc.a
 	mkdir -p $$(FF)
 	for u in $$(ALLPROG_$(1)); do $$(RUN) -t 120 $$(GLIBC_CC) -O2 -fno-builtin $$(PROGFLAGS) -c progs/$$$$u.c -o $$(FF)/$$$$u.ref.o || exit 1; done
 	$$(RUN) -t 120 $$(GLIBC_CC) -static -nostdlib -o $$@ $$(OBJ)/csu/crt1.o $$(OBJ)/csu/crti.o $$(CRTBEGIN) \
-	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
+	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a $$(ALLPROGLIBS_$(1)) -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
 $(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all progs/$(1).expect $$(ALLPROGDEPS_$(1))
 	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); tail -n +2 progs/$(1).expect > $$(FF)/$(1)-all.want; \
 	for b in $(1)-all.ref $(1)-all; do \

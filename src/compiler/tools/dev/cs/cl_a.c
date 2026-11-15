@@ -194,7 +194,7 @@ static void cl_ins_other (char *line, struct cl_list *o)
     if (cl_eq (op, "mrc") && na == 6 && cl_eq (a[0], "p10") && cl_eq (a[1], "7") && cl_r_reg (a[2]) && cl_eq (a[3], "cr1") && cl_eq (a[4], "cr0") && cl_eq (a[5], "0")) { cl_push (o, cl_n1 ("vmrs", cl_n (a[2]))); return; }
   } else if (C->target == 1) {
     static char *words0[] = { "fwait", "hlt", "pause", "nop", "cpuid", "xgetbv", "rdtsc", "mfence", "lfence", "sfence", "fnclex", "fpatan", "syscall", 0 };
-    static char *wf[] = { "fnstcw", "fldcw", "fnstsw", 0 };
+    static char *wf[] = { "fnstcw", "fldcw", "fnstsw", "fstcw", "fstsw", 0 };
     static char *wm[] = { "ldmxcsr", "stmxcsr", "fldenv", "fnstenv", 0 };
     static char *wb[] = { "bsr", "bsf", "bswap", "xchg", "lzcnt", "tzcnt", "popcnt", 0 };
     static char *wa[] = { "addl", "addq", "adcl", "adcq", "subl", "subq", "sbbl", "sbbq", "andl", "andq", "orl", "orq", "xorl", "xorq", 0 };
@@ -216,6 +216,8 @@ static void cl_ins_other (char *line, struct cl_list *o)
       cl_push (o, n);
       return;
     }
+    /* the status word to ax (an "=a" output of 16 bits: libc_fetestexcept_387's fnstsw %0) */
+    if ((cl_eq (op, "fnstsw") || cl_eq (op, "fstsw")) && na == 1 && cl_eq (a[0], "%ax")) { cl_push (o, cl_n1 (cl_cat (op, ".ai"), cl_n ("ax"))); return; }
     if ((cl_eq (op, "xchgl") || cl_eq (op, "xchgq")) && na == 2) {
       long m = 0 - 1;
       if (cl_x86_mem (a[0], &disp, &rg)) m = 0; else if (cl_x86_mem (a[1], &disp, &rg)) m = 1;
@@ -323,6 +325,26 @@ static char cl_x87_size (struct cs_ex *o)
   cl_fail ("an x87 asm operand of a", w);
   return 0;
 }
+/* the address of an x87 asm operand: a variable's own; else (an input of a value, __powl_helper's
+   "0" (w_lo / (1.0L + w_hi)) and "u" (1.0L)) a local of its type set to it first, __x87_1, __x87_2 ... of its function,
+   as gcc computes such an input before it loads it on the x87's stack */
+static char *cl_x87_fn;
+static long cl_x87_n;
+static struct node *cl_x87_addr (struct cs_ex *e, struct cl_list *o)
+{
+  struct cs_ex *s = cl_strip (e);
+  struct cl_list *all;
+  char *nm;
+  if (s->k == E_REF || s->k == E_MEM || s->k == E_IDX || (s->k == E_UN && cl_name_is (s, "*"))) return cl_n1 ("address", cl_atom (e));
+  if (!C->cur_fn) cl_fail ("an x87 asm operand that is no variable", 0);
+  if (!cl_x87_fn || !cl_eq (cl_x87_fn, C->cur_fn)) { cl_x87_fn = C->cur_fn; cl_x87_n = 0; }
+  /* (past a C local of that name) */
+  do { cl_x87_n++; nm = cl_cat ("__x87_", cl_num (cl_x87_n)); } while (cl_val (&C->localname, nm));
+  all = cl_ct (e->t);
+  cl_itemx (e, all);
+  cl_push (o, cl_nl (cl_cat (nm, ":"), all));
+  return cl_n1 ("address", cl_n (nm));
+}
 static void cl_x87 (struct cs_st *n, struct cl_asm *p, struct cl_list *o)
 {
   struct cs_ex **ops = n->ops;
@@ -350,11 +372,9 @@ static void cl_x87 (struct cs_st *n, struct cl_asm *p, struct cl_list *o)
     cl_append (o, in);
     return;
   }
-  j = 0;
-  while (j < n->nops) {
-    struct cs_ex *e = cl_strip (ops[j]);
-    if (!(e->k == E_REF || e->k == E_MEM || e->k == E_IDX || (e->k == E_UN && cl_name_is (e, "*")))) cl_fail ("an x87 asm operand that is no variable", 0);
-    j++;
+  {
+    struct cs_ex *e = cl_strip (ops[0]);
+    if (!(e->k == E_REF || e->k == E_MEM || e->k == E_IDX || (e->k == E_UN && cl_name_is (e, "*")))) cl_fail ("an x87 asm output that is no variable", 0);
   }
   if (un >= 0) { order[nord] = un; nord++; }
   if (t0 >= 0) { order[nord] = t0; nord++; }
@@ -429,9 +449,44 @@ static void cl_x87 (struct cs_st *n, struct cl_asm *p, struct cl_list *o)
       cl_out (cl_nl (cl_cat (name, ":"), d));
     }
     j = 0;
-    while (j < nord) { cl_push (args, cl_n1 ("address", cl_atom (ops[order[j]]))); j++; }
+    while (j < nord) { cl_push (args, cl_x87_addr (ops[order[j]], o)); j++; }
     cl_push (o, cl_nl (name, args));
   }
+}
+/* an empty asm statement of x87 inputs alone ("f"): an asm function of their addresses (rdi rsi ...) that loads
+   each (fld of its format: flds fldl fldt) and pops them all */
+static void cl_x87_in (struct cs_st *n, struct cl_asm *p, struct cl_list *o)
+{
+  struct cs_ex **ops = n->ops;
+  struct cl_list *code = cl_l (), *args = cl_l ();
+  char *sz = alloc (n->nops + 1), *name;
+  long j = 0;
+  if (n->nops > 6) cl_fail ("an asm statement with too many operands", 0);
+  while (j < n->nops) {
+    struct node *m;
+    sz[j] = cl_x87_size (ops[j]);
+    m = cl_n (cl_cat3 ("fld", cl_copy ((unsigned char *) sz + j, 1), ".m"));
+    nd_add (m, cl_n ("0"));
+    nd_add (m, cl_n (cl_argreg (j)));
+    cl_push (code, m);
+    j++;
+  }
+  sz[j] = 0;
+  j = 0;
+  while (j < n->nops) { cl_push (code, cl_n ("fstp.st0")); j++; }
+  name = cl_asm_name (p, sz);
+  if (!cl_val (&C->asmfn, name)) {
+    struct cl_list *d = cl_l ();
+    cl_set (&C->asmfn, name);
+    cl_push (d, cl_n ("asm"));
+    cl_push (d, cl_n1 ("comment", cl_n ("glibc's empty asm statement of x87 inputs (\"f\"): each loaded, then popped")));
+    cl_append (d, code);
+    cl_push (d, cl_n ("ret"));
+    cl_out (cl_nl (cl_cat (name, ":"), d));
+  }
+  j = 0;
+  while (j < n->nops) { cl_push (args, cl_x87_addr (ops[j], o)); j++; }
+  cl_push (o, cl_nl (name, args));
 }
 /* a want of asm_stmt_other */
 enum { AW_VALUE, AW_ADDRESS, AW_MEM, AW_XIN, AW_XOUT, AW_XIO };
@@ -442,7 +497,7 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
   struct cs_ex **ops = n->ops;
   long nops = n->nops, i = 0, nw = 0, ret = 0 - 1, xn = 0, second = 0;
   char **text = alloc ((nops + 1) * sizeof (char *));
-  char **xr = alloc ((nops + 1) * sizeof (char *)), *xw = alloc (nops + 1);
+  char **xr = alloc ((nops + 1) * sizeof (char *)), *xw = alloc (nops + 1), *narrow = alloc (nops + 1);
   struct cl_want *w = alloc ((nops + 1) * sizeof (struct cl_want));
   struct cl_list *code = cl_l (), *after = cl_l ();
   int blank = 1, x86 = C->target == 1;
@@ -485,6 +540,12 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
       }
       return;
     }
+    /* an empty one whose inputs are all the x87's ("f": math_force_eval of a value with effects, its x87 branch):
+       each loaded on its stack (fld of its format), then popped, as gcc does */
+    i = 0;
+    all = x86;
+    while (all && i < nops) { if (!cl_eq (cl_constraint_clean (p.ic[i]), "f")) all = 0; i++; }
+    if (all) { cl_x87_in (n, &p, o); return; }
   }
   if (x86) {
     i = 0;
@@ -542,10 +603,13 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
       continue;
     }
     if (out && fx) {
+      char *t16 = cl_join (cl_ct (ops[i]->t));
       if (cl_has_plus (c)) cl_fail ("the asm constraint", c);
       w[nw].how = AW_ADDRESS;
       nw++;
       text[i] = fx;
+      /* (in the template a 16-bit one is its register's 16 bits, %ax, as gcc writes it) */
+      if (cl_eq (t16, "u16") || cl_eq (t16, "short") || cl_eq (t16, "i16")) narrow[i] = 1;
     } else if (out && (cl_eq (k, "r") || (x86 && cl_eq (k, "x")))) {
       if (ret >= 0 && x86 && !cl_has_plus (c) && !second) {
         second = 1;
@@ -639,6 +703,7 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
             if (!x86) cl_fail ("the asm output of that target", p.oc[ix]);
             if (cl_eq (t, "int") || cl_eq (t, "u32") || cl_eq (t, "i32")) sz = "l";
             else if (cl_eq (t, "long") || cl_eq (t, "u64") || cl_eq (t, "i64") || cl_ends (t, " address") || cl_ends (t, " pointer") || cl_eq (t, "address") || cl_eq (t, "pointer")) sz = "q";
+            else if (cl_eq (t, "u16") || cl_eq (t, "short") || cl_eq (t, "i16")) sz = "w";
             else cl_fail ("the asm output of a", t);
             while (v < nops) { if (text[v] && cl_eq (text[v], a)) inuse = 1; v++; }
             if (inuse) {
@@ -725,6 +790,8 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
           char *r;
           if (v >= nops || !text[v]) cl_fail ("the asm operand", t);
           r = text[v];
+          if (x86 && !mod && narrow[v] && r[0] == 'r' && r[1] && r[2] == 'x' && !r[3]) r = r + 1;
+          else if (x86 && !mod && narrow[v] && (cl_eq (r, "rsi") || cl_eq (r, "rdi"))) r = r + 1;
           if (mod == 'w' && r[0] == 'x' && cl_all_digits (r + 1)) r = cl_cat ("w", r + 1);
           else if (mod && !(x86 && mod == 'd' && r[0] == 'x' && r[1] == 'm') && !(mod == 's' && r[0] == 's' && cl_digit (r[1])) && !(mod == 'd' && r[0] == 'd' && cl_digit (r[1])) && !(mod == 'x' && r[0] == 'x' && cl_digit (r[1]))) cl_fail ("the asm operand of that modifier", t);
           if (x86) {
