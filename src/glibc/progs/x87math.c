@@ -48,6 +48,7 @@ static void own (void)
   double d;
   v2df_t v;
   v4sf_t s;
+  union { v4sf_t v; float f[4]; } u;
   asm volatile ("fnclex");
   printf ("control word %#x, status %#x\n", control (), status ());
   y = lv[4];
@@ -63,8 +64,10 @@ static void own (void)
   asm ("fyl2xp1" : "=t" (r) : "0" (a / (1.0L + b) + 1.75L), "u" (1.0L) : "st(1)");
   printf ("fyl2xp1 of values: %La\n", r);
   v = (v2df_t) { dv[3], -dv[11] * 1e300 };
+  /* (its floats through a union: ttpc does not take a vector's subscript yet) */
   s = __builtin_ia32_cvtpd2ps (v);
-  printf ("cvtpd2ps: %a %a %a %a", (double) s[0], (double) s[1], (double) s[2], (double) s[3]);
+  u.v = s;
+  printf ("cvtpd2ps: %a %a %a %a", (double) u.f[0], (double) u.f[1], (double) u.f[2], (double) u.f[3]);
   flags ("");
   printf ("__builtin_sqrtl: %La %La\n", __builtin_sqrtl (lv[5]), __builtin_sqrtl (lv[2]));
 }

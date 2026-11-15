@@ -879,10 +879,11 @@ sub S {
         if ($k eq 'GotoStmt') { push @out, '(goto ' . ($labels{ $n->{targetLabelDeclId} } // '?') . ')'; next }
         if ($k eq 'IndirectGotoStmt') { push @out, '(goto* ' . E((kids($n))[0]) . ')'; next }
         if ($k eq 'GCCAsmStmt') {
-            # (x86_64's math_opt_barrier of a long double, asm ("" : "=t" (y) : "0" (x)): as c2ff, y = x)
+            # (x86_64's math_opt_barrier, asm ("" : "=t" (y) : "0" (x)) of a long
+            # double, "=x" of a double or a float: as csema, y = x)
             if ($side eq 'glibc' && $target eq 'x86_64') {
                 my ($t, $oc, $ic) = asm_text($n);
-                if (defined $t && $t !~ /\S/ && @$oc == 1 && $oc->[0] =~ /^=&?t$/ && @$ic == 1 && $ic->[0] eq '0') {
+                if (defined $t && $t !~ /\S/ && @$oc == 1 && $oc->[0] =~ /^=&?[tx]$/ && @$ic == 1 && $ic->[0] eq '0') {
                     my ($y, $x) = kids($n);
                     push @out, '(= ' . E($y) . ' ' . E($x) . ')';
                     next;

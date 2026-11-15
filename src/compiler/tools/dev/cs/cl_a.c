@@ -527,6 +527,17 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
     }
     if (all) return;
   }
+  /* x86_64's barrier of a double or a float, asm ("" : "=x" (y) : "0" (x)) (math_opt_barrier's): y = x, as the
+     x87's "=t" (one register, the value unchanged) */
+  if (x86 && blank && p.noc == 1 && p.nic == 1 && nops == 2 && cl_eq (cl_constraint_clean (p.oc[0]), "x") && !cl_has_plus (p.oc[0]) && cl_eq (p.ic[0], "0")) {
+    struct cl_list *in = cl_l ();
+    cl_push (in, cl_atom (ops[1]));
+    if (!cl_eq (cl_tword (ops[0]), cl_tword (ops[1]))) { struct node *c = cl_cast_node (cl_ct (ops[0]->t), in); in = cl_l (); cl_push (in, c); }
+    cl_itemx (ops[0], o);
+    cl_push (o, cl_n ("="));
+    cl_append (o, in);
+    return;
+  }
   if ((x86 || (C->target == 2 && nops)) && blank && !p.noc) {
     int all = 1;
     i = 0;
