@@ -41,20 +41,28 @@ static int status (void) { fexcept16 t; asm volatile ("fnstsw %0" : "=a" (t)); r
 static int control (void) { unsigned short cw; __asm__ ("fstcw %0" : "=m" (cw)); return cw; }
 static void own (void)
 {
-  long double y = lv[4], a = lv[3], b = lv[5], r;
-  double d = dv[5];
-  v2df_t v = { dv[3], -dv[11] * 1e300 };
+  /* (each operand read from a volatile after the asm before it: gcc keeps
+     volatile reads and asm volatile in order, so what it computes from them
+     raises its exceptions after that asm, as ttpc's) */
+  long double y, a, b, r;
+  double d;
+  v2df_t v;
   v4sf_t s;
   asm volatile ("fnclex");
   printf ("control word %#x, status %#x\n", control (), status ());
+  y = lv[4];
   force_eval (y * y);
   printf ("long double underflow in an \"f\" input: status %#x\n", status ());
   asm volatile ("fnclex");
+  d = dv[5];
   force_eval (d * d);
   printf ("double: x87 status %#x", status ());
   flags ("");
+  a = lv[3];
+  b = lv[5];
   asm ("fyl2xp1" : "=t" (r) : "0" (a / (1.0L + b) + 1.75L), "u" (1.0L) : "st(1)");
   printf ("fyl2xp1 of values: %La\n", r);
+  v = (v2df_t) { dv[3], -dv[11] * 1e300 };
   s = __builtin_ia32_cvtpd2ps (v);
   printf ("cvtpd2ps: %a %a %a %a", (double) s[0], (double) s[1], (double) s[2], (double) s[3]);
   flags ("");

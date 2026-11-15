@@ -209,7 +209,7 @@ sub retcls {
 
 our %staticid;
 our %constid;              # a function's static consts of a literal, by id: their values
-our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
+our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias, %x87in);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
 sub strip { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub unparen { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub name_of {
@@ -831,6 +831,13 @@ sub S {
             push @out, brace(S(@c));
             next;
         }
+        # (csema's local of an x87 asm input that is a value, __x87_1 ...,
+        # is that asm statement's operand: the statement after it, which
+        # glibc's side has as (asm) or its barrier)
+        if ($k eq 'DeclStmt' && $side eq 'ff' && kids($n) && !grep { ($_->{kind} // '') ne 'VarDecl' || ($_->{name} // '') !~ /^__x87_\d+$/ } kids($n)) {
+            $x87in{ $_->{name} } = (grep { $_->{kind} !~ /Attr$/ } kids($_))[0] for kids($n);
+            next;
+        }
         if ($k eq 'DeclStmt') {
             for my $d (kids($n)) {
                 next unless $d->{kind} eq 'VarDecl';
@@ -890,6 +897,19 @@ sub S {
             push @out, '(asm)';
             next;
         }
+        # (an empty asm of inputs alone, math_force_eval's: csema's call of
+        # its asm function, _asm___x (v) or of x87 inputs _asm___f_l
+        # (&__x87_1), is glibc's barrier: what an input computes in floating
+        # point, its value unused)
+        if ($side eq 'ff' && $target eq 'x86_64' && (my $c = unimplicit($n)) && (unimplicit($n)->{kind} // '') eq 'CallExpr') {
+            my ($f, @a) = kids($c);
+            my $fd = (strip($f) // {})->{referencedDecl};
+            if ($fd && (name_of($fd) // '') =~ /^_asm___/) {
+                @a = map { x87in($_) } @a;
+                push @out, map { '(cast ToVoid void ' . E($_) . ')' } grep { fp_computes($_) } @a;
+                next;
+            }
+        }
         # an expression whose value is not used
         push @out, xstmt($n);
     }
@@ -898,6 +918,15 @@ sub S {
 # An expression as a statement: a statement expression is its block (ff's :
 # as a statement), a comma's operands statements of a block, one statement
 # in braces that statement.
+# An asm function's argument: the value of csema's x87 local whose address it is
+sub x87in {
+    my ($a) = @_;
+    my $u = unimplicit($a);
+    return $u unless ($u->{kind} // '') eq 'UnaryOperator' && $u->{opcode} eq '&';
+    my $r = strip((kids($u))[0]) // {};
+    my $nm = ($r->{kind} // '') eq 'DeclRefExpr' ? $r->{referencedDecl}{name} // '' : '';
+    exists $x87in{$nm} ? $x87in{$nm} : $u;
+}
 sub xstmt {
     my ($n) = @_;
     my $u = unimplicit($n);
