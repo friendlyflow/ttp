@@ -235,4 +235,15 @@ edit(\$t, 'compile_page',
     sd CC_pass zero t0
     j L1
 ") . "    TX1:\n      addi\n        1\n        s8\n        s8\n");
+# compile_page, each pass: the image not placed yet, before the program's
+# page puts off its thread locals (tlsdefer asks; cc_library cleared it
+# only when it began)
+edit(\$t, 'compile_page',
+    "    L1:\n      la\n        pass\n        t0\n      sd\n        0\n        s8\n        t0\n",
+    "    L1:\n      la\n        pass\n        t0\n      sd\n        0\n        s8\n        t0\n" . asm(6, "
+    la tls_vars t0
+    li32 32776 t1
+    add t1 t0 t0
+    sd 0 zero t0
+"));
 save();
