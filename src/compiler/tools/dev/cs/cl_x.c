@@ -1037,7 +1037,8 @@ static int cl_own_proto_differs (struct cs_decl *d, char *name, long nargs)
 static int cl_asm_value_callee (struct cs_decl *d, char *name)
 {
   struct cs_ty *f = cs_canon (d->t), *r;
-  if (d->k != DK_FUNC || f->k != TY_FUNC || cl_starts (name, "__builtin_") || cl_has (&C->fn, name)) return 0;
+  /* (not a C function: one of the units', its own name in a unit (a static), a C alias of one (sqrtl)) */
+  if (d->k != DK_FUNC || f->k != TY_FUNC || cl_starts (name, "__builtin_") || cl_has (&C->fn, name) || cl_has (&C->fn, cl_own (name)) || cl_has (&C->alias, name)) return 0;
   r = cs_canon (f->to);
   if (cs_is_void (r) || cs_is_int (r) || cs_is_ptr (r)) return 0;
   if (C->treedefs.count) {
