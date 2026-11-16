@@ -1041,8 +1041,12 @@ static int cl_asm_value_callee (struct cs_decl *d, char *name)
   if (d->k != DK_FUNC || f->k != TY_FUNC || cl_starts (name, "__builtin_") || cl_has (&C->fn, name) || cl_has (&C->fn, cl_own (name)) || cl_has (&C->alias, name)) return 0;
   r = cs_canon (f->to);
   if (cs_is_void (r) || cs_is_int (r) || cs_is_ptr (r)) return 0;
-  if (C->treedefs.count) {
-    char *tf = cl_get (&C->treefile, cl_ffname (name));
+  /* (a program's: only with its tree's index, a name of its asm page; without one what the program does not define is
+     its tree's C, as a milestone's program calls libgcc's __muldc3) */
+  if (C->program) {
+    char *tf;
+    if (!C->treedefs.count) return 0;
+    tf = cl_get (&C->treefile, cl_ffname (name));
     if (!tf || !cl_starts (tf, "asm")) return 0;
   }
   return 1;

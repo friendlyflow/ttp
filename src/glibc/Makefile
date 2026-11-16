@@ -1975,16 +1975,18 @@ $(foreach p,$(ALLPROGS),$(eval $(call allprog,$(p))))
 
 # ---- a C call of an asm function that returns a floating value ---------------
 # progs/asmcall.c against the asm functions of progs/asmcall-GTARGET.ff.txt
-# (no glibc: csema -l -T, its own _start; the tree it would include is that
-# page): csema calls them through a pointer of the declaration's type, so
-# the result is taken where the target's ABI returns it. Each target's exit
-# status is progs/asmcall(.GTARGET).expect's, on each of its CPUS.
+# (no glibc: csema -l -T, its own _start, as glibc's units are translated,
+# where what no unit defines in C is asm; a program's, -P, would need its
+# tree's index to know that): csema calls them through a pointer of the
+# declaration's type, so the result is taken where the target's ABI returns
+# it. Each target's exit status is progs/asmcall(.GTARGET).expect's, on each
+# of its CPUS.
 #   make GTARGET=riscv64|x86_64|aarch64|arm asmcall-check
 $(FF)/asmcall.ff: progs/asmcall.c progs/asmcall-$(GTARGET).ff.txt $(CSEMA) | $(CPP) $(PREDEF)
 	mkdir -p $(FF)
 	$(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) progs/asmcall.c -o $(FF)/asmcall.i
-	$(RUN) -t 60 $(CPRUN) $(CSEMA) -l -t $(GTARGET) -S ../compiler/shared.ff -P asmcall -T $(FF)/asmcall.i main > $(FF)/asmcall.c.ff.txt
-	{ sed '/^include$$/,/^  asmcall$$/d' $(FF)/asmcall.c.ff.txt; cat progs/asmcall-$(GTARGET).ff.txt; } > $(FF)/asmcall.ff.txt
+	$(RUN) -t 60 $(CPRUN) $(CSEMA) -l -t $(GTARGET) -S ../compiler/shared.ff -T $(FF)/asmcall.i -- main > $(FF)/asmcall.c.ff.txt
+	cat $(FF)/asmcall.c.ff.txt progs/asmcall-$(GTARGET).ff.txt > $(FF)/asmcall.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(FF)/asmcall.ff.txt > $@
 $(FF)/asmcall: $(FF)/asmcall.ff $(TTPC) $(SHARED)
 	$(RUN) -t 300 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
