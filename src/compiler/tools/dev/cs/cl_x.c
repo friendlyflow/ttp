@@ -26,7 +26,6 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o);
 static void cl_body (struct cs_st *cs, struct cl_list *o);
 static void cl_stmt (struct cs_st *n, struct cl_list *o);
 static struct node *cl_decl (struct cs_decl *v, int global, char *name);
-static int cl_split_struct_items (struct cs_decl *d, struct cl_list *o);
 static struct cl_list *cl_ex (struct cs_ex *e) { struct cl_list *l = cl_l (); cl_expr (e, l); return l; }
 static int cl_isop (char *s)
 {
@@ -1986,52 +1985,6 @@ static int cl_char_enum (struct cs_ex *n, struct cl_list *o)
   if (x->d->uns) cl_push (o, cl_n (cl_unum ((unsigned long long) x->d->val))); else cl_push (o, cl_num_node (x->d->val));
   return 1;
 }
-/* a struct's value as a struct field's or element's item of a local, field by field: a : of the paths to
-   each (as braces hold them), nested structs likewise, where every field is named, no bitfield, no array, no
-   union; 0 where it is not such a struct (coreutils timeout.c's struct itimerspec its = { {0}, ts }: ttpc
-   takes a struct field's item only as a : of its items, a struct variable there was cannot compile: ts) */
-static int cl_struct_fields_ok (struct cs_ty *t, int depth)
-{
-  struct cs_ty *c = cs_canon (t);
-  struct cs_field *f;
-  if (depth > 8 || c->k != TY_STRUCT || !c->rec || !c->rec->first) return 0;
-  for (f = c->rec->first; f; f = f->nxt) {
-    int k = cs_kind (f->t);
-    if (!f->name || !f->nlen || f->anon || f->width >= 0) return 0;
-    if (k == TY_ARRAY || k == TY_UNION || k == TY_VECTOR || k == TY_COMPLEX) return 0;
-    if (k == TY_STRUCT && !cl_struct_fields_ok (f->t, depth + 1)) return 0;
-  }
-  return 1;
-}
-static void cl_path_add (struct cl_list *base, char *field, struct cl_list *o)
-{
-  struct node *h;
-  if (base->n == 1 && !cl_is (base->v[0], ":") && !cl_is (base->v[0], "cast")) h = cl_nl ((char *) base->v[0]->text, cl_l ());
-  else { struct cl_list *x = cl_l (); cl_append (x, base); cl_push (x, cl_n (".")); h = cl_nl (":", x); }
-  if (base->n == 1 && !cl_is (base->v[0], ":") && !cl_is (base->v[0], "cast")) { long i = 0; while (i < base->v[0]->count) { nd_add (h, base->v[0]->kids[i]); i++; } }
-  nd_add (h, cl_n (field));
-  cl_push (o, h);
-}
-static void cl_struct_value (struct cs_ex *v, struct cs_ty *t, struct cl_list *path, struct cl_list *o)
-{
-  struct cs_field *f;
-  struct cl_list *g = cl_l ();
-  for (f = cs_canon (t)->rec->first; f; f = f->nxt) {
-    struct cl_list *p = cl_l ();
-    cl_path_add (path, cl_ffname (cl_copy (f->name, f->nlen)), p);
-    if (cs_kind (f->t) == TY_STRUCT) cl_struct_value (v, f->t, p, g);
-    else cl_append (g, p);
-  }
-  cl_push (o, cl_nl (":", g));
-}
-static int cl_struct_item (struct cs_ex *n, struct cl_list *o)
-{
-  struct cs_ex *s = cl_strip (n);
-  if (C->in_global || cs_kind (n->t) != TY_STRUCT || !cl_struct_fields_ok (n->t, 0)) return 0;
-  if (s->k != E_REF && s->k != E_MEM) return 0;
-  cl_struct_value (s, n->t, cl_ex (s), o);
-  return 1;
-}
 static void cl_init_item (struct cs_ex *n, struct cl_list *o);
 static void cl_init_items (struct cs_ex *l, struct cl_list *o)
 {
@@ -2075,7 +2028,6 @@ static void cl_init_item (struct cs_ex *n, struct cl_list *o)
     return;
   }
   if (cl_char_enum (n, o)) return;
-  if (cl_struct_item (n, o)) return;
   {
     struct cl_list *e = cl_l ();
     cl_itemx (n, e);
@@ -2092,14 +2044,6 @@ static void cl_init (struct cs_ex *n, struct cl_list *o)
   if (s->k == E_INIT) { cl_init_items (s, o); return; }
   str = cl_bare_string (n);
   if (str) { cl_array_text (str, o); return; }
-  /* (a struct's or a union's from a compound literal of it, gnulib parse-datetime.y's
-     relative_time rel_time_0 = (relative_time) { 0, ... }: its items, the declaration's own; as
-     one item, a : of the literal, ttpc set the first field to the temporary's address) */
-  {
-    struct cs_ex *x = cl_strip (n);
-    while (x->k == E_PAREN) x = cl_strip (cl_k (x, 0));
-    if (x->k == E_CLIT && (cs_kind (n->t) == TY_STRUCT || cs_kind (n->t) == TY_UNION) && (cs_kind (x->t) == TY_STRUCT || cs_kind (x->t) == TY_UNION) && cl_strip (cl_k (x, 0))->k == E_INIT) { cl_init_items (cl_strip (cl_k (x, 0)), o); return; }
-  }
   cl_itemx (n, o);
 }
 static struct node *cl_align_node (int has, long long v)
@@ -2446,50 +2390,9 @@ static void cl_decl_stmt (struct cs_st *n, struct cl_list *o)
       if (k > 1) g = cl_cat3 (g, " ", cl_num (k));
       d->global = g;
       cl_out (cl_decl (d, 1, g));
-    } else if (cl_split_struct_items (d, o)) ;
-    else cl_push (o, cl_decl (d, 0, 0));
+    } else cl_push (o, cl_decl (d, 0, 0));
     x = x->nxt;
   }
-}
-/* a local array of structs whose items are struct values that are no braces nor a variable's fields (a
-   call's: coreutils' struct timespec timespec[2] = { get_stat_atime (st), get_stat_mtime (st) }): ttpc
-   takes a struct element's item as a : of its items alone (cannot compile: get_stat_atime); declared
-   zero, then each element set, in order, as C sets them */
-static int cl_split_struct_items (struct cs_decl *d, struct cl_list *o)
-{
-  struct cs_ty *c = cs_canon (d->t);
-  struct cs_ex *il, *init = d->init ? cl_p (d->init) : 0;
-  long i = 0;
-  int any = 0;
-  if (!init || c->k != TY_ARRAY || cs_kind (c->to) != TY_STRUCT) return 0;
-  il = cl_strip (init);
-  if (il->k != E_INIT) return 0;
-  while (i < il->nk) {
-    struct cs_ex *s = cl_strip (cl_k (il, i));
-    if (s->k == E_INIT) return 0;
-    if (s->k == E_IVI || s->k == E_REF || s->k == E_MEM) { i++; continue; }
-    if (s->k == E_CLIT) return 0;
-    any = 1;
-    i++;
-  }
-  if (!any) return 0;
-  d->init = 0;
-  cl_push (o, cl_decl (d, 0, 0));
-  d->init = init;
-  i = 0;
-  while (i < il->nk) {
-    struct cs_ex *k = cl_k (il, i);
-    if (cl_strip (k)->k != E_IVI) {
-      struct cl_list *v = cl_l ();
-      cl_push (o, cl_nl (cl_lname (cl_dn (d)), cl_l ()));
-      nd_add (o->v[o->n - 1], cl_num_node (i));
-      cl_push (o, cl_n ("="));
-      cl_itemx (k, v);
-      cl_append (o, v);
-    }
-    i++;
-  }
-  return 1;
 }
 static void cl_clause_expr (struct cs_ex *e, int eff, struct cl_list *o)
 {
