@@ -1334,3 +1334,169 @@
       0x8000000000000000
       /
       m
+  comment
+    gcc's __builtin_sqrt and __builtin_sqrtf on arm: vsqrt.f64 and vsqrt.f32, the root rounded once, as gcc makes them (glibc's e_sqrt.c, e_sqrtf.c);
+    __builtin_fma and __builtin_fmaf: x * y + z rounded once, VFPv4's vfma.f64 and vfma.f32, as gcc makes them in glibc's units that use them (s_fma-vpfv4.c, s_fmaf-vpfv4.c, built for neon-vfpv4, which arm's fma ifunc picks where the CPU has VFPv4).
+    Each a C function that gives the addresses of its operands and of its result (r0 ...) to an asm function of its own, as aarch64's.
+  __ff_sqrt:
+    asm
+    vldr.64
+      0
+      r0
+      d0
+    vsqrt.f64
+      d0
+      d0
+    vstr.64
+      0
+      r1
+      d0
+    ret
+  __builtin_sqrt:
+    double
+    x:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_sqrt
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_sqrtf:
+    asm
+    vldr.32
+      0
+      r0
+      s0
+    vsqrt.f32
+      s0
+      s0
+    vstr.32
+      0
+      r1
+      s0
+    ret
+  __builtin_sqrtf:
+    float
+    x:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_sqrtf
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fma:
+    asm
+    vldr.64
+      0
+      r0
+      d0
+    vldr.64
+      0
+      r1
+      d1
+    vldr.64
+      0
+      r2
+      d2
+    vfma.f64
+      d1
+      d0
+      d2
+    vstr.64
+      0
+      r3
+      d2
+    ret
+  __builtin_fma:
+    double
+    x:
+      double
+    y:
+      double
+    z:
+      double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      double
+    __ff_fma
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        z
+        & address
+      :
+        r
+        & address
+    return
+      r
+  __ff_fmaf:
+    asm
+    vldr.32
+      0
+      r0
+      s0
+    vldr.32
+      0
+      r1
+      s1
+    vldr.32
+      0
+      r2
+      s2
+    vfma.f32
+      s1
+      s0
+      s2
+    vstr.32
+      0
+      r3
+      s2
+    ret
+  __builtin_fmaf:
+    float
+    x:
+      float
+    y:
+      float
+    z:
+      float
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      float
+    __ff_fmaf
+      :
+        x
+        & address
+      :
+        y
+        & address
+      :
+        z
+        & address
+      :
+        r
+        & address
+    return
+      r

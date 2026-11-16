@@ -94,6 +94,12 @@ TOOLS := $(foreach t,AR:ar NM:nm OBJCOPY:objcopy OBJDUMP:objdump READELF:readelf
 .PHONY: glibc-ref build-gcroots clean
 
 # A step that fails leaves nothing behind that make would take as made.
+# The intermediates of the pattern rules (a unit's .i, .json, .s ...) are
+# kept by .NOTINTERMEDIATE, not .PRECIOUS: a precious target is never
+# deleted, so a make stopped mid-rule left a half-written one (2026-11-13:
+# glibc/arm/i/misc/tsearch.json of 0 bytes, taken as up to date, and every
+# arm round trip failed); a not-intermediate one is kept after a run and
+# deleted on an error or a signal like any other target (GNU make 4.4).
 .DELETE_ON_ERROR:
 
 glibc-ref: $(OBJ)/libc.a build-gcroots
@@ -561,7 +567,7 @@ $(FF)/gccrt.ref: $(GCCQ_$(GTARGET):%=$(I)/%.dump)
 $(I)/gccq/gccq.s: progs/gccq.c
 	mkdir -p $(@D)
 	{ $(GLIBC_CC) -E -g $< | grep '^# [0-9]* "'; $(RUN) -t 60 $(GLIBC_CC) -O2 -fno-pic -S -o - $<; } > $@
-.PRECIOUS: $(I)/gccq/%.s
+.NOTINTERMEDIATE: $(I)/gccq/%.s
 # (a static pattern: as a pattern rule it lost to $(I)/%.s, mki's, whenever
 # _%.i was not made yet, as in a fresh BUILD: mki had no command for gccq/multc3.o)
 $(I)/gccq/multc3.s $(I)/gccq/divtc3.s: $(I)/gccq/%.s: $(I)/libgcc/_%.i
@@ -629,7 +635,7 @@ LINKED_aarch64 := string stdlib ldouble malloc stdio floats args unwind gccrt
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
 LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 # (arm the same way: start.S, crti.S and crtn.S through s2ff-arm, as aarch64's)
-LINKED_arm := string stdlib ldouble malloc stdio floats args unwind gccrt
+LINKED_arm := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -645,7 +651,7 @@ ASMS_skip := elf/dl-debug-symbols
 # units, and the objects of glibc libgcc calls that the program does not)
 objs_of = $(if $(filter $(2),$(LINKED)),$(filter-out $(ASMS_skip) $(OBJS_skip_$(GTARGET)),$(call uniq,$($(1)_link_$(2)) $($(1)_crt) $(if $(filter unwind gccrt,$(2)),$($(1)_$(2))) $(if $(filter OBJS,$(1)),$(OBJS_ldouble)))),$(call with_start,$(1),$(2)))
 
-.PRECIOUS: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
+.NOTINTERMEDIATE: $(FF)/%.map $(FF)/%.objs.mk $(I)/%.i $(I)/%.json $(I)/%.c2ff $(I)/%.one $(I)/%.s $(I)/%.Ls $(I)/%.dump $(I)/%.bin $(FF)/%-prog.ff $(FF)/%.rt.c $(FF)/%.rt.names $(FF)/%/index.ff
 
 # (a C object's .i is the C preprocessor in ff's, cpp, from the object's
 # command, as gcc -E's byte for byte: cpp-check, cpp-crosscheck; so is an
@@ -783,7 +789,9 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_a
 	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
 	$$(file >$$(FF)/$(1).csunits,$$(foreach o,$$(OBJS_all_$(1)),$$(call csread,$$(o))$$(nl)))
 	$$(file >$$(FF)/$(1).rootlist,$$(foreach r,$$(ROOTS_$(1)) $$(if $$(call startms,$(1)),$$(ROOTS_start)),$$(r)$$(nl)))
-	$$(RUN) $$(call csmem,$(1)) -t 600 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
+	# (1800 s: arm's gccrt takes 383 s alone, and past 600 s while three
+	# lanes and a ports-check of three slots share the machine, 2026-11-15)
+	$$(RUN) $$(call csmem,$(1)) -t 1800 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
 	    -- @$$(FF)/$(1).rootlist $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
 	$$(if $$(ASMS_all_$(1)),$$(S2FFH) $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) > $$(FF)/$(1).asm.hdr && sed 's/^/  /' $$(FF)/$(1).asm.hdr >> $$(FF)/$(1).asm.page.txt)
@@ -888,6 +896,9 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 # (x86_64's gnuc with libm.a too: gcc calls fma and fmaf there, which it
 # makes no instruction of without FMA, as glibc's own libm is built)
 REFLIBS_gnuc_x86_64 = $(OBJ)/math/libm.a
+# (arm's too: its glibc is built for vfpv3-d16, where gcc calls fma and
+# fmaf, whose ifunc takes VFPv4's vfma where the CPU has it)
+REFLIBS_gnuc_arm = $(OBJ)/math/libm.a
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
@@ -911,7 +922,7 @@ $(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
 # A program: its .i (gcc -E), csema -l of it from main (-P: a program's
 # names, -T: its own _start, -I: its tree's index); clang's AST of it only
 # for a round trip of its own (progrt) and c2ff-crosscheck.
-.PRECIOUS: $(FF)/%-prog.i $(FF)/%-prog.json
+.NOTINTERMEDIATE: $(FF)/%-prog.i $(FF)/%-prog.json
 $(FF)/gccrt-prog.i: progs/gccrt-fixed.h progs/gccrt-fixedops.h
 $(FF)/%-prog.i: progs/%.c | $(CPP) $(PREDEF)
 	mkdir -p $(FF)
@@ -1070,24 +1081,8 @@ DCKNOWN ?= dcknown-$(GTARGET).txt
 # name; each a definition's name of glibc.ff.txt, what reaches it is left out
 #   sincosf_poly, sinf_poly  x86_64's sinf, cosf, sincosf: "cannot compile: p"
 #                            (v2df_t's arithmetic)
-#   statx_convert_timestamp  "cannot compile: statx_convert_timestamp" (a
-#                            call that returns a struct as a local struct's item)
-#   __backtrace              arm's: "cannot compile: :", a call through
-#                            ((void) link, &_Unwind_Backtrace), an asm
-#                            function there (libgcc's libunwind.S), which has
-#                            no C type
-#   __fma_vpfv4, __fmaf_vpfv4, __ieee754_sqrt, __sqrtf  arm's: "unknown
-#                            function: __builtin_fma" (and fmaf, sqrt, sqrtf: no
-#                            builtins of them on arm yet: VFP's vfma, vsqrt)
-#   DCASM_arm                arm's: "unknown function: vldr.f32" (the asm
-#                            statements of __feraiseexcept, a form ttpc's arm
-#                            has not yet)
 DCSKIP_x86_64 := sincosf_poly sinf_poly
-DCSKIP_arm = __backtrace __fma_vpfv4 __fmaf_vpfv4 __ieee754_sqrt __sqrtf $(DCASM_arm)
-DCASM_arm := _asm_ldc_p10_cr0_1_cdp_p10_8_cr0_cr0_cr0_0_mrc_p10_7_0_cr1_cr0_0_r_m \
-	_asm_ldc_p10_cr0_1_ldcl_p10_cr0_2_cdp_p10_3_cr0_cr0_cr0_1_mrc_p10_7_0_cr1_cr0_0_r_mm \
-	_asm_ldc_p10_cr0_1_ldcl_p10_cr0_2_cdp_p10_8_cr0_cr0_cr0_1_mrc_p10_7_0_cr1_cr0_0_r_mm
-DCSKIP := $(DCSKIP_$(GTARGET)) statx_convert_timestamp
+DCSKIP := $(DCSKIP_$(GTARGET))
 $(DCDIR)/all.i: datacheck.pl $(if $(wildcard $(DCFF)/glibc/index.ff),,$(FF)/glibc/index.ff) $(OBJ)/libc.a
 	mkdir -p $(DCDIR)
 	perl allobjs.pl $(OBJ) > $(DCDIR)/objs
@@ -1097,7 +1092,8 @@ $(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW)
 	$(RUN) -v 9000000 -t 600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(DCFF)/glibc/index.ff -J $(DCFF)/glibc.statics -T \
 	    -O $< -- main > $(DCDIR)/all.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(DCDIR)/all.ff.txt > $@
-$(DCDIR)/all: $(DCDIR)/all.ff $(TTPC) $(SHARED)
+# (and on the folder of glibc in ff the program reads lazily: its index)
+$(DCDIR)/all: $(DCDIR)/all.ff $(DCFF)/glibc/index.ff $(TTPC) $(SHARED)
 	$(RUN) -v 8000000 -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
 datacheck: $(DCDIR)/all datacheck.pl
 	@perl datacheck.pl --target $(GTARGET) --index $(DCFF)/glibc/index.ff --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
@@ -1647,7 +1643,7 @@ $(LOBJ)/libgcc.a:
 	nix build --out-link $(LBUILD)/gcroots/HEADERS $$(echo $(LIBGCC_HEADERS) | cut -d/ -f1-4)
 	nix build --out-link $(LBUILD)/gcroots/CC $$(echo $(GLIBC_CC) | cut -d/ -f1-4)
 
-.PRECIOUS: $(LI)/%.i $(LI)/%.s $(LI)/%.json
+.NOTINTERMEDIATE: $(LI)/%.i $(LI)/%.s $(LI)/%.json
 $(LI)/%.i: $(LOBJ)/libgcc.a | $(MKIT) $(CPP) $(PREDEF)
 	$(RUN) -t 120 $(MKI) --libgcc --cpp $(CPPE) $(LOBJ) $(LI) $*.o > /dev/null
 $(LI)/%.s: $(LOBJ)/libgcc.a | $(MKIT) $(CPP) $(PREDEF)
@@ -1807,7 +1803,7 @@ endif
 -include $(TBUILD)/$(AREA).mk
 endif
 
-.PRECIOUS: $(TI)/%.i $(TI)/%.c2ff $(TFF)/%-prog.ff $(TFF)/%.ref $(TFF)/%-prog
+.NOTINTERMEDIATE: $(TI)/%.i $(TI)/%.c2ff $(TFF)/%-prog.ff $(TFF)/%.ref $(TFF)/%-prog
 
 $(TI)/%.i: | $(MKIT) $(TOBJ)/$(AREA).log
 	$(RUN) -t 120 $(MKI) $(TLOGS) $(TOBJ) $(GLIBC_SRC) $*.o > /dev/null

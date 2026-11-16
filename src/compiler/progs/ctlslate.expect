@@ -1,0 +1,4 @@
+exit 0
+ok a thread local only data reaches
+ok a thread local only a late thread local's value reaches
+ok a thread local whose value is a global's address

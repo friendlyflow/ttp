@@ -183,7 +183,7 @@ static void cl_ins_other (char *line, struct cl_list *o)
     if ((cl_eq (op, "ldc") || cl_eq (op, "ldcl")) && na == 3 && cl_eq (a[0], "p10") && cl_eq (a[1], "cr0") && a[2][0] == '[' && a[2][1] == 'r') {
       long l = cstrlen (a[2]);
       if (a[2][l - 1] == ']') {
-        cl_push (o, cl_ins ("vldr.f32", "0", cl_copy ((unsigned char *) a[2] + 1, l - 2), cl_eq (op, "ldc") ? "s0" : "s1"));
+        cl_push (o, cl_ins ("vldr.32", "0", cl_copy ((unsigned char *) a[2] + 1, l - 2), cl_eq (op, "ldc") ? "s0" : "s1"));
         return;
       }
     }

@@ -627,7 +627,7 @@ builtins:
         >
         2147483647
   comment
-    __builtin_add_overflow on ints (wcsmbs' counters): the sum in a long, and whether an int holds it.
+    __builtin_add_overflow on ints (wcsmbs' counters): the sum in an i64 (arm's long holds no more than an int), and whether an int holds it.
   __builtin_add_overflow int int int:
     int
     a:
@@ -638,13 +638,13 @@ builtins:
       int
       * pointer
     s:
-      long
+      i64
       cast
-        long
+        i64
       a
       +
       cast
-        long
+        i64
       b
     r
     * pointer
@@ -656,7 +656,7 @@ builtins:
       s
       !=
       cast
-        long
+        i64
       r
       * pointer
   comment
@@ -1076,7 +1076,7 @@ builtins:
       <
       a
   comment
-    __builtin_mul_overflow of ints into an int (pidfd_getpid): the product in a long, cut to an int, and whether it was more.
+    __builtin_mul_overflow of ints into an int (pidfd_getpid): the product in an i64 (arm's long holds no more than an int), cut to an int, and whether it was more.
   __builtin_mul_overflow int int int:
     int
     a:
@@ -1087,13 +1087,13 @@ builtins:
       int
       * pointer
     p:
-      long
+      i64
       cast
-        long
+        i64
       a
       *
       cast
-        long
+        i64
       b
     r
     * pointer
@@ -1105,7 +1105,7 @@ builtins:
       p
       !=
       cast
-        long
+        i64
       r
       * pointer
   comment
@@ -1268,13 +1268,13 @@ builtins:
       int
       * pointer
     d:
-      long
+      i64
       cast
-        long
+        i64
       a
       -
       cast
-        long
+        i64
       b
     r
     * pointer
@@ -1286,7 +1286,7 @@ builtins:
       d
       !=
       cast
-        long
+        i64
       cast
         int
       d

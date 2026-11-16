@@ -230,11 +230,9 @@ sub gfirst { my ($n) = @_; my $d = $gdef{$n} or return; (grep { $_->[1]{bind} ==
 # weak names, builtins and libatomic's), each the first strong one, but
 # what reaches a name csema left out (glibc.csema.err: ttpc would stop at
 # it) or a name of --skip (what ttpc cannot compile yet: it says so,
-# without the function's name). main's code takes the address of each (by
-# code, not by an initializer: ttpc places the thread locals after the
-# functions code reaches, and stops at one only data reaches), and so
-# ttpc compiles each, what each reaches and every static of each function
-# it reaches. (What reaches what: the words of each definition of
+# without the function's name). main's code takes the address of each,
+# and so ttpc compiles each, what each reaches and every static of each
+# function it reaches. (What reaches what: the words of each definition of
 # glibc.ff.txt that name another, but a word that is a local's or a
 # field's name anywhere.)
 if (defined $program) {
