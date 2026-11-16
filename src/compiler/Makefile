@@ -117,7 +117,13 @@ $(P)/%.twin.bin: progs/riscv64/%.s ff64.ld | $(P)
 	$(LD) $(TWIN_LDFLAGS) $(P)/$*.twin.o -o $(P)/$*.twin
 	$(OBJCOPY) -O binary $(P)/$*.twin $@
 
+# Every file is kept once made (.SECONDARY, no intermediate is removed),
+# but a recipe that fails or is stopped deletes its half-made target
+# (.DELETE_ON_ERROR; a stage, a tool or a program that make would take as
+# made otherwise). A listing (> $@.lst) and a failing test's output (ctime's
+# .err files) are no target, and stay for the reader.
 .SECONDARY:
+.DELETE_ON_ERROR:
 
 # Every tree must read back to the same bytes from its text form (which
 # also checks its hashes).
