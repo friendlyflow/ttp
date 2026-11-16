@@ -1,0 +1,3 @@
+exit 0
+ok a struct local first in _start starts as zeros
+ok and holds what it is given, with a scalar local after it
