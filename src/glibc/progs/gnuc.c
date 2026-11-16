@@ -10,15 +10,25 @@
    does. gcc builds it with -fno-math-errno (CFLAGS_gnuc): sqrt is then
    fsqrt, as glibc's own libm is built. */
 
-static unsigned long h = 1469598103934665603UL;
+/* (the hash and a double's bits in 64 bits, where long has 32: arm) */
+#if __SIZEOF_LONG__ == 4
+typedef unsigned long long word;
+#else
+typedef unsigned long word;
+#endif
 
-static void mix (unsigned long x) { h = (h ^ x) * 1099511628211UL; }
+static word h = 1469598103934665603ULL;
+
+static void mix (word x) { h = (h ^ x) * 1099511628211ULL; }
 
 static void fbits (float x) { union { float f; unsigned int w; } u; u.f = x; mix (u.w); }
-static void dbits (double x) { union { double d; unsigned long w; } u; u.d = x; mix (u.w); }
+static void dbits (double x) { union { double d; word w; } u; u.d = x; mix (u.w); }
 #ifdef __x86_64__
 /* (the x87's 80 bits: after the sign and exponent 6 bytes of padding no store writes) */
 static void lbits (long double x) { union { long double d; unsigned long w[2]; } u; u.d = x; mix (u.w[0]); mix (u.w[1] & 0xffff); }
+#elif __SIZEOF_LONG_DOUBLE__ == 8
+/* (arm's long double is double) */
+static void lbits (long double x) { union { long double d; word w; } u; u.d = x; mix (u.w); }
 #else
 static void lbits (long double x) { union { long double d; unsigned long w[2]; } u; u.d = x; mix (u.w[0]); mix (u.w[1]); }
 #endif

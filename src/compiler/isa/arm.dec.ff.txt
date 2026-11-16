@@ -10664,6 +10664,29 @@ arm decode:
         sm[0]
         z=0
         sm[4:1]
+    vfma.f32
+      a
+      vfma.f32 {sd}, {sn}, {sm}
+      params
+        sm
+        sn
+        sd
+      signed
+      fields
+        cond=1110
+        op=1110
+        o1=1
+        sd[0]
+        o2=10
+        sn[4:1]
+        sd[4:1]
+        x=101
+        sz=0
+        sn[0]
+        o3=0
+        sm[0]
+        z=0
+        sm[4:1]
     vmov.f32
       a
       vmov.f32 {sd}, {sm}
@@ -11068,6 +11091,29 @@ arm decode:
         o1=1
         dd[4]
         o2=00
+        dn[3:0]
+        dd[3:0]
+        x=101
+        sz=1
+        dn[4]
+        o3=0
+        dm[4]
+        z=0
+        dm[3:0]
+    vfma.f64
+      a
+      vfma.f64 {dd}, {dn}, {dm}
+      params
+        dm
+        dn
+        dd
+      signed
+      fields
+        cond=1110
+        op=1110
+        o1=1
+        dd[4]
+        o2=10
         dn[3:0]
         dd[3:0]
         x=101
@@ -13710,6 +13756,7 @@ arm decode:
         opcode=0001
         s=1
         rn
+  3:
     t2.bics.asr
       t2
       bics.w {rd}, {rn}, {rm}, asr #{sh}
@@ -13750,7 +13797,6 @@ arm decode:
         opcode=0001
         s=1
         rn
-  3:
     t2.orri
       t2
       orr.w {rd}, {rn}, #{imm12~}
@@ -18301,6 +18347,7 @@ arm decode:
         imm[20]
         cond=1001
         imm[17:12]
+  4:
     t2.bge
       t2
       bge.w {imm^4}
@@ -18335,7 +18382,6 @@ arm decode:
         imm[20]
         cond=1011
         imm[17:12]
-  4:
     t2.bgt
       t2
       bgt.w {imm^4}

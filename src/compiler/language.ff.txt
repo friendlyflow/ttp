@@ -309,6 +309,7 @@ ff, the language ttpc compiles
       a page item whose items have children only as :, items, sizeof, alignof, a cast's type or the value after a cast, a suffix or before & address is a global, any other is a function
       each global ends padded to 8 bytes, so what follows a one-byte global (another global, a function's code) stays aligned
       thread local, first under a global's name and before its type, makes it thread-local: in the TLS image at its offset from the thread pointer (riscv64, aarch64, x86_64), else a global
+      every thread local the program reaches is in the TLS image, also one that only a global's value reaches (through a function) or a thread local's value
       align / n, first under a global's name (before thread local or section), places the global at a multiple of n
       align / n, first under a local's name, places the local in its frame at a multiple of n from the frame's base (C's _Alignas, qsort's tmp); the base is only as aligned as the stack's word, so past that n holds only where the caller's sp was aligned
       cleanup / f, first under a local's name (after its align) and before its type, calls f with the local's address at every exit of the local's block, newest first (C's cleanup attribute)
@@ -588,7 +589,7 @@ ff, the language ttpc compiles
       a node naming an instruction or macro of the target is emitted as it is; asm belongs to one target, guard it with compile time
     asm functions
       name: / asm / instructions is an asm function: its instructions (and block labels) are placed as the asm of a page, on a definition page only when C reaches it
-      C calls it by name and takes its address, as a long; it keeps the calling convention itself (glibc's .S functions, by gen/s2ff.pl)
+      C calls it by name and takes its address, a function pointer as a C function's (called where it stands, its result a long, as by name); it keeps the calling convention itself (glibc's .S functions, by gen/s2ff.pl)
       align / n first after asm places the function at a multiple of n (glibc's ENTRY, .p2align: the nops inside it count from there)
       what its instructions name (a library function, C or asm, a C alias) is reached and placed before it, so asm names it by its label
       a block label whose first child is asm is one more entry of the function (glibc's _setjmp runs on into __sigsetjmp): C calls it and takes its address, and the function holding it is placed with it

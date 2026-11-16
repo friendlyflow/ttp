@@ -629,7 +629,7 @@ LINKED_aarch64 := string stdlib ldouble malloc stdio floats args unwind gccrt
 # (x86_64 the same way: start.S, crti.S and crtn.S through s2ff, as aarch64's)
 LINKED_x86_64 := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 # (arm the same way: start.S, crti.S and crtn.S through s2ff-arm, as aarch64's)
-LINKED_arm := string stdlib ldouble malloc stdio floats args unwind gccrt
+LINKED_arm := string stdlib ldouble malloc stdio floats args gnuc unwind gccrt
 LINKED := $(LINKED_$(GTARGET))
 # and the C objects c2ff reaches that gcc's optimizer left no call of
 # (ctype_l's __toupper_l, abs, putc; check_fds, which riscv64's startup has too)
@@ -888,6 +888,9 @@ strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 # (x86_64's gnuc with libm.a too: gcc calls fma and fmaf there, which it
 # makes no instruction of without FMA, as glibc's own libm is built)
 REFLIBS_gnuc_x86_64 = $(OBJ)/math/libm.a
+# (arm's too: its glibc is built for vfpv3-d16, where gcc calls fma and
+# fmaf, whose ifunc takes VFPv4's vfma where the CPU has it)
+REFLIBS_gnuc_arm = $(OBJ)/math/libm.a
 CRTBEGIN = $(shell $(GLIBC_CC) -print-file-name=crtbeginT.o)
 CRTEND = $(shell $(GLIBC_CC) -print-file-name=crtend.o)
 
@@ -1057,21 +1060,7 @@ DCKNOWN ?= dcknown-$(GTARGET).txt
 #                            (v2df_t's arithmetic)
 #   statx_convert_timestamp  "cannot compile: statx_convert_timestamp" (a
 #                            call that returns a struct as a local struct's item)
-#   __backtrace              arm's: "cannot compile: :", a call through
-#                            ((void) link, &_Unwind_Backtrace), an asm
-#                            function there (libgcc's libunwind.S), which has
-#                            no C type
-#   __fma_vpfv4, __fmaf_vpfv4, __ieee754_sqrt, __sqrtf  arm's: "unknown
-#                            function: __builtin_fma" (and fmaf, sqrt, sqrtf: no
-#                            builtins of them on arm yet: VFP's vfma, vsqrt)
-#   DCASM_arm                arm's: "unknown function: vldr.f32" (the asm
-#                            statements of __feraiseexcept, a form ttpc's arm
-#                            has not yet)
 DCSKIP_x86_64 := sincosf_poly sinf_poly
-DCSKIP_arm = __backtrace __fma_vpfv4 __fmaf_vpfv4 __ieee754_sqrt __sqrtf $(DCASM_arm)
-DCASM_arm := _asm_ldc_p10_cr0_1_cdp_p10_8_cr0_cr0_cr0_0_mrc_p10_7_0_cr1_cr0_0_r_m \
-	_asm_ldc_p10_cr0_1_ldcl_p10_cr0_2_cdp_p10_3_cr0_cr0_cr0_1_mrc_p10_7_0_cr1_cr0_0_r_mm \
-	_asm_ldc_p10_cr0_1_ldcl_p10_cr0_2_cdp_p10_8_cr0_cr0_cr0_1_mrc_p10_7_0_cr1_cr0_0_r_mm
 DCSKIP := $(DCSKIP_$(GTARGET)) statx_convert_timestamp
 $(DCDIR)/all.i: datacheck.pl $(if $(wildcard $(DCFF)/glibc/index.ff),,$(FF)/glibc/index.ff) $(OBJ)/libc.a
 	mkdir -p $(DCDIR)
@@ -1082,7 +1071,8 @@ $(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW)
 	$(RUN) -v 9000000 -t 600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(DCFF)/glibc/index.ff -J $(DCFF)/glibc.statics -T \
 	    -O $< -- main > $(DCDIR)/all.ff.txt
 	perl ../compiler/gen/fftext.pl ff $(DCDIR)/all.ff.txt > $@
-$(DCDIR)/all: $(DCDIR)/all.ff $(TTPC) $(SHARED)
+# (and on the folder of glibc in ff the program reads lazily: its index)
+$(DCDIR)/all: $(DCDIR)/all.ff $(DCFF)/glibc/index.ff $(TTPC) $(SHARED)
 	$(RUN) -v 8000000 -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
 datacheck: $(DCDIR)/all datacheck.pl
 	@perl datacheck.pl --target $(GTARGET) --index $(DCFF)/glibc/index.ff --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
