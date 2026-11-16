@@ -498,11 +498,14 @@ static void cl_string_bytes (unsigned char *p, long n, struct cl_list *o)
 {
   struct cl_list *pc = 0;
   char *s = cl_copy (p, n);
-  int hasnul = 0;
+  int hasnul = 0, tyname;
   long i = 0;
   while (i < n) { if (p[i] == 0) hasnul = 1; i++; }
   if (!hasnul && n <= 255) pc = cl_pieces (p, n, 0);
-  if (!hasnul && n <= 255 && !cl_isop (s) && !cl_eq (s, "?") && !cl_eq (s, ":") && !cl_eq (s, ".") && !cl_eq (s, "...") && !cl_eq (s, "?\n") && !cl_eq (s, ":\n") && !cl_eq (s, ".\n") && !cl_eq (s, "...\n") && !cl_val (&C->reserved, s) && (n == 0 || pc)) {
+  /* (in a program, not a type's name either, the tree's or the program's: ttpc took coreutils env.c's "BLOCK", a
+     struct of ptx.c's, for a compound literal of it with no items, cannot compile: (no name)) */
+  tyname = C->treedefs.count && (cl_val (&C->treetypes, s) || cl_val (&C->typedefs, s));
+  if (!hasnul && n <= 255 && !cl_isop (s) && !cl_eq (s, "?") && !cl_eq (s, ":") && !cl_eq (s, ".") && !cl_eq (s, "...") && !cl_eq (s, "?\n") && !cl_eq (s, ":\n") && !cl_eq (s, ".\n") && !cl_eq (s, "...\n") && !cl_val (&C->reserved, s) && !tyname && (n == 0 || pc)) {
     struct node *a = cl_n ("address");
     nd_add (a, cl_n ("char"));
     if (n == 0) nd_add (a, cl_n (""));
@@ -1734,7 +1737,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
       cl_push (o, r);
       return;
     }
-    cl_push (o, cl_n (cl_ffname (nm)));
+    cl_push (o, cl_n (cl_lname (nm)));
     return;
   }
   if (k == E_OFFSETOF) { cl_offsetof (n, o); return; }
@@ -2204,7 +2207,7 @@ static struct node *cl_decl (struct cs_decl *v, int global, char *name)
   struct cs_ex *init = 0;
   char *j, *nm;
   struct cs_ty *vc = cs_canon (v->t);
-  if (name) nm = name; else nm = cl_ffname (cl_dn (v));
+  if (name) nm = name; else nm = cl_lname (cl_dn (v));
   long long vcv;
   if (!global && vc->k == TY_ARRAY && vc->n == -2 && vc->count && !cl_vla_const (vc, &vcv)) {
     struct cl_list *c = cl_l (), *x = cl_l ();
@@ -2478,7 +2481,7 @@ static int cl_split_struct_items (struct cs_decl *d, struct cl_list *o)
     struct cs_ex *k = cl_k (il, i);
     if (cl_strip (k)->k != E_IVI) {
       struct cl_list *v = cl_l ();
-      cl_push (o, cl_nl (cl_ffname (cl_dn (d)), cl_l ()));
+      cl_push (o, cl_nl (cl_lname (cl_dn (d)), cl_l ()));
       nd_add (o->v[o->n - 1], cl_num_node (i));
       cl_push (o, cl_n ("="));
       cl_itemx (k, v);
@@ -3225,7 +3228,7 @@ static struct node *cl_function (char *name, struct cs_decl *d)
     if (d->ps[i].name && d->ps[i].nlen) pn = cl_copy (d->ps[i].name, d->ps[i].nlen);
     else pn = cl_cat ("p", cl_num (i + 1));
     t = cl_ct (d->ps[i].t);
-    cl_push (head, cl_nl (cl_cat (cl_ffname (pn), ":"), t));
+    cl_push (head, cl_nl (cl_cat (cl_lname (pn), ":"), t));
     i++;
   }
   if (f->var) cl_push (head, cl_n ("..."));

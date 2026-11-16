@@ -748,6 +748,8 @@ static void cl_read_index (void)
     if (cl_ends_colon (s)) s = cl_no_colon (s);
     cl_set (&C->treedefs, s);
     if (d->v[i]->count) cl_put (&C->treefile, s, cl_txt (d->v[i]->kids[0]));
+    /* a type of the tree's: a local or a parameter of that name is written otherwise (name', cl_lname) */
+    if (d->v[i]->count && cl_eq (cl_txt (d->v[i]->kids[0]), "types.ff")) cl_set (&C->treetypes, s);
     i++;
   }
   cs_b_init (&b);

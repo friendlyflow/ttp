@@ -34,6 +34,15 @@ static char *cl_ffname (char *n)
   if (!cl_val (&C->reserved, n)) return n;
   return cl_cat (n, "'");
 }
+/* a local's or a parameter's name: one that is a type of the tree's too is written otherwise (name'), as a
+   register's: ttpc took glibc's type hash_entry for coreutils df.c's local hash_entry, a struct devlist *, in
+   a function of a group (hash_entry / seen_last: unknown name) */
+static char *cl_lname (char *n)
+{
+  char *f = cl_ffname (n);
+  if (f == n && cl_val (&C->treetypes, n)) return cl_cat (n, "'");
+  return f;
+}
 static char *cl_dn (struct cs_decl *d) { return cl_copy (d->name, d->nlen); }
 static char *cl_own (char *n) { char *o = cl_get (&C->own, n); if (o) return o; o = cl_get (&C->extown, n); if (o) return o; return n; }
 static void cl_want (char *n)
