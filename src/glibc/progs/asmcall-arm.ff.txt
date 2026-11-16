@@ -6,3 +6,8 @@ asmd:
     0xee300b00
   word
     0xe12fff1e
+_start:
+  void
+  syscall
+    SYS_exit
+    main

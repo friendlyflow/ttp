@@ -37,3 +37,8 @@ asmf:
   byte
     0xc0
   ret
+_start:
+  void
+  syscall
+    SYS_exit
+    main

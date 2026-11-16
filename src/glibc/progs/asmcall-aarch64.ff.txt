@@ -6,3 +6,8 @@ asmd:
     0x1e602800
   word
     0xd65f03c0
+_start:
+  void
+  syscall
+    SYS_exit
+    main

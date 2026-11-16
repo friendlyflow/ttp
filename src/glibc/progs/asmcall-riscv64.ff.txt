@@ -6,3 +6,8 @@ asmd:
     0x02a57553
   word
     0x00008067
+_start:
+  void
+  syscall
+    SYS_exit
+    main
