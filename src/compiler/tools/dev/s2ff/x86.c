@@ -404,6 +404,14 @@ static int xnum (struct str *v, long *out)
   if (ebad || ei != en) return 0;
   return 1;
 }
+/* a decimal or 0x number of digits alone */
+static long xdecorhex (struct str *v)
+{
+  long i, n = 0;
+  if (v->n > 2 && v->p[0] == '0' && (v->p[1] == 'x' || v->p[1] == 'X')) { for (i = 2; i < v->n; i++) n = n * 16 + hexv (v->p[i]); return n; }
+  for (i = 0; i < v->n; i++) n = n * 10 + (v->p[i] - '0');
+  return n;
+}
 static struct hash *xnumeric;
 static struct str *xlabel (struct str *o)
 {
@@ -449,6 +457,20 @@ static struct vec *bindop (struct str *k, struct str *s)
     return r;
   }
   if (m (k, "^label8?$")) {
+    /* (a symbol plus an offset written around it, libmvec's 64+sym and ((0)+sym): the same addi,
+       where the symbol counts once, the expression with it 0 and 1000 a thousand apart) */
+    if (m (s, "^([\\da-fA-FxX()+\\-*]*[(+])([A-Za-z_.][\\w.\\x01]*)([\\da-fA-FxX()+\\-*]*)$")) {
+      struct str *pre = g (1), *sy = g (2), *post = g (3), *e0 = s_dup (pre), *e1 = s_dup (pre);
+      long z, t;
+      s_cat (e0, "0"); s_app (e0, post);
+      s_cat (e1, "1000"); s_app (e1, post);
+      if (xnum (e0, &z) && xnum (e1, &t) && t - z == 1000) {
+        a = alloc (sizeof (struct xalt)); xv_undef (&a->val);
+        a->leaf = nd_add (nd2 (s_of ("addi"), LN (z), nd_new (xlabel (sy))), ndc ("a0"));
+        v_push (r, a);
+        return r;
+      }
+    }
     if (s->n == 0 || m (s, "^[%$(*]") || m (s, "[(),{}]")) return r;
     if (m (s, "^([.\\w\\x01]+)([-+][\\d*+\\-]+)$")) {
       struct str *sy = g (1), *off = s_of ("0");
@@ -948,6 +970,47 @@ static void rodata_add (struct nd *d)
   if (!xroblob) fail_c ("read-only bytes with no label");
   v_push (xroblob, d);
 }
+/* . - X: the bytes of read-only data since its label X, while they are being read (0: X is not the label
+   of the bytes being read) */
+static int dotminus (struct str *x, long *out)
+{
+  long i, n = 0, v;
+  for (i = 0; i < xpending->n; i++) if (s_eq (xpending->v[i], x)) { *out = 0; return 1; }
+  if (!xother || !xroblob || h_pv (xrodata, x) != xroblob) return 0;
+  for (i = 0; i < xroblob->n; i++) {
+    struct nd *d = xroblob->v[i];
+    if (s_is (d->c, "byte")) n += 1;
+    else if (s_is (d->c, "half")) n += 2;
+    else if (s_is (d->c, "word")) n += 4;
+    else if (s_is (d->c, "dword")) n += 8;
+    else if (s_is (d->c, "reserve") && d->k->n && xnum (((struct nd *) d->k->v[0])->c, &v)) n += v;
+    else if (s_is (d->c, "ascii") && d->k->n) n += ((struct nd *) d->k->v[0])->c->n;
+    else return 0;
+  }
+  *out = n;
+  return 1;
+}
+/* the children of a node of more than 255 in numbered layers, 0: 1: ... (FF.pm's layers) */
+static struct vec *x86_layers (struct vec *n, long a, long e)
+{
+  struct vec *l = v_new ();
+  long per = 255, i;
+  if (e - a <= 255) { for (i = a; i < e; i++) v_push (l, n->v[i]); return l; }
+  while (e - a > per * 255) per *= 255;
+  for (i = a; i < e; i += per) {
+    struct str *nm = s_num (l->n);
+    struct vec *k = x86_layers (n, i, i + per < e ? i + per : e);
+    s_cat (nm, ":");
+    { struct nd *x = nd_new (nm); x->k = k; v_push (l, x); }
+  }
+  return l;
+}
+static void x86_lay (struct nd *d)
+{
+  long i;
+  for (i = 0; i < d->k->n; i++) x86_lay (d->k->v[i]);
+  d->k = x86_layers (d->k, 0, d->k->n);
+}
 static void rodata_set (struct str *x)
 {
   struct vec *set, *b;
@@ -1074,6 +1137,15 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
         for (i = 0; i < it->n; i++) { struct str *x = s_of ("."); s_app (x, k); s_cat (x, " "); s_app (x, it->v[i]); walk_stmt (x, file, lineno); }
         return;
       }
+      /* (.space N, .space N, F and .skip N, F: N bytes of F, reserved where F is 0, as .zero: libmvec's tables) */
+      if (m (st, "^\\.(space|skip)\\s+(0x[0-9a-fA-F]+|\\d+)\\s*(?:,\\s*(0x[0-9a-fA-F]+|\\d+))?$") && (s_is (g (1), "space") || g (3))) {
+        struct str *ns = g (2), *fs = g (3);
+        long n = xdecorhex (ns), f = fs ? xdecorhex (fs) : 0, q;
+        if (f > 255) { struct str *x = s_of ("a fill byte past 255: "); s_app (x, st); fail_s (x); }
+        if (!f) { rodata_add (nd1 (s_of ("reserve"), nd_new (s_num (n)))); return; }
+        for (q = 0; q < n; q++) rodata_add (nd1 (s_of ("byte"), nd_new (s_num (f))));
+        return;
+      }
       if (m (st, "^\\.(byte|value|short|2byte|word|long|int|4byte|quad|8byte|zero|skip)\\s+(-?(?:0x[0-9a-fA-F]+|\\d+))$")) {
         struct str *k = g (1), *vs = g (2), *dir;
         long bits;
@@ -1197,6 +1269,13 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
     } else if (m (op, "^(?:call|jmp)q?$") && mf (x, "^([.\\w]+)@PLT$", "i")) ops->v[i] = x = g (1);
     else if (m (x, "@")) fail2 ("a relocation with no ff form: ", x);
     if (m (x, "^([.\\w]+)(?:[-+]\\d+)?\\(%rip\\)$") || m (x, "^\\$(\\.L\\w+)$")) h_set (xro, g (1), 1);
+    /* (and libmvec's: a broadcast's {1toN} after it, an offset written around the symbol, 64 +sym(%rip),
+       ((0)+sym)(%rip)) */
+    if (m (x, "\\(%rip\\)\\s*(?:\\{[^}]*\\}\\s*)*$")) {
+      struct str *e = ssub (x, "\\(%rip\\)\\s*(?:\\{[^}]*\\}\\s*)*$", "", "");
+      e = ssub (e, "\\s+", "g", "");
+      if (m (e, "^([.\\w]+)(?:[-+]\\d+)?$") || m (e, "^[\\da-fA-FxX()+\\-*]*[(+]([A-Za-z_.][\\w.]*)[\\da-fA-FxX()+\\-*]*$")) h_set (xro, g (1), 1);
+    }
   }
   mm = xtake ();
   pre = v_new ();
@@ -1270,7 +1349,42 @@ static void walk_lines (struct vec *src, long depth)
       struct str *k = g0 (1), *e = g (2);
       long v = 0, *c = alloc (3 * sizeof (long));
       int take;
-      if (!off && !xnum (e, &v)) { struct str *x = s_of (".if of "); s_app (x, e); fail_s (x); }
+      struct str *ex = e;
+      if (!off) {
+        /* (. - X: in read-only data, the bytes since its label X, which libmvec's tables check, .err if
+           not where they should be) */
+        long q = 0;
+        ex = s_of ("");
+        while (q < e->n) {
+          long j = q + 1, b;
+          if (e->p[q] == '.' && (q == 0 || !(is_word (e->p[q - 1]) || e->p[q - 1] == '.'))) {
+            while (j < e->n && is_space (e->p[j])) j++;
+            if (j < e->n && e->p[j] == '-') {
+              j++;
+              while (j < e->n && is_space (e->p[j])) j++;
+              b = j;
+              while (j < e->n && (is_word (e->p[j]) || e->p[j] == '.')) j++;
+              if (j > b) {
+                long d;
+                if (!dotminus (s_new (e->p + b, j - b), &d)) { struct str *x = s_of (".if of "); s_app (x, e); fail_s (x); }
+                s_app (ex, s_num (d));
+                q = j;
+                continue;
+              }
+            }
+          }
+          s_chr (ex, e->p[q]);
+          q++;
+        }
+        /* (and a comparison, a == b, a != b or a <> b: GNU's -1 if true) */
+        if (m (ex, "^(.*[^=!<>])\\s*(==|!=|<>)\\s*([^=].*)$")) {
+          struct str *ls = g (1), *op = g (2), *rs = g (3);
+          long lv, rv;
+          if (!xnum (ls, &lv) || !xnum (rs, &rv)) { struct str *x = s_of (".if of "); s_app (x, e); fail_s (x); }
+          ex = s_num ((s_is (op, "==") ? lv == rv : lv != rv) ? -1 : 0);
+        }
+      }
+      if (!off && !xnum (ex, &v)) { struct str *x = s_of (".if of "); s_app (x, e); fail_s (x); }
       take = k->n == 0 || s_is (k, "ne") ? v != 0 : s_is (k, "eq") ? v == 0 : s_is (k, "gt") ? v > 0 : s_is (k, "ge") ? v >= 0 : s_is (k, "lt") ? v < 0 : v <= 0;
       c[0] = !off && take; c[1] = !off && take; c[2] = !off;
       v_push (cond, c);
@@ -1340,6 +1454,22 @@ static struct hash *dotL_labels (struct nd *f)
   for (i = 0; i < ndn (f); i++) if (m (ndk (f, i)->c, "^\\.L.*:$")) h_set (h, unlabel (ndk (f, i)->c), 1);
   return h;
 }
+/* (and a function that carries data, its GOT or TLS words or read-only data, libmvec's, and the one after it:
+   GNU's are in other sections, the data would sit between their code) */
+static int carries (struct nd *f)
+{
+  long i, q;
+  for (i = 0; i < xcarried->n + xcarry->n; i++) {
+    struct carried *c = i < xcarried->n ? xcarried->v[i] : xcarry->v[i - xcarried->n];
+    struct nd *x = c->f;
+    int d = i < xcarried->n;
+    for (q = 0; !d && q < c->nodes->n; q++) if (h_pv (xrodata, c->nodes->v[q]) || h_pv (xroset, c->nodes->v[q])) d = 1;
+    if (!d) continue;
+    while (h_pv (xinto, ptr_key (x))) x = h_pv (xinto, ptr_key (x));
+    if (x == f) return 1;
+  }
+  return 0;
+}
 static void merge_runons (void)
 {
   long i, j, q;
@@ -1356,7 +1486,7 @@ static void merge_runons (void)
     tf = v_new (); jtargets (f, tf); tgt2 = v_new (); jtargets (gg, tgt2);
     for (q = 0; q < tf->n; q++) if (h_has (in_g, tf->v[q])) hitx = 1;
     for (q = 0; q < tgt2->n; q++) if (h_has (in_f, tgt2->v[q])) hitx = 1;
-    if (!hitx) continue;
+    if (!hitx && !carries (f)) continue;
     rest = v_new ();
     for (q = 0; q < ndn (gg); q++) if (!s_is (ndk (gg, q)->c, "align")) v_push (rest, ndk (gg, q));
     own = v_new ();
@@ -1497,7 +1627,6 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
     xfinish ();
     code_done ();
   }
-  for (i = 0; i < xcarried->n; i++) { struct carried *c = xcarried->v[i]; long j; for (j = 0; j < c->nodes->n; j++) nd_add (c->f, c->nodes->v[j]); }
   {
     struct hash *defined = h_new ();
     struct vec *k = h_sorted (xweak);
@@ -1531,7 +1660,23 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
   if (mode == 1) return x86_facts_size;
   if (mode == 2) return x86_facts_align;
   merge_runons ();
+  /* (the GOT and TLS words after all of the function's code, of the one merge_runons made it an entry of too) */
+  for (i = 0; i < xcarried->n; i++) {
+    struct carried *c = xcarried->v[i];
+    struct nd *f = c->f;
+    long j;
+    while (h_pv (xinto, ptr_key (f))) f = h_pv (xinto, ptr_key (f));
+    for (j = 0; j < c->nodes->n; j++) nd_add (f, c->nodes->v[j]);
+  }
   carry_rodata ();
+  /* (a node of more than 255 children, a table of libmvec's read-only data or a long block: its children
+     in numbered layers, 0: 1: ...) */
+  for (i = 0; i < fns->n; i++) {
+    struct nd *f = fns->v[i];
+    long j;
+    for (j = 0; j < ndn (f); j++) x86_lay (ndk (f, j));
+    if (ndn (f) > 255) { struct str *x = s_dup (f->c); s_cat (x, " has "); s_app (x, s_num (ndn (f))); s_cat (x, " parts (max 255)"); fail_s (x); }
+  }
   return 0;
 }
 

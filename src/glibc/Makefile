@@ -821,12 +821,11 @@ ASMCHECK_riscv64 = $(ASMS_stdio) csu/start
 # (aarch64: every asm object of glibc, but crti and crtn, whose .init and
 # .fini are not .text)
 ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
-# (x86_64: every asm object of glibc but those s2ff makes no ff of yet,
-# by reason: libmvec's (mathvec/: SSE and AVX's packed floats, mulpd
-# vfmadd213pd vinsertf128 ..., have no forms yet, and most have tables in
-# .rodata); crti and crtn (.init and .fini, not .text: s2ff --then makes
-# their ff, the milestones run it))
-ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM)) csu/crti csu/crtn
+# (x86_64: every asm object of glibc, libmvec's too (mathvec/: SSE, AVX2
+# and AVX-512 packed floats, isa/x86_64gnu.pl's libmvec groups), but crti
+# and crtn (.init and .fini, not .text: s2ff --then makes their ff, the
+# milestones run it))
+ASMSKIP_x86_64 = csu/crti csu/crtn
 ASMCHECK_x86_64 = $(filter-out $(ASMSKIP_x86_64),$(ALL_ASM))
 # (arm: as aarch64, every asm object but crti and crtn)
 ASMCHECK_arm = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
@@ -1591,10 +1590,8 @@ LIBGCC_TARGETS := riscv64 x86_64 aarch64 arm
 UNWIND_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
 LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc) $(WEAKS_unwind_$(GTARGET))
-# (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
-# forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
-# crti's _init and _fini, s2ff --then, as in a milestone)
-GLIBC_ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM))
+# (glibc's asm that s2ff takes: all of it; but on riscv64, crtn is the end
+# of crti's _init and _fini, s2ff --then, as in a milestone)
 GLIBC_THEN = $(if $(filter-out riscv64,$(GTARGET)),$(filter csu/crtn,$(ALL_ASM)))
 GLIBC_ASM = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)) $(GLIBC_THEN),$(ALL_ASM)) $(if $(LIBGCC_glibc),$(LIBGCC_EH_ASM:%=libgcc/%))
 $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THEN:%=$(I)/%.dump) $(LIBGCC_glibc:%=$(I)/libgcc/%.i)
@@ -1777,7 +1774,7 @@ libgcc-checks: libgcc-roundtrip libgcc-licenses libgcc-asm-check
 
 # ---- s2ff, the Perl's cross-check (here: it needs ALL_ASM and LIBGCC_ASMCHECK) ----
 # s2ff-crosscheck: tools/s2ff.ff (S2FF) against the Perl (S2FFPL) on every
-# asm object of glibc (but x86_64's libmvec, which neither takes yet) and
+# asm object of glibc (x86_64's libmvec too) and
 # libgcc's (LIBGCC_ASMCHECK), each run as the build runs it (s2ffcheck.sh:
 # --facts, --items, --size, the page, --items with the pages' --zero and
 # --plt; aarch64's --skip and --locals, x86_64's --align; crti with crtn's
