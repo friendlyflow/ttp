@@ -783,7 +783,9 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_a
 	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
 	$$(file >$$(FF)/$(1).csunits,$$(foreach o,$$(OBJS_all_$(1)),$$(call csread,$$(o))$$(nl)))
 	$$(file >$$(FF)/$(1).rootlist,$$(foreach r,$$(ROOTS_$(1)) $$(if $$(call startms,$(1)),$$(ROOTS_start)),$$(r)$$(nl)))
-	$$(RUN) $$(call csmem,$(1)) -t 600 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
+	# (1800 s: arm's gccrt takes 383 s alone, and past 600 s while three
+	# lanes and a ports-check of three slots share the machine, 2026-11-15)
+	$$(RUN) $$(call csmem,$(1)) -t 1800 $$(call cstrans,$(1)) $$(call csflags,$(1)) @$$(FF)/$(1).csunits \
 	    -- @$$(FF)/$(1).rootlist $$$$(for a in $$(ASMS_all_$(1)); do $(XPRE)objdump -t $$(I)/$$$$a.ref.o | awk '/\*UND\*/ { print $$$$NF }'; done | sort -u) >> $$(FF)/$(1).ff.txt
 	echo 'glibc asm:' > $$(FF)/$(1).asm.page.txt
 	$$(if $$(ASMS_all_$(1)),$$(S2FFH) $$(filter-out $$(I)/gccq/gccq.s,$$(ASMS_all_$(1):%=$$(I)/%.s)) > $$(FF)/$(1).asm.hdr && sed 's/^/  /' $$(FF)/$(1).asm.hdr >> $$(FF)/$(1).asm.page.txt)
