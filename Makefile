@@ -192,10 +192,11 @@ pc-compiler-check: pc-bootstrap pc-tools
 	$(call pc_step,compiler-check,$(PC_SLOT) $(MAKE) -j1 compiler-check)
 # the translator, csema -l (src/compiler/tools, this machine's build): every
 # page of glibc and libgcc is its, so it is made first, alone (compiler-check
-# makes it too, later); and the C preprocessor in ff, cpp, for the cpp steps
+# makes it too, later); and the C preprocessor in ff, cpp, for the cpp steps,
+# mki, s2ff, fftext and licenses for src/glibc
 PC_HOST := $(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 pc-tools: pc-bootstrap
-	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki $(BUILD)/compiler/tools/$(PC_HOST)/s2ff)
+	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki $(BUILD)/compiler/tools/$(PC_HOST)/s2ff $(BUILD)/compiler/tools/$(PC_HOST)/fftext $(BUILD)/compiler/tools/$(PC_HOST)/licenses)
 	@grep -q '^PASS' $(CHECKLOG)/tools.result
 # the BUILDs, where they are not there yet
 pc-gbuild:
@@ -331,10 +332,12 @@ c2ff-crosscheck:
 .PHONY: c2ff-crosscheck
 
 # The cross-checks of the Perl the tools in ff replaced (src/glibc's
-# s2ff-crosscheck, mki-crosscheck and cpp-crosscheck) on the BUILDs of the
+# s2ff-, mki-, cpp-, cpp-tests- and fftext-crosscheck) on the BUILDs of the
 # last ports-check, each target in turn, as c2ff-crosscheck: before ports
-# goes into main. Their output in CHECKLOG/<check>-<target>.log.
-XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck
+# goes into main (cpp-tests-crosscheck needs their tests builds, GBUILD/tests
+# and GBUILD/<target>/tests: make tests-ref AREA=x, or obj a link to another
+# tests build's). Their output in CHECKLOG/<check>-<target>.log.
+XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck cpp-tests-crosscheck fftext-crosscheck
 crosschecks:
 	@mkdir -p $(CHECKLOG); ok=1; for c in $(XCHECKS); do for t in riscv64 aarch64 x86_64 arm; do \
 	    if $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$$(test $$t = riscv64 || echo /$$t) GTARGET=$$t $$c > $(CHECKLOG)/$$c-$$t.log 2>&1; \
