@@ -219,8 +219,11 @@ $(PFF)/%.ff: $(PFF)/units.same $(PFF)/%.units $(GBF)/ff/glibc/index.ff $(CSEMA) 
 	    -P glibc -I $(GBF)/ff/glibc/index.ff -J $(GBF)/ff/glibc.statics @$(PFF)/$*.csunits -- main >> $(PFF)/$*.ff.txt 2> $(PFF)/$*.csema.err \
 	    || { tail -5 $(PFF)/$*.csema.err; exit 1; }
 	perl $(TOP)/src/compiler/gen/fftext.pl ff $(PFF)/$*.ff.txt > $@
+# (PKG_TTPCSECS: seconds for ttpc on one program: coreutils' one binary of
+# 34 MB of tree takes more than an hour)
+PKG_TTPCSECS ?= 3600
 $(NAMES:%=$(PFF)/%): $(PFF)/%: $(PFF)/%.ff $(TTPC) $(SHARED)
-	$(RUN) -t 3600 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
+	$(RUN) -t $(PKG_TTPCSECS) $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
 # (the tree's license at its root; its groups hold each file's header, as
 # a program's tree, not a library's pages: its types are at the top)
 licenses: $(NAMES:%=$(PFF)/%.ff)
