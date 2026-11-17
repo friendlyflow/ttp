@@ -19,9 +19,12 @@ PKG_PROGRAMS := find/find xargs/xargs locate/locate locate/frcode
 # (mktime: glibc's works; off the machine's own target configure cannot run
 # its test, guesses no, and gnulib's mktime.o then clashes with libc.a's
 # __mktime_internal in the static link)
+# (gnulib's countof as its own sizeof / sizeof, not gcc 16's <stdcountof.h>,
+# whose _Countof (C2y's) the C in ff has no form for yet: riscv64's find had
+# it in gnulib's localeinfo.c, ttpc: unknown function: _Countof)
 PKG_CONFIGURE := --disable-nls --without-selinux \
     gt_cv_locale_fr=fr_FR.ISO-8859-1 gt_cv_locale_fr_utf8=fr_FR.UTF-8 \
-    gl_cv_func_working_mktime=yes
+    gl_cv_func_working_mktime=yes ac_cv_header_stdcountof_h=no
 # the tests: tests/ (automake's) and the DejaGnu suites of find, xargs and
 # locate (runtest: nix develop's dejagnu; nixpkgs runs them not), not
 # gnulib's tests of its modules nor lib/'s; their helper built before the run
