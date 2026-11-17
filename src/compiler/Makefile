@@ -57,7 +57,7 @@ X86GNU := x86_64gnu.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(wildcard tools/*.ff) $(wildcard isa/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
-	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff progs/cenumdefs.ff progs/cenumtextdefs.ff progs/cselfclfail.ff progs/clitplacefail.ff language.ff progs/casmaddrdefs.ff progs/ctlslatedefs.ff progs/casmlayersdefs.ff progs/clocalpathdefs.ff progs/ctextdefdefs.ff
+	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff progs/cenumdefs.ff progs/cenumtextdefs.ff progs/cselfclfail.ff progs/clitplacefail.ff progs/csfnamefail.ff language.ff progs/casmaddrdefs.ff progs/ctlslatedefs.ff progs/casmlayersdefs.ff progs/clocalpathdefs.ff progs/ctextdefdefs.ff
 P := $(BUILD)/progs
 
 # The trees as the frozen ttpcs read them (stage0 and the seeds of the
@@ -288,7 +288,7 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # char, ctypeout, type outside compile time, and cbelow, a local used
 # above its declaration, cargfew and cargmany, calls with fewer and
 # more arguments than parameters (on every target), cnoitems, a struct
-# type as a value with no items after it (on every target), cselfclfail, a union global from a compound literal of its type, clitplacefail, a literal's struct place of a number (on every target); cvecx64, x86_64's vector test, stops riscv64's
+# type as a value with no items after it (on every target), cselfclfail, a union global from a compound literal of its type, clitplacefail, a literal's struct place of a number (on every target), csfnamefail, a runtime function ttpc calls (__addtf3) that nothing defines, named (on every target); cvecx64, x86_64's vector test, stops riscv64's
 # ttpc (vectors are x86_64's alone).
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
@@ -326,6 +326,9 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	for t in riscv64 $(TARGETS); do \
 	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/clitplacefail.ff $(P)/clitplacefail.$$t.celf 2> $(P)/clitplacefail.$$t.err || exit 1; \
 	    grep -q "cannot compile: 1$$" $(P)/clitplacefail.$$t.err || exit 1; done
+	for t in riscv64 $(TARGETS); do \
+	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/csfnamefail.ff $(P)/csfnamefail.$$t.celf 2> $(P)/csfnamefail.$$t.err || exit 1; \
+	    grep -q "no definition of the runtime function __addtf3$$" $(P)/csfnamefail.$$t.err || exit 1; done
 	@echo "ctime: compile time runs and stays out of the program"
 
 # Build files. progs/cws.ff is one, run as ttpc progs/cws.ff with nothing
