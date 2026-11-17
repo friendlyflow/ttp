@@ -244,6 +244,11 @@ QEMU := $(if $(NATIVE),,qemu-$(GTARGET))
 PKG_CHECKTARGET ?= check
 PKG_CHECKRUN ?= $(SUBMAKE) -j$(JOBS) $(PKG_CHECKTARGET) $(PKG_BUILDFLAGS) $(PKG_CHECKFLAGS)
 PKG_CHECKSECS ?= 3600
+# (PKG_CHECKFSIZE: the largest file a test may write, ulimit -f, in blocks of
+# 512 or 1024 bytes as the shell counts them: a runaway test, coreutils' seq
+# of ttpc's that printed one number without end in seq-extra-number.sh, wrote
+# 48 GB into the build folder before the run's time was up)
+PKG_CHECKFSIZE ?= 500000
 PKG_CHECKFILES ?= -name '*.trs' -o -name '*.log'
 QWRAP = $(if $(QEMU),sh ../qwrap.sh $(1) $(REFDIR) "$(QEMU) $(QEMUFLAGS)",:)
 check: $(PB)/check.table
@@ -255,7 +260,7 @@ $(PB)/check-%.done: $(REFDIR)/$(PKG_FIRST) $(if $(PKG_LOCALES),$(LOCALES)/.made-
 	rm -rf $(PB)/check-$*; mkdir -p $(PB)/check-$*
 	cd $(REFDIR) && $(RUN) -t 1800 $(SUBMAKE) -j$(JOBS) $(PKG_BUILDFLAGS) $(PKG_CHECKPROGS) > $(PB)/check-$*/build.log 2>&1
 	$(call QWRAP,wrap)
-	-cd $(REFDIR) && LOCPATH=$(LOCALES) $(RUN) -t $(PKG_CHECKSECS) $(PKG_CHECKRUN) > $(PB)/check-$*/make.log 2>&1
+	-cd $(REFDIR) && ulimit -f $(PKG_CHECKFSIZE) && LOCPATH=$(LOCALES) $(RUN) -t $(PKG_CHECKSECS) $(PKG_CHECKRUN) > $(PB)/check-$*/make.log 2>&1
 	$(call QWRAP,unwrap)
 	for p in $(PKG_PROGRAMS); do cp $(REFDIR)/$$p.gcc $(REFDIR)/$$p && touch $(REFDIR)/$$p; done
 	cd $(REFDIR) && find . \( $(PKG_CHECKFILES) \) -newer $(PB)/check-$*/build.log | tar -cf - -T - | tar -xf - -C $(PB)/check-$*
