@@ -1787,20 +1787,28 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
       return;
     }
     if (!cl_prec (op)) cl_fail ("the operator", op);
-    /* (a program's global's item: a pointer plus or minus numbers, more than one, is the pointer and their sum:
-       ttpc's gval folds an address and one number, and stopped on coreutils cat.c's line_buf +
-       LINE_COUNTER_BUF_LEN - 8, an address ttpc cannot work out) */
+    /* (a program's global's item: a pointer plus or minus numbers, more than one or a number first, is the pointer
+       and their sum: ttpc's gval folds an address and one number after it, and stopped on coreutils cat.c's
+       line_buf + LINE_COUNTER_BUF_LEN - 8 and numfmt.c's 1 + zero_and_valid_suffixes, an address ttpc cannot work
+       out) */
     if (C->in_global && C->treedefs.count && (cl_eq (op, "+") || cl_eq (op, "-")) && cs_kind (n->t) == TY_PTR) {
       struct cs_ex *x = n;
       long long off = 0, v;
-      int steps = 0;
-      while (x->k == E_BIN && x->nk == 2 && (cl_name_is (x, "+") || cl_name_is (x, "-")) && cs_kind (x->t) == TY_PTR
-             && cs_kind (cl_k (x, 0)->t) == TY_PTR && cs_kind (cl_k (x, 1)->t) != TY_PTR && cs_eval (cl_k (x, 1), &v)) {
-        if (cl_name_is (x, "-")) off -= v; else off += v;
-        x = cl_strip (cl_k (x, 0));
+      int steps = 0, first = 0;
+      for (;;) {
+        if (x->k != E_BIN || x->nk != 2 || !(cl_name_is (x, "+") || cl_name_is (x, "-")) || cs_kind (x->t) != TY_PTR) break;
+        if (cs_kind (cl_k (x, 0)->t) == TY_PTR && cs_kind (cl_k (x, 1)->t) != TY_PTR && cs_eval (cl_k (x, 1), &v)) {
+          if (cl_name_is (x, "-")) off -= v; else off += v;
+          x = cl_strip (cl_k (x, 0));
+        } else if (cl_name_is (x, "+") && cs_kind (cl_k (x, 1)->t) == TY_PTR && cs_kind (cl_k (x, 0)->t) != TY_PTR
+                   && cs_eval (cl_k (x, 0), &v)) {
+          off += v;
+          x = cl_strip (cl_k (x, 1));
+          first = 1;
+        } else break;
         steps++;
       }
-      if (steps > 1) {
+      if (steps > 1 || first) {
         cl_operand (x, cl_prec ("+"), 0, o);
         if (off < 0) { cl_push (o, cl_n ("-")); cl_push (o, cl_num_node (-off)); }
         else { cl_push (o, cl_n ("+")); cl_push (o, cl_num_node (off)); }
