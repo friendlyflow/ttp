@@ -18,10 +18,10 @@ static int
 narrow (int fill)
 {
   enum { buf_length = 256 / sizeof (char) };
-  char buf[buf_length];
+  signed char buf[buf_length];
   int i, sum = 0;
   for (i = 0; i < buf_length; i++)
-    buf[i] = (char) (fill + i);
+    buf[i] = (signed char) (fill + i);
   for (i = 0; i < buf_length; i++)
     sum += buf[i];
   printf ("narrow: buf_length %d, sizeof buf %d, sum %d\n", (int) buf_length, (int) sizeof buf, sum);
