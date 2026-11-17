@@ -1455,7 +1455,7 @@ static struct hash *dotL_labels (struct nd *f)
   return h;
 }
 /* (and a function that carries data, its GOT or TLS words or read-only data, libmvec's, and the one after it:
-   GNU's are in other sections, the data would sit between their code) */
+   GNU's are in other sections, the data would sit between their code; while the two fit a node) */
 static int carries (struct nd *f)
 {
   long i, q;
@@ -1469,6 +1469,27 @@ static int carries (struct nd *f)
     if (x == f) return 1;
   }
   return 0;
+}
+/* (the parts a function would hold, its own and its data's, two for each entry of a run of read-only data
+   it names: merged only while they fit the 255 of a node) */
+static long fparts (struct nd *f)
+{
+  long i, q, n = ndn (f);
+  for (i = 0; i < xcarried->n + xcarry->n; i++) {
+    struct carried *c = i < xcarried->n ? xcarried->v[i] : xcarry->v[i - xcarried->n];
+    struct nd *x = c->f;
+    while (h_pv (xinto, ptr_key (x))) x = h_pv (xinto, ptr_key (x));
+    if (x != f) continue;
+    if (i < xcarried->n) { n += c->nodes->n; continue; }
+    for (q = 0; q < c->nodes->n; q++) {
+      struct str *l = c->nodes->v[q];
+      long k;
+      if (!h_pv (xrodata, l) && !h_pv (xroset, l)) continue;
+      k = h_iv (xrunof, l);
+      n += 2 * (k ? ((struct vec *) xruns->v[k - 1])->n : 1);
+    }
+  }
+  return n;
 }
 static void merge_runons (void)
 {
@@ -1497,6 +1518,8 @@ static void merge_runons (void)
         struct nd *y = rest->v[q];
         if (later->n || (m (y->c, ":$") && q != 1)) v_push (later, y); else nd_add (x, y);
       }
+      /* (g's own instructions go in its entry block: one part, and its blocks after it) */
+      if (!hitx && fparts (f) + 1 + later->n + fparts (gg) - ndn (gg) > 255) continue;
       nd_add (f, x);
       for (q = 0; q < later->n; q++) nd_add (f, later->v[q]);
     }
@@ -1670,7 +1693,7 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
   }
   carry_rodata ();
   /* (a node of more than 255 children, a table of libmvec's read-only data or a long block: its children
-     in numbered layers, 0: 1: ...) */
+     in numbered layers, 0: 1: ...; a function past 255 stops, its entries would be in a layer) */
   for (i = 0; i < fns->n; i++) {
     struct nd *f = fns->v[i];
     long j;
