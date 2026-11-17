@@ -599,6 +599,8 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
       if (cl_eq (k, "rm") || cl_eq (k, "g") || cl_eq (k, "rme") || cl_eq (k, "re") || cl_eq (k, "rmi") || cl_eq (k, "ri")) k = "r";
       if (cl_eq (k, "a")) fx = "rax"; else if (cl_eq (k, "b")) fx = "rbx"; else if (cl_eq (k, "d")) fx = "rdx"; else if (cl_eq (k, "c")) fx = "rcx"; else if (cl_eq (k, "S")) fx = "rsi"; else if (cl_eq (k, "D")) fx = "rdi";
     }
+    /* (g, any general operand, a register as on x86_64: the tests' asm ("" : "=g" (r) : "0" (r)), test-strcmp's) */
+    else if (cl_eq (k, "g")) k = "r";
     w[nw].i = i;
     w[nw].r = 0;
     w[nw].hasj = 0;

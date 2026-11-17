@@ -403,6 +403,9 @@ static int cl_utf8_ok (unsigned char *p, long n)
     if (c < 0xe0) more = 1; else if (c < 0xf0) more = 2; else if (c < 0xf8) more = 3; else if (c < 0xfc) more = 4; else if (c < 0xfe) more = 5; else return 0;
     if (i + more >= n + 0 && i + more > n - 1) return 0;
     while (j <= more) { if ((p[i + j] & 0xc0) != 0x80) return 0; j++; }
+    /* (an overlong form is not UTF-8, as Perl's utf8::decode has it, which
+       fftext and c2ff.pl read texts with: u8"\xE0\x9F\xBF", test-c8rtomb's) */
+    if ((c == 0xe0 && p[i + 1] < 0xa0) || (c == 0xf0 && p[i + 1] < 0x90) || (c == 0xf8 && p[i + 1] < 0x88) || (c == 0xfc && p[i + 1] < 0x84)) return 0;
     i += more + 1;
   }
   return 1;
@@ -2861,7 +2864,8 @@ static int cl_regs_only (char *k)
 {
   long i = 0;
   if (!k[0]) return 0;
-  while (k[i]) { if (k[i] != 'r' && k[i] != 'J' && k[i] != 'K') return 0; i++; }
+  /* (g, any general operand: a register, test-strcmp's asm ("" : "=g" (r) : "0" (r))) */
+  while (k[i]) { if (k[i] != 'r' && k[i] != 'J' && k[i] != 'K' && k[i] != 'g') return 0; i++; }
   return 1;
 }
 static int cl_has_plus (char *c) { long i = 0; while (c[i]) { if (c[i] == '+') return 1; i++; } return 0; }
