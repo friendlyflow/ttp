@@ -152,6 +152,10 @@ PCJOBS ?= 3
 GBUILD ?= $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/glibc
 GLIBC_REF := $(HOME)/.cache/ttp/glibc-gcc16
 PC_SLOT := sh src/compiler/gen/slot.sh -v 8000000 -t 3600
+# (compiler-check a cap of its own, 5400 s: it was at 3132 s before T5 and
+# grows with the tools: x86gnu's 30,911 forms, each target's s2ff on
+# x86_64's samples with the 30 MB gnu tree, under qemu 5-7 s a run)
+PC_SLOT_CC := sh src/compiler/gen/slot.sh -v 8000000 -t 5400
 PC_MS := $(shell sed -n 's/^MILESTONES := //p' src/glibc/Makefile)
 # (src/glibc runs the tools the tools step made, this BUILD's: mki, cpp, s2ff,
 # csema; every step that runs src/glibc waits for that step, through
@@ -189,7 +193,7 @@ pc-bootstrap:
 	$(call pc_step,bootstrap,$(PC_SLOT) $(MAKE) -j1 bootstrap)
 	@grep -q '^PASS' $(CHECKLOG)/bootstrap.result
 pc-compiler-check: pc-bootstrap pc-tools
-	$(call pc_step,compiler-check,$(PC_SLOT) $(MAKE) -j1 compiler-check)
+	$(call pc_step,compiler-check,$(PC_SLOT_CC) $(MAKE) -j1 compiler-check)
 # the translator, csema -l (src/compiler/tools, this machine's build): every
 # page of glibc and libgcc is its, so it is made first, alone (compiler-check
 # makes it too, later); and the C preprocessor in ff, cpp, for the cpp steps,
