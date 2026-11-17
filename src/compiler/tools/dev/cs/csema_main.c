@@ -132,7 +132,7 @@ static void one_unit (char *file, char *name, int target, int mode)
   if (target == 2) put (buf, &n, "struct __va_list { void *__stack; void *__gr_top; void *__vr_top; int __gr_offs; int __vr_offs; };\ntypedef struct __va_list __builtin_va_list;\n", 0);
   if (target == 3) put (buf, &n, "struct __va_list { void *__ap; };\ntypedef struct __va_list __builtin_va_list;\n", 0);
   /* (x86_64's SSE4 units: what gcc's headers call and clangvec.pl leaves) */
-  if (target == 1) put (buf, &n, "typedef char __csema_v16qi __attribute__ ((__vector_size__ (16)));\nint __builtin_ia32_pmovmskb128 (__csema_v16qi);\n__csema_v16qi __builtin_ia32_pshufb128 (__csema_v16qi, __csema_v16qi);\n", 0);
+  if (target == 1) put (buf, &n, "typedef char __csema_v16qi __attribute__ ((__vector_size__ (16)));\nint __builtin_ia32_pmovmskb128 (__csema_v16qi);\n__csema_v16qi __builtin_ia32_pshufb128 (__csema_v16qi, __csema_v16qi);\ntypedef double __csema_v2df __attribute__ ((__vector_size__ (16)));\ntypedef float __csema_v4sf __attribute__ ((__vector_size__ (16)));\n__csema_v4sf __builtin_ia32_cvtpd2ps (__csema_v2df);\n", 0);
   while (builtins[i]) {
     /* (x86_64's va_list an array: its builtins take the pointer it decays to, va_start more) */
     if (target == 1 && same ((unsigned char *) builtins[i], 23, "void __builtin_va_start")) put (buf, &n, "void __builtin_va_start (__builtin_va_list, ...);", 0);

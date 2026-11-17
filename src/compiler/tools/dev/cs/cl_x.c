@@ -1032,6 +1032,28 @@ static int cl_own_proto_differs (struct cs_decl *d, char *name, long nargs)
   np = cl_tree_nparams (name);
   return np >= 0 && np != nargs;
 }
+/* a function of no C (an asm function: glibc's .S, s2ff's) whose declaration returns a value that is no integer
+   or pointer (a float, a double, a long double, a complex, a struct): C calls an asm function's name as a long
+   (rax, a0, x0, r0), so through a pointer of the declaration's type, whose call takes its result where the
+   target's ABI returns it (st0 or xmm0, fa0, d0, s0/d0 or r0 r1 ...): __powl_helper's __ieee754_expl. A
+   program's: a name of its tree's asm page (--index) */
+static int cl_asm_value_callee (struct cs_decl *d, char *name)
+{
+  struct cs_ty *f = cs_canon (d->t), *r;
+  /* (not a C function: one of the units', its own name in a unit (a static), a C alias of one (sqrtl)) */
+  if (d->k != DK_FUNC || f->k != TY_FUNC || cl_starts (name, "__builtin_") || cl_has (&C->fn, name) || cl_has (&C->fn, cl_own (name)) || cl_has (&C->alias, name)) return 0;
+  r = cs_canon (f->to);
+  if (cs_is_void (r) || cs_is_int (r) || cs_is_ptr (r)) return 0;
+  /* (a program's: only with its tree's index, a name of its asm page; without one what the program does not define is
+     its tree's C, as a milestone's program calls libgcc's __muldc3) */
+  if (C->program) {
+    char *tf;
+    if (!C->treedefs.count) return 0;
+    tf = cl_get (&C->treefile, cl_ffname (name));
+    if (!tf || !cl_starts (tf, "asm")) return 0;
+  }
+  return 1;
+}
 static void cl_call (struct cs_ex *n, struct cl_list *o)
 {
   struct cs_ex *callee = cl_k (n, 0), *c = cl_strip (callee);
@@ -1175,7 +1197,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   }
 
   if (C->target == 1 && !na && cl_eq (name, "__builtin_ia32_rdsspq")) { cl_push (o, cl_n1 (name, cl_n ("0"))); return; }
-  if (C->target == 1 && (cl_eq (name, "__builtin_ia32_rdsspq") || cl_eq (name, "__builtin_ia32_incsspq") || cl_eq (name, "__builtin___clear_cache") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_signbitf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_ia32_pmovmskb128") || cl_eq (name, "__builtin_ia32_pshufb128"))) { cl_push (o, cl_call_node (name, n)); return; }
+  if (C->target == 1 && (cl_eq (name, "__builtin_ia32_rdsspq") || cl_eq (name, "__builtin_ia32_incsspq") || cl_eq (name, "__builtin___clear_cache") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_signbitf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_ia32_pmovmskb128") || cl_eq (name, "__builtin_ia32_pshufb128") || cl_eq (name, "__builtin_ia32_cvtpd2ps") || cl_eq (name, "__builtin_sqrtl"))) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 1 && !na && (cl_eq (name, "__builtin_ia32_rdtsc") || cl_eq (name, "__builtin_ia32_pause") || cl_eq (name, "__builtin_ia32_xbegin") || cl_eq (name, "__builtin_ia32_xend") || cl_eq (name, "__builtin_ia32_xtest"))) { cl_push (o, cl_n (name)); return; }
   if (C->target == 1 && na == 3 && (cl_eq (name, "_mm_cmpistri") || cl_eq (name, "_mm_cmpistrc") || cl_eq (name, "_mm_cmpistrz"))) {
 
@@ -1201,6 +1223,20 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     return;
   }
   if (cl_starts (name, "__builtin_")) cl_fail ("the builtin", name);
+  /* (after the builtins: fabs, copysign ... are gcc's) */
+  if (cl_asm_value_callee (c->d, cl_dn (c->d))) {
+    struct cs_ex *to = cs_mk (E_CAST, callee->t, 0);
+    struct cl_list *p;
+    struct node *h;
+    to->op = CK_BITCAST;
+    cs_add (to, callee);
+    p = cl_ex (to);
+    h = cl_one (p);
+    nd_add (h, cl_n ("."));
+    cl_add_all (h, cl_args (n, 1));
+    cl_push (o, h);
+    return;
+  }
   if (c->d->k == DK_FUNC) { name = cl_own (name); cl_want (name); }
   /* (a call through a global's pointer, gawk's make_number = r_make_number: the global wanted, as any use of it) */
   else if (c->d->k == DK_VAR && !c->d->local && !c->d->global && na) { name = cl_own (name); cl_want (name); }

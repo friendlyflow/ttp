@@ -1,0 +1,13 @@
+comment
+  asmd: fadd d0, d0, d0; ret
+asmd:
+  asm
+  word
+    0x1e602800
+  word
+    0xd65f03c0
+_start:
+  void
+  syscall
+    SYS_exit
+    main
