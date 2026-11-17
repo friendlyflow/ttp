@@ -209,7 +209,7 @@ sub retcls {
 
 our %staticid;
 our %constid;              # a function's static consts of a literal, by id: their values
-our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
+our ($side, %labels, %regvar, %local, $in_global, %enumval, %asmalias, %x87in);   # 'glibc' or 'ff'; the function's labels; the unit's register variables
 sub strip { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub unparen { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub name_of {
@@ -440,7 +440,14 @@ sub str {
 }
 sub is_atomiccall { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') =~ /^__atomic_\w+_\d+$/ }
 sub is_mempcpy { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') eq '__builtin_mempcpy' }
-sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $d = (strip((kids($s))[0]) // {})->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
+sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $f = strip((kids($s))[0]) // {}; $f = fnaddr($f) // $f; my $d = $f->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
+# &f of a function f: its reference (a cast of it stripped before)
+sub fnaddr {
+    my ($c) = @_;
+    return undef unless ($c->{kind} // '') eq 'UnaryOperator' && $c->{opcode} eq '&';
+    my $r = strip((kids($c))[0]) // {};
+    ($r->{kind} // '') eq 'DeclRefExpr' && ($r->{referencedDecl}{kind} // '') eq 'FunctionDecl' ? $r : undef;
+}
 # (arm's syscall, whose value c2ff has as a long, glibc's an int: its
 # conversions to either are not compared)
 sub is_syscallv {
@@ -498,6 +505,10 @@ sub call {
     my ($callee, @args) = kids($n);
     my $c = strip($callee);
     $c = strip((kids($c))[0]) while $c->{kind} eq 'UnaryOperator' && $c->{opcode} eq '*';
+    # (csema's call of an asm function whose value is no integer or pointer,
+    # through its address cast to the declaration's pointer type, (*(T) &f)
+    # (x), is the call f (x): the same prototype converts the arguments)
+    $c = fnaddr($c) // $c;
     my $name = $c->{kind} eq 'DeclRefExpr' && ($c->{referencedDecl}{kind} // '') eq 'FunctionDecl' ? name_of($c->{referencedDecl}) : undef;
     if (defined $name) {
         if ($side eq 'glibc') {
@@ -831,6 +842,13 @@ sub S {
             push @out, brace(S(@c));
             next;
         }
+        # (csema's local of an x87 asm input that is a value, __x87_1 ...,
+        # is that asm statement's operand: the statement after it, which
+        # glibc's side has as (asm) or its barrier)
+        if ($k eq 'DeclStmt' && $side eq 'ff' && kids($n) && !grep { ($_->{kind} // '') ne 'VarDecl' || ($_->{name} // '') !~ /^__x87_\d+$/ } kids($n)) {
+            $x87in{ $_->{name} } = (grep { $_->{kind} !~ /Attr$/ } kids($_))[0] for kids($n);
+            next;
+        }
         if ($k eq 'DeclStmt') {
             for my $d (kids($n)) {
                 next unless $d->{kind} eq 'VarDecl';
@@ -872,10 +890,11 @@ sub S {
         if ($k eq 'GotoStmt') { push @out, '(goto ' . ($labels{ $n->{targetLabelDeclId} } // '?') . ')'; next }
         if ($k eq 'IndirectGotoStmt') { push @out, '(goto* ' . E((kids($n))[0]) . ')'; next }
         if ($k eq 'GCCAsmStmt') {
-            # (x86_64's math_opt_barrier of a long double, asm ("" : "=t" (y) : "0" (x)): as c2ff, y = x)
+            # (x86_64's math_opt_barrier, asm ("" : "=t" (y) : "0" (x)) of a long
+            # double, "=x" of a double or a float: as csema, y = x)
             if ($side eq 'glibc' && $target eq 'x86_64') {
                 my ($t, $oc, $ic) = asm_text($n);
-                if (defined $t && $t !~ /\S/ && @$oc == 1 && $oc->[0] =~ /^=&?t$/ && @$ic == 1 && $ic->[0] eq '0') {
+                if (defined $t && $t !~ /\S/ && @$oc == 1 && $oc->[0] =~ /^=&?[tx]$/ && @$ic == 1 && $ic->[0] eq '0') {
                     my ($y, $x) = kids($n);
                     push @out, '(= ' . E($y) . ' ' . E($x) . ')';
                     next;
@@ -890,6 +909,19 @@ sub S {
             push @out, '(asm)';
             next;
         }
+        # (an empty asm of inputs alone, math_force_eval's: csema's call of
+        # its asm function, _asm___x (v) or of x87 inputs _asm___f_l
+        # (&__x87_1), is glibc's barrier: what an input computes in floating
+        # point, its value unused)
+        if ($side eq 'ff' && $target eq 'x86_64' && (my $c = unimplicit($n)) && (unimplicit($n)->{kind} // '') eq 'CallExpr') {
+            my ($f, @a) = kids($c);
+            my $fd = (strip($f) // {})->{referencedDecl};
+            if ($fd && (name_of($fd) // '') =~ /^_asm___/) {
+                @a = map { x87in($_) } @a;
+                push @out, map { '(cast ToVoid void ' . E($_) . ')' } grep { fp_computes($_) } @a;
+                next;
+            }
+        }
         # an expression whose value is not used
         push @out, xstmt($n);
     }
@@ -898,6 +930,15 @@ sub S {
 # An expression as a statement: a statement expression is its block (ff's :
 # as a statement), a comma's operands statements of a block, one statement
 # in braces that statement.
+# An asm function's argument: the value of csema's x87 local whose address it is
+sub x87in {
+    my ($a) = @_;
+    my $u = unimplicit($a);
+    return $u unless ($u->{kind} // '') eq 'UnaryOperator' && $u->{opcode} eq '&';
+    my $r = strip((kids($u))[0]) // {};
+    my $nm = ($r->{kind} // '') eq 'DeclRefExpr' ? $r->{referencedDecl}{name} // '' : '';
+    exists $x87in{$nm} ? $x87in{$nm} : $u;
+}
 sub xstmt {
     my ($n) = @_;
     my $u = unimplicit($n);

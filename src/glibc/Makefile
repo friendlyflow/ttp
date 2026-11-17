@@ -2007,8 +2007,15 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   anonrec one macro that makes anonymous records of other fields on one
 #           line (tst-strtod4.c's TEST_STRTOD): each its own type
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check
-ALLPROGS := locale enums statics anonrec
+#   x87math x86_64's libm where glibc's C has x87 asm and gcc's x87 builtins
+#           (exp, pow ... at their special cases, the x87's exception masks,
+#           floorl, the narrowing functions, sqrtl, powl) and those forms in
+#           its own C; gcc's with libm.a too (ALLPROGLIBS); x86_64 only
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check
+ALLPROGS := locale enums statics anonrec x87math
+ALLPROG_x87math := x87math
+ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_locale := locale
 ALLPROG_enums := enums-a enums-b
 ALLPROG_statics := statics-a statics-b
@@ -2030,7 +2037,7 @@ $$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(OBJ)/libc.a
 	mkdir -p $$(FF)
 	for u in $$(ALLPROG_$(1)); do $$(RUN) -t 120 $$(GLIBC_CC) -O2 -fno-builtin $$(PROGFLAGS) -c progs/$$$$u.c -o $$(FF)/$$$$u.ref.o || exit 1; done
 	$$(RUN) -t 120 $$(GLIBC_CC) -static -nostdlib -o $$@ $$(OBJ)/csu/crt1.o $$(OBJ)/csu/crti.o $$(CRTBEGIN) \
-	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
+	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a $$(ALLPROGLIBS_$(1)) -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
 $(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all progs/$(1).expect $$(ALLPROGDEPS_$(1))
 	@want=$$$$(head -n 1 progs/$(1).expect | cut -d" " -f2); tail -n +2 progs/$(1).expect > $$(FF)/$(1)-all.want; \
 	for b in $(1)-all.ref $(1)-all; do \
@@ -2042,3 +2049,29 @@ $(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all progs/$(1).expect $$(ALLPROGDEPS
 .PHONY: $(1)-check
 endef
 $(foreach p,$(ALLPROGS),$(eval $(call allprog,$(p))))
+
+# ---- a C call of an asm function that returns a floating value ---------------
+# progs/asmcall.c against the asm functions of progs/asmcall-GTARGET.ff.txt
+# (no glibc: csema -l as glibc's units are translated, _start the page's,
+# where what no unit defines in C is asm; a program's, -P, would need its
+# tree's index to know that): csema calls them through a pointer of the
+# declaration's type, so the result is taken where the target's ABI returns
+# it. Each target's exit status is progs/asmcall(.GTARGET).expect's, on each
+# of its CPUS.
+#   make GTARGET=riscv64|x86_64|aarch64|arm asmcall-check
+$(FF)/asmcall.ff: progs/asmcall.c progs/asmcall-$(GTARGET).ff.txt $(CSEMA) | $(CPP) $(PREDEF)
+	mkdir -p $(FF)
+	$(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) progs/asmcall.c -o $(FF)/asmcall.i
+	$(RUN) -t 60 $(CPRUN) $(CSEMA) -l -t $(GTARGET) -S ../compiler/shared.ff $(FF)/asmcall.i -- main > $(FF)/asmcall.c.ff.txt
+	cat $(FF)/asmcall.c.ff.txt progs/asmcall-$(GTARGET).ff.txt > $(FF)/asmcall.ff.txt
+	perl ../compiler/gen/fftext.pl ff $(FF)/asmcall.ff.txt > $@
+$(FF)/asmcall: $(FF)/asmcall.ff $(TTPC) $(SHARED)
+	$(RUN) -t 300 $(TTPC_RUN) $(SHARED) $< $@ > $@.lst
+asmcall-check: $(FF)/asmcall $(call expect,asmcall)
+	@want=$$(head -n 1 $(call expect,asmcall) | cut -d" " -f2); \
+	for cpu in $(CPUS); do \
+	    s=0; $(RUN) -t 60 qemu-$(GTARGET) -cpu $$cpu $(FF)/asmcall || s=$$?; \
+	    test $$s -eq $$want || { echo "asmcall-check: on $$cpu: exit status $$s, not $$want"; exit 1; }; \
+	done; \
+	echo "asmcall-check: a C call of an asm function's floating value as the ABI returns it, on $(GTARGET) ($(CPUS)): exit $$want"
+.PHONY: asmcall-check

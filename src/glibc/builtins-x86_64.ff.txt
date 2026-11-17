@@ -494,6 +494,76 @@
         & address
     return
       r
+  comment
+    gcc's __builtin_sqrtl on x86_64 (e_sqrtl.c's __ieee754_sqrtl): the x87's fsqrt, the root of the extended format rounded once (by the control word), as gcc makes it:
+    a C function that gives the addresses of its operand and its result (rdi rsi) to an asm function of its own, which loads one (fldt), takes its root and stores it (fstpt).
+  __ff_fsqrt:
+    asm
+    fldt.m
+      0
+      rdi
+    fsqrt
+    fstpt.m
+      0
+      rsi
+    ret
+  __builtin_sqrtl:
+    long double
+    x:
+      long double
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      long double
+    __ff_fsqrt
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
+  comment
+    gcc's __builtin_ia32_cvtpd2ps x (sincosf_poly.h's v2df_to_sf): cvtpd2ps, x's two doubles as floats (rounded by MXCSR) in the low two of four, the high two 0;
+    a C function of vectors (vector / double / 2 to vector / float / 4) that gives their addresses to an asm function of its own (rdi rsi), as the SSE builtins above.
+  __ff_cvtpd2ps:
+    asm
+    movdqu.m
+      0
+      rdi
+      xmm0
+    cvtpd2ps.n
+      xmm0
+      xmm0
+    movdqu.mr
+      xmm0
+      0
+      rsi
+    ret
+  __builtin_ia32_cvtpd2ps:
+    vector
+      float
+      4
+    x:
+      vector
+        double
+        2
+    comment
+      r is a local: a local first in a body with only its type would be one more parameter, which no call passes
+    r:
+      vector
+        float
+        4
+    __ff_cvtpd2ps
+      :
+        x
+        & address
+      :
+        r
+        & address
+    return
+      r
   __builtin_fma:
     double
     x:
