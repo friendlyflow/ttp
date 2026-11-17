@@ -1982,6 +1982,7 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   structitem  a local struct's field set from a struct variable (coreutils' timeout.c)
 #   structcall  a local array of structs set from calls that return them (coreutils' cp, touch)
 #   localtag  a struct's tag that another unit has as a local's name (coreutils' hash_entry)
+#   ptrsum  a global's item, an address plus or minus numbers (coreutils cat.c's line_buf + 20 - 8)
 #   statics two units each with a writable static of one name and text (a
 #           counter each, glibc's locks) and a const one, which may be shared
 #   anonrec one macro that makes anonymous records of other fields on one
@@ -1992,8 +1993,9 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           floorl, the narrowing functions, sqrtl, powl) and those forms in
 #           its own C; gcc's with libm.a too (ALLPROGLIBS); x86_64 only
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check x87math-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag x87math
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math
+ALLPROG_ptrsum := ptrsum
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_localtag := localtag-a localtag-b
