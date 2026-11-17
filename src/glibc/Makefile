@@ -1537,7 +1537,25 @@ ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # its names weak (address 0), as for a program that never unwinds
 LIBGCC_TARGETS := riscv64 x86_64 aarch64 arm
 UNWIND_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
-LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH))
+# and libgcc's conversions of _Float16 and __bf16, which gcc calls where the
+# target has no instruction for them and ttpc where it names them
+# (cc_sfnames: __extendhfsf2, __truncsfbf2, ...): a program's, as coreutils'
+# od -t fH and fB (ttpc stopped there: cannot compile, its helper in no
+# tree); roots of their own (ROOTS_hf), as nothing of glibc calls them. On
+# aarch64 those of bfloat and of a long double (its _Float16 and float or
+# double convert by fcvt); none on arm, where gcc has no _Float16 and no
+# conversion to __bf16 by default ("not supported on this target")
+LIBGCC_HF_riscv64 := extendhfsf2 extendhfdf2 extendhftf2 extendbfsf2 trunctfhf2 truncdfhf2 truncsfhf2 trunctfbf2 \
+	truncdfbf2 truncsfbf2 trunchfbf2 truncbfhf2 fixhfsi fixhfdi fixunshfsi fixunshfdi floatsihf floatdihf floatunsihf \
+	floatundihf floatsibf floatdibf floatunsibf floatundibf fixhfti fixunshfti floattihf floatuntihf floattibf floatuntibf
+LIBGCC_HF_x86_64 := extendhfsf2 extendhfdf2 extendhftf2 extendhfxf2 extendbfsf2 trunctfhf2 truncxfhf2 truncdfhf2 \
+	truncsfhf2 trunctfbf2 truncxfbf2 truncdfbf2 truncsfbf2 trunchfbf2 fixhfti fixunshfti floattihf floatuntihf floattibf \
+	floatuntibf eqhf2
+LIBGCC_HF_aarch64 := extendhftf2 extendbfsf2 trunctfhf2 trunctfbf2 truncdfbf2 truncsfbf2 trunchfbf2 fixhfti fixunshfti \
+	floattihf floatuntihf floatdibf floatundibf floattibf floatuntibf
+LIBGCC_HF := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_HF_$(GTARGET)))
+ROOTS_hf := $(LIBGCC_HF:%=__%)
+LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH) $(LIBGCC_HF))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc) $(WEAKS_unwind_$(GTARGET))
 # (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
 # forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
@@ -1549,7 +1567,7 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
-	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)); do echo $$r; done; } | sort -u > $@
+	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)) $(ROOTS_hf); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
