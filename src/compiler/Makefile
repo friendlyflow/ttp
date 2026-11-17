@@ -288,8 +288,8 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # char, ctypeout, type outside compile time, and cbelow, a local used
 # above its declaration, cargfew and cargmany, calls with fewer and
 # more arguments than parameters (on every target), cnoitems, a struct
-# type as a value with no items after it (on every target), cselfclfail, a union global from a compound literal of its type, clitplacefail, a literal's struct place of a number (on every target); cvecx64, x86_64's vector test, stops riscv64's
-# ttpc (vectors are x86_64's alone).
+# type as a value with no items after it (on every target), cselfclfail, a union global from a compound literal of its type, clitplacefail, a literal's struct place of a number (on every target). (cvecx64, x86_64's vector
+# test, no longer stops riscv64's ttpc: vectors are every target's, vecops.pl, cvecops.)
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
 	grep -qx "asm at compile time" $(P)/ctasm.lst
@@ -302,8 +302,6 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -q "a reserved word: \* pointer" $(P)/creserved.err
 	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cmisplaced.ff $(P)/cmisplaced.celf 2> $(P)/cmisplaced.err
 	grep -q "compile time goes only first in a function or a lambda: while" $(P)/cmisplaced.err
-	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cvecx64.ff $(P)/cvecx64.celf 2> $(P)/cvecx64.err
-	grep -q "vector, of the SysV ABI of x86_64, on another target: vector$$" $(P)/cvecx64.err
 	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/cuntyped.ff $(P)/cuntyped.celf 2> $(P)/cuntyped.err
 	grep -q "needs a type: n$$" $(P)/cuntyped.err
 	! $(QEMU) $(BOOT)/stage2 $(J) $(SHARED) progs/citems.ff $(P)/citems.celf 2> $(P)/citems.err
