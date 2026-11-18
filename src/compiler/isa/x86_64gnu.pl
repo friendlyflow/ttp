@@ -172,8 +172,10 @@ sub legacy {
     my ($rk, $mk) = ($o{rk} // $s, $o{mk} // $s);
     my ($ik, $isz) = ($o{ik}, $o{isz});
     my $osfx = $o{osfx} // { RM => "", MR => "r", M => "", MI => "i", RMI => "" }->{$kind};
-    my @imm = defined $isz ? ($isz == 1 && $ik eq "i8" ? C("simm8", "imm") : gimm($isz)) : ();
+    my @imm = defined $isz ? ($isz == 1 && $ik eq "i8" ? C("simm8", "imm") : gimm($isz)) : defined $o{fimm} ? C("byte", $o{fimm}) : ();
     my $ig = defined $isz ? "\$<imm>, " : "";
+    # (a fixed immediate, fimm: the mnemonic stands for it, cmpltpd)
+    $isz //= 1 if defined $o{fimm};
     for my $n (0, 1) {
         next if $n && $w;                      # W needs REX
         my $cls = $n ? "lo" : "hi";
@@ -188,9 +190,9 @@ sub legacy {
                 @b = (($n ? () : C("rex", $w, 0, 0, "rd")), gbytes(@op), C($n ? "modrm.n" : "modrm", 3, $o{digit}, "rd"));
                 $g = "$gnu $ig" . ($o{gx} // "") . "<rd>";
             } elsif ($kind eq "MR") {
-                @p = ("rs:" . rk($rk, $cls), "rd:" . rk($mk, $n ? "lo" : "any"));
+                @p = (($kind eq "MR" && defined $ik ? "imm:$ik" : ()), "rs:" . rk($rk, $cls), "rd:" . rk($mk, $n ? "lo" : "any"));
                 @b = (($n ? () : C("rex", $w, "rs", 0, "rd")), gbytes(@op), C($n ? "modrm.n" : "modrm", 3, "rs", "rd"));
-                $g = "$gnu <rs>, <rd>";
+                $g = "$gnu $ig<rs>, <rd>";
             } else {   # RM, RMI
                 @p = (($kind eq "RMI" ? "imm:$ik" : ()), "rs:" . rk($mk, $cls), "rd:" . rk($rk, $n ? "lo" : "any"));
                 @b = (($n ? () : C("rex", $w, "rd", 0, "rs")), gbytes(@op), C($n ? "modrm.n" : "modrm", 3, "rd", "rs"));
@@ -211,12 +213,12 @@ sub legacy {
             elsif (!$w && $kind =~ /^(M|MI)$/) { @mp = map { /^base:/ ? "$_.hi" : $_ } @mp }
             my $name = "$nm$ns.$m$osfx";
             my $reg = $kind =~ /^(M|MI)$/ ? $o{digit} : $kind eq "MR" ? "rs" : "rd";
-            my @p = $kind eq "MR" ? ("rs:" . rk($rk, $cls), @mp)
+            my @p = $kind eq "MR" ? ((defined $ik ? "imm:$ik" : ()), "rs:" . rk($rk, $cls), @mp)
                   : $kind =~ /^(M|MI)$/ ? (($kind eq "MI" ? "imm:$ik" : ()), @mp)
                   : (($kind eq "RMI" ? "imm:$ik" : ()), @mp, "rd:" . rk($rk, $cls));
             # (a rex form whose only register is the reg operand, rip or
             # absolute memory, needs it high: GNU gives no REX for nothing)
-            my $g = $kind eq "MR" ? "$gnu <rs>, $d->{g}" : $kind =~ /^(M|MI)$/ ? "$gnu $ig" . ($o{gx} // "") . $d->{g} : "$gnu $ig$d->{g}, <rd>";
+            my $g = $kind eq "MR" ? "$gnu $ig<rs>, $d->{g}" : $kind =~ /^(M|MI)$/ ? "$gnu $ig" . ($o{gx} // "") . $d->{g} : "$gnu $ig$d->{g}, <rd>";
             my $rr = $kind =~ /^(M|MI)$/ ? 0 : $reg;
             gform($name, \@p, $g, gbytes(@pre), ($n ? () : grex($w, $rr, $m)), gbytes(@op), gmem($m, $reg, $n, scalar @imm ? $isz : 0), @imm);
         }
@@ -485,6 +487,10 @@ my %VK = (128 => "x", 256 => "y");
 #   mem        0: no memory forms; regs 0: no register forms; rev: the
 #              register form is the store opcode's (.rev)
 #   digit      ModRM.reg for VM
+#   fimm       a fixed immediate the mnemonic stands for (vcmpltpd: vcmppd $1)
+#   is4        a fourth register in imm8's high nibble, AT&T's first (vblendvpd)
+#   vsib       memory forms only, their index a vector register of the kind
+#              this gives by the length ({128 => "x", 256 => "y"}): gathers
 sub vexf {
     my (%o) = @_;
     my $nm = $o{nm};
@@ -510,9 +516,9 @@ sub vexf {
                 $v2 ? (gbytes(0xc5), C("vex2.b", $reg, $vv, $L, $pp))
                     : (gbytes(0xc4), C("vex3.1", $reg, $x, $b, $map), C("vex3.2", $w, $vv, $L, $pp));
             };
-            my @imm = defined $o{isz} ? C("byte", "imm") : ();
-            my $ig = @imm ? "\$<imm>, " : "";
-            my @ip = @imm ? ("imm:u8") : ();
+            my @imm = defined $o{isz} ? C("byte", "imm") : defined $o{fimm} ? C("byte", $o{fimm}) : $o{is4} ? C("is4", "is") : ();
+            my $ig = defined $o{isz} ? "\$<imm>, " : $o{is4} ? "<is>, " : "";
+            my @ip = defined $o{isz} ? ("imm:u8") : $o{is4} ? ("is:" . rk($vec, "any")) : ();
             # the order of the operands, AT&T's, as params and in GNU's line
             my $ops = sub {
                 my ($rmp, $rmg) = @_;     # the r/m's params and spelling
@@ -526,7 +532,7 @@ sub vexf {
                 return ([@ip, @$rmp, $rv], "$ig$rmg, <$vreg>") if $kind eq "VM";
                 die "vexf: $kind\n";
             };
-            if ($o{regs} // 1) {
+            if (($o{regs} // 1) && !$o{vsib}) {
                 my $c2 = $v2 ? "lo" : "any";
                 my ($p, $g) = $ops->(["$rmname:" . rk($mk, $c2)], "<$rmname>");
                 my $name = "$nm$lp.$enc" . ($o{rev} ? ".rev" : "") . ($o{rsfx} ? ".$o{rsfx}" : "");
@@ -534,10 +540,11 @@ sub vexf {
                     $prefix->($rmname, 0, $rmname), gbytes($o{op}), C($v2 ? "modrm.v" : "modrm", 3, $reg, $rmname), @imm);
             }
             next if defined $o{mem} && !$o{mem};
-            for my $m (@MEMS) {
+            for my $m ($o{vsib} ? qw(x0 x8 x32) : @MEMS) {
                 next if $m eq "a32";
                 my $d = $MEM{$m};
                 my @mp = @{ $d->{p} };
+                @mp = map { /^index:/ ? "index:" . rk($o{vsib}{$len}, "any") : $_ } @mp if $o{vsib};
                 @mp = map { /^(base|index):/ ? "$_.lo" : $_ } @mp if $v2;
                 my ($p, $g) = $ops->(\@mp, $d->{g});
                 my ($x, $b) = $d->{rip} ? (0, 0) : ($d->{sib} == 2 ? "index" : 0, "base");
@@ -659,6 +666,18 @@ sub evc { $_[0] =~ /^[xyz]$/ ? "ev" : "any" }
 #          immediate the mnemonic stands for (vpcmpneqb: vpcmpb with 4);
 #          isz  an immediate operand (1); nomask  no mask (vmovd); kstore
 #          a store's memory forms also under a merge mask (.k)
+#   kind   also VM: vvvv <- r/m, reg a digit (vpsrlq $32, %zmm0, %zmm1)
+#   bcst   the bytes of an element: the memory forms also as broadcasts
+#          (.b: disp(base){1toN}, EVEX.b, disp8 over the element's bytes)
+#   rc sae the register forms of 512 also with a rounding mode ({rn-sae}
+#          .rn, {rd-sae} .rd, {ru-sae} .ru, {rz-sae} .rz: EVEX.b, L'L the
+#          mode) or with exceptions suppressed ({sae} .sae: EVEX.b, L'L 0)
+#   mkh rkh  the r/m's or reg's vector half the length (x x y), the
+#          memory's N too (vcvtps2pd, vpmovzxdq, vcvtpd2ps)
+#   vsib   memory forms only, under a merge mask, their index a vector
+#          register of the kind this gives by the length: gathers (EVEX's
+#          V' its bit 4, vvvv 1111)
+my %HALF = (128 => "x", 256 => "x", 512 => "y");
 sub evexf {
     my (%o) = @_;
     my $nm = $o{nm};
@@ -668,15 +687,18 @@ sub evexf {
     for my $len (@{ $o{lens} }) {
         my ($ll, $vec) = @{ $ELEN{$len} };
         my $lp = $len eq "lig" ? "" : ".$len";
-        my $N = $o{n} // ($len eq "lig" ? 1 : $len / 8);
+        my $N = $o{n} // ($len eq "lig" ? 1 : ($o{mkh} || $o{rkh}) ? $len / 16 : $len / 8);
         my ($rk, $vk, $mk) = map { my $k = $o{$_} // "v"; $k eq "v" ? $vec : $k } qw(rk vk mk);
+        $mk = $HALF{$len} if $o{mkh};
+        $rk = $HALF{$len} if $o{rkh};
         for my $mask ("", $o{nomask} ? () : ("k", "kz")) {
             next if $mask && $kind eq "MR" && !$o{rev} && !($o{kstore} && $mask eq "k");
             next if $mask eq "kz" && ($o{rk} // "") eq "k";    # (a mask is never zeroed into)
+            next if $o{vsib} && $mask ne "k";
             my $mp = $mask ? ".$mask" : "";
-            my $reg = $kind eq "MR" ? "rs" : "rd";
+            my $reg = $kind eq "MR" ? "rs" : $kind eq "VM" ? $o{digit} : "rd";
             my $rmname = $kind eq "MR" ? "rd" : "rs";
-            my $vv = $kind eq "RVM" ? "vs" : 0;
+            my $vv = $kind eq "RVM" ? "vs" : $kind eq "VM" ? "vd" : 0;
             my $dst = $kind eq "MR" ? $rmname : $reg;
             my @mkp = $mask ? ("mk:k.any") : ();
             my $mg = $mask ? "{<mk>}" . ($mask eq "kz" ? "{z}" : "") : "";
@@ -684,35 +706,50 @@ sub evexf {
             my @ip = defined $o{isz} ? ("imm:u8") : ();
             my $ig = defined $o{isz} ? "\$<imm>, " : "";
             my $ops = sub {
-                my ($rmp, $rmg) = @_;
+                my ($rmp, $rmg, $rc) = @_;
+                $rc //= "";
                 my $rv = "vs:" . rk($vk, evc($vk));
                 my $rr = "$reg:" . rk($rk, evc($rk));
-                return ([@ip, @$rmp, $rv, $rr, @mkp], "$ig$rmg, <vs>, <$reg>$mg") if $kind eq "RVM";
-                return ([@ip, @$rmp, $rr, @mkp], "$ig$rmg, <$reg>$mg") if $kind eq "RM";
-                return ([@ip, $rr, @$rmp, @mkp], "$ig<$reg>, $rmg$mg") if $kind eq "MR";
+                return ([@ip, @$rmp, $rv, $rr, @mkp], "$ig$rc$rmg, <vs>, <$reg>$mg") if $kind eq "RVM";
+                return ([@ip, @$rmp, $rr, @mkp], "$ig$rc$rmg, <$reg>$mg") if $kind eq "RM";
+                return ([@ip, $rr, @$rmp, @mkp], "$ig$rc<$reg>, $rmg$mg") if $kind eq "MR";
+                return ([@ip, @$rmp, "vd:" . rk($vk, evc($vk)), @mkp], "$ig$rc$rmg, <vd>$mg") if $kind eq "VM";
                 die "evexf: $kind\n";
             };
-            my $p2 = sub { C("evex.2", $mask eq "kz" ? 1 : 0, $ll, $vv, $mask ? "mk" : 0) };
-            if ($o{regs} // 1) {
-                my ($p, $g) = $ops->(["$rmname:" . rk($mk, evc($mk))], "<$rmname>");
-                gform("$nm$lp.evex" . ($o{rev} ? ".rev" : "") . $mp . ($o{rsfx} ? ".$o{rsfx}" : ""), $p, "{evex} " . ($o{rev} ? "{store} " : "") . "$gnu $g",
-                    gbytes(0x62), C("evex.0r", $reg, $rmname, $rmname, $reg, $map), C("evex.1", $w, $vv, $pp), $p2->(),
-                    gbytes($o{op}), C("modrm", 3, $reg, $rmname), @imm);
+            my $p2 = sub { my ($b, $l, $v) = @_; C($b ? "evex.2b" : "evex.2", $mask eq "kz" ? 1 : 0, $l // $ll, $v // $vv, $mask ? "mk" : 0) };
+            if (($o{regs} // 1) && !$o{vsib}) {
+                # [name part, GNU's operand, EVEX.b, L'L]
+                my @var = (["", "", 0, $ll]);
+                if ($len eq "512" || $len eq "lig") {
+                    push @var, map { [".$_->[0]", "{$_->[0]-sae}, ", 1, $_->[1]] } [rn => 0], [rd => 1], [ru => 2], [rz => 3] if $o{rc};
+                    push @var, [".sae", "{sae}, ", 1, 0] if $o{sae};
+                }
+                for my $v (@var) {
+                    my ($p, $g) = $ops->(["$rmname:" . rk($mk, evc($mk))], "<$rmname>", $v->[1]);
+                    gform("$nm$lp.evex" . ($o{rev} ? ".rev" : "") . $mp . $v->[0] . ($o{rsfx} ? ".$o{rsfx}" : ""), $p, ($v->[2] ? "" : "{evex} ") . ($o{rev} ? "{store} " : "") . "$gnu $g",
+                        gbytes(0x62), C("evex.0r", $reg, $rmname, $rmname, $reg, $map), C("evex.1", $w, $vv, $pp), $p2->($v->[2], $v->[3]),
+                        gbytes($o{op}), C("modrm", 3, $reg, $rmname), @imm);
+                }
             }
             next if defined $o{mem} && !$o{mem};
             next if $mask && $kind eq "MR" && !($o{kstore} && $mask eq "k");
-            for my $m (@MEMS) {
-                next if $m eq "a32";
-                my $d = $MEM{$m};
-                my @mp = map { /^disp:d8$/ ? "disp:d8x$N" : /^disp:d32$/ ? "disp:d32e" : $_ } @{ $d->{p} };
-                my ($p, $g) = $ops->(\@mp, $d->{g});
-                my ($x, $b) = $d->{rip} ? (0, 0) : ($d->{sib} == 2 ? "index" : 0, "base");
-                my @m = gmem($m, $reg, 0, scalar @imm ? 1 : 0);
-                # disp8: the displacement over N
-                @m = map { $_->{content} eq "simm8" && $N > 1 ? C("byte", C("d$N'[7:0]", "disp")) : $_ } @m;
-                gform("$nm$lp.evex$mp.$m" . ($o{osfx} // ""), $p, "{evex} $gnu $g",
-                    gbytes(0x62), C("evex.0", $reg, $x, $b, $reg, $map), C("evex.1", $w, $vv, $pp), $p2->(),
-                    gbytes($o{op}), @m, @imm);
+            for my $bc ("", $o{bcst} ? ("b") : ()) {
+                my $n = $bc ? $o{bcst} : $N;
+                my $bg = $bc ? "{1to" . (($o{mkh} ? $len / 16 : $len / 8) / $o{bcst}) . "}" : "";
+                for my $m ($o{vsib} ? qw(x0 x8 x32) : @MEMS) {
+                    next if $m eq "a32";
+                    my $d = $MEM{$m};
+                    my @mp = map { /^disp:d8$/ ? "disp:d8x$n" : /^disp:d32$/ ? "disp:d32e" : $_ } @{ $d->{p} };
+                    @mp = map { /^index:/ ? "index:" . rk($o{vsib}{$len}, "ev") : $_ } @mp if $o{vsib};
+                    my ($p, $g) = $ops->(\@mp, $d->{g} . $bg);
+                    my ($x, $b) = $d->{rip} ? (0, 0) : ($d->{sib} == 2 ? "index" : 0, "base");
+                    my @m = gmem($m, $reg, 0, scalar @imm ? 1 : 0);
+                    # disp8: the displacement over N
+                    @m = map { $_->{content} eq "simm8" && $n > 1 ? C("byte", C("d$n'[7:0]", "disp")) : $_ } @m;
+                    gform("$nm$lp.evex$mp" . ($bc ? ".b" : "") . ".$m" . ($o{osfx} // ""), $p, "{evex} $gnu $g",
+                        gbytes(0x62), C("evex.0", $reg, $x, $b, $reg, $map), C("evex.1", $w, $o{vsib} ? 0 : $vv, $pp),
+                        $p2->($bc ? 1 : 0, undef, $o{vsib} ? "index" : undef), gbytes($o{op}), @m, @imm);
+                }
             }
         }
     }
@@ -852,5 +889,226 @@ for my $t (["xtest", 0x0f, 0x01, 0xd6], ["xgetbv", 0x0f, 0x01, 0xd0], ["rdpkru",
 for my $t (["fs", 0x64], ["gs", 0x65], ["cs", 0x2e], ["ds", 0x3e], ["data16", 0x66], ["addr32", 0x67], ["notrack", 0x3e]) {
     gform($t->[0], [], sprintf(".byte 0x%02x", $t->[1]), gbytes($t->[1]));
 }
+
+
+# ---------------------------------------------------------------------------
+# libmvec: x86_64's vector math functions (sysdeps/x86_64/fpu/multiarch,
+# mathvec/: SSE4, AVX2 and AVX-512 packed floating point), their forms in
+# SSE, VEX and EVEX. EVEX here only at 512 bits, all libmvec's evex has;
+# its broadcasts ({1toN}, .b), rounding modes ({rn-sae} .rn ...) and {sae}
+# (.sae); the gathers' memory operands have a vector index (VSIB).
+# ---------------------------------------------------------------------------
+
+$isa->group("gnu libmvec sse");
+# xmm <- xmm/m128: [name, prefix, opcode bytes after 0F]
+for my $t (["cvtdq2pd", 0xf3, 0xe6], ["cvtdq2ps", undef, 0x5b], ["rcpps", undef, 0x53], ["rsqrtps", undef, 0x52],
+           ["pcmpgtd", 0x66, 0x66], ["pmuludq", 0x66, 0xf4], ["pmaxsd", 0x66, 0x38, 0x3d], ["pminsd", 0x66, 0x38, 0x39],
+           ["psllq", 0x66, 0xf3], ["psrlq", 0x66, 0xd3], ["pslld", 0x66, 0xf2], ["psrld", 0x66, 0xd2], ["psrad", 0x66, 0xe2]) {
+    my ($nm, $p, @op) = @$t;
+    legacy(nm => $nm, s => "l", pre => [defined $p ? $p : ()], op => [0x0f, @op], kind => "RM", rk => "x", mk => "x");
+}
+# the compares by the predicate the mnemonic names (cmpltpd: cmppd $1)
+my @SSEPRED = qw(eq lt le unord neq nlt nle ord);
+for my $i (0 .. $#SSEPRED) {
+    legacy(nm => "cmp$SSEPRED[$i]pd", s => "l", pre => [0x66], op => [0x0f, 0xc2], kind => "RM", rk => "x", mk => "x", fimm => $i);
+    legacy(nm => "cmp$SSEPRED[$i]ps", s => "l", op => [0x0f, 0xc2], kind => "RM", rk => "x", mk => "x", fimm => $i);
+}
+# the sign bits into r32
+legacy(nm => "movmskpd", s => "l", pre => [0x66], op => [0x0f, 0x50], kind => "RM", rk => "l", mk => "x", mem => 0);
+legacy(nm => "movmskps", s => "l", op => [0x0f, 0x50], kind => "RM", rk => "l", mk => "x", mem => 0);
+# with an immediate: rounding, a word or dword out of an xmm register
+for my $t (["roundpd", 0x09], ["roundps", 0x08]) {
+    legacy(nm => $t->[0], s => "l", pre => [0x66], op => [0x0f, 0x3a, $t->[1]], kind => "RMI", rk => "x", mk => "x", ik => "u8", isz => 1, osfx => "i", rsfx => "i");
+}
+legacy(nm => "pextrw", s => "l", pre => [0x66], op => [0x0f, 0xc5], kind => "RMI", rk => "l", mk => "x", ik => "u8", isz => 1, osfx => "i", rsfx => "i", mem => 0);
+legacy(nm => "pextrd", s => "l", pre => [0x66], op => [0x0f, 0x3a, 0x16], kind => "MR", rk => "x", mk => "l", ik => "u8", isz => 1, osfx => "ri", rsfx => "i");
+# shifts of each element by an immediate: [name, opcode, digit]
+for my $t (["pslld", 0x72, 6], ["psllq", 0x73, 6], ["psrad", 0x72, 4], ["psrld", 0x72, 2], ["psrlq", 0x73, 2]) {
+    legacy(nm => $t->[0], s => "l", pre => [0x66], op => [0x0f, $t->[1]], kind => "MI", digit => $t->[2], mk => "x", ik => "u8", isz => 1, osfx => "i", mem => 0);
+}
+
+$isa->group("gnu libmvec avx");
+# reg <- vvvv, r/m at 128 and 256: [name, pp, map, W, opcode]
+for my $t (["vaddpd", 66, 1, 0, 0x58], ["vaddps", "", 1, 0, 0x58], ["vsubpd", 66, 1, 0, 0x5c], ["vsubps", "", 1, 0, 0x5c],
+           ["vmulpd", 66, 1, 0, 0x59], ["vmulps", "", 1, 0, 0x59], ["vdivpd", 66, 1, 0, 0x5e], ["vdivps", "", 1, 0, 0x5e],
+           ["vminpd", 66, 1, 0, 0x5d], ["vminps", "", 1, 0, 0x5d], ["vmaxpd", 66, 1, 0, 0x5f], ["vmaxps", "", 1, 0, 0x5f],
+           ["vandpd", 66, 1, 0, 0x54], ["vandps", "", 1, 0, 0x54], ["vandnpd", 66, 1, 0, 0x55], ["vandnps", "", 1, 0, 0x55],
+           ["vorpd", 66, 1, 0, 0x56], ["vorps", "", 1, 0, 0x56], ["vxorpd", 66, 1, 0, 0x57], ["vxorps", "", 1, 0, 0x57],
+           ["vunpcklpd", 66, 1, 0, 0x14], ["vunpcklps", "", 1, 0, 0x14], ["vunpckhpd", 66, 1, 0, 0x15], ["vunpckhps", "", 1, 0, 0x15],
+           ["vpaddd", 66, 1, 0, 0xfe], ["vpaddq", 66, 1, 0, 0xd4], ["vpsubd", 66, 1, 0, 0xfa], ["vpsubq", 66, 1, 0, 0xfb],
+           ["vpcmpgtd", 66, 1, 0, 0x66], ["vpcmpgtq", 66, 2, 0, 0x37], ["vpmuludq", 66, 1, 0, 0xf4],
+           ["vpunpckldq", 66, 1, 0, 0x62], ["vpunpcklqdq", 66, 1, 0, 0x6c], ["vpmulld", 66, 2, 0, 0x40],
+           ["vpmaxsd", 66, 2, 0, 0x3d], ["vpminsd", 66, 2, 0, 0x39], ["vpermps", 66, 2, 0, 0x16]) {
+    my ($nm, $pp, $map, $w, $op) = @$t;
+    vexf(nm => $nm, pp => $pp, map => $map, w => $w, lens => $nm eq "vpermps" ? [256] : [128, 256], op => $op, kind => "RVM");
+}
+# FMA3: [name, opcode]; pd W1, ps W0
+for my $t (["vfmadd132", 0x98], ["vfmadd213", 0xa8], ["vfmadd231", 0xb8], ["vfmsub132", 0x9a], ["vfmsub213", 0xaa], ["vfmsub231", 0xba],
+           ["vfnmadd132", 0x9c], ["vfnmadd213", 0xac], ["vfnmadd231", 0xbc], ["vfnmsub132", 0x9e], ["vfnmsub213", 0xae], ["vfnmsub231", 0xbe]) {
+    my ($nm, $op) = @$t;
+    vexf(nm => "${nm}pd", pp => 66, map => 2, w => 1, lens => [128, 256], op => $op, kind => "RVM");
+    vexf(nm => "${nm}ps", pp => 66, map => 2, w => 0, lens => [128, 256], op => $op, kind => "RVM");
+}
+# the compares, by an immediate and by the predicate the mnemonic names
+# (the ones libmvec has)
+my %VPRED = (eq => 0, lt => 1, le => 2, unord => 3, neq => 4, nlt => 5, nle => 6, ord => 7,
+             nge_uq => 9 + 16, ngt_uq => 10 + 16, ge_oq => 13 + 16, gt_oq => 14 + 16, lt_oq => 17, le_oq => 18,
+             nlt_uq => 21, nle_uq => 22);
+for my $s (["pd", 66], ["ps", ""]) {
+    my ($sfx, $pp) = @$s;
+    vexf(nm => "vcmp$sfx", pp => $pp, lens => [128, 256], op => 0xc2, kind => "RVM", isz => 1);
+    vexf(nm => "vcmp$_$sfx", pp => $pp, lens => [128, 256], op => 0xc2, kind => "RVM", fimm => $VPRED{$_}) for sort keys %VPRED;
+}
+# the moves of pd, as vmovaps and vmovups
+for my $t (["vmovapd", 66, 0x28, 0x29], ["vmovupd", 66, 0x10, 0x11]) {
+    my ($nm, $pp, $ld, $st) = @$t;
+    vexf(nm => $nm, pp => $pp, lens => [128, 256], op => $ld, kind => "RM");
+    vexf(nm => $nm, pp => $pp, lens => [128, 256], op => $st, kind => "MR", rev => 1, mem => 0);
+    vexf(nm => $nm, pp => $pp, lens => [128, 256], op => $st, kind => "MR", regs => 0, osfx => "r");
+}
+# the scalar moves: vmovsd and vmovss of memory, and of registers (the
+# upper elements from vvvv); vmovhpd: the high half from memory
+for my $t (["vmovsd", "f2"], ["vmovss", "f3"]) {
+    my ($nm, $pp) = @$t;
+    vexf(nm => $nm, pp => $pp, lens => ["lig"], op => 0x10, kind => "RM", regs => 0);
+    vexf(nm => $nm, pp => $pp, lens => ["lig"], op => 0x11, kind => "MR", regs => 0, osfx => "r");
+    vexf(nm => $nm, pp => $pp, lens => ["lig"], op => 0x10, kind => "RVM", mem => 0);
+}
+vexf(nm => "vmovhpd", pp => 66, lens => ["lig"], op => 0x16, kind => "RVM", regs => 0);
+# reg <- r/m: the sign bits, conversions (vcvtdq2pd and vcvtps2pd from half
+# the length, vcvtpd2ps to it: registers only, GNU names its memory forms
+# by the length), reciprocals
+vexf(nm => "vmovmskpd", pp => 66, lens => [128, 256], op => 0x50, kind => "RM", rk => "l", mem => 0);
+vexf(nm => "vmovmskps", pp => "", lens => [128, 256], op => 0x50, kind => "RM", rk => "l", mem => 0);
+vexf(nm => "vcvtdq2pd", pp => "f3", lens => [128, 256], op => 0xe6, kind => "RM", mk => "x");
+vexf(nm => "vcvtps2pd", pp => "", lens => [128, 256], op => 0x5a, kind => "RM", mk => "x");
+vexf(nm => "vcvtpd2ps", pp => 66, lens => [128, 256], op => 0x5a, kind => "RM", rk => "x", mem => 0);
+for my $t (["vcvtdq2ps", "", 0x5b], ["vrcpps", "", 0x53], ["vrsqrtps", "", 0x52]) {
+    vexf(nm => $t->[0], pp => $t->[1], lens => [128, 256], op => $t->[2], kind => "RM");
+}
+# with an immediate
+vexf(nm => "vpshufd", pp => 66, lens => [128, 256], op => 0x70, kind => "RM", isz => 1);
+vexf(nm => "vroundpd", pp => 66, map => 3, lens => [128, 256], op => 0x09, kind => "RM", isz => 1);
+vexf(nm => "vroundps", pp => 66, map => 3, lens => [128, 256], op => 0x08, kind => "RM", isz => 1);
+vexf(nm => "vshufps", pp => "", lens => [128, 256], op => 0xc6, kind => "RVM", isz => 1);
+for my $t (["vpslld", 0x72, 6], ["vpsllq", 0x73, 6], ["vpsrad", 0x72, 4], ["vpsrld", 0x72, 2], ["vpsrlq", 0x73, 2]) {
+    vexf(nm => $t->[0], pp => 66, lens => [128, 256], op => $t->[1], kind => "VM", digit => $t->[2], isz => 1, mem => 0, rsfx => "i");
+}
+# 128 bits into or out of a ymm register; a dword or qword out of an xmm
+for my $t (["vinsertf128", 0x18, 0x19], ["vinserti128", 0x38, 0x39]) {
+    my ($nm, $ins, $ext) = @$t;
+    vexf(nm => $nm, pp => 66, map => 3, lens => [256], op => $ins, kind => "RVM", mk => "x", isz => 1);
+    (my $x = $nm) =~ s/insert/extract/;
+    vexf(nm => $x, pp => 66, map => 3, lens => [256], op => $ext, kind => "MR", mk => "x", isz => 1);
+}
+vexf(nm => "vpextrd", pp => 66, map => 3, lens => ["lig"], op => 0x16, kind => "MR", mk => "l", rk => "x", isz => 1);
+vexf(nm => "vpextrq", pp => 66, map => 3, w => 1, lens => ["lig"], op => 0x16, kind => "MR", mk => "q", rk => "x", isz => 1);
+# blends by the sign of a fourth register (is4)
+vexf(nm => "vblendvpd", pp => 66, map => 3, lens => [128, 256], op => 0x4b, kind => "RVM", is4 => 1);
+vexf(nm => "vblendvps", pp => 66, map => 3, lens => [128, 256], op => 0x4a, kind => "RVM", is4 => 1);
+# the gathers: vvvv the mask, the index a vector (VSIB)
+vexf(nm => "vgatherdpd", pp => 66, map => 2, w => 1, lens => [128, 256], op => 0x92, kind => "RMV", vsib => { 128 => "x", 256 => "x" });
+vexf(nm => "vgatherqpd", pp => 66, map => 2, w => 1, lens => [128, 256], op => 0x93, kind => "RMV", vsib => { 128 => "x", 256 => "y" });
+vexf(nm => "vgatherdps", pp => 66, map => 2, w => 0, lens => [128, 256], op => 0x92, kind => "RMV", vsib => { 128 => "x", 256 => "y" });
+# BMI's blsr; the 16-bit masks: kmovw, kandw, kxnorw
+vexf(nm => "blsrl", gnu => "blsr", map => 2, lens => ["lz"], op => 0xf3, kind => "VM", digit => 1, vk => "l", mk => "l");
+vexf(nm => "blsrq", gnu => "blsr", map => 2, w => 1, lens => ["lz"], op => 0xf3, kind => "VM", digit => 1, vk => "q", mk => "q");
+vexf(nm => "kmovw", pp => "", lens => ["lz"], op => 0x92, kind => "RM", rk => "k", mk => "l", mem => 0, rsfx => "tok");
+vexf(nm => "kmovw", pp => "", lens => ["lz"], op => 0x93, kind => "RM", rk => "l", mk => "k", mem => 0, rsfx => "fromk");
+vexf(nm => "kmovw", pp => "", lens => ["lz"], op => 0x90, kind => "RM", rk => "k", mk => "k");
+vexf(nm => "kmovw", pp => "", lens => ["lz"], op => 0x91, kind => "MR", rk => "k", mk => "k", regs => 0, osfx => "r");
+vexf(nm => "kandw", pp => "", lens => [1], op => 0x41, kind => "RVM", rk => "k", vk => "k", mk => "k", mem => 0);
+vexf(nm => "kxnorw", pp => "", lens => [1], op => 0x46, kind => "RVM", rk => "k", vk => "k", mk => "k", mem => 0);
+
+$isa->group("gnu libmvec avx512");
+$isa->def("evex.2b", "z[0:0]", "ll[1:0]", "bb=1", "v4n'[0:0]", "aaa[2:0]");
+my @Z = (512);
+# reg <- vvvv, r/m: [name, pp, map, W, opcode, broadcast's bytes, rc/sae]
+for my $t (["vaddpd", 66, 1, 1, 0x58, 8, "rc"], ["vaddps", "", 1, 0, 0x58, 4, "rc"], ["vsubpd", 66, 1, 1, 0x5c, 8, "rc"],
+           ["vsubps", "", 1, 0, 0x5c, 4, "rc"], ["vmulpd", 66, 1, 1, 0x59, 8, "rc"], ["vmulps", "", 1, 0, 0x59, 4, "rc"],
+           ["vdivpd", 66, 1, 1, 0x5e, 8, "rc"], ["vdivps", "", 1, 0, 0x5e, 4, "rc"], ["vminpd", 66, 1, 1, 0x5d, 8, "sae"],
+           ["vminps", "", 1, 0, 0x5d, 4, "sae"], ["vmaxpd", 66, 1, 1, 0x5f, 8, "sae"], ["vmaxps", "", 1, 0, 0x5f, 4, "sae"],
+           ["vandpd", 66, 1, 1, 0x54, 8], ["vandps", "", 1, 0, 0x54, 4], ["vandnpd", 66, 1, 1, 0x55, 8], ["vandnps", "", 1, 0, 0x55, 4],
+           ["vorpd", 66, 1, 1, 0x56, 8], ["vorps", "", 1, 0, 0x56, 4], ["vxorpd", 66, 1, 1, 0x57, 8], ["vxorps", "", 1, 0, 0x57, 4],
+           ["vscalefpd", 66, 2, 1, 0x2c, 8, "rc"], ["vscalefps", 66, 2, 0, 0x2c, 4, "rc"],
+           ["vpaddd", 66, 1, 0, 0xfe, 4], ["vpaddq", 66, 1, 1, 0xd4, 8], ["vpsubd", 66, 1, 0, 0xfa, 4], ["vpsubq", 66, 1, 1, 0xfb, 8],
+           ["vpandd", 66, 1, 0, 0xdb, 4], ["vpandq", 66, 1, 1, 0xdb, 8], ["vpandnd", 66, 1, 0, 0xdf, 4], ["vpandnq", 66, 1, 1, 0xdf, 8],
+           ["vpord", 66, 1, 0, 0xeb, 4], ["vporq", 66, 1, 1, 0xeb, 8], ["vpxord", 66, 1, 0, 0xef, 4], ["vpxorq", 66, 1, 1, 0xef, 8],
+           ["vpmulld", 66, 2, 0, 0x40, 4], ["vpmullq", 66, 2, 1, 0x40, 8], ["vpmaxsd", 66, 2, 0, 0x3d, 4], ["vpminsd", 66, 2, 0, 0x39, 4],
+           ["vpermt2pd", 66, 2, 1, 0x7f, 8], ["vpermt2ps", 66, 2, 0, 0x7f, 4], ["vpermi2pd", 66, 2, 1, 0x77, 8], ["vpermi2ps", 66, 2, 0, 0x77, 4],
+           ["vpermpd", 66, 2, 1, 0x16, 8], ["vpermps", 66, 2, 0, 0x16, 4], ["vblendmpd", 66, 2, 1, 0x65, 8], ["vblendmps", 66, 2, 0, 0x65, 4]) {
+    my ($nm, $pp, $map, $w, $op, $bc, $r) = @$t;
+    evexf(nm => $nm, pp => $pp, map => $map, w => $w, lens => \@Z, op => $op, kind => "RVM", bcst => $bc, ($r ? ($r => 1) : ()));
+}
+for my $t (["vfmadd132", 0x98], ["vfmadd213", 0xa8], ["vfmadd231", 0xb8], ["vfmsub132", 0x9a], ["vfmsub213", 0xaa], ["vfmsub231", 0xba],
+           ["vfnmadd132", 0x9c], ["vfnmadd213", 0xac], ["vfnmadd231", 0xbc], ["vfnmsub132", 0x9e], ["vfnmsub213", 0xae], ["vfnmsub231", 0xbe]) {
+    my ($nm, $op) = @$t;
+    evexf(nm => "${nm}pd", pp => 66, map => 2, w => 1, lens => \@Z, op => $op, kind => "RVM", bcst => 8, rc => 1);
+    evexf(nm => "${nm}ps", pp => 66, map => 2, w => 0, lens => \@Z, op => $op, kind => "RVM", bcst => 4, rc => 1);
+}
+# with an immediate: [name, pp, map, W, opcode, broadcast's bytes, sae]
+for my $t (["vpternlogq", 66, 3, 1, 0x25, 8], ["vpternlogd", 66, 3, 0, 0x25, 4], ["vshuff32x4", 66, 3, 0, 0x23, 4],
+           ["vshufi32x4", 66, 3, 0, 0x43, 4], ["vrangeps", 66, 3, 0, 0x50, 4, 1], ["vrangepd", 66, 3, 1, 0x50, 8, 1]) {
+    my ($nm, $pp, $map, $w, $op, $bc, $sae) = @$t;
+    evexf(nm => $nm, pp => $pp, map => $map, w => $w, lens => \@Z, op => $op, kind => "RVM", isz => 1, bcst => $bc, sae => $sae);
+}
+# into a mask: the compares (by an immediate, and by the predicate the
+# mnemonic names) and tests
+for my $s (["pd", 66, 1, 8], ["ps", "", 0, 4]) {
+    my ($sfx, $pp, $w, $bc) = @$s;
+    evexf(nm => "vcmp$sfx", pp => $pp, w => $w, lens => \@Z, op => 0xc2, kind => "RVM", rk => "k", isz => 1, bcst => $bc, sae => 1);
+    evexf(nm => "vcmp$_$sfx", pp => $pp, w => $w, lens => \@Z, op => 0xc2, kind => "RVM", rk => "k", imm => $VPRED{$_}, bcst => $bc, sae => 1) for sort keys %VPRED;
+}
+for my $t (["vpcmpgtd", 1, 0, 0x66, 4], ["vpcmpgtq", 2, 1, 0x37, 8], ["vpcmpeqd", 1, 0, 0x76, 4], ["vptestmq", 2, 1, 0x27, 8], ["vptestmd", 2, 0, 0x27, 4]) {
+    my ($nm, $map, $w, $op, $bc) = @$t;
+    evexf(nm => $nm, pp => 66, map => $map, w => $w, lens => \@Z, op => $op, kind => "RVM", rk => "k", bcst => $bc);
+}
+evexf(nm => "vpcmpd", pp => 66, map => 3, w => 0, lens => \@Z, op => 0x1f, kind => "RVM", rk => "k", isz => 1, bcst => 4);
+evexf(nm => "vpcmpq", pp => 66, map => 3, w => 1, lens => \@Z, op => 0x1f, kind => "RVM", rk => "k", isz => 1, bcst => 8);
+for my $pr (@pred) {
+    evexf(nm => "vpcmp$pr->[0]d", pp => 66, map => 3, w => 0, lens => \@Z, op => 0x1f, kind => "RVM", rk => "k", imm => $pr->[1], bcst => 4)
+        unless $pr->[0] eq "eq";
+    evexf(nm => "vpcmp$pr->[0]q", pp => 66, map => 3, w => 1, lens => \@Z, op => 0x1f, kind => "RVM", rk => "k", imm => $pr->[1], bcst => 8)
+        unless $pr->[0] eq "eq";
+}
+evexf(nm => "vfpclasspd", pp => 66, map => 3, w => 1, lens => \@Z, op => 0x66, kind => "RM", rk => "k", isz => 1, bcst => 8, gnu => "vfpclasspd", mem => 0);
+evexf(nm => "vfpclassps", pp => 66, map => 3, w => 0, lens => \@Z, op => 0x66, kind => "RM", rk => "k", isz => 1, bcst => 4, gnu => "vfpclassps", mem => 0);
+# reg <- r/m: [name, pp, map, W, opcode, broadcast's bytes, rc/sae, immediate]
+for my $t (["vrcp14pd", 66, 2, 1, 0x4c, 8], ["vrcp14ps", 66, 2, 0, 0x4c, 4], ["vrsqrt14pd", 66, 2, 1, 0x4e, 8],
+           ["vrsqrt14ps", 66, 2, 0, 0x4e, 4], ["vrcp28pd", 66, 2, 1, 0xca, 8, "sae"], ["vrcp28ps", 66, 2, 0, 0xca, 4, "sae"],
+           ["vgetexppd", 66, 2, 1, 0x42, 8, "sae"], ["vgetexpps", 66, 2, 0, 0x42, 4, "sae"],
+           ["vcvtdq2ps", "", 1, 0, 0x5b, 4, "rc"],
+           ["vgetmantpd", 66, 3, 1, 0x26, 8, "sae", 1], ["vgetmantps", 66, 3, 0, 0x26, 4, "sae", 1],
+           ["vreducepd", 66, 3, 1, 0x56, 8, "sae", 1], ["vreduceps", 66, 3, 0, 0x56, 4, "sae", 1],
+           ["vrndscalepd", 66, 3, 1, 0x09, 8, "sae", 1], ["vrndscaleps", 66, 3, 0, 0x08, 4, "sae", 1]) {
+    my ($nm, $pp, $map, $w, $op, $bc, $r, $i) = @$t;
+    evexf(nm => $nm, pp => $pp, map => $map, w => $w, lens => \@Z, op => $op, kind => "RM", bcst => $bc, ($r ? ($r => 1) : ()), ($i ? (isz => 1) : ()));
+}
+# from or to half the length: conversions, widening and narrowing
+evexf(nm => "vcvtdq2pd", pp => "f3", w => 0, lens => \@Z, op => 0xe6, kind => "RM", mkh => 1, bcst => 4);
+evexf(nm => "vcvtps2pd", pp => "", w => 0, lens => \@Z, op => 0x5a, kind => "RM", mkh => 1, bcst => 4, sae => 1);
+evexf(nm => "vcvtpd2ps", pp => 66, w => 1, lens => \@Z, op => 0x5a, kind => "RM", rkh => 1, rc => 1, mem => 0);
+evexf(nm => "vpmovzxdq", pp => 66, map => 2, w => 0, lens => \@Z, op => 0x35, kind => "RM", mkh => 1);
+evexf(nm => "vpmovqd", pp => "f3", map => 2, w => 0, lens => \@Z, op => 0x35, kind => "MR", mkh => 1);
+# shifts of each element by an immediate: [name, opcode, digit, W]
+for my $t (["vpslld", 0x72, 6, 0], ["vpsllq", 0x73, 6, 1], ["vpsrad", 0x72, 4, 0], ["vpsrld", 0x72, 2, 0], ["vpsrlq", 0x73, 2, 1]) {
+    my ($nm, $op, $digit, $w) = @$t;
+    evexf(nm => $nm, pp => 66, w => $w, lens => \@Z, op => $op, kind => "VM", digit => $digit, isz => 1, rsfx => "i", osfx => "i");
+}
+# half the length into or out of a zmm register
+for my $t (["vinserti64x4", 0x3a, 1], ["vinsertf32x8", 0x1a, 0], ["vinserti32x8", 0x3a, 0]) {
+    evexf(nm => $t->[0], pp => 66, map => 3, w => $t->[2], lens => \@Z, op => $t->[1], kind => "RVM", mkh => 1, isz => 1);
+}
+for my $t (["vextractf32x8", 0x1b], ["vextracti32x8", 0x3b]) {
+    evexf(nm => $t->[0], pp => 66, map => 3, w => 0, lens => \@Z, op => $t->[1], kind => "MR", mkh => 1, isz => 1);
+}
+# broadcasts of a qword, from memory, or from r64
+evexf(nm => "vpbroadcastq", pp => 66, map => 2, w => 1, lens => \@Z, op => 0x59, kind => "RM", mk => "x", n => 8);
+evexf(nm => "vpbroadcastq", pp => 66, map => 2, w => 1, lens => \@Z, op => 0x7c, kind => "RM", mk => "q", mem => 0, rsfx => "fromr");
+evexf(nm => "vbroadcastsd", pp => 66, map => 2, w => 1, lens => \@Z, op => 0x19, kind => "RM", mk => "x", n => 8);
+# the gathers, under a mask (VSIB)
+evexf(nm => "vgatherdpd", pp => 66, map => 2, w => 1, lens => \@Z, op => 0x92, kind => "RM", vsib => { 512 => "y" }, n => 8);
+evexf(nm => "vgatherqpd", pp => 66, map => 2, w => 1, lens => \@Z, op => 0x93, kind => "RM", vsib => { 512 => "z" }, n => 8);
+evexf(nm => "vgatherdps", pp => 66, map => 2, w => 0, lens => \@Z, op => 0x92, kind => "RM", vsib => { 512 => "z" }, n => 4);
 
 1;

@@ -164,6 +164,12 @@ PREDEF := predef-$(GTARGET).txt
 MKIT := $(CPTOOLS)/mki
 MKI = $(CPRUN) $(abspath $(MKIT))
 MKID = $(if $(wildcard $(MKIT)),$(MKI) --dry,$(error $(MKIT) is not made: make -C ../compiler BUILD=... its tools/<host>/mki first (ports-check's tools step makes it)))
+# gen/fftext.pl and licenses.pl in ff (../compiler/tools/fftext.ff and
+# licenses.ff, made as csema): each page's .ff from its text, and the
+# licenses' checks; fftext-crosscheck compares them with the Perl
+FFTEXTT := $(CPTOOLS)/fftext
+FFTEXT = $(CPRUN) $(abspath $(FFTEXTT))
+LICENSEST := $(CPTOOLS)/licenses
 CSFLAGS = -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff
 CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
@@ -178,7 +184,7 @@ csread = $(if $(filter $(1),$(CLANGVEC)),$(I)/$(1).vec.i=)$(I)/$(1).i
 csflags = $(foreach z,$(call with_start,ZEROS,$(1)),-Z $(z)) $(foreach w,$(call with_start,WEAKS,$(1)),-W $(w)) $(if $(filter --keep-going,$(C2FFFLAGS_$(1))),-k)
 csdeps = $(1:%=$(I)/%.i) $(addprefix $(I)/,$(addsuffix .vec.i,$(filter $(1),$(CLANGVEC))))
 # (it is made by make -C ../compiler, never here: four targets' makes at once)
-$(CSEMA) $(CPP) $(MKIT):
+$(CSEMA) $(CPP) $(MKIT) $(FFTEXTT) $(LICENSEST):
 	@echo "$@ is not made: make -C ../compiler $(abspath $@) first (ports-check's tools step does)"; exit 1
 C2FF_CLANG ?= $(error C2FF_CLANG is not set: run this in `nix develop`)
 # ttpc: on an x86_64 machine its own build for x86_64 (make bootstraps makes
@@ -784,7 +790,7 @@ endef
 define milestone
 OBJS_all_$(1) := $$(call objs_of,OBJS,$(1))
 ASMS_all_$(1) := $$(call objs_of,ASMS,$(1))
-$$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt $$(S2FFDEPS)
+$$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_all_$(1):%=$$(I)/%.dump) $$(if $$(filter csu/crti,$$(ASMS_all_$(1))),$$(I)/csu/crtn.dump) builtins.ff.txt $$(X87B) stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS) license.ff.txt $$(S2FFDEPS) | $$(FFTEXTT)
 	mkdir -p $$(FF)
 	cp $$(or $$(LICENSE_$(1)),license.ff.txt) $$(FF)/$(1).ff.txt
 	$$(file >$$(FF)/$(1).csunits,$$(foreach o,$$(OBJS_all_$(1)),$$(call csread,$$(o))$$(nl)))
@@ -802,7 +808,7 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_a
 	done
 	$$(if $$(ASMS_all_$(1)),$$(LAYERS) $$(FF)/$(1).asm.page.txt >> $$(FF)/$(1).ff.txt)
 	{ $$(BUILTINS); cat stdbit.ff.txt $$(wildcard builtins-$$(GTARGET).ff.txt) $$(ATOMICS); } >> $$(FF)/$(1).ff.txt
-	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1).ff.txt > $$@
+	$$(FFTEXT) ff $$(FF)/$(1).ff.txt > $$@
 endef
 $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 
@@ -815,12 +821,11 @@ ASMCHECK_riscv64 = $(ASMS_stdio) csu/start
 # (aarch64: every asm object of glibc, but crti and crtn, whose .init and
 # .fini are not .text)
 ASMCHECK_aarch64 = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
-# (x86_64: every asm object of glibc but those s2ff makes no ff of yet,
-# by reason: libmvec's (mathvec/: SSE and AVX's packed floats, mulpd
-# vfmadd213pd vinsertf128 ..., have no forms yet, and most have tables in
-# .rodata); crti and crtn (.init and .fini, not .text: s2ff --then makes
-# their ff, the milestones run it))
-ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM)) csu/crti csu/crtn
+# (x86_64: every asm object of glibc, libmvec's too (mathvec/: SSE, AVX2
+# and AVX-512 packed floats, isa/x86_64gnu.pl's libmvec groups), but crti
+# and crtn (.init and .fini, not .text: s2ff --then makes their ff, the
+# milestones run it))
+ASMSKIP_x86_64 = csu/crti csu/crtn
 ASMCHECK_x86_64 = $(filter-out $(ASMSKIP_x86_64),$(ALL_ASM))
 # (arm: as aarch64, every asm object but crti and crtn)
 ASMCHECK_arm = $(filter-out csu/crti csu/crtn,$(ALL_ASM))
@@ -857,11 +862,11 @@ ASMHDR_x86_64 := 120
 ASMTRAP = $(or $(ASMTRAP_$(GTARGET)),$(error asm-check: no ASMTRAP_$(GTARGET) yet))
 ASMHDR = $(or $(ASMHDR_$(GTARGET)),$(error asm-check: no ASMHDR_$(GTARGET) yet))
 # (x86_64's s2ff also reads isa/x86_64.dec.ff, both x86_64gnu.ff)
-$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC)
+$(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC) | $(FFTEXTT)
 	@rm -f $@; a=$(I)/$*; \
 	{ $(S2FF) --facts $$a.facts $$a$(SSRC) $$a.dump && printf '_start:\n  $(ASMTRAP)\n' && \
 	  $(XPRE)objdump -t $$a.ref.o | awk '/\*UND\*/ { printf "%s:\n  $(ASMTRAP)\n", $$NF }'; } > $$a.asm.ff.txt || exit 1; \
-	perl ../compiler/gen/fftext.pl ff $$a.asm.ff.txt > $$a.asm.ff; \
+	$(FFTEXT) ff $$a.asm.ff.txt > $$a.asm.ff; \
 	$(RUN) -n -t 60 $(TTPC_RUN) $(SHARED) $$a.asm.ff $$a.asm > $$a.asm.lst || exit 1; \
 	size=$$(sed -n 's/^size //p' $$a.facts); test -n "$$size" || exit 1; \
 	skip=$(if $(filter aarch64,$(GTARGET)),$$(sed -n 's/^skip //p' $$a.facts),0); \
@@ -931,10 +936,10 @@ $(FF)/%-prog.json: $(FF)/%-prog.i clang-prelude.h
 	$(RUN) -t 120 $(C2FF_CLANG) -x c -include clang-prelude.h $(PROGCLANG_$(GTARGET)) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) -std=gnu11 -w $< > $@
 progstart = $(if $(filter $(1),$(OWNSTART)),1,$(if $(call startms,$(1)),,1))
-$(FF)/%-prog.ff: $(FF)/%-prog.i $(CSEMA) $(CSVIEW)
+$(FF)/%-prog.ff: $(FF)/%-prog.i $(CSEMA) $(CSVIEW) | $(FFTEXTT)
 	$(RUN) -v 9000000 -t 300 $(CPRUN) $(CSEMA) -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -P $* $(if $(call progstart,$*),-T) \
 	    $(if $(filter $*,$(INDEXED)),-I $(FF)/$*/index.ff) $< main $(PROGROOTS_$*) > $(FF)/$*-prog.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(FF)/$*-prog.ff.txt > $@
+	$(FFTEXT) ff $(FF)/$*-prog.ff.txt > $@
 # (a program that names a record of its tree's it only declares, unwind's
 # struct _Unwind_Context: c2ff reads the tree's index and types, --index)
 INDEXED := unwind
@@ -1087,11 +1092,11 @@ $(DCDIR)/all.i: datacheck.pl $(if $(wildcard $(DCFF)/glibc/index.ff),,$(FF)/glib
 	mkdir -p $(DCDIR)
 	perl allobjs.pl $(OBJ) > $(DCDIR)/objs
 	perl datacheck.pl --target $(GTARGET) $(DCSKIP:%=--skip %) --program $(DCFF) $(OBJ) $(DCDIR)/objs > $@
-$(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW)
+$(DCDIR)/all.ff: $(DCDIR)/all.i $(CSEMA) $(CSVIEW) | $(FFTEXTT)
 	ln -sfn $(abspath $(DCFF))/glibc $(DCDIR)/glibc
 	$(RUN) -v 9000000 -t 600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(DCFF)/glibc/index.ff -J $(DCFF)/glibc.statics -T \
 	    -O $< -- main > $(DCDIR)/all.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(DCDIR)/all.ff.txt > $@
+	$(FFTEXT) ff $(DCDIR)/all.ff.txt > $@
 # (and on the folder of glibc in ff the program reads lazily: its index)
 $(DCDIR)/all: $(DCDIR)/all.ff $(DCFF)/glibc/index.ff $(TTPC) $(SHARED)
 	$(RUN) -v 8000000 -t 1800 $(TTPC_RUN) -g $(SHARED) $< $@ > $@.lst
@@ -1099,24 +1104,55 @@ datacheck: $(DCDIR)/all datacheck.pl
 	@perl datacheck.pl --target $(GTARGET) --index $(DCFF)/glibc/index.ff --known $(DCKNOWN) --report $(DCDIR)/report $(DCDIR)/all $(OBJ) $(DCDIR)/objs
 .PHONY: datacheck
 
-# The licenses (../compiler/gen/licenses.pl): glibc's trees here (their
+# The licenses (../compiler/tools/licenses.ff, LICENSES; gen/licenses.pl
+# behind fftext-crosscheck): glibc's trees here (their
 # pages' licenses: builtins, atomics), and of a milestone its tree, its
 # folder (each file and the index) and its program, each with its license
 # at its root and every page made from source with the license of each
 # file it is made of. glibc-licenses checks every milestone made.
+# (its SPDX ids are gen/spdx.txt of the folder it runs in, else --spdx's:
+# the Perl finds them beside itself)
+LICENSES = $(CPRUN) $(abspath $(LICENSEST)) --spdx ../compiler/gen/spdx.txt
 LICENSES_PL := perl ../compiler/gen/licenses.pl
-licenses:
-	$(LICENSES_PL) --fragment builtins.ff.txt stdbit.ff.txt atomics.ff.txt $(wildcard atomics-*.ff.txt)
-	$(LICENSES_PL) license.ff.txt license-libgcc.ff.txt ../libgcc/license.ff.txt progs/strlen.ff
+licenses: | $(LICENSEST)
+	$(LICENSES) --fragment builtins.ff.txt stdbit.ff.txt atomics.ff.txt $(wildcard atomics-*.ff.txt)
+	$(LICENSES) license.ff.txt license-libgcc.ff.txt ../libgcc/license.ff.txt progs/strlen.ff
 define licenses
-$(1)-licenses: $$(FF)/$(1).ff $$(FF)/$(1)/index.ff $$(FF)/$(1)-prog.ff
-	$$(LICENSES_PL) --pages $$(FF)/$(1).ff $$(FF)/$(1)/*.ff
-	$$(LICENSES_PL) $$(FF)/$(1)-prog.ff
+$(1)-licenses: $$(FF)/$(1).ff $$(FF)/$(1)/index.ff $$(FF)/$(1)-prog.ff | $$(LICENSEST)
+	$$(LICENSES) --pages $$(FF)/$(1).ff $$(FF)/$(1)/*.ff
+	$$(LICENSES) $$(FF)/$(1)-prog.ff
 .PHONY: $(1)-licenses
 endef
 $(foreach m,$(MILESTONES),$(eval $(call licenses,$(m))))
 glibc-licenses: licenses $(MILESTONES:%=%-licenses)
 .PHONY: licenses glibc-licenses
+# fftext-crosscheck: fftext and licenses in ff (FFTEXT, LICENSES) against
+# gen/fftext.pl and licenses.pl, which they replace here: every page of
+# this BUILD that fftext made (each X.ff.txt with its X.ff beside it, in
+# FF, I, DCDIR and the tests' TBUILD/ff), both ways (ff of the text, txt
+# of the .ff), and each call of licenses here (licenses, and those of each
+# milestone and of libgcc made): output, messages and exit status byte for
+# byte. Run it before ports goes into main, with the other cross-checks.
+FFX := $(BUILD)/fftext-crosscheck
+FFXCMP = s=0; $(1) > $$d/p.out 2> $$d/p.err || s=$$?; echo "exit $$s" >> $$d/p.err; \
+	s=0; $(2) > $$d/f.out 2> $$d/f.err || s=$$?; echo "exit $$s" >> $$d/f.err; \
+	cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.err $$d/f.err || { echo "fftext-crosscheck: $(3) is not the Perl's ($$d)"; exit 1; }
+FFXLIC = $(call FFXCMP,$(LICENSES_PL) $(1),$(LICENSES) $(1),licenses $(1)); n=$$((n + 1))
+fftext-crosscheck: | $(FFTEXTT) $(LICENSEST)
+	@set -e; d=$(FFX); mkdir -p $$d; n=0; \
+	for f in $$(find $(wildcard $(FF) $(I) $(DCDIR) $(TBUILD)/ff) -name '*.ff.txt' | sort); do test -e $${f%.txt} || continue; \
+	    $(call FFXCMP,perl ../compiler/gen/fftext.pl ff $$f,$(FFTEXT) ff $$f,fftext ff $$f); \
+	    $(call FFXCMP,perl ../compiler/gen/fftext.pl txt $${f%.txt},$(FFTEXT) txt $${f%.txt},fftext txt $${f%.txt}); \
+	    n=$$((n + 1)); done; \
+	test $$n -gt 0 || { echo "fftext-crosscheck: no page of fftext's in $(BUILD)"; exit 1; }; \
+	echo "fftext-crosscheck: fftext as fftext.pl on $$n pages of $(BUILD), both ways"; \
+	n=0; $(call FFXLIC,--fragment builtins.ff.txt stdbit.ff.txt atomics.ff.txt $(wildcard atomics-*.ff.txt)); \
+	$(call FFXLIC,license.ff.txt license-libgcc.ff.txt ../libgcc/license.ff.txt progs/strlen.ff); \
+	for m in $(MILESTONES); do test -e $(FF)/$$m-prog.ff && test -e $(FF)/$$m/index.ff || continue; \
+	    $(call FFXLIC,--pages $(FF)/$$m.ff $(FF)/$$m/*.ff); $(call FFXLIC,$(FF)/$$m-prog.ff); done; \
+	if test -e $(FF)/libgcc/index.ff; then $(call FFXLIC,--pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff); fi; \
+	echo "fftext-crosscheck: licenses as licenses.pl in $$n calls"
+.PHONY: fftext-crosscheck
 
 # ---- the C parser in ff (T3a) -----------------------------------------------
 # ../compiler/tools/cparse and cprint (their library tools/c.ff), checked by
@@ -1170,6 +1206,9 @@ csema-check:
 #   cpp-crosscheck  all of glibc's C and asm objects, and libgcc's, against
 #                   gcc -E run now (minutes, nothing kept but the lists; with
 #                   predef-check: run it before ports goes into main)
+#   cpp-tests-crosscheck  the tests' units of a tests build (TBUILD), the
+#                   same against gcc -E run now (the tests' .i are cpp's,
+#                   their option sets TKEYS in predef)
 #   predef          predef-$(GTARGET).txt made again: gcc's answers to what
 #                   cpp --collect of all of glibc's units asks, until nothing
 #                   is new (needs gcc: the reference build's)
@@ -1197,16 +1236,43 @@ cpp-check:
 cpp-crosscheck:
 	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 -k "$(MKI)" "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(OBJ) $(GLIBC_SRC) $(BUILD)/cpp-all - $(CPPALL)
 	$(RUN) -t 3600 bash cppcheck.sh -g -j 3 -k "$(MKI) --libgcc" "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(LOBJ) $(LI) $(BUILD)/cpp-libgcc-all - $(LIBGCC_C) $(LIBGCC_ASM) $(LIBGCC_ASMWEAK_$(GTARGET))
-# (the commands of glibc's and libgcc's builds, and the programs' gcc -E
-# $(PROGFLAGS); the questions of all their units)
-PREDEF_ARGS = --key "$(PROGFLAGS)" $(OBJ)/build.log $(LOBJ)/build.log
+# cpp-tests-crosscheck: the tests' units of this BUILD's tests build (TBUILD:
+# make tests-ref AREA=x for each of TAREAS, or its obj a link to another
+# BUILD's tests obj, read only) as cpp-crosscheck: gcc -E run now. A unit
+# gcc -E cannot make now either (stdlib's test-as-const-*.c, which make
+# check makes and removes) is "without gcc's .i", and counted.
+cpp-tests-crosscheck:
+	@test -n "$(TXAREAS)" || { echo "cpp-tests-crosscheck: no tests build in $(TBUILD) (none of $(TAREAS)): make tests-ref AREA=x first"; exit 1; }
+	@s=0; $(RUN) -t 3600 bash cppcheck.sh -g -j 3 $(subst --log,-l,$(TXLOGS)) -k "$(MKI)" "$(CPRUN) $(abspath $(CPP))" $(PREDEF) $(TOBJ) $(GLIBC_SRC) $(BUILD)/cpp-tests - $(TXUNITS) \
+	    > $(BUILD)/cpp-tests.out || s=$$?; cat $(BUILD)/cpp-tests.out; \
+	echo "cpp-tests-crosscheck: the tests of $(TXAREAS) ($(GTARGET)): $$(sed -n 's/^cppcheck: //p' $(BUILD)/cpp-tests.out)"; exit $$s
+.PHONY: cpp-tests-crosscheck
+# (the commands of glibc's and libgcc's builds, the programs' gcc -E
+# $(PROGFLAGS) and the tests' sets, TKEYS; the questions of all their units,
+# and those the committed file has: a tests build's units ask more, and a
+# make predef without one keeps their answers)
+# The tests' sets: make check's commands of the tests (a tests build, TAREAS)
+# add these to the tests' base set TKEY (-fno-builtin, -O3, the -std= of
+# tst-strtol-binary-c11 and its kin, ...; on x86_64 the tst-*-rtm tests'
+# -mrtm), the same on every target. A tests build with a set not here fails
+# cpp-tests-crosscheck (cpp: no macros in --predef for it).
+TKEY := -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE
+TKEYS_x86_64 := -mrtm
+TKEYS = -O3 -fexceptions -fno-builtin -fno-exceptions,-fno-asynchronous-unwind-tables -funwind-tables -std=c11 -std=gnu11 -std=gnu89 $(TKEYS_$(GTARGET))
+PREDEF_ARGS = --key "$(PROGFLAGS)" $(foreach k,$(TKEYS),--key "$(TKEY) $(subst $(comma), ,$(k))") $(OBJ)/build.log $(LOBJ)/build.log
 CPPCOLLECT = "$(CPRUN) $(abspath $(CPP)) --collect" --predef $$d/predef.txt
+# (each list of units goes on past a unit that fails, which --collect
+# does not mind: under set -e a failed xargs ended the left side of the
+# pipe, and the lists after it went unasked, without a word)
+# (the questions a predef file has answered)
+PREDEF_QUERIES = sed -n 's/^has \(.*\) [0-9]*$$/\1/p; s/^target \(.*\)$$/target \1/p'
 predef:
-	@set -e; d=$(BUILD)/predef; rm -rf $$d; mkdir -p $$d; : > $$d/queries; \
+	@set -e; d=$(BUILD)/predef; rm -rf $$d; mkdir -p $$d; $(PREDEF_QUERIES) $(PREDEF) | sort -u > $$d/queries; \
 	for pass in 1 2 3 4 5; do \
 	    perl predef.pl $(PREDEF_CC) --queries $$d/queries $(PREDEF_ARGS) > $$d/predef.txt; \
-	    { echo "$(CPPALL)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 $(MKI) --cpp $(CPPCOLLECT) --out $$d/i $(OBJ) $(GLIBC_SRC) 2>&1 > /dev/null; \
-	      echo "$(LIBGCC_C)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 $(MKI) --libgcc --cpp $(CPPCOLLECT) --out $$d/i $(LOBJ) $$d/i 2>&1 > /dev/null; \
+	    { echo "$(CPPALL)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 $(MKI) --cpp $(CPPCOLLECT) --out $$d/i $(OBJ) $(GLIBC_SRC) 2>&1 > /dev/null || true; \
+	      echo "$(LIBGCC_C)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 $(MKI) --libgcc --cpp $(CPPCOLLECT) --out $$d/i $(LOBJ) $$d/i 2>&1 > /dev/null || true; \
+	      $(if $(TXAREAS),echo "$(TXUNITS)" | tr ' ' '\n' | sed 's/$$/.o/' | $(RUN) -t 1800 xargs -P 3 -n 60 $(MKI) $(TXLOGS) --cpp $(CPPCOLLECT) --out $$d/i $(TOBJ) $(GLIBC_SRC) 2>&1 > /dev/null || true;) \
 	      for f in progs/*.c; do $(CPRUN) $(abspath $(CPP)) --collect --predef=$$d/predef.txt $(PROGFLAGS) $$f -o $$d/p.i 2>&1 > /dev/null || true; done; } \
 	        | sed -n 's/^cpp: query //p; s/^cpp: \(target .*\)/\1/p' | sort -u > $$d/new; \
 	    rm -rf $$d/i $$d/p.i; \
@@ -1218,7 +1284,7 @@ predef:
 	cp $$d/predef.txt $(PREDEF); echo "predef: $(PREDEF)"
 predef-check:
 	@set -e; d=$(BUILD)/predef-check; rm -rf $$d; mkdir -p $$d; \
-	sed -n 's/^has \(.*\) [0-9]*$$/\1/p; s/^target \(.*\)$$/target \1/p' $(PREDEF) > $$d/queries; \
+	$(PREDEF_QUERIES) $(PREDEF) > $$d/queries; \
 	perl predef.pl $(PREDEF_CC) --queries $$d/queries $(PREDEF_ARGS) > $$d/predef.txt; \
 	cmp $$d/predef.txt $(PREDEF) || { echo "predef-check: $(PREDEF) is not what gcc says now: make predef"; exit 1; }; \
 	echo "predef-check: $(PREDEF) as gcc makes it"
@@ -1376,10 +1442,10 @@ units-crosscheck: units-check
 # c2ff-crosscheck: the frozen c2ff.pl writes it bare, which ttpc takes for a
 # function).
 OWNSTART := generic stdbit textcount roundnames globsize
-$(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt
+$(OWNSTART:%=$(FF)/%.ff): $(FF)/%.ff: builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt | $(FFTEXTT)
 	mkdir -p $(FF)
 	{ cat license.ff.txt; $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } > $(FF)/$*.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(FF)/$*.ff.txt > $@
+	$(FFTEXT) ff $(FF)/$*.ff.txt > $@
 $(eval $(call check,generic))
 $(eval $(call check,stdbit))
 $(eval $(call check,textcount))
@@ -1557,10 +1623,8 @@ LIBGCC_HF := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_HF_$(GTARGET))
 ROOTS_hf := $(LIBGCC_HF:%=__%)
 LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH) $(LIBGCC_HF))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc) $(WEAKS_unwind_$(GTARGET))
-# (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
-# forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
-# crti's _init and _fini, s2ff --then, as in a milestone)
-GLIBC_ASMSKIP_x86_64 = $(filter mathvec/%,$(ALL_ASM))
+# (glibc's asm that s2ff takes: all of it; but on riscv64, crtn is the end
+# of crti's _init and _fini, s2ff --then, as in a milestone)
 GLIBC_THEN = $(if $(filter-out riscv64,$(GTARGET)),$(filter csu/crtn,$(ALL_ASM)))
 GLIBC_ASM = $(filter-out $(GLIBC_ASMSKIP_$(GTARGET)) $(GLIBC_THEN),$(ALL_ASM)) $(if $(LIBGCC_glibc),$(LIBGCC_EH_ASM:%=libgcc/%))
 $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_THEN:%=$(I)/%.dump) $(LIBGCC_glibc:%=$(I)/libgcc/%.i)
@@ -1571,7 +1635,7 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
-$(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt $(S2FFDEPS)
+$(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) license.ff.txt license-libgcc.ff.txt $(S2FFDEPS) | $(FFTEXTT)
 	cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(FF)/glibc.ff.txt
 	$(file >$(FF)/glibc.csunits,$(foreach o,$(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)) $(LIBGCC_glibc:%=libgcc/%),$(call csread,$(o))$(nl)))
 	$(SLOT) $(call csmem,glibc) -t 3600 $(call cstrans,glibc) -k -K $(FF)/glibc.statics $(foreach z,$(ZEROS_glibc),-Z $(z)) $(foreach w,$(WEAKS_glibc),-W $(w)) \
@@ -1586,7 +1650,7 @@ $(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)
 	done
 	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
 	{ $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } >> $(FF)/glibc.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(FF)/glibc.ff.txt > $@
+	$(FFTEXT) ff $(FF)/glibc.ff.txt > $@
 
 # the list of a kind of object, for a look at it: make print-ALL_ASM
 print-%:
@@ -1701,7 +1765,7 @@ $(FF)/libgcc.roots $(FF)/libgcc.units &: $(FF)/libgcc.lists $(LIBGCC_C:%=$(LI)/%
 	for o in $(LIBGCC_C); do $(XPRE)nm --defined-only -g $(LOBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done | sort -u > $(FF)/libgcc.roots
 	for o in $(LIBGCC_C); do echo "$(LI)/$$o.json=$(LI)/$$o.i"; done > $(FF)/libgcc.units
 
-$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt $(S2FFDEPS)
+$(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builtins.ff.txt $(X87B) stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS) ../libgcc/license.ff.txt $(S2FFDEPS) | $(FFTEXTT)
 	cp ../libgcc/license.ff.txt $(FF)/libgcc.ff.txt
 	$(file >$(FF)/libgcc.csunits,$(foreach o,$(LIBGCC_C),$(LI)/$(o).i$(nl)))
 	$(RUN) $(call csmem,libgcc) -t 900 $(call cstrans,libgcc) -k -p gcc @$(FF)/libgcc.csunits -- @$(FF)/libgcc.roots \
@@ -1716,7 +1780,7 @@ $(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builti
 	done
 	$(LAYERS) $(FF)/libgcc.asm.page.txt >> $(FF)/libgcc.ff.txt
 	{ $(BUILTINS); cat stdbit.ff.txt $(wildcard builtins-$(GTARGET).ff.txt) $(ATOMICS); } >> $(FF)/libgcc.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(FF)/libgcc.ff.txt > $@
+	$(FFTEXT) ff $(FF)/libgcc.ff.txt > $@
 	@echo "libgcc.ff: $$(grep -c '^csema: left out' $(FF)/libgcc.csema.err) names left out, why in $(FF)/libgcc.csema.err"
 # (and its cross-check, c2ff.pl's page from each unit's pass, as csema's)
 c2ff-libgcc: $(LIBGCC_C:%=$(LI)/%.c2ff) $(FF)/libgcc.ff
@@ -1732,8 +1796,8 @@ c2ff-libgcc: $(LIBGCC_C:%=$(LI)/%.c2ff) $(FF)/libgcc.ff
 # gccrt-roundtrip's (libgcc-roundtrip), with glibc's C, which they call.
 $(FF)/gccrt.ff: $(FF)/libgcc.roots
 libgcc-roundtrip: gccrt-roundtrip
-libgcc-licenses: $(FF)/libgcc.ff $(FF)/libgcc/index.ff
-	$(LICENSES_PL) --pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff
+libgcc-licenses: $(FF)/libgcc.ff $(FF)/libgcc/index.ff | $(LICENSEST)
+	$(LICENSES) --pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff
 # (and its asm, as glibc's: ttpc makes each object's bytes, asm-check's way)
 LIBGCC_ASMCHECK = $(LIBGCC_ASM) $(LIBGCC_ASMWEAK_$(GTARGET))
 libgcc-asm-check: $(LIBGCC_ASMCHECK:%=$(LI)/%.asmok)
@@ -1743,7 +1807,7 @@ libgcc-checks: libgcc-roundtrip libgcc-licenses libgcc-asm-check
 
 # ---- s2ff, the Perl's cross-check (here: it needs ALL_ASM and LIBGCC_ASMCHECK) ----
 # s2ff-crosscheck: tools/s2ff.ff (S2FF) against the Perl (S2FFPL) on every
-# asm object of glibc (but x86_64's libmvec, which neither takes yet) and
+# asm object of glibc (x86_64's libmvec too) and
 # libgcc's (LIBGCC_ASMCHECK), each run as the build runs it (s2ffcheck.sh:
 # --facts, --items, --size, the page, --items with the pages' --zero and
 # --plt; aarch64's --skip and --locals, x86_64's --align; crti with crtn's
@@ -1787,7 +1851,7 @@ s2ff-crosscheck: $(S2FFCHECK:%=$(I)/%.dump) $(LIBGCC_ASMCHECK:%=$(LI)/%.dump) $(
 # whose libsupport (libsupport_nonshared.a) they take too. The area's log,
 # TOBJ/AREA.log, has each test's link command, and so its objects
 # (tests.pl mk, TBUILD/AREA.mk); the .i of each, and of libsupport's
-# objects (build.log), is its command again with -E (mki.pl --log), its
+# objects (build.log), is its command again with cpp (mki --log --cpp), its
 # c2ff pass as for all of glibc. Each test's steps (gcc's link, c2ff,
 # ttpc, the runs) go on where one fails, and its result says which did:
 # TFF/test.result, the steps' logs next to it.
@@ -1797,6 +1861,13 @@ TOBJ := $(TBUILD)/obj
 TI := $(TBUILD)/i
 TFF := $(TBUILD)/ff/$(AREA)
 TLOGS := --log $(TOBJ)/build.log --log $(TOBJ)/$(AREA).log
+# All the tests' units of a tests build, for make predef and
+# cpp-tests-crosscheck: every object the logs of its areas (those of TAREAS
+# made, make tests-ref AREA=x) compile, and libsupport's
+TXAREAS = $(foreach a,$(TAREAS),$(if $(wildcard $(TOBJ)/$(a).log),$(a)))
+TXLOGS = --log $(TOBJ)/build.log $(TXAREAS:%=--log $(TOBJ)/%.log)
+TXUNITS = $(eval TXUNITS := $(sort $(if $(TXAREAS),$(shell perl -ne 'print "$$1\n" if / -c / && m{ -o (?:\Q$(TOBJ)\E|\Q$(realpath $(TOBJ))\E)/(\S+)\.o[sS]? }' $(TXAREAS:%=$(TOBJ)/%.log)) \
+	$(shell ar t $(TOBJ)/support/libsupport_nonshared.a | sed 's/\.oS$$//; s/^/support\//'))))$(TXUNITS)
 
 # The inner make builds glibc alone, with AREA empty: AREA would come down
 # in MAKEFLAGS, and with it the -include below, whose .mk needs a libc.a of
@@ -1823,8 +1894,10 @@ endif
 
 .NOTINTERMEDIATE: $(TI)/%.i $(TI)/%.c2ff $(TFF)/%-prog.ff $(TFF)/%.ref $(TFF)/%-prog
 
-$(TI)/%.i: | $(MKIT) $(TOBJ)/$(AREA).log
-	$(RUN) -t 120 $(MKI) $(TLOGS) $(TOBJ) $(GLIBC_SRC) $*.o > /dev/null
+# (cpp's, as glibc's units': the tests' option sets are in predef, TKEYS;
+# cpp-tests-crosscheck compares them with gcc -E's)
+$(TI)/%.i: | $(MKIT) $(CPP) $(PREDEF) $(TOBJ)/$(AREA).log
+	$(RUN) -t 120 $(MKI) $(TLOGS) --cpp $(CPPE) $(TOBJ) $(GLIBC_SRC) $*.o > /dev/null
 
 # (a test's .i for clang: on riscv64 the suffixes of gcc's _FloatN literals,
 # f32 f64 f32x f64x f128, which clang lacks, as the C types they are there,
@@ -1876,12 +1949,12 @@ $(TFF)/%.ref: $(OBJ)/libc.a $(TBUILD)/$(AREA).mk
 # program including glibc in ff (TFF/glibc, a link to FF/glibc), whose
 # index says which of the program's weak names glibc defines
 .SECONDEXPANSION:
-$(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).i) $(SUPPORT:%=$(TI)/%.i) $(FF)/glibc/index.ff $(CSEMA) $(CSVIEW)
+$(TFF)/%-prog.ff: $$(foreach o,$$(TOBJS_$$*),$(TI)/$$(o).i) $(SUPPORT:%=$(TI)/%.i) $(FF)/glibc/index.ff $(CSEMA) $(CSVIEW) | $$(FFTEXTT)
 	mkdir -p $(TFF)
 	ln -sfn $(abspath $(FF))/glibc $(TFF)/glibc
 	$(RUN) -v 9000000 -t 300 $(CPRUN) $(CSEMA) -l $(CSFLAGS) -P glibc -I $(FF)/glibc/index.ff -J $(FF)/glibc.statics $(if $(GLIBC_START),,-T) \
 	    $(foreach o,$(TOBJS_$*),-O $(TI)/$(o).i) $(SUPPORT:%=$(TI)/%.i) -- main > $(TFF)/$*-prog.ff.txt
-	perl ../compiler/gen/fftext.pl ff $(TFF)/$*-prog.ff.txt > $@
+	$(FFTEXT) ff $(TFF)/$*-prog.ff.txt > $@
 
 TTPCFLAGS_tests := $(if $(LIBGCC_glibc),-g)
 $(TFF)/%-prog: $(TFF)/%-prog.ff $(FF)/glibc/index.ff $(TTPC) $(SHARED)
@@ -2032,10 +2105,10 @@ $(BUILD)/locales/C.utf8/LC_CTYPE:
 	mkdir -p $(BUILD)/locales
 	I18NPATH=$(GLIBC_SRC)/localedata $(LOCALEDEF) -c --no-archive -i C -f UTF-8 $(BUILD)/locales/C.utf8 || test -e $@
 define allprog
-$$(FF)/$(1)-all.ff: $$(ALLPROG_$(1):%=$$(FF)/%-prog.i) $$(FF)/glibc/index.ff $$(CSEMA) $$(CSVIEW)
+$$(FF)/$(1)-all.ff: $$(ALLPROG_$(1):%=$$(FF)/%-prog.i) $$(FF)/glibc/index.ff $$(CSEMA) $$(CSVIEW) | $$(FFTEXTT)
 	$$(RUN) -v 9000000 -t 300 $$(CPRUN) $$(CSEMA) -l $$(CSFLAGS) -P glibc -I $$(FF)/glibc/index.ff -J $$(FF)/glibc.statics $$(if $$(GLIBC_START),,-T) \
 	    $$(foreach u,$$(ALLPROG_$(1)),-O $$(FF)/$$(u)-prog.i) -- main > $$(FF)/$(1)-all.ff.txt
-	perl ../compiler/gen/fftext.pl ff $$(FF)/$(1)-all.ff.txt > $$@
+	$$(FFTEXT) ff $$(FF)/$(1)-all.ff.txt > $$@
 $$(FF)/$(1)-all: $$(FF)/$(1)-all.ff $$(FF)/glibc/index.ff $$(TTPC) $$(SHARED)
 	$$(RUN) -t 900 $$(TTPC_RUN) $$(TTPCFLAGS_tests) $$(SHARED) $$< $$@ > $$@.lst
 $$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(OBJ)/libc.a

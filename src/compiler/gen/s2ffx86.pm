@@ -23,7 +23,8 @@
 #   label:          a function (a global label), or in one a block label
 #                   holding the instructions up to the next (.L, and the
 #                   numeric 1: as .L1 1, .L1 2, ...); a function the one
-#                   before runs on into is an entry block in it (asm first)
+#                   before runs on into (or that carries data) is an entry
+#                   block in it (asm first)
 #   alignment       .align, .p2align, .balign: the nops GNU as put in are
 #                   kept, each as the form of its bytes (cs nopw is data16,
 #                   cs, nopl), in the function before them; a function GNU
@@ -330,6 +331,14 @@ sub bindop {
     }
     if ($k eq 'scale') { return () unless $s =~ /^[1248]$/; return ($s + 0, $s) }
     if ($k =~ /^label8?$/) {
+        # (a symbol plus an offset written around it, libmvec's 64+sym and
+        # ((0)+sym), cpp's of its macros: the same addi, where the symbol
+        # counts once, the expression with it 0 and 1000 a thousand apart)
+        if ($s =~ /^([\da-fA-FxX()+\-*]*[(+])([A-Za-z_.][\w.\x01]*)([\da-fA-FxX()+\-*]*)$/) {
+            my ($pre, $sym, $post) = ($1, $2, $3);
+            my ($z, $t) = (num("${pre}0$post"), num("${pre}1000$post"));
+            return (undef, node('addi', node($z), node(label($sym)), node('a0'))) if defined $z && defined $t && $t - $z == 1000;
+        }
         return () if $s eq '' || $s =~ /^[%\$(*]/ || $s =~ /[(),{}]/;
         # (a symbol plus an offset, sym+352: the compile time instruction
         # addi / 352 / sym / a0, the user's choice B)
@@ -658,7 +667,6 @@ sub run {
         finish();
         code_done();
     }
-    push @{ $_->[0]{children} }, @{ $_->[1] } for @carried;
     # a weak name defined nowhere here: X: / weak / function / void (0
     # unless something defines it), its GOT word a C global
     my %defined = map { $_->{content} =~ s/:$//r => 1 } @fns;
@@ -683,7 +691,19 @@ sub run {
     return $CODE{'.text'}{pos} if $mode eq 'size';
     return $maxalign // 1 if $mode eq 'align';
     merge_runons();
+    # (the GOT and TLS words after all of the function's code, of the one
+    # merge_runons made it an entry of too)
+    for my $c (@carried) { my $f = $c->[0]; $f = $into{$f} while $into{$f}; push @{ $f->{children} }, @{ $c->[1] } }
     carry_rodata();
+    # (a node of more than 255 children, a table of libmvec's read-only
+    # data or a long block: its children in numbered layers, 0: 1: ...; a
+    # function past 255 stops, its entries would be in a layer)
+    my $lay;
+    $lay = sub { for my $c (@{ $_[0]{children} }) { $lay->($c); } $_[0]{children} = [FF::layers(@{ $_[0]{children} })] };
+    for my $f (@fns) {
+        $lay->($_) for @{ $f->{children} };
+        fail "$f->{content} has " . scalar(@{ $f->{children} }) . " parts (max 255)" if @{ $f->{children} } > 255;
+    }
     \@fns;
 }
 # Each function carries the read-only data it names, after its code (and
@@ -765,7 +785,16 @@ sub walk_lines {
         }
         if ($t =~ /^\.if(eq|ne|gt|ge|lt|le)?\s+(.*)$/) {
             my ($k, $e) = ($1 // '', $2);
-            my $v = $off ? 0 : num($e) // fail ".if of $e";
+            # (. - X: in read-only data, the bytes since its label X, which
+            # libmvec's tables check, .err if not where they should be)
+            (my $x = $e) =~ s/(?<![\w.])\.\s*-\s*([.\w]+)/dotminus($1) \/\/ fail ".if of $e"/ge unless $off;
+            # (and a comparison, a == b, a != b or a <> b: GNU's -1 if true)
+            if (!$off && $x =~ /^(.*[^=!<>])\s*(==|!=|<>)\s*([^=].*)$/) {
+                my ($a, $op, $b) = (num($1), $2, num($3));
+                fail ".if of $e" unless defined $a && defined $b;
+                $x = ($op eq '==' ? $a == $b : $a != $b) ? -1 : 0;
+            }
+            my $v = $off ? 0 : num($x) // fail ".if of $e";
             my $take = $k eq '' || $k eq 'ne' ? $v != 0 : $k eq 'eq' ? $v == 0 : $k eq 'gt' ? $v > 0 : $k eq 'ge' ? $v >= 0 : $k eq 'lt' ? $v < 0 : $v <= 0;
             push @cond, [!$off && $take, !$off && $take, !$off];
             next;
@@ -824,6 +853,20 @@ sub rodata_add {
     }
     fail "read-only bytes with no label" unless $roblob;
     push @$roblob, $d;
+}
+# . - X: the bytes of read-only data since its label X, while they are
+# being read (undef where X is not the label of the bytes being read)
+sub dotminus {
+    my ($x) = @_;
+    return 0 if grep { $_ eq $x } @pending;
+    return undef unless defined $other && $roblob && $rodata{$x} && $rodata{$x} == $roblob;
+    my %sz = (byte => 1, half => 2, word => 4, dword => 8);
+    my $n = 0;
+    for my $d (@$roblob) {
+        my $c = $d->{content};
+        $n += $sz{$c} // ($c eq 'reserve' ? $d->{children}[0]{content} : $c eq 'ascii' ? length $d->{children}[0]{content} : return undef);
+    }
+    $n;
 }
 # X of .set X, Y+n: Y's bytes from n on (n at the start of one of them)
 sub rodata_set {
@@ -922,6 +965,15 @@ sub walk_stmt {
                 walk_stmt(".$k $_", $file, $line) for split /\s*,\s*/, $list;
                 return;
             }
+            # (.space N, .space N, F and .skip N, F: N bytes of F, reserved
+            # where F is 0, as .zero: libmvec's tables)
+            if ($st =~ /^\.(space|skip)\s+(0x[0-9a-fA-F]+|\d+)\s*(?:,\s*(0x[0-9a-fA-F]+|\d+))?$/ && ($1 eq 'space' || defined $3)) {
+                my ($n, $f) = map { defined $_ && /^0x(.*)$/i ? hex $1 : $_ } $2, $3 // 0;
+                fail "a fill byte past 255: $st" if $f > 255;
+                return rodata_add(node('reserve', node($n))) unless $f;
+                rodata_add(node('byte', node($f))) for 1 .. $n;
+                return;
+            }
             if ($st =~ /^\.(byte|value|short|2byte|word|long|int|4byte|quad|8byte|zero|skip)\s+(-?(?:0x[0-9a-fA-F]+|\d+))$/) {
                 my ($k, $v) = ($1, $2);
                 $v = $v =~ /^(-?)0x(.*)$/i ? ($1 ? -hex $2 : hex $2) : $v;
@@ -1007,6 +1059,13 @@ sub walk_stmt {
         elsif ($op =~ /^(?:call|jmp)q?$/ && /^([.\w]+)\@PLT$/i) { $_ = $1 }
         elsif (/\@/) { fail "a relocation with no ff form: $_" }
         $ro{$1} = 1 if /^([.\w]+)(?:[-+]\d+)?\(%rip\)$/ || /^\$(\.L\w+)$/;
+        # (and libmvec's: a broadcast's {1toN} after it, an offset written
+        # around the symbol, 64 +sym(%rip), ((0)+sym)(%rip))
+        if (/\(%rip\)\s*(?:\{[^}]*\}\s*)*$/) {
+            (my $e = $_) =~ s/\(%rip\)\s*(?:\{[^}]*\}\s*)*$//;
+            $e =~ s/\s+//g;
+            $ro{$1} = 1 if $e =~ /^([.\w]+)(?:[-+]\d+)?$/ || $e =~ /^[\da-fA-FxX()+\-*]*[(+]([A-Za-z_.][\w.]*)[\da-fA-FxX()+\-*]*$/;
+        }
     }
     my $m = take();
     my @pre = @prefix;
@@ -1017,7 +1076,12 @@ sub walk_stmt {
 }
 
 # A function that jumps to a block of the (asm) function after it: the two
-# are one asm function, the second's name an entry in it (as s2ff.pl)
+# are one asm function, the second's name an entry in it (as s2ff.pl); so
+# are a function that carries data (its GOT or TLS words, read-only data:
+# libmvec's) and the one after it, where GNU's are in other sections and
+# the data would sit between their code, while the two fit a node (255
+# parts, the data counted: gcc's functions of progs/abi, each with its
+# constants, would make one of more)
 sub merge_runons {
     my $targets = sub {
         my ($f) = @_;
@@ -1027,6 +1091,21 @@ sub merge_runons {
         @t;
     };
     my $isasm = sub { @{ $_[0]{children} } && $_[0]{children}[0]{content} eq 'asm' };
+    my @data = ((map { $_->[0] } @carried), map { $_->[0] } grep { grep { $rodata{$_} || $roset{$_} } @{ $_->[1] } } @carry);
+    my $carries = sub { my ($f) = @_; grep { my $x = $_; $x = $into{$x} while $into{$x}; $x == $f } @data };
+    # (the parts a function would hold, its own and its data's, two for each entry of a run of
+    # read-only data it names: merged only while they fit the 255 of a node)
+    my $resolve = sub { my $x = $_[0]; $x = $into{$x} while $into{$x}; $x };
+    my $parts = sub {
+        my ($f) = @_;
+        my $n = @{ $f->{children} };
+        for (@carried) { $n += @{ $_->[1] } if $resolve->($_->[0]) == $f }
+        for my $c (@carry) {
+            next unless $resolve->($c->[0]) == $f;
+            for my $l (grep { $rodata{$_} || $roset{$_} } @{ $c->[1] }) { my $k = $runof{$l}; $n += 2 * (defined $k ? scalar @{ $runs[$k] } : 1) }
+        }
+        $n;
+    };
     for (my $i = 0; $i + 1 < @fns; $i++) {
         my $f = $fns[$i];
         next unless $isasm->($f);
@@ -1038,10 +1117,13 @@ sub merge_runons {
         # (or the next jumps back into this one's: libm's __logl_finite into
         # __ieee754_logl's 2:)
         my %in_f = map { $_->{content} =~ s/:$//r => 1 } grep { $_->{content} =~ /^\.L.*:$/ } @{ $f->{children} };
-        next unless grep({ $in_g{$_} } $targets->($f)) || grep({ $in_f{$_} } $targets->($g));
+        my $hit = grep({ $in_g{$_} } $targets->($f)) || grep({ $in_f{$_} } $targets->($g));
+        next unless $hit || $carries->($f);
         my (undef, @rest) = grep { $_->{content} ne 'align' } @{ $g->{children} };
         my (@own, @later);
         for (@rest) { if (@later || ($_->{content} =~ /:$/ && $_ != $rest[0])) { push @later, $_ } else { push @own, $_ } }
+        # (g's own instructions go in its entry block: one part, and its blocks after it)
+        next unless $hit || $parts->($f) + 1 + @later + $parts->($g) - @{ $g->{children} } <= 255;
         push @{ $f->{children} }, node($g->{content}, node('asm'), @own), @later;
         $into{$g} = $f;
         splice @fns, $j, 1;
