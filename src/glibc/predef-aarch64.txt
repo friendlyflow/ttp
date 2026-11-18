@@ -928,6 +928,37 @@ predef
 -__GNUC_GNU_INLINE__
 -__OPTIMIZE__
 -__ROUNDING_MATH__
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -O3
++#define __PIE__ 2
++#define __pie__ 2
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -fexceptions
++#define __EXCEPTIONS 1
++#define __PIE__ 2
++#define __pie__ 2
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -fno-builtin
++#define __PIE__ 2
++#define __pie__ 2
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -fno-exceptions -fno-asynchronous-unwind-tables
++#define __PIE__ 2
++#define __pie__ 2
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -funwind-tables
++#define __PIE__ 2
++#define __pie__ 2
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -std=c11
++#define __PIE__ 2
++#define __STRICT_ANSI__ 1
++#define __pie__ 2
+-linux
+-unix
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -std=gnu11
++#define __PIE__ 2
++#define __pie__ 2
+predef -std=gnu11 -fgnu89-inline -O2 -fmerge-all-constants -frounding-math -ftrapping-math -fno-stack-protector -fno-common -fmath-errno -fPIE -std=gnu89
++#define __PIE__ 2
++#define __pie__ 2
+-__STDC_UTF_16__
+-__STDC_UTF_32__
+-__STDC_VERSION__
 sysdir 1 /nix/store/gj65apvfkwibdimflysmk1g1sb59m5yb-aarch64-unknown-linux-gnu-gcc-16.2.0/lib/gcc/aarch64-unknown-linux-gnu/16.2.0/include
 sysdir 1 /nix/store/gj65apvfkwibdimflysmk1g1sb59m5yb-aarch64-unknown-linux-gnu-gcc-16.2.0/lib/gcc/aarch64-unknown-linux-gnu/16.2.0/include-fixed
 sysdir 1 /nix/store/gj65apvfkwibdimflysmk1g1sb59m5yb-aarch64-unknown-linux-gnu-gcc-16.2.0/lib/gcc/aarch64-unknown-linux-gnu/16.2.0/../../../../aarch64-unknown-linux-gnu/sys-include
