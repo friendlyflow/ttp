@@ -665,12 +665,32 @@
       =
       8
   comment
-    __builtin_eh_return: gcc's epilogue of a function that installs a context (_Unwind_RaiseException, _Unwind_ForcedUnwind, _Unwind_Resume ...): it restores the target frame's registers and jumps to its landing pad. Only a frame with a personality
-    routine has one, and ttpc writes none (no LSDA): no unwind of ttpc's frames comes here, and glibc's cancellation longjmps out of its stop function. A gcc frame's landing pad (C++'s, lane A-cxx) takes the exception in rax and rdx and its
-    callee-saved registers from the frames between, which ttpc's frame does not keep yet: until then it stops here, as int3.
+    __builtin_eh_return (offset, handler): gcc's epilogue of a function that installs a context (_Unwind_Resume, _Unwind_ForcedUnwind, _Unwind_RaiseException ...): its registers as the context left them in its frame, rsp its CFA + offset,
+    a jump to the landing pad. ttpc keeps such a function's frame for it (gen/patches/ehtable.pl): its FDE has rax at CFA - 32 and rdx at CFA - 24 (rbp - 16, rbp - 8), where the personality's exception lands, and rbp's own slot (at
+    rbp) has the target frame's rbp, which uw_install_context_1 wrote there. ttpc's C keeps nothing else in a callee-saved register; rbx, r12 ... r15 stay as they are (their slots would go below rdx's). It runs in that function's frame
+    (an asm function has none): rbp is its.
   __builtin_eh_return:
     asm
-    int3
+    movq.m
+      -16
+      rbp
+      rax
+    movq.m
+      -8
+      rbp
+      rdx
+    leaq.x
+      16
+      rbp
+      rdi
+      1
+      rsp
+    movq.m
+      0
+      rbp
+      rbp
+    jmp.r
+      rsi
   comment
     The shadow stack's builtins (CET, which gcc builds libgcc's unwinder for: -fcf-protection -mshstk, its _Unwind_Frames_Extra): a ttpc program runs without a shadow stack (its ELF has no GNU property of SHSTK, so Linux enables none), where rdssp leaves
     its register as it was: __builtin_ia32_rdsspq x (clang's form, x the value it keeps: clangfix.pl writes gcc's of none as one of 0) is x, and the unwinder never calls __builtin_ia32_incsspq (a shadow stack pointer of 0). __builtin___clear_cache:

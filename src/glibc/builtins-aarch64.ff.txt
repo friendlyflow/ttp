@@ -149,12 +149,45 @@
     =
     8
   comment
-    __builtin_eh_return: gcc's epilogue of a function that installs a context (_Unwind_RaiseException, _Unwind_ForcedUnwind ...): only a frame with a personality routine has one, and ttpc writes none (no LSDA); glibc's cancellation longjmps out of
-    its stop function. A gcc frame's landing pad (C++'s, lane A-cxx) takes the exception in x0 and x1 and its callee-saved registers from the frames between, which ttpc's frame does not keep yet: until then it stops here, as brk.
+    __builtin_eh_return (offset, handler): gcc's epilogue of a function that installs a context (_Unwind_Resume, _Unwind_ForcedUnwind, _Unwind_RaiseException ...): its registers as the context left them in its frame, sp its CFA + offset, a
+    jump to the landing pad. ttpc keeps such a function's frame for it (gen/patches/ehtable.pl): its FDE has x0 at CFA - 32 and x1 at CFA - 24 (x29 - 16, x29 - 8), where the personality's exception lands, and x29's own slot (at x29)
+    has the target frame's x29, which uw_install_context_1 wrote there. ttpc's C keeps nothing else in a callee-saved register; x19 ... x28 stay as they are (their slots would go below x1's). It runs in that function's frame (an asm
+    function has none): x29 is its.
   __builtin_eh_return:
     asm
-    brk
-      1000
+    mov
+      x1
+      x16
+    ldur
+      -16
+      x29
+      x2
+    ldur
+      -8
+      x29
+      x3
+    addi
+      16
+      x29
+      x4
+    add.ext
+      x0
+      3
+      0
+      x4
+      sp
+    ldr
+      0
+      x29
+      x29
+    mov
+      x2
+      x0
+    mov
+      x3
+      x1
+    br
+      x16
   comment
     The pointer authentication and guarded control stack builtins of libgcc's aarch64-unwind.h. __builtin_aarch64_autia1716 a s, __builtin_aarch64_autib1716 a s: a (x17) authenticated with the salt s (x16), key A or B (a hint: a CPU
     without PAC leaves x17). __builtin_aarch64_chkfeat x: x (x16) with the bits of the features enabled cleared (GCS, 1). __builtin_aarch64_gcspr: the GCS pointer (mrs GCSPR_EL0, s3_3_c2_c5_1); __builtin_aarch64_gcspopm: a pop of the GCS.

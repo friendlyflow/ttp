@@ -15,7 +15,12 @@
    Then the same over frames of gcc's and the program's mixed: FILE
    (progs/unwind-gcc.c, by gcc alone) is mapped where it says, its .eh_frame
    registered (__register_frame), and its gcc_mid and gcc_forced call back
-   into the program, whose walks pass through gcc's frame. */
+   into the program, whose walks pass through gcc's frame. And a forced
+   unwind from k2 through k1, whose cleanups (C's cleanup attribute) run on
+   the way, newest first, as glibc's cancellation runs _IO_acquire_lock's:
+   gcc's with -fexceptions (its landing pads, LSDA, __gcc_personality_v0),
+   ttpc's tables likewise (gen/patches/ehtable.pl); its stop function ends
+   the walk at main's frame. */
 
 #ifdef __arm__
 #define _GNU_SOURCE     /* (link.h's dl_iterate_phdr) */
@@ -90,11 +95,13 @@ int main (int, char **);
 
 static int cb (int);
 static void g1m (int);
+static void k1 (int), k2 (int);
 
 static struct { void *fn; const char *name; } fns[] = {
   { (void *) walk, "walk" }, { (void *) f1, "f1" }, { (void *) f2, "f2" }, { (void *) f3, "f3" },
   { (void *) g1, "g1" }, { (void *) g2, "g2" }, { (void *) g3, "g3" }, { (void *) main, "main" },
   { (void *) cb, "cb" }, { (void *) g1m, "g1m" }, { 0, "gcc_mid" }, { 0, "gcc_forced" },
+  { (void *) k1, "k1" }, { (void *) k2, "k2" },
 };
 
 static const char *name_of (struct _Unwind_Context *c)
@@ -179,6 +186,41 @@ static __attribute__ ((noinline)) void g3 (int x)
   printf ("forced: returned\n");
 }
 static __attribute__ ((noinline)) void g2 (int x) { g3 (x + 1); sink = 0; }
+
+/* the cleanups' walk: k2's forced unwind, k1's two cleanups on the way */
+static int cleaned;
+static struct _Unwind_Exception exc2;
+static void note (int *p)
+{
+  cleaned += *p;
+  printf ("cleanup %d\n", *p);
+}
+static _Unwind_Reason_Code stop2 (int version, _Unwind_Action actions, _Unwind_Exception_Class cls,
+                                  struct _Unwind_Exception *e, struct _Unwind_Context *c, void *param)
+{
+  const char *n = name_of (c);
+  see (n);
+  if ((actions & _UA_END_OF_STACK) || version != 1 || e != &exc2 || strcmp (n, "main") == 0)
+    longjmp (out, 3);
+  return _URC_NO_REASON;
+}
+static __attribute__ ((noinline)) void k2 (int x)
+{
+  memcpy (&exc2.exception_class, "\0\0ff_ptt", 8);
+  sink = x;
+  _Unwind_ForcedUnwind (&exc2, stop2, 0);
+  printf ("cleanups: returned\n");
+}
+static __attribute__ ((noinline)) void k1 (int x)
+{
+  int a __attribute__ ((cleanup (note))) = 10;
+  {
+    int b __attribute__ ((cleanup (note))) = x;
+    k2 (x + 1);
+    sink = b;
+  }
+  sink = a;
+}
 static __attribute__ ((noinline)) void g1 (int x) { g2 (x + 1); sink = 0; }
 
 /* gcc's part: its PT_LOAD mapped where it says, its .eh_frame registered,
@@ -250,6 +292,11 @@ int main (int argc, char **argv)
   if (j == 0)
     g1 (1);
   printf ("forced:%s (longjmp %d, CFAs %s)\n", seen, j, rising ? "rising" : "not rising");
+  seen[at = 0] = 0;
+  j = setjmp (out);
+  if (j == 0)
+    k1 (5);
+  printf ("cleanups:%s (longjmp %d, %d)\n", seen, j, cleaned);
   if (argc < 2 || !load (argv[1]))
     {
       printf ("no frames of gcc's\n");
