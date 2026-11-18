@@ -1896,6 +1896,11 @@ tests-locales: $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
 .PHONY: tests-locales
 TSTEP = $(MAKE) --no-print-directory $(TFF)/$*$(1) > $(TFF)/$*.$(2).log 2>&1 || \
 	{ echo "not yet: $(3): $$(perl tests.pl why $(TFF)/$*.$(2).log)" > $@; exit 0; }
+# The runs' slot command: RUN's; or a pool of their own beside the machine's
+# slots, where the master allows it (lane tests2, 2026-11-18: two at a time,
+# TRUNSLOT='env TTP_SLOTS=<dir> TTP_NSLOTS=2 sh ../compiler/gen/slot.sh -v 4000000'),
+# csema, ttpc and gcc's link still in the machine's slots
+TRUNSLOT ?= $(RUN)
 # (and what its steps' outputs depend on, ttpc's and csema's: each step is
 # a make of its own, so that one that fails is the result's reason)
 $(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) $(SHARED) $(CSEMA) $(CSVIEW) tests.pl $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
@@ -1905,7 +1910,7 @@ $(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $
 	$(call TSTEP,-prog.ff,c2ff,c2ff); \
 	$(call TSTEP,-prog,ttpc,ttpc); \
 	in=$(GLIBC_SRC)/$(AREA)/$*.input; test -e $$in || in=/dev/null; \
-	perl tests.pl run $(TFF) $* $$in $(TENV) $(RUN) -t 600 -- $(TRUN) > $@
+	perl tests.pl run $(TFF) $* $$in $(TENV) $(TRUNSLOT) -t 600 -- $(TRUN) > $@
 
 # (the .mk first: where glibc's tests build failed, it stops here, before
 # a make of each test would try that build again)
