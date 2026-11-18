@@ -2016,8 +2016,14 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           and subscripts (sincosf_poly.h, ttpc's vecops.pl); gcc's with
 #           libm.a too
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check
-ALLPROGS := locale enums statics anonrec x87math sincosf
+#   fltinc  ++ and -- of float, double and long double, prefix and postfix,
+#           their values, a field and an element, and coreutils seq's loop
+#           (for (long double i = 1; ; i++), which ttpc kept at 1: it added
+#           1 to the bits; gen/patches/fltinc.pl); every target
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check fltinc-check
+ALLPROGS := locale enums statics anonrec x87math sincosf fltinc
+ALLPROG_fltinc := fltinc
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_sincosf := sincosf
