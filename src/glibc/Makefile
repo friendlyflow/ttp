@@ -1064,9 +1064,9 @@ DCDIR ?= $(BUILD)/datacheck
 DCKNOWN ?= dcknown-$(GTARGET).txt
 # what ttpc cannot compile yet: it stops, mostly without the function's
 # name; each a definition's name of glibc.ff.txt, what reaches it is left out
-#   sincosf_poly, sinf_poly  x86_64's sinf, cosf, sincosf: "cannot compile: p"
-#                            (v2df_t's arithmetic)
-DCSKIP_x86_64 := sincosf_poly sinf_poly
+# (none now: x86_64's sincosf_poly and sinf_poly, v2df_t's arithmetic, since
+# ../compiler/gen/patches/vecops.pl)
+DCSKIP_x86_64 :=
 DCSKIP := $(DCSKIP_$(GTARGET))
 $(DCDIR)/all.i: datacheck.pl $(if $(wildcard $(DCFF)/glibc/index.ff),,$(FF)/glibc/index.ff) $(OBJ)/libc.a
 	mkdir -p $(DCDIR)
@@ -1939,10 +1939,16 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           floorl, the narrowing functions, sqrtl, powl) and those forms in
 #           its own C; gcc's with libm.a too (ALLPROGLIBS); x86_64 only
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check
-ALLPROGS := locale enums statics anonrec x87math
+#   sincosf sinf, cosf and sincosf, whose x86_64 C has v2df_t's arithmetic
+#           and subscripts (sincosf_poly.h, ttpc's vecops.pl); gcc's with
+#           libm.a too
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check
+ALLPROGS := locale enums statics anonrec x87math sincosf
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
+ALLPROG_sincosf := sincosf
+ALLPROGLIBS_sincosf = $(OBJ)/math/libm.a
 ALLPROG_locale := locale
 ALLPROG_enums := enums-a enums-b
 ALLPROG_statics := statics-a statics-b
