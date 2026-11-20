@@ -607,6 +607,9 @@ static void cl_new_place (struct cl_list *run, struct cl_list *it, int depth, st
   if (agg) {
     if (it && it->n == 1 && cl_is (it->v[0], ":") && !cl_leaf (it->v[0])) { cl_new_lit (run, cl_sub (it->v[0], 0), depth + 1, o); return; }
     if (!it) { cl_new_lit (run, cl_l (), depth + 1, o); return; }
+    /* (an aggregate place left implicit, a : with nothing under it, or the 0 of an empty literal: its zeros written
+       out, as ttpc takes a place that is a struct; tst-itimer's &(struct itimerval) { }, whose first timeval was 0) */
+    if (it->n == 1 && cl_leaf (it->v[0]) && (cl_is (it->v[0], ":") || cl_is (it->v[0], "0"))) { cl_new_lit (run, cl_l (), depth + 1, o); return; }
   }
   if (!it) { cl_push (o, cl_n ("0")); return; }
   cl_newlist (it, CX_FN, o);

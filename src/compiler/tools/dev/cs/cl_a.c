@@ -218,6 +218,8 @@ static void cl_ins_other (char *line, struct cl_list *o)
     }
     /* the status word to ax (an "=a" output of 16 bits: libc_fetestexcept_387's fnstsw %0) */
     if ((cl_eq (op, "fnstsw") || cl_eq (op, "fstsw")) && na == 1 && cl_eq (a[0], "%ax")) { cl_push (o, cl_n1 (cl_cat (op, ".ai"), cl_n ("ax"))); return; }
+    /* (and with no operand, which GNU as takes as %ax: libm-test-support's fpstack_test, asm ("fnstsw" : "=a" (sw))) */
+    if ((cl_eq (op, "fnstsw") || cl_eq (op, "fstsw")) && !na) { cl_push (o, cl_n1 (cl_cat (op, ".ai"), cl_n ("ax"))); return; }
     if ((cl_eq (op, "xchgl") || cl_eq (op, "xchgq")) && na == 2) {
       long m = 0 - 1;
       if (cl_x86_mem (a[0], &disp, &rg)) m = 0; else if (cl_x86_mem (a[1], &disp, &rg)) m = 1;

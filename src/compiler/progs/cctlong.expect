@@ -1,0 +1,7 @@
+exit 0
+ok sizeof of i64
+ok sizeof of u64
+ok alignof of i64
+ok sizeof of long
+ok the high word of TYPE_MAXIMUM (i64)
+ok the low bits of TYPE_MAXIMUM (i64)

@@ -1522,7 +1522,16 @@ ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # its names weak (address 0), as for a program that never unwinds
 LIBGCC_TARGETS := riscv64 x86_64 aarch64 arm
 UNWIND_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
-LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH))
+# and libgcc's complex multiply and divide (_mulsc3 ... _divtc3, each of the
+# target's floating types), which csema calls for C's complex * and / as gcc
+# does (__muldc3 ...): roots of their own (CXROOTS), no glibc code calls them
+LIBGCC_CX_riscv64 := _mulsc3 _muldc3 _multc3 _divsc3 _divdc3 _divtc3
+LIBGCC_CX_aarch64 := $(LIBGCC_CX_riscv64)
+LIBGCC_CX_x86_64 := _mulsc3 _muldc3 _mulxc3 _multc3 _divsc3 _divdc3 _divxc3 _divtc3
+LIBGCC_CX_arm := _mulsc3 _muldc3 _divsc3 _divdc3
+LIBGCC_CX := $(LIBGCC_CX_$(GTARGET))
+CXROOTS = $(patsubst _%,__%,$(LIBGCC_CX))
+LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH) $(LIBGCC_CX))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc) $(WEAKS_unwind_$(GTARGET))
 # (glibc's asm that s2ff takes: on x86_64 not libmvec's yet, whose packed
 # forms isa/x86_64gnu.pl lacks; and, but on riscv64, crtn is the end of
@@ -1534,7 +1543,7 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
-	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)); do echo $$r; done; } | sort -u > $@
+	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)) $(if $(LIBGCC_glibc),$(CXROOTS)); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
@@ -1950,8 +1959,13 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           and subscripts (sincosf_poly.h, ttpc's vecops.pl); gcc's with
 #           libm.a too
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check
-ALLPROGS := locale enums statics anonrec x87math sincosf
+#   cxops   C's complex + - * / == !=, unary -, the compound assignments
+#           and the conversions on each complex type (csema writes them of
+#           the parts and calls libgcc's __mulXc3 and __divXc3, as gcc does)
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops
+ALLPROG_cxops := cxops
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_sincosf := sincosf

@@ -234,6 +234,16 @@ static struct cs_ex *cs_uuc (struct cs_ex *e)
   }
   return e;
 }
+/* a value tested for truth (a condition, !, && and ||' operands): a complex one converted to bool as
+   clang's AST has it (FloatingComplexToBoolean: either part nonzero); an rvalue, else as it was */
+static struct cs_ex *cs_test (struct cs_ex *e)
+{
+  struct cs_ty *t;
+  e = cs_rv (e);
+  t = cs_canon (e->t);
+  if (t->k != TY_COMPLEX) return e;
+  return cs_ice (e, cs_basic (TY_BOOL), cs_k_int (cs_canon (t->to)->k) ? CK_INTEGRALCOMPLEXTOBOOLEAN : CK_FLOATINGCOMPLEXTOBOOLEAN);
+}
 static struct cs_ex *cs_arg_promo (struct cs_ex *e)
 {
   e = cs_uuc (e);

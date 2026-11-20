@@ -1171,7 +1171,7 @@ static struct cs_st *cs_item (struct node *n)
   if (cs_is (n, "directive")) { cs_top_add (TOP_WEAK, 0, 0, n->kids[0], 1); return 0; }
   return cs_stmt (n);
 }
-static struct cs_ex *cs_cond_of (struct node *n) { return cs_rv (cs_ex_of (n)); }
+static struct cs_ex *cs_cond_of (struct node *n) { return cs_test (cs_ex_of (n)); }
 static int cs_asm_letter (unsigned char c)
 {
   /* 1 memory, 2 immediate, 3 a modifier, 0 a register */

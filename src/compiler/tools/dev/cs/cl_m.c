@@ -654,7 +654,14 @@ void cl_finish (void)
       cl_write_txt (cl_n1 ("include", cl_n (C->program)), 0);
       while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; }
       q = 0;
-      while (q < nout) { cl_write_txt (all->v[nt + q], 0); q++; }
+      /* (past the 255 items a node holds, the license, include, types and _start counted, its definitions in
+         layers 0: 1: ...: wcsmbs's tst-wcstod-round, 279 wide texts) */
+      if (2 + nt + nout + (C->start ? 1 : 0) > 255) {
+        struct cl_list *outs = cl_slice (all, nt, nt + nout), *y = cl_l ();
+        if (nout > 255) cl_layers (outs, y); else cl_push (y, cl_layer_node (0, outs));
+        while (q < y->n) { cl_write_txt (y->v[q], 0); q++; }
+      } else
+        while (q < nout) { cl_write_txt (all->v[nt + q], 0); q++; }
       cl_write_start ();
       out_flush ();
       return;

@@ -2574,6 +2574,108 @@ builtins:
       >=
       y
   comment
+    __builtin_islessgreater on floats: x < y or x > y, 0 for a NaN (no invalid for a quiet one).
+  __builtin_islessgreater float:
+    int
+    x:
+      float
+    y:
+      float
+    if
+      __builtin_isunordered float
+        x
+        y
+      return
+        0
+    return
+      x
+      !=
+      y
+  comment
+    __builtin_isnormal on floats: fpclassify's FP_NORMAL.
+  __builtin_isnormal float:
+    int
+    x:
+      float
+    return
+      __builtin_fpclassify float
+        0
+        1
+        4
+        3
+        2
+        x
+      ==
+      4
+  comment
+    __builtin_islessgreater on doubles: x < y or x > y, 0 for a NaN (no invalid for a quiet one).
+  __builtin_islessgreater double:
+    int
+    x:
+      double
+    y:
+      double
+    if
+      __builtin_isunordered double
+        x
+        y
+      return
+        0
+    return
+      x
+      !=
+      y
+  comment
+    __builtin_isnormal on doubles: fpclassify's FP_NORMAL.
+  __builtin_isnormal double:
+    int
+    x:
+      double
+    return
+      __builtin_fpclassify double
+        0
+        1
+        4
+        3
+        2
+        x
+      ==
+      4
+  comment
+    __builtin_islessgreater on long doubles: x < y or x > y, 0 for a NaN (no invalid for a quiet one).
+  __builtin_islessgreater long double:
+    int
+    x:
+      long double
+    y:
+      long double
+    if
+      __builtin_isunordered long double
+        x
+        y
+      return
+        0
+    return
+      x
+      !=
+      y
+  comment
+    __builtin_isnormal on long doubles: fpclassify's FP_NORMAL.
+  __builtin_isnormal long double:
+    int
+    x:
+      long double
+    return
+      __builtin_fpclassify long double
+        0
+        1
+        4
+        3
+        2
+        x
+      ==
+      4
+  comment
     gcc's __builtin_fabsf: x without its sign, from its bits.
   __builtin_fabsf:
     float

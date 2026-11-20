@@ -89,6 +89,9 @@ sub spdx_one {
         $lic = "GPL-$v.0-" . ($later ? 'or-later' : 'only');
     } elsif ($t =~ /Developed at SunPro/i && $t =~ /freely granted, provided that this notice is preserved/i) {
         $lic = 'SunPro';
+    } elsif ($t =~ /Copying and distribution of this file, with or without modification, are permitted in any medium without royalty provided the copyright notice and this notice are preserved/i) {
+        # (the FSF All Permissive License: wcsmbs's tst-fgetwc-after-eof.c)
+        $lic = 'FSFAP';
     } elsif ($t =~ /Permission to use, copy, modify, and(?:\/or)? distribute this software for any purpose with or without fee is hereby granted/i) {
         $lic = 'ISC';
     } elsif ($t =~ /Permission is hereby granted, free of charge, to any person obtaining a copy/i) {
