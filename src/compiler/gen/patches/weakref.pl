@@ -9,8 +9,9 @@
 #   weak / (f / args), and weak / f of a function (C's f ()): a call through
 #     that address (0 when f is placed by nothing else); call's LWR, as a weak declaration's call (L47), its
 #     result the function's type.
-#   weak / name, & address in a global's items (gval's LWG): its label's
-#     address, 0 where nothing else places it.
+#   weak / name, & address in a global's items (gval's LWG), and weak / name
+#     as an item's value (LWV: an array's or a function's address): its
+#     label's address, 0 where nothing else places it.
 #   with / names..., first under a definition's name: placing the
 #     definition (libadd) places the names too (withadd), as ld's object
 #     member brings all its symbols (glibc's _NL_CURRENT_DEFINE flags with
@@ -433,5 +434,53 @@ G2:
     beqz G8 a0
     mv s4 a0
     call withstrip
+"));
+
+# gval: weak / name as a global's item's value (an array's or a function's
+# address, C's decay: glibc's _nl_global_locale's __ctype_b,
+# (const uint16_t *) _nl_C_LC_CTYPE_class + 128): its label's address,
+# 0 where nothing else places it (gval's LWV), as LWG for & address
+edit(\$t, 'cc/gval', asm(8, "
+L10:
+    mv s5 a0
+    call kwof
+    li KW_address t0
+") => asm(8, "
+L10:
+    mv s5 a0
+    call kwof
+    li KW_weak t0
+    beq rel:LWV t0 a0
+    mv s5 a0
+    call kwof
+    li KW_address t0
+"), asm(8, "
+LWG8:
+    call bad
+") => asm(8, "
+LWG8:
+    call bad
+LWV:
+    mv s5 a0
+    li 1 t1
+    lbu NODE_children_len a0 t0
+    bne rel:LWG8 t1 t0
+    ld NODE_children a0 t0
+    ld 0 t0 s5
+    lbu NODE_children_len s5 t0
+    bnez LWG8 t0
+    la tscan_quiet t0
+    sd 0 t1 t0
+    ld NODE_content s5 a0
+    lbu NODE_content_len s5 a1
+    mv s5 a2
+    call cfind
+    la tscan_quiet t0
+    sd 0 zero t0
+    beqz LWV9 a0
+    call label_addr
+LWV9:
+    addi 8 s4 a1
+    j L9
 "));
 save();
