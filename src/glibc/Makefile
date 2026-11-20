@@ -1621,7 +1621,11 @@ LIBGCC_HF_aarch64 := extendhftf2 extendbfsf2 trunctfhf2 trunctfbf2 truncdfbf2 tr
 	floattihf floatuntihf floatdibf floatundibf floattibf floatuntibf
 LIBGCC_HF := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_HF_$(GTARGET)))
 ROOTS_hf := $(LIBGCC_HF:%=__%)
-LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH) $(LIBGCC_HF))
+# (and on aarch64 libgcc's sfp-exceptions, __sfp_handle_exceptions, which
+# soft-fp's conversions there call and glibc's units define not: on x86_64
+# glibc has it, riscv64's soft-fp raises its flags inline)
+LIBGCC_HFEXC_aarch64 := sfp-exceptions
+LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH) $(LIBGCC_HF) $(LIBGCC_HFEXC_$(GTARGET)))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc) $(WEAKS_unwind_$(GTARGET))
 # (glibc's asm that s2ff takes: all of it; but on riscv64, crtn is the end
 # of crti's _init and _fini, s2ff --then, as in a milestone)
