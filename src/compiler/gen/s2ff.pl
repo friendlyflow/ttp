@@ -162,15 +162,6 @@ sub ins { my ($op, @a) = @_; node($op, map { ref $_ ? $_ : leaf($_) } @a) }
 my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel_offset => [1, 0], restore => [1],
     register => [1, 1], undefined => [1], same_value => [1], def_cfa_offset => [0], adjust_cfa_offset => [0],
     remember_state => [], restore_state => [], signal_frame => []);
-# A procedure (.cfi_startproc ... .cfi_endproc) none of whose words is in
-# the block where it starts (gcc's FDE of the CIE's rules alone, a leaf's;
-# or its rows after a block label) gets one there that says the CIE's
-# rules again, cfi def cfa offset / 0 where it starts: ttpc's procedure is
-# an asm function, or an entry block with cfi words of its own. One with
-# .cfi_return_column (libgcc's __riscv_save_*, whose return address is t0:
-# a CIE of its own) has none.
-my $proc;       # since .cfi_startproc: {into, at} where it starts (its first label, word or instruction), n its words there, skip
-sub proc_at { $proc->{into} = $_[0], $proc->{at} = scalar @{ $_[0] } if $proc && !$proc->{into} }
 sub cfi {
     my ($d, @o) = @_;
     return if $d =~ /^(startproc|endproc|label)$/;
@@ -287,6 +278,15 @@ sub canon {
 
 # ---- the source --------------------------------------------------------------
 my (@fns, $fn, $block, $file, $line);
+# ttpc's procedure is an asm function, or an entry block in it that starts
+# with a cfi word. So a procedure (.cfi_startproc ... .cfi_endproc) that
+# starts at an entry block with no word of its own there, or one with no
+# word at all (gcc's FDE of the CIE's rules alone, a leaf's), gets one
+# where it starts that says the CIE's rules again, cfi def cfa offset / 0.
+# One with .cfi_return_column (libgcc's __riscv_save_*, whose return
+# address is t0: a CIE of its own) has none.
+my $proc;       # since .cfi_startproc: {into, at} where it starts (its first label, word or instruction), top (a function's own), n its words, s 1 with one there, skip
+sub proc_at { if ($proc && !$proc->{into}) { $proc->{into} = $_[0]; $proc->{at} = scalar @{ $_[0] }; $proc->{top} = $_[0] == $fn->{children} } }
 ($file, $line) = ($src =~ s{.*/}{}r, 0);     # (a .s of gcc's has no line marks)
 # (the name of its tree, glibc-2.44, or gcc-16.2.0 for libgcc's, whose
 # files are named from gcc's folder)
@@ -441,7 +441,8 @@ while (my $l = <$s>) {
                 my $d = $1;
                 if ($d eq 'startproc') { $proc = { n => 0 }; next }
                 if ($d eq 'endproc') {
-                    splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', leaf(0)) if $proc && !$proc->{n} && !$proc->{skip} && $proc->{into};
+                    splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', leaf(0))
+                        if $proc && !$proc->{skip} && $proc->{into} && ($proc->{top} ? !$proc->{n} : !$proc->{s});
                     undef $proc;
                     next;
                 }
@@ -453,7 +454,8 @@ while (my $l = <$s>) {
                     my $c = ($block // $fn)->{children};
                     proc_at($c);
                     push @$c, $w;
-                    $proc->{n}++ if $proc && $c == $proc->{into};
+                    $proc->{n}++ if $proc;
+                    $proc->{s} = 1 if $proc && $c == $proc->{into} && $#$c == $proc->{at};
                 }
                 next;
             }

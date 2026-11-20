@@ -798,17 +798,16 @@ static struct nd *xinto_ (void) { return block ? block : fn; }
    procedure's first label or instruction are held for it (xpcfi). */
 static struct vec *xpcfi;
 static int xcfiproc;
-/* a procedure none of whose words is in the block where it starts (its
-   first label or instruction) gets cfi def cfa offset / 8 there, as
-   s2ffx86.pm's $proc */
+/* a procedure that starts at an entry block with no word of its own there,
+   or one with no word at all, gets cfi def cfa offset / 8 where it starts
+   (its first label or instruction), as s2ffx86.pm's $proc */
 static struct vec *xpr_into;
 static long xpr_at, xpr_n;
-static int xpr_on;
+static int xpr_on, xpr_top, xpr_s;
 static void xcfi_flush (void)
 {
   long i;
-  if (xcfiproc && xpr_on && !xpr_into) { xpr_into = xinto_ ()->k; xpr_at = xpr_into->n; }
-  if (xpr_on && xpr_into && xinto_ ()->k == xpr_into && xpcfi) xpr_n += xpcfi->n;
+  if (xcfiproc && xpr_on && !xpr_into) { xpr_into = xinto_ ()->k; xpr_at = xpr_into->n; xpr_top = !block; if (xpcfi && xpcfi->n) xpr_s = 1; }
   xcfiproc = 0;
   if (!xpcfi) return;
   for (i = 0; i < xpcfi->n; i++) nd_add (xinto_ (), xpcfi->v[i]);
@@ -1305,14 +1304,15 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
     if (m (op, "^\\.cfi_(\\w+)$")) {
       struct str *d = g (1);
       struct nd *w = xcfi (d, x_split_ops (rest));
-      if (s_is (d, "startproc")) { xcfiproc = 1; xpr_on = 1; xpr_into = 0; xpr_n = 0; }
+      if (s_is (d, "startproc")) { xcfiproc = 1; xpr_on = 1; xpr_into = 0; xpr_n = 0; xpr_s = 0; xpr_top = 0; }
       if (s_is (d, "endproc")) {
-        if (xpr_on && !xpr_n && xpr_into) { long i; v_push (xpr_into, 0); for (i = xpr_into->n - 1; i > xpr_at; i--) xpr_into->v[i] = xpr_into->v[i - 1]; xpr_into->v[xpr_at] = nd1 (s_of ("cfi def cfa offset"), nd_new (s_of ("8"))); }
+        if (xpr_on && xpr_into && (xpr_top ? !xpr_n : !xpr_s)) { long i; v_push (xpr_into, 0); for (i = xpr_into->n - 1; i > xpr_at; i--) xpr_into->v[i] = xpr_into->v[i - 1]; xpr_into->v[xpr_at] = nd1 (s_of ("cfi def cfa offset"), nd_new (s_of ("8"))); }
         xpr_on = 0;
       }
       if (w) {
+        if (xpr_on) xpr_n++;
         if (xcfiproc || !fn) { if (!xpcfi) xpcfi = v_new (); v_push (xpcfi, w); }
-        else { if (xpr_on && xpr_into && xinto_ ()->k == xpr_into) xpr_n++; nd_add (xinto_ (), w); }
+        else { if (xpr_on && xpr_into && xinto_ ()->k == xpr_into && xinto_ ()->k->n == xpr_at) xpr_s = 1; nd_add (xinto_ (), w); }
       }
       return;
     }

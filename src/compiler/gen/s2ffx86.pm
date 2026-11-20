@@ -312,13 +312,14 @@ my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel
     remember_state => [], restore_state => [], signal_frame => []);
 my @pcfi;       # cfi words held for the procedure's first label or instruction
 my $cfiproc;    # since .cfi_startproc, no label or instruction yet
-# A procedure none of whose words is in the block where it starts (its
-# first label or instruction; gcc's FDE of the CIE's rules alone) gets one
-# there that says them again, cfi def cfa offset / 8, as s2ff.pl's.
-my $proc;       # since .cfi_startproc: {into, at} where it starts, n its words there
+# A procedure that starts at an entry block with no word of its own there,
+# or one with no word at all (gcc's FDE of the CIE's rules alone), gets one
+# where it starts (its first label or instruction) that says them again,
+# cfi def cfa offset / 8, as s2ff.pl's: ttpc's procedure is an asm
+# function, or an entry block in it that starts with a cfi word.
+my $proc;       # since .cfi_startproc: {into, at} where it starts, top (a function's own), n its words, s 1 with one there
 sub cfi_flush {
-    if ($cfiproc && $proc && !$proc->{into}) { $proc->{into} = into(); $proc->{at} = scalar @{ into() } }
-    $proc->{n} += @pcfi if $proc && $proc->{into} && into() == $proc->{into};
+    if ($cfiproc && $proc && !$proc->{into}) { $proc->{into} = into(); $proc->{at} = scalar @{ into() }; $proc->{top} = !in_block(); $proc->{s} = 1 if @pcfi }
     $cfiproc = 0; push @{ into() }, splice @pcfi if @pcfi;
 }
 sub cfi {
@@ -548,6 +549,7 @@ sub take {
     $m;
 }
 sub into { ($block // $fn)->{children} }
+sub in_block { defined $block }
 # the end of a function: the words its GOT and TLS operands read (a TLS
 # word its offset from fs: tprel / sym), after all of its code (placed
 # last: crtn's part of crti's _init comes after it); a weak name's GOT
@@ -1076,11 +1078,13 @@ sub walk_stmt {
             # resms64*.h put them before the label)
             if ($d eq 'startproc') { $cfiproc = 1; $proc = { n => 0 } }
             if ($d eq 'endproc') {
-                splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', node(8)) if $proc && !$proc->{n} && $proc->{into};
+                splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', node(8)) if $proc && $proc->{into} && ($proc->{top} ? !$proc->{n} : !$proc->{s});
                 undef $proc;
             }
             if ($w) {
-                if ($cfiproc || !$fn) { push @pcfi, $w } else { $proc->{n}++ if $proc && $proc->{into} && into() == $proc->{into}; push @{ into() }, $w }
+                $proc->{n}++ if $proc;
+                if ($cfiproc || !$fn) { push @pcfi, $w }
+                else { $proc->{s} = 1 if $proc && $proc->{into} && into() == $proc->{into} && @{ into() } == $proc->{at}; push @{ into() }, $w }
             }
             return;
         }

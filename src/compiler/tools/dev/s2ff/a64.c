@@ -227,7 +227,7 @@ static struct hash *codes;
    they are placed */
 static struct hash *cfiat;
 /* each word with its FDE; the FDEs in order and by where they start */
-struct afde { long b, n, start_at; struct vec *start_k; int has_start; };
+struct afde { long b, n; struct nd *first; int s; };
 struct cfiw { struct afde *f; struct nd *w; };
 static struct vec *afdes;
 static struct hash *fdeat;
@@ -241,11 +241,21 @@ static void cfiat_add (long at, struct nd *w)
   c->f = afdes->v[afdes->n - 1]; c->w = w;
   v_push (l, c);
 }
-static void cfiput (struct vec *c, struct vec *l)
+static void cfiput (struct vec *c, struct vec *l, long a)
 {
   long i;
-  for (i = 0; i < l->n; i++) { struct cfiw *x = l->v[i]; v_push (c, x->w); if (x->f->has_start && c == x->f->start_k) x->f->n++; }
+  for (i = 0; i < l->n; i++) { struct cfiw *x = l->v[i]; v_push (c, x->w); x->f->n++; if (a == x->f->b) x->f->s = 1; }
   l->n = 0;
+}
+/* the node that holds node t under f (and t's place in it), if any */
+static int find_parent (struct nd *f, struct nd *t, struct nd **p, long *at)
+{
+  long i;
+  for (i = 0; i < ndn (f); i++) {
+    if (ndk (f, i) == t) { *p = f; *at = i; return 1; }
+    if (find_parent (ndk (f, i), t, p, at)) return 1;
+  }
+  return 0;
 }
 static struct str *cfireg (struct str *r)
 {
@@ -783,11 +793,14 @@ static void a64_main (struct vec *files)
       }
     }
     if (!fn) { struct str *x = s_of ("an instruction outside a function at "); s_app (x, s_num (mm->addr)); fail_s (x); }
-    /* (the cfi words of the rows that start at it, before it; where an FDE starts) */
+    /* (the cfi words of the rows that start at it, before it; the first node there of each FDE that starts there) */
     if (s_is (mm->sec, ".text")) {
       struct vec *c = (block ? block : fn)->k, *fl = h_pv (fdeat, s_num (mm->addr)), *w = h_pv (cfiat, s_num (mm->addr));
-      if (fl) for (k = 0; k < fl->n; k++) { struct afde *f = fl->v[k]; if (!f->has_start) { f->has_start = 1; f->start_k = c; f->start_at = c->n; } }
-      if (w && w->n) cfiput (c, w);
+      long at = c->n;
+      if (w && w->n) cfiput (c, w, mm->addr);
+      a64_emit (mm);
+      if (fl) for (k = 0; k < fl->n; k++) { struct afde *f = fl->v[k]; if (!f->first) f->first = c->v[at]; }
+      continue;
     }
     a64_emit (mm);
   }
@@ -797,7 +810,7 @@ static void a64_main (struct vec *files)
     struct vec *w, *left = v_new ();
     for (k = 0; k < mv->n; k++) if (s_is (((struct a64m *) mv->v[k])->sec, ".text")) end = ((struct a64m *) mv->v[k])->addr + 4;
     w = h_pv (cfiat, s_num (end));
-    if (fn && w && w->n) cfiput ((block ? block : fn)->k, w);
+    if (fn && w && w->n) cfiput ((block ? block : fn)->k, w, end);
     for (k = 0; k < cfiat->keys->n; k++) { struct hent *e = cfiat->keys->v[k]; if (((struct vec *) e->pv)->n) v_push (left, e); }
     if (left->n) {
       struct hent *lo = left->v[0];
@@ -805,10 +818,9 @@ static void a64_main (struct vec *files)
       for (k = 1; k < left->n; k++) if (dec (((struct hent *) left->v[k])->k) < dec (lo->k)) lo = left->v[k];
       x = s_of ("a frame's row at "); s_app (x, lo->k); s_cat (x, ", where .text has no instruction"); fail_s (x);
     }
-    for (k = afdes->n - 1; k >= 0; k--) {
+    for (k = 0; k < afdes->n; k++) {
       struct afde *f = afdes->v[k];
-      if (!f->has_start) { struct str *x = s_of ("an FDE at "); s_app (x, s_num (f->b)); s_cat (x, ", where .text has no instruction"); fail_s (x); }
-      if (!f->n) { long q; struct vec *c = f->start_k; v_push (c, 0); for (q = c->n - 1; q > f->start_at; q--) c->v[q] = c->v[q - 1]; c->v[f->start_at] = nd1 (s_of ("cfi def cfa offset"), ndc ("0")); }
+      if (!f->first) { struct str *x = s_of ("an FDE at "); s_app (x, s_num (f->b)); s_cat (x, ", where .text has no instruction"); fail_s (x); }
     }
   }
   a64_finish ();
@@ -867,6 +879,19 @@ static void a64_main (struct vec *files)
       fns = nf;
     }
     i--;
+  }
+  /* (an FDE with no rows, or one that starts an entry block with no row there: cfi def cfa offset / 0 first where it starts; the last first) */
+  for (i = afdes->n - 1; i >= 0; i--) {
+    struct afde *f = afdes->v[i];
+    struct nd *p = 0;
+    long at = 0, q;
+    int top = 0;
+    for (q = 0; q < fns->n && !p; q++) find_parent (fns->v[q], f->first, &p, &at);
+    for (q = 0; q < fns->n; q++) if (fns->v[q] == p) top = 1;
+    if (top ? f->n : f->s) continue;
+    v_push (p->k, 0);
+    for (q = p->k->n - 1; q > at; q--) p->k->v[q] = p->k->v[q - 1];
+    p->k->v[at] = nd1 (s_of ("cfi def cfa offset"), ndc ("0"));
   }
   {
     struct vec *out = fns;

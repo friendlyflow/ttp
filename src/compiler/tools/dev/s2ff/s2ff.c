@@ -297,15 +297,6 @@ static struct nd *cfi_word (struct str *d, struct vec *o)
   }
   return x;
 }
-/* a procedure (.cfi_startproc ... .cfi_endproc) none of whose words is
-   in the block where it starts (its first label, word or instruction) gets
-   cfi def cfa offset / 0 there, as gen/s2ff.pl's $proc; one with
-   .cfi_return_column none */
-static struct vec *pr_into;
-static long pr_at, pr_n;
-static int pr_on, pr_skip;
-static void v_insert (struct vec *a, long at, void *x) { long i; v_push (a, x); for (i = a->n - 1; i > at; i--) a->v[i] = a->v[i - 1]; a->v[at] = x; }
-static void proc_at (struct vec *k) { if (pr_on && !pr_into) { pr_into = k; pr_at = k->n; } }
 static struct nd *ins0 (struct str *op) { return nd_new (op); }
 static struct nd *ins1 (struct str *op, struct nd *a) { return nd1 (op, a); }
 static struct nd *ins2 (struct str *op, struct nd *a, struct nd *b) { return nd2 (op, a, b); }
@@ -433,6 +424,15 @@ static struct nd *canon (struct made *mm)
 /* ---- the source */
 static struct vec *fns;
 static struct nd *fn, *block;
+/* a procedure (.cfi_startproc ... .cfi_endproc) that starts at an entry
+   block with no word of its own there, or one with no word at all, gets
+   cfi def cfa offset / 0 where it starts (its first label, word or
+   instruction), as gen/s2ff.pl's $proc; one with .cfi_return_column none */
+static struct vec *pr_into;
+static long pr_at, pr_n;
+static int pr_on, pr_skip, pr_top, pr_s;
+static void v_insert (struct vec *a, long at, void *x) { long i; v_push (a, x); for (i = a->n - 1; i > at; i--) a->v[i] = a->v[i - 1]; a->v[at] = x; }
+static void proc_at (struct vec *k) { if (pr_on && !pr_into) { pr_into = k; pr_at = k->n; pr_top = k == fn->k; } }
 static long n_at, pos, ends;
 static struct hash *tls, *got, *numeric, *dlabel, *datadef;
 static struct str *label;
@@ -674,9 +674,9 @@ static void rv_main (void)
         if (m (op, "^\\.cfi_(\\w+)$")) {
           struct str *d = g (1);
           struct nd *w;
-          if (s_is (d, "startproc")) { pr_on = 1; pr_into = 0; pr_n = 0; pr_skip = 0; continue; }
+          if (s_is (d, "startproc")) { pr_on = 1; pr_into = 0; pr_n = 0; pr_skip = 0; pr_s = 0; pr_top = 0; continue; }
           if (s_is (d, "endproc")) {
-            if (pr_on && !pr_n && !pr_skip && pr_into) v_insert (pr_into, pr_at, nd1 (S ("cfi def cfa offset"), LN (0)));
+            if (pr_on && !pr_skip && pr_into && (pr_top ? !pr_n : !pr_s)) v_insert (pr_into, pr_at, nd1 (S ("cfi def cfa offset"), LN (0)));
             pr_on = 0;
             continue;
           }
@@ -689,7 +689,8 @@ static void rv_main (void)
             c = into_of ()->k;
             proc_at (c);
             v_push (c, w);
-            if (pr_on && c == pr_into) pr_n++;
+            if (pr_on) pr_n++;
+            if (pr_on && c == pr_into && c->n - 1 == pr_at) pr_s = 1;
           }
           continue;
         }

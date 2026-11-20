@@ -54,12 +54,13 @@
 #                   the cfi words of ttpc's asmcfi.pl, each at the
 #                   instruction where it starts, as DWARF has them (cfi
 #                   offset / x19 / -16, cfi def cfa offset / 16: GNU's
-#                   rel offset and adjust cfa offset are those there); an
-#                   FDE none of whose rows is in the block where it starts
-#                   (the CIE's rules alone, a leaf's; its rows after a
-#                   block label) has cfi def cfa offset / 0 there, which
-#                   says the CIE's rules again: ttpc's procedure is an asm
-#                   function, or an entry block with cfi words of its own
+#                   rel offset and adjust cfa offset are those there). ttpc's
+#                   procedure is an asm function, or an entry block in it
+#                   that starts with a cfi word: an FDE with no rows (the
+#                   CIE's rules alone, a leaf's), or one that starts an
+#                   entry block with no row there, has cfi def cfa offset
+#                   / 0 first where it starts, which says the CIE's rules
+#                   again
 #
 # A host tool (core Perl only), not part of ttpc.
 use strict;
@@ -198,7 +199,8 @@ sub decode {
 my (%sym, %sect, %type, %bind);
 my %code = map { $_ => 1 } qw(.text .init .fini);
 # the frames: the cfi words at each address of .text where rows start,
-# each with its FDE ({b, start => [children, at], n its words there})
+# each with its FDE ({b, first: the first node there, n its words, s 1
+# with one there})
 my (%cfiat, @fdes, %fdeat);
 sub cfireg { my ($r) = @_; $r =~ /^r\d+ \(([\w.]+)\)$/ or fail "a frame's register $r"; $1 }
 sub frameword {
@@ -451,28 +453,26 @@ for my $m (@made) {
         }
     }
     fail "an instruction outside a function at $m->{addr}" unless $fn;
-    # (the cfi words of the rows that start at it, before it; where an
-    # FDE starts)
+    # (the cfi words of the rows that start at it, before it; the first
+    # node there of each FDE that starts there)
     if ($m->{sec} eq '.text') {
         my $c = ($block // $fn)->{children};
-        $_->{start} //= [$c, scalar @$c] for @{ $fdeat{ $m->{addr} } || [] };
-        cfiput($c, delete $cfiat{ $m->{addr} }) if $cfiat{ $m->{addr} };
+        my $at = @$c;
+        cfiput($c, delete $cfiat{ $m->{addr} }, $m->{addr}) if $cfiat{ $m->{addr} };
+        emit($m);
+        $_->{first} //= $c->[$at] for @{ $fdeat{ $m->{addr} } || [] };
+        next;
     }
     emit($m);
 }
-sub cfiput { my ($c, $l) = @_; for (@$l) { my ($f, $w) = @$_; push @$c, $w; $f->{n}++ if $f->{start} && $c == $f->{start}[0] } }
-# (rows where .text's instructions end: after the last); an FDE none of
-# whose words is where it starts: cfi def cfa offset / 0 there (the last
-# first, which keeps the places of those before it)
+sub cfiput { my ($c, $l, $a) = @_; for (@$l) { my ($f, $w) = @$_; push @$c, $w; $f->{n}++; $f->{s} = 1 if $a == $f->{b} } }
+# (rows where .text's instructions end: after the last)
 {
     my @t = grep { $_->{sec} eq '.text' } @made;
     my $end = @t ? $t[-1]{addr} + 4 : 0;
-    cfiput(($block // $fn)->{children}, delete $cfiat{$end}) if $fn && $cfiat{$end};
+    cfiput(($block // $fn)->{children}, delete $cfiat{$end}, $end) if $fn && $cfiat{$end};
     fail "a frame's row at $_, where .text has no instruction" for sort { $a <=> $b } keys %cfiat;
-    for my $f (reverse @fdes) {
-        fail "an FDE at $f->{b}, where .text has no instruction" unless $f->{start};
-        splice @{ $f->{start}[0] }, $f->{start}[1], 0, node('cfi def cfa offset', node(0)) unless $f->{n};
-    }
+    $_->{first} or fail "an FDE at $_->{b}, where .text has no instruction" for @fdes;
 }
 finish();
 # crtn's .init and .fini (--then crtn.Ls crtn.dump): the end of crti's
@@ -559,6 +559,20 @@ push @fns, @weakgot;
             push @{ $fns[$i]{children} }, node($g->{content}, $asm, @own), @later;
         }
         $i--;
+    }
+}
+# (an FDE with no rows, or one that starts an entry block with no row
+# there: cfi def cfa offset / 0 first where it starts; the last first)
+{
+    my %top = map { $_ => 1 } @fns;
+    my %parent;
+    my $walk; $walk = sub { for my $k (@{ $_[0]{children} }) { $parent{$k} = $_[0]; $walk->($k) } };
+    $walk->($_) for @fns;
+    for my $f (reverse @fdes) {
+        my $p = $parent{ $f->{first} };
+        next if $top{$p} ? $f->{n} : $f->{s};
+        my ($i) = grep { $p->{children}[$_] == $f->{first} } 0 .. $#{ $p->{children} };
+        splice @{ $p->{children} }, $i, 0, node('cfi def cfa offset', node(0));
     }
 }
 print $items ? write_txt(@fns) : write_txt(node("$page:", @fns));

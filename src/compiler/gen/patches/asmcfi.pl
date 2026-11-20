@@ -403,8 +403,11 @@ O9:
     lbu 1 s6 a0
     leave3
 ", 2)
-. cfn('ehcfn', "the procedure the code at cur_pc is in: the latest placed label (labels_end in the first pass, label_next in the second) whose first child is asm and which is open (its end not before cur_pc) or has cfi or ehabi words of its own (an entry block that ended without any is not one: its function's code goes on after it), its offset in the label table (-1 none)", "
+. cfn('ehcfn', "the procedure the code at cur_pc is in: the latest placed label (labels_end in the first pass, label_next in the second) whose first child is asm and which is the function (the outermost open one, ehfnode) or an entry block that starts with a cfi or ehabi word (ehlead), its offset in the label table (-1 none)", "
     enter3
+    call ehfnode
+    mv a0 s6
+    beqz F8 s6
     la labels_base t0
     ld 0 t0 s4
     la label_next t1
@@ -419,31 +422,9 @@ F1:
     bgeu rel:F8 s5 s4
     li LABEL_size t2
     sub t2 s5 s5
-    ld LABEL_node s5 s6
-    lbu NODE_children_len s6 t3
-    beqz F1 t3
-    ld NODE_children s6 t3
-    ld 0 t3 t3
-    lbu NODE_content_len t3 t4
-    li 3 t5
-    bne rel:F1 t5 t4
-    ld NODE_content t3 t3
-    lbu 0 t3 t4
-    li 97 t5
-    bne rel:F1 t5 t4
-    lbu 1 t3 t4
-    li 115 t5
-    bne rel:F1 t5 t4
-    lbu 2 t3 t4
-    li 109 t5
-    bne rel:F1 t5 t4
-    ld LABEL_end s5 t4
-    beqz F2 t4
-    la cur_pc t5
-    ld 0 t5 t5
-    bltu rel:F2 t4 t5
-    mv s6 a0
-    call ehown
+    ld LABEL_node s5 a0
+    beq rel:F2 a0 s6
+    call ehlead
     beqz F1 a0
 F2:
     sub s4 s5 a0
@@ -1012,59 +993,92 @@ S9:
 
 # ---- more of it, at the start of layer 2 (layer 0 is full): the
 # procedures' ends, arm's EHABI
-my $code2 = cfn('ehown', "1 if node a0 has a cfi or ehabi word among its children, else 0", "
+my $code2 = cfn('ehlead', "1 if node a0's first child is asm and its first after asm, comment and align is a cfi or ehabi word (an entry block that starts a procedure), else 0", "
     lbu NODE_children_len a0 t0
     ld NODE_children a0 t1
-W1:
     beqz W8 t0
     ld 0 t1 t2
+    lbu NODE_content_len t2 t3
+    li 3 t4
+    bne rel:W8 t4 t3
+    ld NODE_content t2 t2
+    lbu 0 t2 t3
+    li 97 t4
+    bne rel:W8 t4 t3
+    lbu 1 t2 t3
+    li 115 t4
+    bne rel:W8 t4 t3
+    lbu 2 t2 t3
+    li 109 t4
+    bne rel:W8 t4 t3
+W1:
     addi 8 t1 t1
     addi -1 t0 t0
+    beqz W8 t0
+    ld 0 t1 t2
     lbu NODE_content_len t2 t3
-    li 4 t4
-    bltu rel:W1 t4 t3
     ld NODE_content t2 t2
+    li 7 t4
+    bne rel:W3 t4 t3
+    lbu 0 t2 t5
+    li 99 t4
+    bne rel:W3 t4 t5
+    lbu 1 t2 t5
+    li 111 t4
+    beq rel:W1 t4 t5
+W3:
+    li 5 t4
+    bne rel:W4 t4 t3
+    lbu 0 t2 t5
+    li 97 t4
+    bne rel:W4 t4 t5
+    lbu 1 t2 t5
+    li 108 t4
+    beq rel:W1 t4 t5
+W4:
+    li 4 t4
+    bltu rel:W8 t4 t3
     lbu 0 t2 t5
     li 99 t4
     bne rel:W2 t4 t5
     lbu 1 t2 t5
     li 102 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     lbu 2 t2 t5
     li 105 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     lbu 3 t2 t5
     li 32 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     li 1 a0
     ret
 W2:
     li 101 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     li 6 t4
-    bltu rel:W1 t4 t3
+    bltu rel:W8 t4 t3
     lbu 1 t2 t5
     li 104 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     lbu 2 t2 t5
     li 97 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     lbu 3 t2 t5
     li 98 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     lbu 4 t2 t5
     li 105 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     lbu 5 t2 t5
     li 32 t4
-    bne rel:W1 t4 t5
+    bne rel:W8 t4 t5
     li 1 a0
     ret
 W8:
     li 0 a0
     ret
 ", 2)
-. cfn('ehfun', "the function of the procedure at label a0 (an offset in the label table): the outermost open label whose first child is asm (scopes), found back from a0; a0 if none", "
+. cfn('ehfnode', "the node of the asm function the code is in: the outermost open label whose first child is asm (scopes), else 0", "
     la scope_depth t0
     ld 0 t0 t1
     la scopes t2
@@ -1073,11 +1087,11 @@ U1:
     bgeu rel:U8 t1 t3
     slli 3 t3 t4
     add t2 t4 t4
-    ld 0 t4 t4
+    ld 0 t4 a0
     addi 1 t3 t3
-    lbu NODE_children_len t4 t5
+    lbu NODE_children_len a0 t5
     beqz U1 t5
-    ld NODE_children t4 t5
+    ld NODE_children a0 t5
     ld 0 t5 t5
     lbu NODE_content_len t5 t6
     li 3 a1
@@ -1092,20 +1106,32 @@ U1:
     lbu 2 t5 t6
     li 109 a1
     bne rel:U1 a1 t6
+    ret
+U8:
+    li 0 a0
+    ret
+", 2)
+. cfn('ehfun', "the function of the procedure at label a0 (an offset in the label table): ehfnode's, found back from a0; a0 if none", "
+    enter1
+    mv a0 s4
+    call ehfnode
+    beqz U8 a0
     la labels_base t0
     ld 0 t0 t0
-    add a0 t0 t1
+    add s4 t0 t1
 U2:
     ld LABEL_node t1 t2
-    beq rel:U9 t2 t4
+    beq rel:U9 t2 a0
     beq rel:U8 t0 t1
     li LABEL_size t2
     sub t2 t1 t1
     j U2
 U9:
     sub t0 t1 a0
+    leave1
 U8:
-    ret
+    mv s4 a0
+    leave1
 ", 2)
 . cfn('ehpend', "the end of the procedure of row a0 (a1 rows from it): its function's end, or where the next procedure starts if that is before it (a1 1 then, else 0)", "
     ld 8 a0 t0
