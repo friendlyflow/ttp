@@ -286,6 +286,8 @@ static struct vec *a_data;
 static struct str *ffname (struct str *n)
 {
   if (m (n, "^\\.L(\\d+)__(\\d+)$")) { struct str *x = s_of (".L"); s_app (x, g (1)); s_cat (x, " "); s_app (x, g (2)); return x; }
+  /* (a symbol: as csema names it, name' where it reserves the name) */
+  if (n->n && n->p[0] != '.') return resname (n);
   return n;
 }
 static int isL (struct str *s) { return s->n >= 2 && s->p[0] == '.' && s->p[1] == 'L'; }
@@ -450,12 +452,12 @@ static void a64_finish (void)
       struct str *n = k->v[i];
       if (h_iv (weakref, n) && und (n)) {
         struct str *x = s_of (".Lgot "); s_app (x, n); s_cat (x, ":");
-        v_push (weakgot, nd_add (nd_add (nd_add (nd1 (x, ndc ("void")), nd_new (w_ptr ())), nd_new (n)), nd_new (w_addr ())));
+        v_push (weakgot, nd_add (nd_add (nd_add (nd1 (x, ndc ("void")), nd_new (w_ptr ())), nd_new (ffname (n))), nd_new (w_addr ())));
       } else v_push (keep, n);
     }
     if (keep->n) {
       nd_add (fn, nd1 (s_of ("align"), ndc ("8")));
-      for (i = 0; i < keep->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, keep->v[i]); s_cat (x, ":"); nd_add (fn, nd1 (x, nd1 (s_of ("dword"), nd_new (keep->v[i])))); }
+      for (i = 0; i < keep->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, keep->v[i]); s_cat (x, ":"); nd_add (fn, nd1 (x, nd1 (s_of ("dword"), nd_new (ffname (keep->v[i]))))); }
     }
   }
   if (ro->n) {
@@ -524,8 +526,8 @@ static void a64_emit (struct a64m *mm)
       long to;
       struct str *l;
       if (is_rel26 (rt) && h_iv (weakref, rs) && und (rs)) { struct str *x = s_of (".Lweak "); s_app (x, rs); h_set (weakb, rs, 1); nd_add (ins, nd1 (s_of ("rel"), nd_new (x))); continue; }
-      if (is_rel26 (rt)) { nd_add (ins, nd1 (s_of ("rel"), nd_new (rs))); continue; }
-      if (rt && s_is (rt, "R_AARCH64_ADR_PREL_PG_HI21")) { nd_add (ins, nd1 (s_of ("pagerel"), nd_new (rs))); continue; }
+      if (is_rel26 (rt)) { nd_add (ins, nd1 (s_of ("rel"), nd_new (ffname (rs)))); continue; }
+      if (rt && s_is (rt, "R_AARCH64_ADR_PREL_PG_HI21")) { nd_add (ins, nd1 (s_of ("pagerel"), nd_new (ffname (rs)))); continue; }
       if (rt && s_is (rt, "R_AARCH64_ADR_GOT_PAGE")) { struct str *x = s_of (".Lgot "); s_app (x, rs); h_set (a_got, rs, 1); nd_add (ins, nd1 (s_of ("pagerel"), nd_new (x))); continue; }
       if (rt) { struct str *x = s_of ("a relocation "); s_app (x, rt); s_cat (x, " in "); s_app (x, mm->op); fail_s (x); }
       to = s_is (d->name, "adrp") ? (mm->addr & ~4095LL) + val : mm->addr + val;
@@ -534,7 +536,7 @@ static void a64_emit (struct a64m *mm)
       nd_add (ins, nd1 (s_of (s_is (d->name, "adrp") ? "pagerel" : "rel"), nd_new (ffname (l))));
       continue;
     }
-    if (s_is (p, "uimm") && rt && m (rt, "^R_AARCH64_(ADD_ABS_LO12_NC|LDST(8|16|32|64|128)_ABS_LO12_NC)$")) { nd_add (ins, nd1 (s_of ("lo12"), nd_new (rs))); continue; }
+    if (s_is (p, "uimm") && rt && m (rt, "^R_AARCH64_(ADD_ABS_LO12_NC|LDST(8|16|32|64|128)_ABS_LO12_NC)$")) { nd_add (ins, nd1 (s_of ("lo12"), nd_new (ffname (rs)))); continue; }
     if (s_is (p, "uimm") && rt && s_is (rt, "R_AARCH64_LD64_GOT_LO12_NC")) { struct str *x = s_of (".Lgot "); s_app (x, rs); h_set (a_got, rs, 1); nd_add (ins, nd1 (s_of ("lo12"), nd_new (x))); continue; }
     if (s_is (p, "cond")) { nd_add (ins, nd_new (s_of (conds[val & 15]))); continue; }
     nd_add (ins, LN (val));
@@ -681,12 +683,12 @@ static void a64_main (struct vec *files)
         block = nd_new (x);
         nd_add (fn, block);
       } else if (fn && !a_ends) {
-        x = s_dup (name); s_cat (x, ":");
+        x = s_dup (ffname (name)); s_cat (x, ":");
         block = nd2 (x, ndc ("asm"), c);
         nd_add (fn, block);
       } else {
         a64_finish ();
-        x = s_dup (name); s_cat (x, ":");
+        x = s_dup (ffname (name)); s_cat (x, ":");
         fn = nd2 (x, ndc ("asm"), c);
         h_setp (fnof, name, fn);
         v_push (fns, fn);
@@ -715,7 +717,7 @@ static void a64_main (struct vec *files)
     for (i = 0; i < k->n; i++) v_push (fns, alias_of (k->v[i], h_pv (a_alias, k->v[i])));
     for (i = 0; i < a_data->n; i++) v_push (fns, a_data->v[i]);
     k = h_sorted (weakref);
-    for (i = 0; i < k->n; i++) if (und (k->v[i])) { struct str *x = s_dup (k->v[i]); s_cat (x, ":"); v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void"))); }
+    for (i = 0; i < k->n; i++) if (und (k->v[i])) { struct str *x = s_dup (ffname (k->v[i])); s_cat (x, ":"); v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void"))); }
     for (i = 0; i < weakgot->n; i++) v_push (fns, weakgot->v[i]);
   }
   /* a function that jumps to a block label of a function after it: one asm function */

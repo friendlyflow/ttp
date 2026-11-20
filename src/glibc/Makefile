@@ -1356,16 +1356,16 @@ c2ff-page-%: c2ff-passes $(FF)/%.ff
 	$(file >$(FF)/$*.units,$(foreach o,$(OBJS_all_$*),$(I)/$(o).json=$(I)/$(o).i$(nl)))
 	@$(RUN) -t 600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS_$*) $(foreach z,$(call with_start,ZEROS,$*),--zero $(z)) $(foreach w,$(call with_start,WEAKS,$*),--weak $(w)) @$(FF)/$*.units \
 	    -- @$(FF)/$*.rootlist $$(for a in $(ASMS_all_$*); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done | sort -u) > $(C2FFOUT)/$*.page 2> $(C2FFOUT)/$*.err
-	@sh ../compiler/gen/pageprefix.sh "c2ff-page $* ($(GTARGET))" $(or $(LICENSE_$*),license.ff.txt) $(C2FFOUT)/$*.page $(FF)/$*.ff.txt
+	@sh ../compiler/gen/pageprefix.sh "c2ff-page $* ($(GTARGET))" $(or $(LICENSE_$*),license.ff.txt) $(C2FFOUT)/$*.page $(FF)/$*.ff.txt $(GTARGET)
 c2ff-prog-%: $(FF)/%-prog.json $(FF)/%-prog.ff
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(call progstart,$*),--start) \
 	    $(if $(filter $*,$(INDEXED)),--index $(FF)/$*/index.ff) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main $(PROGROOTS_$*) > $(C2FFOUT)/$*-prog.ff.txt
-	@cmp $(C2FFOUT)/$*-prog.ff.txt $(FF)/$*-prog.ff.txt && echo "c2ff-prog $* ($(GTARGET)): c2ff.pl's program and csema's the same"
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/$*-prog.ff.txt | cmp $(C2FFOUT)/$*-prog.ff.txt - && echo "c2ff-prog $* ($(GTARGET)): c2ff.pl's program and csema's the same"
 c2ff-unit-%: $(FF)/%-prog.json %-roundtrip
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- $(PROGRT_$*) > $(C2FFOUT)/$*-unit.ff.txt
-	@cmp $(C2FFOUT)/$*-unit.ff.txt $(FF)/$*-unit.ff.txt && echo "c2ff-unit $* ($(GTARGET)): c2ff.pl's page and csema's the same"
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/$*-unit.ff.txt | cmp $(C2FFOUT)/$*-unit.ff.txt - && echo "c2ff-unit $* ($(GTARGET)): c2ff.pl's page and csema's the same"
 # and every test program of glibc that a tests build has (make tests-ref AREA=x
 # first, for each of TAREAS), through both, byte for byte: 45 minutes for
 # 508 programs at -j3, so not in ports-check (../compiler/gen/cltests.sh).
@@ -1381,7 +1381,7 @@ c2ff-glibc: all-passes $(FF)/glibc.ff
 	@mkdir -p $(C2FFOUT)
 	@$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) --statics-out $(C2FFOUT)/glibc.statics $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots > $(C2FFOUT)/glibc.page 2> $(C2FFOUT)/glibc.err
-	@sh ../compiler/gen/pageprefix.sh "c2ff-glibc ($(GTARGET))" $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(C2FFOUT)/glibc.page $(FF)/glibc.ff.txt
+	@sh ../compiler/gen/pageprefix.sh "c2ff-glibc ($(GTARGET))" $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(C2FFOUT)/glibc.page $(FF)/glibc.ff.txt $(GTARGET)
 	@cmp $(C2FFOUT)/glibc.statics $(FF)/glibc.statics && echo "c2ff-glibc ($(GTARGET)): the statics the same"
 .PHONY: c2ff-glibc
 
@@ -1409,10 +1409,10 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen
 	@grep -q '^twice units/units-p:' $(FF)/units/prog.ff.txt
 units-crosscheck: units-check
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --statics-out $(FF)/units/statics.c2ff $(foreach u,$(UNITS2),$(FF)/units/$(u).json=$(FF)/units/$(u).i) -- ua ub uc > $(FF)/units/page.c2ff.ff.txt 2> $(FF)/units/page.c2ff.err
-	@cmp $(FF)/units/page.c2ff.ff.txt $(FF)/units/page.ff.txt
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/units/page.ff.txt | cmp $(FF)/units/page.c2ff.ff.txt -
 	@cmp $(FF)/units/statics.c2ff $(FF)/units/statics
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program units --index $(FF)/units/tree/index.ff --statics $(FF)/units/statics --start $(FF)/units/units-p.json=$(FF)/units/units-p.i -- main > $(FF)/units/prog.c2ff.ff.txt 2> $(FF)/units/prog.c2ff.err
-	@cmp $(FF)/units/prog.c2ff.ff.txt $(FF)/units/prog.ff.txt
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/units/prog.ff.txt | cmp $(FF)/units/prog.c2ff.ff.txt -
 	@echo "units-crosscheck ($(GTARGET)): c2ff.pl's pages, statics and program as csema's"
 .PHONY: units-check units-crosscheck
 
@@ -1773,7 +1773,7 @@ $(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builti
 c2ff-libgcc: $(LIBGCC_C:%=$(LI)/%.c2ff) $(FF)/libgcc.ff
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --keep-going --page gcc --target $(GTARGET) @$(FF)/libgcc.units -- @$(FF)/libgcc.roots > $(C2FFOUT)/libgcc.page 2> $(C2FFOUT)/libgcc.err
-	@sh ../compiler/gen/pageprefix.sh "c2ff-libgcc ($(GTARGET))" ../libgcc/license.ff.txt $(C2FFOUT)/libgcc.page $(FF)/libgcc.ff.txt
+	@sh ../compiler/gen/pageprefix.sh "c2ff-libgcc ($(GTARGET))" ../libgcc/license.ff.txt $(C2FFOUT)/libgcc.page $(FF)/libgcc.ff.txt $(GTARGET)
 .PHONY: c2ff-libgcc
 
 # The tree's own check: libgcc-licenses, its license at its root and each
@@ -2051,9 +2051,14 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           (for (long double i = 1; ; i++), which ttpc kept at 1: it added
 #           1 to the bits; gen/patches/fltinc.pl); every target
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check
-ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc
+#   insnames C names that are instruction words of a target (glibc's brk
+#           and setns, the program's add, ret, b, str ...): csema writes
+#           them name', and s2ff the asm's definitions of them so too
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames
 ALLPROG_cxops := cxops
+ALLPROG_insnames := insnames
 ALLPROG_fltinc := fltinc
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a

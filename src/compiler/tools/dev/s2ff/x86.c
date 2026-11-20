@@ -425,6 +425,8 @@ static struct str *xlabel (struct str *o)
     s_app (x, d); s_cat (x, " "); s_app (x, s_num (h_iv (xnumeric, d) + (f ? 1 : 0)));
     return x;
   }
+  /* (a symbol: as csema names it, name' where it reserves the name) */
+  if (o->n && o->p[0] != '.') return resname (o);
   return o;
 }
 /* an operand bound to a parameter of kind k: its alternatives, each a value and a leaf */
@@ -778,6 +780,8 @@ static struct str *xother; static struct vec *xpending; static struct hash *xdat
 static long xalign; static int xalign_def; static long xmaxalign; static int xmaxalign_def;
 static struct vec *xprefixes, *xsections, *xcarried, *xcarry, *xruns;
 static struct hash *xMADE, *xCODE, *xrodata, *xro, *xroset, *xrunof, *xrunidx, *xinto;
+static struct hash *xemitted;   /* (the read-only data carry_rodata put in a function, by name) */
+static struct hash *xglobl;     /* (the names .globl makes global) */
 static struct str *xcode_;
 static struct vec *xroblob;
 static long xroalign; static int xroalign_def;
@@ -812,7 +816,7 @@ static void xfinish (void)
     k = h_sorted (xtls);
     for (i = 0; i < k->n; i++) { struct str *x = s_of (".Ltls "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (c->nodes, nd1 (x, nd1 (s_of ("dword"), nd1 (s_of ("tprel"), nd_new (k->v[i]))))); }
     k = h_sorted (xgot);
-    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (c->nodes, nd1 (x, nd1 (s_of ("dword"), nd_new (k->v[i])))); }
+    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (c->nodes, nd1 (x, nd1 (s_of ("dword"), nd_new (resname (k->v[i]))))); }
     v_push (xcarried, c);
   }
   h_clear (xtls); xgot = h_new ();
@@ -1035,7 +1039,8 @@ static void rodata_set (struct str *x)
   { struct vec *nb = v_new (); for (; i < b->n; i++) v_push (nb, b->v[i]); h_setp (xrodata, x, nb); }
 }
 static struct hash *xkw;
-static struct str *kwname (struct str *n) { if (h_has (xkw, n)) { struct str *x = s_dup (n); s_cat (x, "'"); return x; } return n; }
+/* (a label's name: csema's name' where it reserves the name, resname, which holds xkw's words too) */
+static struct str *kwname (struct str *n) { if (h_has (xkw, n)) { struct str *x = s_dup (n); s_cat (x, "'"); return x; } return resname (n); }
 
 /* a decimal number as the double nearest it (Perl's NV of the text) */
 static unsigned long dbl_bits (struct str *t);
@@ -1051,6 +1056,7 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
   long i;
   if (m (st, "^\\.pushsection\\s+\"?\\.note\\.gnu\\.property\"?")) { skipnote = 1; return; }
   if (skipnote) { if (s_is (st, ".popsection")) skipnote = 0; return; }
+  if (m (st, "^\\.(?:globl|global)\\s+(.+)$")) { struct vec *gl = ssplit ("\\s*,\\s*", g (1), 0); for (i = 0; i < gl->n; i++) h_set (xglobl, gl->v[i], 1); }
   if (m (st, "^\\.weak\\s+([.\\w]+)$")) h_set (xweak, g (1), 1);
   if (m (st, "^\\.(text|data|bss)$")) {
     struct str *s = s_of ("."); struct vec *p = v_new ();
@@ -1580,9 +1586,13 @@ static void carry_rodata (void)
         struct nd *last;
         struct str *x;
         if (q > st && (e->has_align ? e->align : 1) > 1) nd_add (f, nd1 (s_of ("align"), LN (e->align)));
-        for (z = 0; z + 1 < e->names->n; z++) { x = s_dup (e->names->v[z]); s_cat (x, ":"); nd_add (f, nd_new (x)); }
-        x = s_dup (e->names->v[e->names->n - 1]); s_cat (x, ":");
+        for (z = 0; z < e->names->n; z++) h_set (xemitted, e->names->v[z], 1);
+        /* (a global label of the data, an entry: asm its first child, as a function's, so that ttpc takes it
+           as one, seen from other units: libmvec's tables their functions name; also in layer 0 of a big one) */
+        for (z = 0; z + 1 < e->names->n; z++) { x = s_dup (resname (e->names->v[z])); s_cat (x, ":"); nd_add (f, h_has (xglobl, e->names->v[z]) ? nd1 (x, ndc ("asm")) : nd_new (x)); }
+        x = s_dup (resname (e->names->v[e->names->n - 1])); s_cat (x, ":");
         last = nd_new (x);
+        if (h_has (xglobl, e->names->v[e->names->n - 1])) nd_add (last, ndc ("asm"));
         for (z = 0; z < e->bytes->n; z++) nd_add (last, e->bytes->v[z]);
         nd_add (f, last);
       }
@@ -1593,12 +1603,79 @@ static void carry_rodata (void)
       struct nd *n2;
       long z;
       if (h_iv (xrunof, x)) continue;
+      h_set (xemitted, x, 1);
       nd_add (f, nd1 (s_of ("align"), ndc ("16")));
-      y = s_dup (x); s_cat (y, ":");
+      y = s_dup (resname (x)); s_cat (y, ":");
       n2 = nd_new (y);
+      if (h_has (xglobl, x)) nd_add (n2, ndc ("asm"));
       b = h_pv (xrodata, x);
       for (z = 0; z < b->n; z++) nd_add (n2, b->v[z]);
       nd_add (f, n2);
+    }
+  }
+}
+
+/* (a run entry's bytes, little-endian, as byte leaves onto out; 0 where one is no number: a label's
+   difference, a negative .quad's Perl NV) */
+static int rodata_bytes (struct vec *b, struct vec *out)
+{
+  long i, j;
+  for (i = 0; i < b->n; i++) {
+    struct nd *d = b->v[i], *v = d->k->n ? d->k->v[0] : 0;
+    long w = s_is (d->c, "byte") ? 1 : s_is (d->c, "half") ? 2 : s_is (d->c, "word") ? 4 : s_is (d->c, "dword") ? 8 : 0;
+    if (w) {
+      unsigned long u = 0;
+      long q = 0, neg = 0;
+      if (!v || v->k->n || !v->c->n) return 0;
+      if (v->c->p[0] == '-') { neg = 1; q = 1; }
+      if (q >= v->c->n) return 0;
+      for (; q < v->c->n; q++) { if (v->c->p[q] < '0' || v->c->p[q] > '9') return 0; u = u * 10 + (unsigned long) (v->c->p[q] - '0'); }
+      if (neg) u = (unsigned long) 0 - u;
+      for (j = 0; j < w; j++) v_push (out, nd_new (s_num ((long) ((u >> (8 * j)) & 255))));
+      continue;
+    }
+    if (s_is (d->c, "reserve") && v && !v->k->n) {
+      long n;
+      if (!xnum (v->c, &n)) return 0;
+      for (j = 0; j < n; j++) v_push (out, nd_new (s_num (0)));
+      continue;
+    }
+    if (s_is (d->c, "ascii") && v) { for (j = 0; j < v->c->n; j++) v_push (out, nd_new (s_num (v->c->p[j] & 255))); continue; }
+    return 0;
+  }
+  return 1;
+}
+/* (read-only data no function of the file names, a table of its own under a global name: libmvec's
+   svml_*_data.S, which hold only .rodata: a global of its bytes, at its alignment, as csema writes C's
+   tables (array u8, its items in groups of 255), the entry's other names aliases of it) */
+static void data_globals (void)
+{
+  long r, q, z, i;
+  for (r = 0; r < xruns->n; r++) {
+    struct vec *run = xruns->v[r];
+    for (q = 0; q < run->n; q++) {
+      struct runent *e = run->v[q];
+      struct str *name = 0, *x;
+      struct vec *by;
+      struct nd *gl;
+      for (z = 0; z < e->names->n; z++) if (h_has (xemitted, e->names->v[z])) break;
+      if (z < e->names->n) continue;
+      for (z = 0; z < e->names->n && !name; z++) if (!m (e->names->v[z], "^\\.L")) name = e->names->v[z];
+      if (!name) continue;
+      by = v_new ();
+      if (!rodata_bytes (e->bytes, by)) { x = s_of ("read-only data of no function that are no bytes: "); s_app (x, name); fail_s (x); }
+      x = s_dup (resname (name)); s_cat (x, ":");
+      gl = nd_new (x);
+      if (e->has_align && e->align > 1) nd_add (gl, nd1 (s_of ("align"), LN (e->align)));
+      nd_add (gl, nd2 (s_of ("array"), ndc ("u8"), LN (by->n)));
+      for (i = 0; i < by->n; i += 255) {
+        struct nd *it = nd_new (s_of ("items"));
+        long j;
+        for (j = i; j < by->n && j < i + 255; j++) nd_add (it, by->v[j]);
+        nd_add (gl, it);
+      }
+      v_push (fns, gl);
+      for (z = 0; z < e->names->n; z++) if (e->names->v[z] != name && !m (e->names->v[z], "^\\.L")) v_push (fns, alias_of (e->names->v[z], name));
     }
   }
 }
@@ -1618,6 +1695,8 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
   xsections = v_new (); xprefixes = v_new (); xrodata = h_new (); xro = h_new (); xcarry = v_new (); xroset = h_new (); xweak = h_new ();
   xcarried = v_new (); xweakgot = h_new (); xruns = v_new (); xrunof = h_new (); xrunidx = h_new (); xinto = h_new ();
   xroalign_def = 0;
+  xemitted = h_new ();
+  xglobl = h_new ();
   xzeroed = h_new ();
   for (i = 0; i < zerov->n; i++) h_set (xzeroed, zerov->v[i], 1);
   xroblob = 0;
@@ -1656,12 +1735,12 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
     for (i = 0; i < fns->n; i++) h_set (defined, unlabel (((struct nd *) fns->v[i])->c), 1);
     for (i = 0; i < k->n; i++) {
       struct str *w = k->v[i], *x;
-      if (h_has (defined, w) || m (w, "^DW\\.ref\\.")) continue;
-      x = s_dup (w); s_cat (x, ":");
+      if (h_has (defined, resname (w)) || m (w, "^DW\\.ref\\.")) continue;
+      x = s_dup (resname (w)); s_cat (x, ":");
       v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void")));
     }
     k = h_sorted (xweakgot);
-    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (fns, nd_add (nd_add (nd_add (nd1 (x, ndc ("void")), nd_new (w_ptr ())), nd_new (k->v[i])), nd_new (w_addr ()))); }
+    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (fns, nd_add (nd_add (nd_add (nd1 (x, ndc ("void")), nd_new (w_ptr ())), nd_new (resname (k->v[i]))), nd_new (w_addr ()))); }
   }
   if (xprefixes->n) { struct str *x = s_of ("a prefix with no instruction after it:"); for (i = 0; i < xprefixes->n; i++) { s_cat (x, " "); s_app (x, xprefixes->v[i]); } fail_s (x); }
   {
@@ -1692,6 +1771,7 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
     for (j = 0; j < c->nodes->n; j++) nd_add (f, c->nodes->v[j]);
   }
   carry_rodata ();
+  data_globals ();
   /* (a node of more than 255 children, a table of libmvec's read-only data or a long block: its children
      in numbered layers, 0: 1: ...; a function past 255 stops, its entries would be in a layer) */
   for (i = 0; i < fns->n; i++) {

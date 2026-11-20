@@ -22,6 +22,9 @@
 static struct str *src_s, *dump_s, *page;
 static int o_size, o_items, o_align, o_header, o_locals, o_skip;
 static char *tgt_name;
+static struct str *resname (struct str *n);   /* (below: a name csema reserves on the target is name') */
+static int is_opt (char *a, char *o);
+static void res_init (void);
 static struct str *facts_f;
 static struct vec *zero_v, *then_v, *files;
 static struct str *where;
@@ -397,7 +400,7 @@ static struct str *label;
 static struct str *dname (struct str *l)
 {
   struct str *x;
-  if (!h_iv (dlabel, l)) return l;
+  if (!h_iv (dlabel, l)) return l->n && l->p[0] != '.' ? resname (l) : l;
   x = ssub (l, "^\\.", "", "");
   s_cat (x, " ");
   s_app (x, ssub (ssub (src_s, ".*/", "", ""), "\\.\\w+$", "", ""));
@@ -419,20 +422,20 @@ static void finish (void)
   if (!(fn && (tls->n || got->n))) return;
   nd_add (fn, nd1 (S ("align"), ndc ("8")));
   k = h_sorted (tls);
-  for (i = 0; i < k->n; i++) { struct str *x = S (".Ltls "); s_app (x, k->v[i]); s_cat (x, ":"); nd_add (fn, nd1 (x, nd1 (S ("dword"), nd1 (S ("tprel"), nd_new (k->v[i]))))); }
+  for (i = 0; i < k->n; i++) { struct str *x = S (".Ltls "); s_app (x, k->v[i]); s_cat (x, ":"); nd_add (fn, nd1 (x, nd1 (S ("dword"), nd1 (S ("tprel"), nd_new (resname (k->v[i])))))); }
   k = h_sorted (got);
-  for (i = 0; i < k->n; i++) { struct str *x = S (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); nd_add (fn, nd1 (x, nd1 (S ("dword"), nd_new (k->v[i])))); }
+  for (i = 0; i < k->n; i++) { struct str *x = S (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); nd_add (fn, nd1 (x, nd1 (S ("dword"), nd_new (resname (k->v[i]))))); }
   h_clear (tls); h_clear (got);
 }
 static struct nd *into_of (void) { return block ? block : fn; }
 static struct nd *fn_head (struct str *name, struct str *file, long lineno)
 {
-  struct str *x = s_dup (name), *c = s_dup (label);
+  struct str *x = s_dup (resname (name)), *c = s_dup (label);
   s_cat (x, ":");
   s_cat (c, " "); s_app (c, file); s_cat (c, ":"); s_app (c, s_num (lineno));
   return nd2 (x, ndc ("asm"), nd1 (S ("comment"), nd_new (c)));
 }
-static struct nd *alias_of (struct str *a, struct str *b) { struct str *x = s_dup (a); s_cat (x, ":"); return nd2 (x, ndc ("alias"), nd_new (b)); }
+static struct nd *alias_of (struct str *a, struct str *b) { struct str *x = s_dup (resname (a)); s_cat (x, ":"); return nd2 (x, ndc ("alias"), nd_new (resname (b))); }
 
 /* gcc's read-only data */
 struct dobj { struct str *name, *sec; unsigned char *b; long nb, room; };
@@ -681,7 +684,7 @@ static void rv_main (void)
         continue;
       }
       mm = take ();
-      if (m (op, "^(call|tail)$")) { take (); nd_add (into, nd1 (op, nd_new (O (o, -1)))); continue; }
+      if (m (op, "^(call|tail)$")) { take (); nd_add (into, nd1 (op, nd_new (dname (O (o, -1))))); continue; }
       if (mm->bytes == 2) {
         struct str *tgt = 0;
         for (i = 0; i < o->n && !tgt; i++) if (m (o->v[i], "^\\.L")) tgt = o->v[i];
@@ -792,6 +795,94 @@ static void rv_main (void)
 #include "arm.c"
 #include "x86.c"
 
+/* ---- the names csema reserves on the target, which it writes name' (cl_t.c's cl_reserve, cl_m.c's
+   cl_reserve_target): the language's words; riscv64's registers, another target's its section's registers
+   group in shared.ff; every target's instruction forms, its instruction groups' name: children there (the
+   user's choice, 2026-11-20); on x86_64 x86_64gnu.ff's forms too. An asm definition of such a name, and each
+   operand naming it, is name' here, as a C caller names it (setns' on x86_64, syscall' on aarch64 and arm).
+   The groups as cl_m.c lists them, gen/S2ffRes.pm too. */
+static struct hash *s2ff_res;
+static char *res_words[] = {
+  "if", "else", "while", "for", "return", "break", "continue", "comment", "address", "content", "syscall", "U", "L", "UL", "LL", "ULL",
+  "array", "struct", "union", "enum", "function", "sizeof", "alignof", "compile", "emit", "fail", "number",
+  "target", "include", "workspace", "switch", "case", "default", "goto", "char", "short", "int", "long", "void",
+  "type", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "float16", "bfloat16", "fract", "accum", "va_list", "va_start", "va_arg", "va_end", "va_copy",
+  "alias", "ifunc", "asm", "items", "cast", "weak", "va_arg_pack", "va_arg_pack_len", "real", "imag", "generic", "section", "constructor", "destructor", "fs", "vector", "line", "byte", "half", "word", "dword", 0
+};
+static char *res_rv[] = { "integer:", "system:", "atomic:", "float:", "vector:", "compressed:", 0 };
+static char *res_x86[] = { "alu1:", "alu2:", "move:", "unary:", "shift1:", "shift2:", "bit:", "branch:", "set:", "cmov:", "stack:", "atomic:", "system:", "sse:", 0 };
+static char *res_a64[] = { "integer:", "branch:", "system:", "memory:", "atomic:", "float:", "vector:", "sve:", "sme:", 0 };
+static char *res_arm[] = { "data:", "data2:", "shifts:", "multiply:", "bits:", "memory:", "atomic:", "branch:", "system:", "vfp:", "a32x:", 0 };
+static int res_alpha (int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
+/* (cl_reserve_form: a name: of letters, digits and _, a letter or _ first) */
+static void res_form (struct str *s)
+{
+  long i;
+  if (s->n < 2 || s->p[s->n - 1] != ':' || !res_alpha (s->p[0])) return;
+  for (i = 0; i < s->n - 1; i++) if (!res_alpha (s->p[i]) && !(s->p[i] >= '0' && s->p[i] <= '9')) return;
+  h_set (s2ff_res, s_sub (s, 0, s->n - 1), 1);
+}
+/* (cl_reserve_gnu: a name: with no name: under it, a lower case letter first, is a form; else what is under it) */
+static void res_gnu (struct nd *root)
+{
+  long j, i;
+  for (j = 0; j < ndn (root); j++) {
+    struct nd *x = ndk (root, j);
+    struct str *s = x->c;
+    int form = s->n >= 2 && s->p[s->n - 1] == ':' && s->p[0] >= 'a' && s->p[0] <= 'z';
+    for (i = 0; form && i < s->n - 1; i++) if (!res_alpha (s->p[i]) && !(s->p[i] >= '0' && s->p[i] <= '9')) form = 0;
+    for (i = 0; form && i < ndn (x); i++) { struct str *k = ndk (x, i)->c; if (k->n && k->p[k->n - 1] == ':') form = 0; }
+    if (form) res_form (s); else res_gnu (x);
+  }
+}
+static void res_init (void)
+{
+  char **g;
+  struct nd *sec;
+  long i, j;
+  s2ff_res = h_new ();
+  for (i = 0; res_words[i]; i++) h_set (s2ff_res, s_of (res_words[i]), 1);
+  sec = section_of (tgt_name);
+  if (is_opt (tgt_name, "riscv64")) {
+    static char *w[] = { "zero", "ra", "sp", "gp", "tp", "fp", "pc", 0 }, *pre[] = { "x", "a", "s", "t", "f", "fa", "fs", "ft", "v", 0 };
+    for (i = 0; w[i]; i++) h_set (s2ff_res, s_of (w[i]), 1);
+    for (i = 0; pre[i]; i++) for (j = 0; j < 32; j++) { struct str *x = s_of (pre[i]); s_app (x, s_num (j)); h_set (s2ff_res, x, 1); }
+  } else {
+    struct nd *regs = child_named (sec, "registers:");
+    if (!regs) die_c ("s2ff: no registers: in the target's section of the shared page\n");
+    for (i = 0; i < ndn (regs); i++) {
+      struct str *c = ndk (regs, i)->c;
+      struct vec *v;
+      if (c->n && c->p[c->n - 1] == ':') c = s_sub (c, 0, c->n - 1);
+      v = ssplit ("\\s+", c, 0);
+      for (j = 0; j < v->n; j++) if (((struct str *) v->v[j])->n) h_set (s2ff_res, v->v[j], 1);
+    }
+  }
+  g = is_opt (tgt_name, "x86_64") ? res_x86 : is_opt (tgt_name, "aarch64") ? res_a64 : is_opt (tgt_name, "arm") ? res_arm : res_rv;
+  for (i = 0; i < ndn (sec); i++) {
+    struct nd *x = ndk (sec, i);
+    int yes = 0;
+    for (j = 0; g[j]; j++) if (s_is (x->c, g[j])) yes = 1;
+    if (yes) for (j = 0; j < ndn (x); j++) res_form (ndk (x, j)->c);
+  }
+  if (is_opt (tgt_name, "x86_64")) {
+    struct str *t;
+    if (!gnu_f) die_c ("s2ff: no --gnu FILE (x86_64gnu.ff)\n");
+    t = read_all ((char *) gnu_f->p);
+    if (!t) { struct str *x = s_of ("s2ff: cannot open "); s_app (x, gnu_f); s_cat (x, "\n"); die_s (x); }
+    ffp = t->p; ffn = t->n; ffi = 0;
+    res_gnu (ff_node ());
+  }
+}
+static struct str *resname (struct str *n)
+{
+  struct str *x;
+  if (!s2ff_res) res_init ();
+  if (!n->n || n->p[n->n - 1] == '\'' || !h_has (s2ff_res, n)) return n;
+  x = s_dup (n); s_cat (x, "'");
+  return x;
+}
+
 static int is_opt (char *a, char *o) { long n = slen (o); return slen (a) == n && msame ((unsigned char *) a, (unsigned char *) o, n); }
 static void init_tables (void)
 {
@@ -841,6 +932,9 @@ int s2ff_main (int argc, char **argv)
     if (i + 1 < argc && is_opt (argv[i], "--gnu")) { gnu_f = s_of (argv[i + 1]); i += 2; continue; }
     break;
   }
+  /* (the reserved names, once, before any translation: res_init's patterns would take the place of a
+     caller's captures; --header has no shared page and names nothing) */
+  if (shared_f) res_init ();
   if (is_opt (tgt_name, "aarch64")) {
     while (i < argc) {
       char *a = argv[i++];

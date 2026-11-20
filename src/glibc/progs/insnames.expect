@@ -1,0 +1,6 @@
+exit 0
+addresses: 7
+calls: 5 2 2 1 42
+data: 7 str 15 3 4 5 6 8 9
+brk: 0
+setns: -1 EBADF

@@ -250,7 +250,7 @@ if (defined $program) {
     # children, through its layers), and what reaches a name left out
     my %left = map { $_ => 1 } @skip;
     { open my $h, '<', "$program/glibc.csema.err" or die "datacheck: $program/glibc.csema.err: $!\n"; while (<$h>) { $left{$1} = 1 if /^csema: left out: (.+)$/ } }
-    my (%uses, %locals, @stack, $def);
+    my (%uses, %locals, %entry, @stack, $def, $isasm);
     open my $h, '<', "$program/glibc.ff.txt" or die "datacheck: $program/glibc.ff.txt: $!\n";
     while (my $l = <$h>) {
         chomp $l;
@@ -264,10 +264,16 @@ if (defined $program) {
             my @p = @stack[1 .. $d];
             my $i = 0;
             $i++ while $i < @p && $p[$i] =~ /^\d+:$/;
-            if ($stack[0] =~ /^glibc .*:$/ && $i == $#p && $c =~ /^(.+):$/) { $def = [$1, $d]; next }
+            if ($stack[0] =~ /^glibc .*:$/ && $i == $#p && $c =~ /^(.+):$/) { $def = [$1, $d]; $isasm = 0; next }
             undef $def if defined $def && $d <= $def->[1];
         }
         next unless $def;
+        # (an asm function's: asm its first child)
+        $isasm = 1 if $d == $def->[1] + 1 && $c eq 'asm' && !$locals{ $def->[0] } && !$uses{ $def->[0] };
+        # (an asm function's entry, "x:" among its children, through their
+        # layers: a name of the function, not a local; libmvec's merged
+        # functions and data labels; a .L label is the function's own)
+        if ($isasm && $c =~ /^([^.\d][^ ]*):$/ && !grep { !/^\d+:$/ } @stack[$def->[1] + 1 .. $d - 1]) { $entry{$1} = $def->[0]; next }
         # (a local's declaration, "x:" in a body: x is no global there)
         if ($c =~ /^(.+):$/) { $locals{ $def->[0] }{$1} = 1 } else { $uses{ $def->[0] }{$c} = 1 }
     }
@@ -275,7 +281,9 @@ if (defined $program) {
     # (a word that is a local or a field anywhere is no edge: a path's fields
     # are words as a call is)
     my %decl = map { %$_ } values %locals;
-    for my $f (keys %uses) { delete @{ $uses{$f} }{ grep { $decl{$_} } keys %{ $uses{$f} } } }
+    for my $f (keys %uses) { delete @{ $uses{$f} }{ grep { $decl{$_} && !$entry{$_} } keys %{ $uses{$f} } } }
+    # (a use of an entry is a use of the function that holds it)
+    for my $f (keys %uses) { for my $u (grep { $entry{$_} } keys %{ $uses{$f} }) { delete $uses{$f}{$u}; $uses{$f}{ $entry{$u} } = 1 unless $entry{$u} eq $f } }
     my %rev;
     for my $f (keys %uses) { for my $u (keys %{ $uses{$f} }) { push @{ $rev{$u} }, $f if $uses{$u} || $left{$u} } }
     my %bad = %left;
