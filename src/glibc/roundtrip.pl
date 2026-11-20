@@ -43,6 +43,7 @@
 # A host tool, not part of ttpc.
 use strict;
 use warnings;
+use feature 'current_sub';
 use FindBin;
 use lib "$FindBin::Bin/../compiler/gen";
 use FFold;
@@ -276,6 +277,9 @@ sub E {
         # a conversion to _Bool: in ff (where it is a u8) a compare with 0
         # (what the operand is converted to first does not matter then)
         return '(tobool ' . E(unimplicit($c)) . ')' if $ck =~ /ToBoolean$/;
+        # (a complex value's real part, its conversion to a real type: csema
+        # writes it so, cast T / real x)
+        return '(u__real ' . E($c) . ')' if $ck eq 'FloatingComplexToReal';
         # (C23's true and false, a bool's own, are c2ff's 1 and 0, a u8 there:
         # a 1 or 0 converted to a u8 is that literal, on both sides)
         if ($ck eq 'IntegralCast' && tcls($n) eq 'u8' && !$in_global && (unparen($c)->{kind} // '') eq 'IntegerLiteral' && (unparen($c)->{value} // '') =~ /^[01]$/) { return E(unparen($c)) }
@@ -371,6 +375,9 @@ sub E {
         return E($c) if $op eq '&' && $in_global && tcls(unparen($c)) =~ /^arr\(/;
         # a function's address is the function (its decay is dropped too)
         return E($c) if $op eq '&' && (strip($c)->{kind} // '') eq 'DeclRefExpr' && (strip($c)->{referencedDecl}{kind} // '') eq 'FunctionDecl';
+        # (! of a complex value, which clang tests as it is: csema's test of
+        # its parts is that value)
+        return '(u! ' . ET($c) . ')' if $op eq '!';
         return "(u$op" . ($n->{isPostfix} ? 'post' : '') . ' ' . E($c) . ')';
     }
     if ($k eq 'BinaryOperator' && $n->{opcode} eq ',') { return seqform(seq($n)) }
@@ -385,9 +392,15 @@ sub E {
         # (an enum is an int in ttpc, in C maybe an unsigned: the other operand
         # without its conversion)
         if (tcls(unimplicit($l)) eq 'enum' || tcls(unimplicit($r)) eq 'enum') { ($l, $r) = (unimplicit($l), unimplicit($r)) }
+        # (csema's complex c op= b: c = c op b, of its parts)
+        if ($side eq 'ff' && $n->{opcode} eq '=' && (my @x = cxlow(unparen($r))) > 2) {
+            my $el = E($l);
+            return "($x[1]= $el $x[3])" if $x[1] =~ m{^[-+*/]$} && $x[2] eq $el;
+        }
+        return "($n->{opcode} " . ET($l) . ' ' . ET($r) . ')' if $n->{opcode} =~ /^(&&|\|\|)$/;
         return "($n->{opcode} " . E($l) . ' ' . E($r) . ')';
     }
-    if ($k eq 'ConditionalOperator') { my ($c, $a, $b) = kids($n); return '(?: ' . E($c) . ' ' . E($a) . ' ' . E($b) . ')' }
+    if ($k eq 'ConditionalOperator') { my ($c, $a, $b) = kids($n); return '(?: ' . ET($c) . ' ' . E($a) . ' ' . E($b) . ')' }
     if ($k eq 'BinaryConditionalOperator') { my @k = kids($n); return '(?2 ' . E($k[0]) . ' ' . E($k[3]) . ')' }
     if ($k eq 'ArraySubscriptExpr') { my ($b, $i) = kids($n); return '(u* (+ ' . E($b) . ' ' . E($i) . '))' }
     if ($k eq 'MemberExpr') {
@@ -395,6 +408,11 @@ sub E {
         # (an anonymous member is no step of its own)
         return E($b) if ($n->{name} // '') eq '';
         return '(mem ' . ($n->{isArrow} ? '->' : '.') . ($n->{name} =~ s/'$//r) . ' ' . E($b) . ')';
+    }
+    # (__builtin_complex (x, 0) is x converted to the complex type, csema's
+    # form of that conversion: complex T / x / 0)
+    if ($k eq 'CallExpr' && ((strip((kids($n))[0]) // {})->{referencedDecl}{name} // '') eq '__builtin_complex' && kids($n) == 3 && is_zero((kids($n))[2])) {
+        return "(cast FloatingRealToComplex " . tcls($n) . ' ' . E((kids($n))[1]) . ')';
     }
     return call($n) if $k eq 'CallExpr';
     return atomic($n) if $k eq 'AtomicExpr';
@@ -405,6 +423,7 @@ sub E {
         return "($w $t)";
     }
     if ($k eq 'StmtExpr') {
+        if (my ($f) = cxlow($n)) { return $f }
         my ($cs) = kids($n);
         if ($side eq 'glibc') { my $s = syscall_idiom($cs); return $s if $s }
         return seqform(S(kids($cs)));
@@ -417,6 +436,125 @@ sub E {
     return '(asm)' if $k eq 'GCCAsmStmt';
     "(?$k)";
 }
+# csema's complex arithmetic (C's complex + - * / == != and unary - on
+# their parts, as gcc does them, ttpc having no complex operator), written
+# back as a statement expression: its operands in locals __cx_N first (one
+# declared alone is assigned next), then the value. It is C's operator:
+# __mulXc3 (re a, im a, re b, im b) is a * b, __divXc3 a / b (a real a: a,
+# 0); __builtin_complex (re a + re b, im a + im b) is a + b, - a - b (a real
+# operand stays real: re a + r, im a is a + r; r - re b, - im b is r - b),
+# * and / of a real operand part by part; re a == re b && im a == im b is
+# a == b (a real b: im a == 0), != with ||; - re a, - im a is - a; (re a,
+# im a) of another type a's conversion; re a != 0 || im a != 0 its truth.
+# Each operand is its local's value (a real one real, as clang has it).
+# Returns (form, op, a, b), or () if it is no such statement expression.
+sub cxlow {
+    my ($n) = @_;
+    return () unless $side eq 'ff' && ($n->{kind} // '') eq 'StmtExpr';
+    my ($cs) = kids($n);
+    my @s = kids($cs);
+    return () unless @s >= 2;
+    my %t;
+    my $i = 0;
+    while ($i < $#s) {
+        my $st = $s[$i];
+        return () unless ($st->{kind} // '') eq 'DeclStmt';
+        my @v = kids($st);
+        return () unless @v == 1 && ($v[0]{kind} // '') eq 'VarDecl' && ($v[0]{name} // '') =~ /^__cx_\d+$/;
+        my $nm = $v[0]{name};
+        my ($init) = grep { $_->{kind} !~ /Attr$/ } kids($v[0]);
+        if (!$init) {
+            return () unless $i + 1 < $#s;
+            my $as = unparen($s[$i + 1]);
+            return () unless ($as->{kind} // '') eq 'BinaryOperator' && $as->{opcode} eq '=';
+            my ($l, $r) = kids($as);
+            return () unless (strip($l)->{kind} // '') eq 'DeclRefExpr' && (strip($l)->{referencedDecl}{name} // '') eq $nm;
+            $init = $r;
+            $i++;
+        }
+        $t{$nm} = [$init, tcls($v[0]) !~ /_Complex/];
+        $i++;
+    }
+    my $ct = tcls($n);
+    my $part = sub {
+        my $u = strip($_[0]);
+        return ['zero'] if is_zero($u);
+        if (($u->{kind} // '') eq 'UnaryOperator' && $u->{opcode} =~ /^__(real|imag)$/) {
+            my $r = strip((kids($u))[0]);
+            my $nm = ($r->{kind} // '') eq 'DeclRefExpr' ? $r->{referencedDecl}{name} // '' : '';
+            return [$1 eq 'real' ? 're' : 'im', $nm] if $t{$nm} && !$t{$nm}[1];
+        }
+        if (($u->{kind} // '') eq 'DeclRefExpr' && $t{ $u->{referencedDecl}{name} // '' } && $t{ $u->{referencedDecl}{name} }[1]) { return ['val', $u->{referencedDecl}{name}] }
+        if (($u->{kind} // '') eq 'UnaryOperator' && $u->{opcode} eq '-') { my $q = __SUB__->((kids($u))[0]); return ['neg', @$q] if $q && $q->[0] =~ /^(re|im)$/ }
+        if (($u->{kind} // '') eq 'BinaryOperator') { return ['bin', $u->{opcode}, (kids($u))[0, 1]] }
+        return undef;
+    };
+    my $opnd = sub { my ($nm) = @_; E($t{$nm}[0]) };
+    my $is = sub { my ($p, $k, $nm) = @_; $p && $p->[0] eq $k && (!defined $nm || ($p->[1] // '') eq $nm) };
+    my $R = strip($s[-1]);
+    my $rk = $R->{kind} // '';
+    my $res = sub { my ($op, $a, $b) = @_; defined $b ? ("($op $a $b)", $op, $a, $b) : ("($op $a)", $op, $a) };
+    if ($rk eq 'CallExpr') {
+        my ($f, @a) = kids($R);
+        my $fn = (strip($f) // {})->{referencedDecl}{name} // '';
+        if ($fn =~ /^__(mul|div)[sdxt]c3$/ && @a == 4) {
+            my $op = $1 eq 'mul' ? '*' : '/';
+            my @p = map { $part->($_) } @a;
+            my @o;
+            for my $j (0, 2) {
+                if ($is->($p[$j], 're') && $is->($p[$j + 1], 'im', $p[$j][1])) { push @o, $opnd->($p[$j][1]) }
+                elsif ($is->($p[$j], 'val') && $is->($p[$j + 1], 'zero')) { push @o, $opnd->($p[$j][1]) }
+                else { return () }
+            }
+            return $res->($op, @o);
+        }
+        if ($fn eq '__builtin_complex' && @a == 2) {
+            my ($x, $y) = map { $part->($_) } @a;
+            return () unless $x && $y;
+            # - a
+            if ($x->[0] eq 'neg' && $y->[0] eq 'neg' && $x->[1] eq 're' && $y->[1] eq 'im' && $x->[2] eq $y->[2]) { return $res->('u-', $opnd->($x->[2])) }
+            # a's conversion
+            if ($x->[0] eq 're' && $y->[0] eq 'im' && $x->[1] eq $y->[1]) { return ("(cast FloatingComplexCast $ct " . $opnd->($x->[1]) . ')') }
+            return () unless $x->[0] eq 'bin' && $x->[1] =~ m{^[-+*/]$};
+            my $op = $x->[1];
+            my ($l, $r) = map { $part->($_) } @$x[2, 3];
+            return () unless $l && $r;
+            my $yb = $y->[0] eq 'bin' && $y->[1] eq $op ? [map { $part->($_) } @$y[2, 3]] : undef;
+            if ($is->($l, 're') && $is->($r, 're')) {
+                return $res->($op, $opnd->($l->[1]), $opnd->($r->[1])) if $op =~ /^[-+]$/ && $yb && $is->($yb->[0], 'im', $l->[1]) && $is->($yb->[1], 'im', $r->[1]);
+                return ();
+            }
+            if ($is->($l, 're') && $is->($r, 'val')) {
+                return $res->($op, $opnd->($l->[1]), $opnd->($r->[1])) if ($op =~ /^[-+]$/ && $is->($y, 'im', $l->[1])) || ($op =~ m{^[*/]$} && $yb && $is->($yb->[0], 'im', $l->[1]) && $is->($yb->[1], 'val', $r->[1]));
+                return ();
+            }
+            if ($is->($l, 'val') && $is->($r, 're')) {
+                return $res->($op, $opnd->($l->[1]), $opnd->($r->[1])) if ($op eq '+' && $is->($y, 'im', $r->[1])) || ($op eq '-' && $y->[0] eq 'neg' && $y->[1] eq 'im' && $y->[2] eq $r->[1]) || ($op eq '*' && $yb && $is->($yb->[0], 'val', $l->[1]) && $is->($yb->[1], 'im', $r->[1]));
+                return ();
+            }
+            return ();
+        }
+        return ();
+    }
+    if ($rk eq 'BinaryOperator' && $R->{opcode} =~ /^(&&|\|\|)$/) {
+        my ($x, $y) = map { $part->($_) } kids($R);
+        return () unless $x && $y && $x->[0] eq 'bin' && $y->[0] eq 'bin' && $x->[1] eq $y->[1];
+        my $op = $x->[1];
+        return () unless ($op eq '==' && $R->{opcode} eq '&&') || ($op eq '!=' && $R->{opcode} eq '||');
+        my ($a1, $b1) = map { $part->($_) } @$x[2, 3];
+        my ($a2, $b2) = map { $part->($_) } @$y[2, 3];
+        return () unless $a1 && $b1 && $a2 && $b2;
+        if ($op eq '!=' && $is->($a1, 're') && $is->($b1, 'zero') && $is->($a2, 'im', $a1->[1]) && $is->($b2, 'zero')) { my $v = E(unimplicit($t{ $a1->[1] }[0])); return ("(tobool $v)", 'tobool', $v) }
+        my $side_of = sub { my ($p, $q) = @_; return $p->[1] if $is->($p, 're') && $is->($q, 'im', $p->[1]); return $p->[1] if $is->($p, 'val') && $is->($q, 'zero'); undef };
+        my ($an, $bn) = ($side_of->($a1, $a2), $side_of->($b1, $b2));
+        return () unless defined $an && defined $bn;
+        return $res->($op, $opnd->($an), $opnd->($bn));
+    }
+    ();
+}
+# A value tested for truth (a condition, !, && and ||'s operands): clang
+# tests a complex one as it is, csema by its parts (cxlow's tobool).
+sub ET { my ($c) = @_; my @x = $c ? cxlow(unparen(strip($c))) : (); return $x[2] if ($x[1] // '') eq 'tobool'; E($c) }
 sub unpromote { my ($n) = @_; $n = (kids($n))[0] while $n && (($n->{kind} // '') =~ /^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/ || (($n->{kind} // '') eq 'ImplicitCastExpr' && ($n->{castKind} // '') !~ /ToBoolean$/)); $n }
 sub unimplicit { my ($n) = @_; $n = (kids($n))[0] while $n && ($n->{kind} // '') =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$/; $n }
 sub seqform { my (@i) = @_; @i == 1 ? $i[0] : '(seq ' . join(' ', @i) . ')' }
@@ -819,9 +957,24 @@ sub holds { my ($n, $k) = @_; (($n->{kind} // '') eq $k) || grep { holds($_, $k)
 # Statements, as a list.
 sub S {
     my @out;
-    for my $n (@_) {
+    my @all = @_;
+    for my $ix (0 .. $#all) {
+        my $n = $all[$ix];
         next unless $n && $n->{kind};
+        next if $n->{cxdone};
         my $k = $n->{kind};
+        # (csema's complex local whose value is its complex arithmetic: declared,
+        # then assigned it, a lone : after a struct local being its items)
+        if ($side eq 'ff' && $k eq 'DeclStmt' && kids($n) == 1 && ($n->{inner}[0]{kind} // '') eq 'VarDecl' && !grep { $_->{kind} !~ /Attr$/ } kids($n->{inner}[0])) {
+            my $d = $n->{inner}[0];
+            my $as = $ix < $#all ? unparen($all[$ix + 1]) : undef;
+            if ($as && ($as->{kind} // '') eq 'BinaryOperator' && $as->{opcode} eq '=' && (strip((kids($as))[0])->{referencedDecl}{name} // '') eq ($d->{name} // '-')
+                && (my ($f) = cxlow(unparen((kids($as))[1])))) {
+                push @out, '(var ' . ($d->{name} =~ s/'$//r) . ' ' . tcls($d) . " $f)";
+                $all[$ix + 1]{cxdone} = 1;
+                next;
+            }
+        }
         if ($k eq 'CompoundStmt') {
             # (c2ff's x = setjmp (...) through a local of its own, returns
             # twice, is that assignment)
@@ -862,19 +1015,19 @@ sub S {
         if ($k eq 'IfStmt') {
             my @k = kids($n);
             my ($c, $t, $e) = $n->{hasElse} ? @k : (@k, undef);
-            push @out, '(if ' . E($c), body($t), ($e ? ('else', body($e)) : ()), ')';
+            push @out, '(if ' . ET($c), body($t), ($e ? ('else', body($e)) : ()), ')';
             next;
         }
-        if ($k eq 'WhileStmt') { my ($c, $b) = kids($n); push @out, '(while ' . E($c), body($b), ')'; next }
-        if ($k eq 'DoStmt') { my ($b, $c) = kids($n); push @out, '(do ' . E($c), body($b), ')'; next }
+        if ($k eq 'WhileStmt') { my ($c, $b) = kids($n); push @out, '(while ' . ET($c), body($b), ')'; next }
+        if ($k eq 'DoStmt') { my ($b, $c) = kids($n); push @out, '(do ' . ET($c), body($b), ')'; next }
         if ($k eq 'ForStmt') {
             my ($i, undef, $c, $s, $b) = kids($n);
             # an init declaring several: a block holding them and the loop (as c2ff has it)
             if ($i && $i->{kind} && $i->{kind} eq 'DeclStmt' && kids($i) > 1) {
-                push @out, '{', S($i), '(for - ' . E($c) . ' ' . effect($s), body($b), ')', '}';
+                push @out, '{', S($i), '(for - ' . ET($c) . ' ' . effect($s), body($b), ')', '}';
                 next;
             }
-            push @out, '(for ' . ($i && $i->{kind} ? ($i->{kind} eq 'DeclStmt' ? join(' ', S($i)) : effect($i)) : '-') . ' ' . E($c) . ' ' . effect($s), body($b), ')';
+            push @out, '(for ' . ($i && $i->{kind} ? ($i->{kind} eq 'DeclStmt' ? join(' ', S($i)) : effect($i)) : '-') . ' ' . ET($c) . ' ' . effect($s), body($b), ')';
             next;
         }
         if ($k eq 'SwitchStmt') { my ($v, $b) = kids($n); push @out, '(switch ' . E($v), body($b), ')'; next }
