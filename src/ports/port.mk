@@ -119,12 +119,16 @@ GLIBCMAKE = $(MAKE) --no-print-directory -C $(TOP)/src/glibc BUILD=$(GB) $(if $(
 # ---- the sysroot: glibc installed as a program's build sees it
 # (PERL: config.make's is the store path of the reference build's day, which
 # nix gc may have taken; the manual's install runs it)
+# (in a copy of the reference's obj, whose objdir is the copy's own, `pwd`:
+# make never runs in a shared reference, src/glibc's refguard's REFROOTS)
+REFROOTS := $(HOME)/.cache/ttp/glibc-gcc16 $(HOME)/.cache/ttp/glibc $(HOME)/.cache/ttp/libgcc-gcc16
 sysroot: $(SYSROOT)/.installed
 $(SYSROOT)/.installed:
 	$(if $(GLIBC_FROM),{ echo "port.mk: no sysroot in GLIBC_FROM's $(GBF)"; exit 1; })
 	test -e $(GREF)/libc.a || { echo "port.mk: no reference glibc $(GREF)"; exit 1; }
 	rm -rf $(GB)/sysroot.obj $(SYSROOT); mkdir -p $(GB)
 	cp -a $(GREF)/. $(GB)/sysroot.obj
+	d=$$(readlink -f $(GB)/sysroot.obj); for r in $(REFROOTS); do case "$$d/" in "$$r"/*) echo "port.mk: $(GB)/sysroot.obj is in the shared reference $$r: no make there"; exit 1;; esac; done
 	$(RUN) -t 3600 $(SUBMAKE) -C $(GB)/sysroot.obj -j$(JOBS) install install_root=$(SYSROOT) PERL=$$(command -v perl) > $(GB)/sysroot.log 2>&1 \
 	    || { tail -30 $(GB)/sysroot.log; exit 1; }
 	rm -rf $(GB)/sysroot.obj
