@@ -694,6 +694,10 @@ $(I)/%.s: $(OBJ)/libc.a | $(MKIT) $(CPP) $(PREDEF)
 # forms from the shared page and, for arm and x86_64, the tables
 # ../compiler/isa/<target>.dec.ff (and x86_64gnu.ff). The Perl (S2FFPL) stays
 # behind s2ff-crosscheck, which compares them on every asm object.
+# (#pccache< NAME to #pccache> NAME: rules and variables whose lines are in
+# the keys of the steps ports-check caches, pccache.mk: keep a rule a cached
+# step runs inside its region)
+#pccache< s2ff
 S2FFPL_riscv64 := ../compiler/gen/s2ff.pl
 S2FFPL_aarch64 := ../compiler/gen/s2ff-aarch64.pl
 S2FFPL_arm := ../compiler/gen/s2ff-arm.pl
@@ -732,7 +736,9 @@ $(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
 # the section of an object's code: .text, but on x86_64 the one it has
 # (glibc's multiarch asm is in .text.avx2, .text.evex ...: one an object)
 codesec = $(if $(filter x86_64,$(GTARGET)),$$($(XPRE)objdump -h $(1) | awk '$$2 ~ /^\.text/ && $$3 !~ /^0+$$/ { s = $$2 } END { print s ? s : ".text" }'),.text)
+#pccache> s2ff
 
+#pccache< json
 # What clang does not read of gcc's C, rewritten for clang alone in a copy of
 # the .i, each to as many bytes (c2ff finds an asm statement's text in the
 # .i itself by the offsets in clang's AST). x86_64: gcc's %v in an asm
@@ -768,6 +774,7 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(if $(CLANGFIX),$(CLANGFIX) $< $(call vecfix,$*) > $(I)/$*.clang.i)
 	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(call vecflag,$*) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
+#pccache> json
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
 # its asm parts name from elsewhere: setjmp's tail __sigjmp_save), then
@@ -812,6 +819,7 @@ $$(FF)/$(1).ff: $$(call csdeps,$$(OBJS_all_$(1))) $$(CSEMA) $$(CSVIEW) $$(ASMS_a
 endef
 $(foreach m,$(MILESTONES),$(eval $(call milestone,$(m))))
 
+#pccache< asm
 # Each asm part, assembled by ttpc alone (with a _start after it; start.S's
 # own is its page's), is the
 # bytes glibc's compiler made of it, its .text without the padding at its
@@ -882,6 +890,7 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC) | $(FFTEXTT)
 	cmp $$a.got $$a.want || exit 1; \
 	echo "asm-check: $*: ttpc and glibc's compiler agree ($$size bytes)" > $@
 
+#pccache> asm
 # progs/strlen.ff includes string.ff from its own folder, so both go there
 strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
 	cp progs/strlen.ff $(FF)/strlen-prog.ff
@@ -994,6 +1003,7 @@ CHECKO_MS := $(if $(filter riscv64,$(GTARGET)),$(MILESTONES),$(LINKED))
 check-O: $(CHECKO_MS:%=%-check-O)
 .PHONY: check-O
 
+#pccache< rt
 # The round trip, the other proof of "exact": the C functions of a milestone,
 # written back as C from its ff (ff2c.pl, which reads ff as ttpc does), have
 # the AST of glibc's own, each against its .i's (roundtrip.pl). The
@@ -1023,6 +1033,7 @@ $(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_al
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
+#pccache> rt
 # All of glibc: every function and global of its page (make FF/glibc.ff first;
 # in a BUILD of all of glibc), a unit at a time (../compiler/gen/rtall.sh), which
 # keeps no AST on disk: RTDIR gets each file's normal forms, its report the
@@ -1697,6 +1708,7 @@ $(LI)/%.i: $(LOBJ)/libgcc.a | $(MKIT) $(CPP) $(PREDEF)
 	$(RUN) -t 120 $(MKI) --libgcc --cpp $(CPPE) $(LOBJ) $(LI) $*.o > /dev/null
 $(LI)/%.s: $(LOBJ)/libgcc.a | $(MKIT) $(CPP) $(PREDEF)
 	$(RUN) -t 120 $(MKI) --libgcc --cpp $(CPPE) $(LOBJ) $(LI) $*.o > /dev/null
+#pccache< ljson
 # (x86_64's: the shadow stack's builtins (-mshstk, as gcc's
 # -fcf-protection -mshstk), the casts of longlong.h's asm
 # outputs, which gcc takes as their lvalues; unwind-dw2's intrinsics
@@ -1712,6 +1724,7 @@ $(LI)/%.json: $(LI)/%.i ../libgcc/clangfix.pl ../libgcc/aarch64.h clangvec.pl cl
 	$(if $(filter $*,$(LIBGCC_FIXEDC)),$(RUNN),$(RUN)) -t 300 $(C2FF_CLANG) -x c $(if $(filter $*,$(LIBGCC_FIXEDC)),-ffixed-point,-include clang-prelude.h $(LCLANG_$(GTARGET))) -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) -std=gnu23 -fgnu89-inline -w $(LI)/$*.clang.i > $@
 	$(if $(filter arm,$(GTARGET)),sed -i 's/"__Sync_/"__sync_/g' $@)
+#pccache> ljson
 # (c2ff-crosscheck's pass of a libgcc object, c2ff-passes and c2ff-libgcc:
 # from its AST, which stays; a static pattern, so that a unit whose AST is not
 # made yet does not take glibc's rule, $(I)/%.c2ff, of the .i alone)
@@ -2087,3 +2100,6 @@ asmcall-check: $(FF)/asmcall $(call expect,asmcall)
 	done; \
 	echo "asmcall-check: a C call of an asm function's floating value as the ABI returns it, on $(GTARGET) ($(CPUS)): exit $$want"
 .PHONY: asmcall-check
+
+# The inputs of the steps ports-check takes from its cache (pccache.mk)
+include pccache.mk
