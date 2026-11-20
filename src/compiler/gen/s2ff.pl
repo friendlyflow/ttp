@@ -157,6 +157,20 @@ sub leaf {
     return node($o);
 }
 sub ins { my ($op, @a) = @_; node($op, map { ref $_ ? $_ : leaf($_) } @a) }
+# a CFI directive as its cfi word: registers by name (or DWARF number),
+# numbers worked out; startproc, endproc and label none
+my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel_offset => [1, 0], restore => [1],
+    register => [1, 1], undefined => [1], same_value => [1], def_cfa_offset => [0], adjust_cfa_offset => [0],
+    remember_state => [], restore_state => [], signal_frame => []);
+sub cfi {
+    my ($d, @o) = @_;
+    return if $d =~ /^(startproc|endproc|label)$/;
+    my $w = 'cfi ' . ($d =~ tr/_/ /r);
+    return node($w, map { leaf(num($_)) } @o) if $d eq 'escape';
+    my $k = $cfiregs{$d} or fail "a CFI directive with no cfi word: .cfi_$d";
+    @o == @$k or fail ".cfi_$d takes " . @$k . " operands: @o";
+    node($w, map { $k->[$_] ? leaf($o[$_] =~ s/^%//r) : leaf(num($o[$_])) } 0 .. $#o);
+}
 sub rel { node('rel', node($_[0])) }
 
 my %rtype = map { $_ => 1 } qw(add sub and or xor sll srl sra slt sltu addw subw sllw srlw sraw
@@ -405,6 +419,17 @@ while (my $l = <$s>) {
                     my $m = take();
                     push @{($block // $fn)->{children}}, $m->{bytes} == 2 ? node('c.nop') : ins('addi', 0, 'zero', 'zero');
                     $ends = 0;
+                }
+                next;
+            }
+            # GNU's CFI as the ff's cfi words (ttpc's asmcfi.pl): between the
+            # instructions where it stands, no bytes; the procedure is the
+            # function (no startproc, endproc), .cfi_label names nothing
+            if ($op =~ /^\.cfi_(\w+)$/) {
+                my $w = cfi($1, split_ops($rest));
+                if ($w) {
+                    fail "a CFI directive outside a function: $st" unless $fn;
+                    push @{($block // $fn)->{children}}, $w;
                 }
                 next;
             }

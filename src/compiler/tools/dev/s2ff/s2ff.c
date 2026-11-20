@@ -264,6 +264,39 @@ static struct nd *leaf (struct str *o)
 static struct nd *LO (struct str *o) { return leaf (o); }
 static struct nd *LC (char *o) { return leaf (s_of (o)); }
 static struct nd *LN (long v) { return nd_new (s_num (v)); }
+
+/* a CFI directive (.cfi_D) as its cfi word, as gen/s2ff.pl's cfi: the
+   registers by name (or DWARF number), the numbers worked out; startproc,
+   endproc and label none (0) */
+static struct nd *cfi_word (struct str *d, struct vec *o)
+{
+  static char *regs[] = { "def_cfa", "11", "def_cfa_register", "1", "offset", "10", "rel_offset", "10", "restore", "1",
+    "register", "11", "undefined", "1", "same_value", "1", "def_cfa_offset", "0", "adjust_cfa_offset", "0",
+    "remember_state", "", "restore_state", "", "signal_frame", "", 0 };
+  struct str *w;
+  struct nd *x;
+  char *k = 0;
+  long i;
+  if (m (d, "^(startproc|endproc|label)$")) return 0;
+  w = s_of ("cfi ");
+  for (i = 0; i < d->n; i++) { char c[2] = { d->p[i] == '_' ? ' ' : (char) d->p[i], 0 }; s_cat (w, c); }
+  x = nd_new (w);
+  if (s_is (d, "escape")) { for (i = 0; i < o->n; i++) nd_add (x, LN (num (o->v[i]))); return x; }
+  for (i = 0; regs[i]; i += 2) if (s_is (d, regs[i])) k = regs[i + 1];
+  if (!k) { struct str *e = s_of ("a CFI directive with no cfi word: .cfi_"); s_app (e, d); fail_s (e); }
+  if (o->n != slen (k)) {
+    struct str *e = s_of (".cfi_");
+    s_app (e, d); s_cat (e, " takes "); s_app (e, s_num (slen (k))); s_cat (e, " operands: ");
+    for (i = 0; i < o->n; i++) { if (i) s_cat (e, " "); s_app (e, o->v[i]); }
+    fail_s (e);
+  }
+  for (i = 0; i < o->n; i++) {
+    struct str *v = o->v[i];
+    if (k[i] == '1') { if (v->n && v->p[0] == '%') v = s_sub (v, 1, v->n); nd_add (x, leaf (v)); }
+    else nd_add (x, LN (num (v)));
+  }
+  return x;
+}
 static struct nd *ins0 (struct str *op) { return nd_new (op); }
 static struct nd *ins1 (struct str *op, struct nd *a) { return nd1 (op, a); }
 static struct nd *ins2 (struct str *op, struct nd *a, struct nd *b) { return nd2 (op, a, b); }
@@ -622,6 +655,15 @@ static void rv_main (void)
             mm = take ();
             nd_add (into_of (), mm->bytes == 2 ? ndc ("c.nop") : ins3 (S ("addi"), LN (0), LC ("zero"), LC ("zero")));
             ends = 0;
+          }
+          continue;
+        }
+        /* GNU's CFI as the ff's cfi words, between the instructions where it stands */
+        if (m (op, "^\\.cfi_(\\w+)$")) {
+          struct nd *w = cfi_word (g (1), split_ops (rest));
+          if (w) {
+            if (!fn) fail2 ("a CFI directive outside a function: ", st);
+            nd_add (into_of (), w);
           }
           continue;
         }
