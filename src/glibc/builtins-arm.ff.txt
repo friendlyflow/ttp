@@ -190,6 +190,27 @@
       <
       a
   comment
+    __builtin_eh_return_data_regno: the registers a landing pad takes the exception in, r0 and r1 (0 and 1), as gcc has them on arm: __gcc_personality_v0 (unwind-c.c) sets them in the virtual register set, which EHABI's unwinder installs whole.
+  __builtin_eh_return_data_regno:
+    int
+    n:
+      int
+    return
+      n
+      ==
+      0
+      ?
+      0
+      :
+      n
+      ==
+      1
+      ?
+      1
+      :
+      -
+      1
+  comment
     gcc's __builtin_frob_return_addr of libgcc's EHABI unwinder: the address itself, as gcc has it on arm.
   __builtin_frob_return_addr:
     void

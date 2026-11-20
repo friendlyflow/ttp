@@ -339,9 +339,42 @@
       =
       4
   comment
-    __builtin_eh_return: gcc's epilogue of a function that installs a context (_Unwind_RaiseException, _Unwind_ForcedUnwind, _Unwind_Resume ...): it restores the target frame's registers and jumps to its landing pad. Only a frame with a personality
-    routine has one, and ttpc writes none (no LSDA): no unwind of ttpc's frames comes here, and glibc's cancellation longjmps out of its stop function. A gcc frame's landing pad (C++'s, lane A-cxx) takes the exception in a0 and a1 and its
-    callee-saved registers from the frames between, which ttpc's frame does not keep yet: until then it stops here, as __builtin_trap.
+    __builtin_eh_return (offset, handler): gcc's epilogue of a function that installs a context (_Unwind_Resume, _Unwind_ForcedUnwind, _Unwind_RaiseException ...): its registers as the context left them in its frame, sp its CFA + offset, a
+    jump to the landing pad. ttpc keeps such a function's frame for it (gen/patches/ehtable.pl): its FDE has a0 at CFA - 32 and a1 at CFA - 24 (s0 - 16, s0 - 8), where the personality's exception lands, and s0's own slot (at s0) has
+    the target frame's s0, which uw_install_context_1 wrote there. ttpc's C keeps nothing else in a callee-saved register; s1 ... s11 stay as they are (their slots would go below a1's). It runs in that function's frame (an asm function
+    has none): s0 is its.
   __builtin_eh_return:
     asm
-    ebreak
+    mv
+      a1
+      t1
+    ld
+      -16
+      s0
+      a2
+    ld
+      -8
+      s0
+      a3
+    addi
+      16
+      s0
+      t0
+    add
+      a0
+      t0
+      sp
+    ld
+      0
+      s0
+      s0
+    mv
+      a2
+      a0
+    mv
+      a3
+      a1
+    jalr
+      0
+      t1
+      zero

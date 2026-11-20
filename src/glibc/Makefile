@@ -428,7 +428,7 @@ LIBGCC_EH_ASM := $(LIBGCC_EH_ASM_$(GTARGET))
 OBJS_unwind := $(OBJS_unwind_$(GTARGET)) elf/dl-iteratephdr setjmp/longjmp setjmp/jmp-unwind nptl/pthread_cleanup_upto nptl/pthread_cond_wait nptl/pthread_cond_broadcast nptl/pthread_mutex_cond_lock nptl/pthread_cond_signal $(LIBGCC_EH:%=libgcc/%)
 ASMS_unwind := $(LIBGCC_EH_ASM:%=libgcc/%)
 ROOTS_unwind := $(ROOTS_stdio) _Unwind_Backtrace _Unwind_ForcedUnwind _Unwind_GetIP _Unwind_GetCFA _Unwind_FindEnclosingFunction _setjmp longjmp \
-	open read mmap __register_frame $(ROOTS_unwind_$(GTARGET))
+	open read mmap __register_frame _Unwind_Resume __gcc_personality_v0 $(ROOTS_unwind_$(GTARGET))
 # (and gcc's frames among the program's: progs/unwind-gcc.c, by gcc alone at
 # an address of its own, which the program maps and registers)
 RUN_unwind = $(FF)/unwind-gcc.elf
@@ -449,8 +449,14 @@ WEAKS_unwind := $(WEAKS_stdio) $(WEAKS_unwind_$(GTARGET))
 LICENSE_unwind := license-libgcc.ff.txt
 TTPCFLAGS_unwind := -g
 # (gcc's on arm with unwind tables, .ARM.exidx, which its C has not by
-# default there; the other targets' have them, -fasynchronous-unwind-tables)
-CFLAGS_unwind := $(if $(filter arm,$(GTARGET)),-funwind-tables)
+# default there; the other targets' have them, -fasynchronous-unwind-tables;
+# and -fexceptions everywhere, which runs k1's cleanups in the forced unwind
+# as glibc's libio is built: landing pads, an LSDA, __gcc_personality_v0.
+# ttpc's tables for them, gen/patches/ehtable.pl, need _Unwind_Resume and
+# __gcc_personality_v0 among the roots; -fno-reorder-blocks-and-partition
+# keeps k1's landing pad in k1, not in a k1.cold that name_of cannot name, as
+# x86_64's -O2 put it)
+CFLAGS_unwind := -fexceptions -fno-reorder-blocks-and-partition $(if $(filter arm,$(GTARGET)),-funwind-tables)
 
 # gccrt: libgcc's own functions in ff (src/libgcc, as unwind's), called by
 # name (progs/gccrt.c): complex multiply and divide, the integer helpers,
@@ -1607,9 +1613,11 @@ ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # __pthread_unwind, backtrace): on riscv64 and x86_64 libgcc's own in ff (src/libgcc,
 # as the milestone unwind has it), its units after glibc's, as gcc links
 # libgcc_eh.a after libc.a, the tree's root license with libgcc's
-# (license-libgcc.ff.txt); a program that unwinds is built with ttpc -g
-# (its .eh_frame: the tests, TTPCFLAGS_tests); elsewhere not in ff yet,
-# its names weak (address 0), as for a program that never unwinds
+# (license-libgcc.ff.txt), and _Unwind_Resume and __gcc_personality_v0 among
+# the roots, which ttpc's landing pads and LSDAs name (ehtable.pl): with the
+# unwinder in the program ttpc writes its .eh_frame, -g or not (the tests
+# keep -g, TTPCFLAGS_tests); elsewhere not in ff yet, its names weak
+# (address 0), as for a program that never unwinds
 LIBGCC_TARGETS := riscv64 x86_64 aarch64 arm
 UNWIND_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
 # and libgcc's conversions of _Float16 and __bf16, which gcc calls where the
@@ -1644,7 +1652,7 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
-	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)) $(ROOTS_hf); do echo $$r; done; } | sort -u > $@
+	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)) $(ROOTS_hf) $(if $(LIBGCC_glibc),_Unwind_Resume __gcc_personality_v0); do echo $$r; done; } | sort -u > $@
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 

@@ -169,3 +169,10 @@ _nl_current_LC_TELEPHONE_used	46587ed1b7d7	false alarm	glibc's C has it only as 
 _nl_current_LC_TIME_used	46587ed1b7d7	false alarm	glibc's C has it only as setlocale.c's weak extern; lc-time.c defines it by a top-level asm (.set _nl_current_LC_TIME_used, 2: an absolute symbol, setlocale tests its address); ff defines it there as a char of value 2, its address not 0, its value never read
 cmd	f23d838e6673	false alarm	enum constants as a u8 field's items (res_hconf.c's cmd[], a char name[11], a uint8_t cb, an unsigned int) written as their numbers under a cast to u8: the same values
 per_database_defaults	4609e3d2348b	false alarm	enum constants as items of a char array (nss_database.c's per_database_defaults) written as their numbers, of type char (csema, textname.pl): the same values
+_Unwind_GetIPInfo	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetLanguageSpecificData	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_RaiseException_Phase2	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_Resume	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetGR	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetIP	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_identify_context	-	clang refuses	in file libgcc_unwind-dw2, see it

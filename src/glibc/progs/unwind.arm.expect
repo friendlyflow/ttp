@@ -1,5 +1,8 @@
 exit 13
 backtrace: walk f3 f2 f1 main (5 frames, 9)
 forced: g3 g2 g1 (longjmp 1, CFAs rising)
+cleanup 5
+cleanup 10
+cleanups: k2 k1 k1 main (longjmp 3, 15)
 mixed backtrace: cb gcc_mid main (3 frames, 9)
 mixed forced: g3 gcc_forced g1m (longjmp 1, CFAs rising)
