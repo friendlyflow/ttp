@@ -739,9 +739,20 @@ DUMPOPT_aarch64 := -r -t -M no-aliases
 $(I)/%.Ls: $(I)/%.s | $(S2FFDEPS)
 	$(S2FF) --locals $< > $@.tmp && mv $@.tmp $@
 
-$(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
+# aarch64's and arm's dump also hold the object's frames, after its code:
+# s2ff makes each row the word asmcfi.pl knows at the instruction it starts
+# at (aarch64: objdump --dwarf=frames, as cfi words; arm: readelf -u, the
+# EHABI entries, as ehabi words). The dump is made again where that command
+# changes (DUMPCMD, written to BUILD/dump.cmd only then; riscv64's and
+# x86_64's read the .s for CFI).
+DUMPFRAMES_aarch64 = $(XPRE)objdump --dwarf=frames
+DUMPFRAMES_arm = $(XPRE)readelf -u
+DUMPCMD = $(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(if $(DUMPFRAMES_$(GTARGET)),; $(DUMPFRAMES_$(GTARGET)))
+$(BUILD)/dump.cmd: FORCE
+	@mkdir -p $(@D); echo '$(DUMPCMD)' | cmp -s - $@ || echo '$(DUMPCMD)' > $@
+$(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC) $(if $(DUMPFRAMES_$(GTARGET)),$(BUILD)/dump.cmd)
 	$(RUN) -t 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
-	$(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o > $(I)/$*.dump
+	{ $(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o$(if $(DUMPFRAMES_$(GTARGET)), && $(DUMPFRAMES_$(GTARGET)) $(I)/$*.ref.o); } > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j $(call codesec,$(I)/$*.ref.o) $(I)/$*.ref.o $(I)/$*.bin
 
 # the section of an object's code: .text, but on x86_64 the one it has
@@ -896,6 +907,33 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC) | $(FFTEXTT)
 	perl relmask.pl $$a.relocs $$a.got.raw $$skip $$sec > $$a.got || exit 1; \
 	cmp $$a.got $$a.want || exit 1; \
 	echo "asm-check: $*: ttpc and glibc's compiler agree ($$size bytes)" > $@
+
+# asmcfi-check, the frames' asm-check: each asm part of asm-check's list
+# and libgcc's (LIBGCC_ASMCHECK), as asm-check made it (its .asm.ff, its
+# facts), built again by ttpc with -g, which writes the frames of its asm
+# functions from their cfi and ehabi words (asmcfi.pl), against the frames
+# of glibc's compiler's object, per function (cficheck.pl): on riscv64,
+# x86_64 and aarch64 each FDE (where it starts, where it ends, its rows as
+# readelf decodes them), on arm each EHABI entry (where it starts, its
+# unwinding instructions). ASMCFIKNOWN_<target>: parts known to differ,
+# not checked. riscv64: libgcc's save-restore.S, whose __riscv_save_*
+# return to t0 (.cfi_return_column, a CIE of its own: no cfi word says it,
+# s2ff leaves their frames out).
+ASMCFIKNOWN_riscv64 := libgcc/save-restore
+ASMCFICHECK = $(filter-out $(ASMCFIKNOWN_$(GTARGET)),$(ASMCHECK) $(LIBGCC_ASMCHECK:%=libgcc/%))
+# (a make of its own, as asm-check's: libgcc's list comes after this rule)
+asmcfi-check:
+	@$(MAKE) --no-print-directory $(ASMCFICHECK:%=$(I)/%.cfiok)
+	@for a in $(ASMCFICHECK); do cat $(I)/$$a.cfiok; done
+$(I)/%.cfiok: $(I)/%.asmok cficheck.pl
+	@rm -f $@; a=$(I)/$*; \
+	$(RUN) -n -t 60 $(TTPC_RUN) -g $(SHARED) $$a.asm.ff $$a.asmg > $$a.asmg.lst || exit 1; \
+	size=$$(sed -n 's/^size //p' $$a.facts); test -n "$$size" || exit 1; \
+	skip=$(if $(filter aarch64,$(GTARGET)),$$(sed -n 's/^skip //p' $$a.facts),0); \
+	hdr=$(if $(filter x86_64,$(GTARGET)),$$(sed -n 's/^align //p' $$a.facts | awk '{ print int(($(ASMHDR) + $$1 - 1) / $$1) * $$1 }'),$(ASMHDR)); \
+	perl cficheck.pl $(XPRE)readelf $(GTARGET) $$a.ref.o $$skip $$a.asmg $$hdr $$size > $$a.cfi || { echo "asmcfi-check: $*:"; cat $$a.cfi; exit 1; }; \
+	echo "asmcfi-check: $*: ttpc's frames are glibc's compiler's ($$(head -1 $$a.cfi))" > $@
+.PHONY: asmcfi-check
 
 # progs/strlen.ff includes string.ff from its own folder, so both go there
 strlen-check: $(FF)/string.ff progs/strlen.ff asm-check

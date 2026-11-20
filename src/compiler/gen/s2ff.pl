@@ -162,6 +162,15 @@ sub ins { my ($op, @a) = @_; node($op, map { ref $_ ? $_ : leaf($_) } @a) }
 my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel_offset => [1, 0], restore => [1],
     register => [1, 1], undefined => [1], same_value => [1], def_cfa_offset => [0], adjust_cfa_offset => [0],
     remember_state => [], restore_state => [], signal_frame => []);
+# A procedure (.cfi_startproc ... .cfi_endproc) none of whose words is in
+# the block where it starts (gcc's FDE of the CIE's rules alone, a leaf's;
+# or its rows after a block label) gets one there that says the CIE's
+# rules again, cfi def cfa offset / 0 where it starts: ttpc's procedure is
+# an asm function, or an entry block with cfi words of its own. One with
+# .cfi_return_column (libgcc's __riscv_save_*, whose return address is t0:
+# a CIE of its own) has none.
+my $proc;       # since .cfi_startproc: {into, at} where it starts (its first label, word or instruction), n its words there, skip
+sub proc_at { $proc->{into} = $_[0], $proc->{at} = scalar @{ $_[0] } if $proc && !$proc->{into} }
 sub cfi {
     my ($d, @o) = @_;
     return if $d =~ /^(startproc|endproc|label)$/;
@@ -391,6 +400,7 @@ while (my $l = <$s>) {
                 fail "label $name outside a function" unless $fn;
                 $block = node("$name:");
                 push @{$fn->{children}}, $block;
+                proc_at($block->{children});
             } elsif ($fn && !$ends) {
                 # the function before runs on into this one: it holds it, as
                 # a label, so that they are placed together; asm first (which
@@ -398,12 +408,14 @@ while (my $l = <$s>) {
                 # the function that holds it
                 $block = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
                 push @{$fn->{children}}, $block;
+                proc_at($block->{children});
             } else {
                 finish();
                 $fn = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
                 push @fns, $fn;
                 undef $block;
                 $ends = 0;      # none of its own yet: it runs on into what follows
+                proc_at($fn->{children});
             }
         }
         next if $st eq '';
@@ -426,10 +438,22 @@ while (my $l = <$s>) {
             # instructions where it stands, no bytes; the procedure is the
             # function (no startproc, endproc), .cfi_label names nothing
             if ($op =~ /^\.cfi_(\w+)$/) {
-                my $w = cfi($1, split_ops($rest));
+                my $d = $1;
+                if ($d eq 'startproc') { $proc = { n => 0 }; next }
+                if ($d eq 'endproc') {
+                    splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', leaf(0)) if $proc && !$proc->{n} && !$proc->{skip} && $proc->{into};
+                    undef $proc;
+                    next;
+                }
+                if ($d eq 'return_column') { fail ".cfi_return_column after cfi words" if $proc && $proc->{n}; $proc->{skip} = 1 if $proc; next }
+                next if $proc && $proc->{skip};
+                my $w = cfi($d, split_ops($rest));
                 if ($w) {
                     fail "a CFI directive outside a function: $st" unless $fn;
-                    push @{($block // $fn)->{children}}, $w;
+                    my $c = ($block // $fn)->{children};
+                    proc_at($c);
+                    push @$c, $w;
+                    $proc->{n}++ if $proc && $c == $proc->{into};
                 }
                 next;
             }
@@ -443,6 +467,7 @@ while (my $l = <$s>) {
         # program has no PLT)
         my @o = map { /^(\d+)([fb])$/ ? ".L$1 " . (($numeric{$1} // 0) + ($2 eq 'f' ? 1 : 0)) : s/\@plt$//r } split_ops($rest);
         my $into = ($block // $fn)->{children};
+        proc_at($into);
         # li is what GNU as made of it for its value (addi, or lui and addiw)
         if ($op eq 'li') {
             my $v = num($o[1]);

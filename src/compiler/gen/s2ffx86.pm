@@ -312,7 +312,15 @@ my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel
     remember_state => [], restore_state => [], signal_frame => []);
 my @pcfi;       # cfi words held for the procedure's first label or instruction
 my $cfiproc;    # since .cfi_startproc, no label or instruction yet
-sub cfi_flush { $cfiproc = 0; push @{ into() }, splice @pcfi if @pcfi }
+# A procedure none of whose words is in the block where it starts (its
+# first label or instruction; gcc's FDE of the CIE's rules alone) gets one
+# there that says them again, cfi def cfa offset / 8, as s2ff.pl's.
+my $proc;       # since .cfi_startproc: {into, at} where it starts, n its words there
+sub cfi_flush {
+    if ($cfiproc && $proc && !$proc->{into}) { $proc->{into} = into(); $proc->{at} = scalar @{ into() } }
+    $proc->{n} += @pcfi if $proc && $proc->{into} && into() == $proc->{into};
+    $cfiproc = 0; push @{ into() }, splice @pcfi if @pcfi;
+}
 sub cfi {
     my ($d, @o) = @_;
     return if $d =~ /^(startproc|endproc|label|personality|lsda)$/;
@@ -656,7 +664,7 @@ sub read_src {
 # and .fini: the end of crti's _init and _fini, as the linker puts them
 # after crti's)
 sub run {
-    @pcfi = (); $cfiproc = 0;
+    @pcfi = (); $cfiproc = 0; undef $proc;
     my ($mode, $src, $dump, %opt) = @_;
     load();
     $where = $src;
@@ -1066,9 +1074,13 @@ sub walk_stmt {
             # (after .cfi_startproc, before the procedure's first
             # instruction or label: its own, held until then, as libgcc's
             # resms64*.h put them before the label)
-            $cfiproc = 1 if $d eq 'startproc';
+            if ($d eq 'startproc') { $cfiproc = 1; $proc = { n => 0 } }
+            if ($d eq 'endproc') {
+                splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', node(8)) if $proc && !$proc->{n} && $proc->{into};
+                undef $proc;
+            }
             if ($w) {
-                if ($cfiproc || !$fn) { push @pcfi, $w } else { push @{ into() }, $w }
+                if ($cfiproc || !$fn) { push @pcfi, $w } else { $proc->{n}++ if $proc && $proc->{into} && into() == $proc->{into}; push @{ into() }, $w }
             }
             return;
         }

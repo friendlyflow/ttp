@@ -49,6 +49,18 @@
 #                   --zero's global, its other labels aliases; an init
 #                   array is left out; any other bytes stop the translation
 #
+#   frames          the dump also has the object's frames (objdump
+#                   --dwarf=frames, after its code): each FDE's rows are
+#                   the cfi words of ttpc's asmcfi.pl, each at the
+#                   instruction where it starts, as DWARF has them (cfi
+#                   offset / x19 / -16, cfi def cfa offset / 16: GNU's
+#                   rel offset and adjust cfa offset are those there); an
+#                   FDE none of whose rows is in the block where it starts
+#                   (the CIE's rules alone, a leaf's; its rows after a
+#                   block label) has cfi def cfa offset / 0 there, which
+#                   says the CIE's rules again: ttpc's procedure is an asm
+#                   function, or an entry block with cfi words of its own
+#
 # A host tool (core Perl only), not part of ttpc.
 use strict;
 use warnings;
@@ -185,13 +197,60 @@ sub decode {
 # .fini), in the dump's order, and (of the file itself) its symbols.
 my (%sym, %sect, %type, %bind);
 my %code = map { $_ => 1 } qw(.text .init .fini);
+# the frames: the cfi words at each address of .text where rows start,
+# each with its FDE ({b, start => [children, at], n its words there})
+my (%cfiat, @fdes, %fdeat);
+sub cfireg { my ($r) = @_; $r =~ /^r\d+ \(([\w.]+)\)$/ or fail "a frame's register $r"; $1 }
+sub frameword {
+    my ($at, $op, $a) = @_;
+    my @w;
+    if ($op eq 'DW_CFA_def_cfa' && $a =~ /^(r\d+ \([\w.]+\)) ofs (-?\d+)$/) { @w = ('cfi def cfa', cfireg($1), $2) }
+    elsif ($op =~ /^DW_CFA_def_cfa_offset(_sf)?$/ && $a =~ /^(-?\d+)$/) { @w = ('cfi def cfa offset', $1) }
+    elsif ($op eq 'DW_CFA_def_cfa_register') { @w = ('cfi def cfa register', cfireg($a)) }
+    elsif ($op =~ /^DW_CFA_offset(_extended(_sf)?)?$/ && $a =~ /^(r\d+ \([\w.]+\)) at cfa([+-]\d+)$/) { @w = ('cfi offset', cfireg($1), $2 + 0) }
+    elsif ($op =~ /^DW_CFA_restore(_extended)?$/) { @w = ('cfi restore', cfireg($a)) }
+    elsif ($op eq 'DW_CFA_remember_state' && $a eq '') { @w = ('cfi remember state') }
+    elsif ($op eq 'DW_CFA_restore_state' && $a eq '') { @w = ('cfi restore state') }
+    elsif ($op eq 'DW_CFA_register' && $a =~ /^(r\d+ \([\w.]+\)) in (r\d+ \([\w.]+\))$/) { @w = ('cfi register', cfireg($1), cfireg($2)) }
+    elsif ($op eq 'DW_CFA_undefined') { @w = ('cfi undefined', cfireg($a)) }
+    elsif ($op eq 'DW_CFA_same_value') { @w = ('cfi same value', cfireg($a)) }
+    else { fail "a frame's $op $a, which no cfi word says" }
+    my ($w, @o) = @w;
+    push @{ $cfiat{$at} }, [$fdes[-1], node($w, map { node($_) } @o)];
+}
 sub readdump {
     my ($file, $symbols) = @_;
     my @made;
     open my $d, '<', $file or die "s2ff: cannot open $file: $!\n";
     my $insec = '';
+    # (the frames after the code, objdump's second header: its CIE GNU's,
+    # each FDE's rows; an FDE's start and the rows' places in .text)
+    my ($heads, $incie, $fde, $loc) = (0, 0);
     while (<$d>) {
         chomp;
+        if (/^\S.*:\s+file format /) { $heads++; next }
+        if ($heads > 1) {
+            next unless $symbols;
+            if (/^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+ CIE$/) { undef $fde; $incie = 1; next }
+            if (/^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+ FDE cie=[0-9a-f]+ pc=([0-9a-f]+)\.\.([0-9a-f]+)$/) {
+                $incie = 0; $fde = { b => hex $1, n => 0 }; $loc = hex $1;
+                push @fdes, $fde; push @{ $fdeat{ hex $1 } }, $fde;
+                next;
+            }
+            if (/^\s+DW_CFA_advance_loc\d?: \d+ to ([0-9a-f]+)$/) { $loc = hex $1; next }
+            next if /^\s+DW_CFA_nop$/;
+            if (/^\s+(DW_CFA_\w+):?\s*(.*?)\s*$/) {
+                if ($incie) { "$1 $2" eq 'DW_CFA_def_cfa r31 (sp) ofs 0' or fail "a CIE that says $1 $2, not GNU's"; next }
+                fail "$1 outside an FDE" unless $fde;
+                frameword($loc, $1, $2);
+                next;
+            }
+            if ($incie && /^\s+(Augmentation|Code alignment factor|Data alignment factor|Return address column):\s+(.*?)\s*$/) {
+                my %gnu = ('Augmentation' => '"zR"', 'Code alignment factor' => 4, 'Data alignment factor' => -8, 'Return address column' => 30);
+                $2 eq $gnu{$1} or fail "a CIE whose $1 is $2, not GNU's";
+            }
+            next;
+        }
         # the symbol table: value, flags, section, size, name
         if ($symbols && /^([0-9a-f]{16}) (.{7}) (\S+)\t[0-9a-f]+ (.+)$/) {
             my ($v, $flags, $sec, $name) = (hex $1, $2, $3, $4);
@@ -225,6 +284,7 @@ sub readdump {
         }
     }
     close $d;
+    fail "the dump has no frames (objdump --dwarf=frames after its code): make it again" if $symbols && $heads < 2;
     @made;
 }
 my @all = readdump($dump, 1);
@@ -391,7 +451,28 @@ for my $m (@made) {
         }
     }
     fail "an instruction outside a function at $m->{addr}" unless $fn;
+    # (the cfi words of the rows that start at it, before it; where an
+    # FDE starts)
+    if ($m->{sec} eq '.text') {
+        my $c = ($block // $fn)->{children};
+        $_->{start} //= [$c, scalar @$c] for @{ $fdeat{ $m->{addr} } || [] };
+        cfiput($c, delete $cfiat{ $m->{addr} }) if $cfiat{ $m->{addr} };
+    }
     emit($m);
+}
+sub cfiput { my ($c, $l) = @_; for (@$l) { my ($f, $w) = @$_; push @$c, $w; $f->{n}++ if $f->{start} && $c == $f->{start}[0] } }
+# (rows where .text's instructions end: after the last); an FDE none of
+# whose words is where it starts: cfi def cfa offset / 0 there (the last
+# first, which keeps the places of those before it)
+{
+    my @t = grep { $_->{sec} eq '.text' } @made;
+    my $end = @t ? $t[-1]{addr} + 4 : 0;
+    cfiput(($block // $fn)->{children}, delete $cfiat{$end}) if $fn && $cfiat{$end};
+    fail "a frame's row at $_, where .text has no instruction" for sort { $a <=> $b } keys %cfiat;
+    for my $f (reverse @fdes) {
+        fail "an FDE at $f->{b}, where .text has no instruction" unless $f->{start};
+        splice @{ $f->{start}[0] }, $f->{start}[1], 0, node('cfi def cfa offset', node(0)) unless $f->{n};
+    }
 }
 finish();
 # crtn's .init and .fini (--then crtn.Ls crtn.dump): the end of crti's

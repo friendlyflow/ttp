@@ -47,6 +47,17 @@
 #                   function / void, address 0; a branch to it goes to a
 #                   trap the function carries (.Lweak X: / udf 0)
 #
+#   EHABI           the dump also has the object's unwinding entries
+#                   (readelf -u, after its code): each entry's
+#                   instructions are the ehabi words of ttpc's asmcfi.pl
+#                   where it starts, as GNU as's directives would make
+#                   them (ehabi save / r4 / lr, a .save; ehabi pad / 8, a
+#                   .pad; ehabi cantunwind), first to last; an entry with
+#                   none has ehabi pad / 0. Where no symbol is, the entry
+#                   starts an entry block of its own, "<file> .text <hex>":
+#                   ttpc writes an entry for each asm function or entry
+#                   block with ehabi words, its procedure
+#
 # A host tool (core Perl only), not part of ttpc.
 use strict;
 use warnings;
@@ -80,6 +91,7 @@ my (%sym, %symsec);     # name -> address, section (from the symbol table)
 my (%secsyms, %secend);  # section -> [[address, name], ...] (functions and labels); its end
 my (@secs, %sec);       # sections of code in order; name -> { lines => [...] }
 my (%undef);             # names the symbol table has undefined
+my %ehabi;               # address of .text -> the ehabi words of the entry there
 # (crtn's, --then: its sections' instructions after crti's, from its end on)
 sub readdump {
 my ($dump, $then) = @_;
@@ -95,8 +107,28 @@ my $cur;
 my $last;
 open my $d, '<', $dump or die "s2ff-arm: cannot open $dump: $!\n";
 my $insyms = 0;
+# (readelf -u after the code: its entries, each's instructions' bytes)
+my ($unwind, $ent) = (0);
+my @ents;
 while (my $l = <$d>) {
     chomp $l;
+    if ($l eq 'There are no unwind sections in this file.') { $unwind = 1; next }
+    if ($l =~ /^Unwind section '(\S+)' at offset 0x[0-9a-f]+ contains \d+ entr(y|ies):$/) {
+        fail "unwinding entries of $1, not .text's" unless $1 eq '.ARM.exidx';
+        $unwind = 2; next;
+    }
+    if ($unwind) {
+        next if $then;
+        if ($l =~ /^0x([0-9a-f]+)(?: <[^>]*>)?: (\S+)/) {
+            $ent = { addr => hex $1, bytes => [] };
+            $ent->{cant} = 1 if $2 eq '0x1';
+            push @ents, $ent;
+            next;
+        }
+        next if $l =~ /^\s+Compact model index: [01]$/ || $l eq '' || $l =~ /^\s+\[cantunwind\]$/;
+        if ($ent && $l =~ /^\s+((?:0x[0-9a-f]{2} ?)+)\s+\S/) { push @{ $ent->{bytes} }, map { hex } grep { $_ ne '0xb0' } split ' ', $1; next }
+        fail "readelf -u: $l";
+    }
     if ($l =~ /^SYMBOL TABLE:/) { $insyms = 1; next }
     if ($insyms) {
         if ($l =~ /^([0-9a-f]{8}) (.{7}) (\S+)\t([0-9a-f]+) (.*)$/) {
@@ -141,6 +173,43 @@ while (my $l = <$d>) {
     }
 }
 close $d;
+fail "the dump has no unwinding entries (readelf -u after its code): make it again" unless $unwind || $then;
+ehabi($_) for @ents;
+}
+# an entry's instructions (the unwinder's order) as GNU as's directives,
+# first to last (ehabi words): its instructions last first, a pop of r4 to
+# r15 and one of r0 to r3 after it one save (a .save of both makes them),
+# vsp's additions one pad
+sub ehabi {
+    my ($e) = @_;
+    my @b = @{ $e->{bytes} };
+    my @ops;    # [kind, value], the unwinder's order
+    while (@b) {
+        my $x = shift @b;
+        if ($x < 0x40) { push @ops, [pad => ($x << 2) + 4] }
+        elsif ($x < 0x80) { push @ops, [pad => -((($x & 0x3f) << 2) + 4)] }
+        elsif ($x < 0x90) { my $y = shift @b // fail "an EHABI pop with no second byte"; my $m = (($x & 15) << 8 | $y) << 4; fail "EHABI's refuse to unwind" unless $m; push @ops, [save => $m] }
+        elsif ($x >= 0xa0 && $x < 0xb0) { my $m = 0; $m |= 1 << (4 + $_) for 0 .. ($x & 7); $m |= 1 << 14 if $x & 8; push @ops, [save => $m] }
+        elsif ($x == 0xb1) { my $y = shift @b // fail "an EHABI pop with no second byte"; fail "an EHABI pop of $y" unless $y && $y < 16; push @ops, [save => $y] }
+        elsif ($x == 0xb2) { my ($v, $k) = (0, 0); while (1) { my $y = shift @b // fail "an EHABI uleb128 cut short"; $v |= ($y & 0x7f) << $k; $k += 7; last unless $y & 0x80 } push @ops, [pad => 0x204 + ($v << 2)] }
+        else { fail sprintf("an EHABI instruction 0x%02x, which no ehabi word says", $x) }
+    }
+    my @w;
+    for my $o (reverse @ops) {
+        my ($k, $v) = @$o;
+        if (@w && $w[-1][0] eq $k && ($k eq 'pad' || ($v < 16 && $w[-1][1] >= 16 && !($w[-1][1] & 15)))) { $w[-1][1] += $v; next }
+        push @w, [$k, $v];
+    }
+    my @n;
+    my %rn = (13 => 'sp', 14 => 'lr', 15 => 'pc');
+    for (@w) {
+        my ($k, $v) = @$_;
+        if ($k eq 'pad') { push @n, node('ehabi pad', node($v)); next }
+        push @n, node('ehabi save', map { node($rn{$_} // "r$_") } grep { $v >> $_ & 1 } 0 .. 15);
+    }
+    @n = (node('ehabi cantunwind')) if $e->{cant};
+    @n = (node('ehabi pad', node(0))) unless @n;
+    push @{ $ehabi{ $e->{addr} } }, @n;
 }
 readdump($dump);
 readdump($then[1], 1) if @then;
@@ -269,6 +338,9 @@ for my $s (@secs) {
     # its own, sigrestorer.S's nop for the unwinder, strcmp.S's tail: a
     # local name of it)
     $names{ $lines[0]{addr} } //= ["$base $s"];
+    # (an unwinding entry where no symbol is, vfork.S's after its first
+    # instruction, clone.S's child's .cantunwind: an entry block of its own)
+    if ($s eq '.text') { $names{$_} //= [sprintf "$base $s %x", $_] for keys %ehabi }
     my $lname = sub { my ($a) = @_; $names{$a} ? $names{$a}[0] : sprintf('.L %x', $a) };
     my (%target);     # addresses branches go to
     my @out;                # [address, node] in order
@@ -286,6 +358,8 @@ for my $s (@secs) {
     for my $i (@lines) {
         my $at = $i->{addr};
         $zeros->($at);
+        # (the ehabi words of the entry that starts here, before it)
+        push @out, map { [$at, $_] } @{ delete $ehabi{$at} } if $s eq '.text' && $ehabi{$at};
         $next = $at + ($i->{hex} =~ /^(\w{4}) (\w{4})$/ ? 4 : length($i->{hex}) / 2);
         my $rel = $i->{relocs}[0];
         if ($i->{op} =~ /^\.(word|short|byte)$/) {
@@ -334,9 +408,10 @@ for my $s (@secs) {
     my ($first) = @{ $names{ $lines[0]{addr} } };
     my $fn = node("$first:", node('asm'), node('comment', node('glibc-2.44 ' . ($file // $src) . " ($s)")));
     my $into = $fn;
+    my $lastat = $lines[0]{addr};
     for my $o (@out) {
         my ($at, $n) = @$o;
-        if ($at != $lines[0]{addr} && ($names{$at} || $target{$at})) {
+        if ($at != $lastat && ($names{$at} || $target{$at})) {
             my $l = $lname->($at);
             # (the other names there, ieee754-df.S's __aeabi_dadd at
             # __adddf3: entries of their own, empty, before it: ttpc knows an
@@ -345,6 +420,7 @@ for my $s (@secs) {
             $into = node("$l:", $names{$at} ? (node('asm')) : ());
             push @{ $fn->{children} }, $into;
         }
+        $lastat = $at;
         push @{ $into->{children} }, $n;
     }
     push @aliases, map { node("$_:", node('alias'), node($first)) } @{ $names{ $lines[0]{addr} } }[1 .. $#{ $names{ $lines[0]{addr} } }];
@@ -388,6 +464,7 @@ sub data_reloc {
     fail "a word with $type";
 }
 
+fail sprintf("an unwinding entry at 0x%x, where .text has no instruction", $_) for sort { $a <=> $b } keys %ehabi;
 if ($size) { print $bytes // 0, "\n"; exit }
 if (defined $facts) { open my $h, ">", $facts or die "s2ff: cannot write $facts: $!\n"; print $h "size ", $bytes // 0, "\n" }
 # the GOT: its start, then a word for each symbol read through it, each a
