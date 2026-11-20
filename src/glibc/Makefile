@@ -444,8 +444,10 @@ TTPCFLAGS_unwind := -g
 # and -fexceptions everywhere, which runs k1's cleanups in the forced unwind
 # as glibc's libio is built: landing pads, an LSDA, __gcc_personality_v0.
 # ttpc's tables for them, gen/patches/ehtable.pl, need _Unwind_Resume and
-# __gcc_personality_v0 among the roots)
-CFLAGS_unwind := -fexceptions $(if $(filter arm,$(GTARGET)),-funwind-tables)
+# __gcc_personality_v0 among the roots; -fno-reorder-blocks-and-partition
+# keeps k1's landing pad in k1, not in a k1.cold that name_of cannot name, as
+# x86_64's -O2 put it)
+CFLAGS_unwind := -fexceptions -fno-reorder-blocks-and-partition $(if $(filter arm,$(GTARGET)),-funwind-tables)
 
 # gccrt: libgcc's own functions in ff (src/libgcc, as unwind's), called by
 # name (progs/gccrt.c): complex multiply and divide, the integer helpers,
