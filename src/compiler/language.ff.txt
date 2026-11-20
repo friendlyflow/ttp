@@ -482,6 +482,7 @@ ff, the language ttpc compiles
       do while condition body: the body first, then the condition, as C's do body while (condition)
       switch value body: to the case with that value, else the default, else past the body; case value body..., default body..., anywhere in the switch, fall through to the next one; break leaves the switch
       case lo ... hi body...: GNU C's case range, for the values from lo to hi
+      a declaration in a case's or default's body is the switch body's, as in C: later cases see it (jumped past, its initializer has not run)
       example
         switch
           c
