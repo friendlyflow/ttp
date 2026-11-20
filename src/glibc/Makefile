@@ -2074,9 +2074,15 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           and subscripts (sincosf_poly.h, ttpc's vecops.pl); gcc's with
 #           libm.a too
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf
+#   fltinc  ++ and -- of float, double and long double, prefix and postfix,
+#           their values, a field and an element, and coreutils seq's loop
+#           (for (long double i = 1; ; i++), which ttpc kept at 1: it added
+#           1 to the bits; gen/patches/fltinc.pl); every target
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check fltinc-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf fltinc
 ALLPROG_ptrsum := ptrsum
+ALLPROG_fltinc := fltinc
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_sincosf := sincosf

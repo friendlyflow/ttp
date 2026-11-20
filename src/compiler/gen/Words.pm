@@ -602,6 +602,16 @@ sub oldprefix {
         return (node($n->{content}), $i + 1) unless $x && leaf($x) && $x->{content} =~ $num;
         return (node($suffix{ $n->{content} }, node($x->{content})), $i + 2) unless is_post($l->[$i + 2]);
     }
+    # (a leaf under char * pointer, u8, i8, is a text, a record's name too: so
+    # before its unit, which would take that name for a literal; no postfix
+    # after it)
+    if (!leaf($n) && $i + 1 < @$l) {
+        my ($r, $e) = oldrun($t, [kids($n)], 0);
+        my ($x, $z) = @$l[$i + 1, $i + 2];
+        return (node('address', @$r[1 .. $#$r], node($x->{content})), $i + 2)
+            if $r && $e == kids($n) && oldtextish($r) && leaf($x) && !exists $opix{ $x->{content} } && !is_prefix($x) && !is_post($x)
+                && !($z && (is_post($z) || is($z, '++') || is($z, '--')));
+    }
     my ($v, $j, $flat) = oldunit($t, $l, $i + 1, 1);
     $v = $flat if $flat;
     return (node($suffix{ $n->{content} }, @$v), $j) if leaf($n);
@@ -611,7 +621,7 @@ sub oldprefix {
     # a leaf under char * pointer (u8, i8): a text, address / char / leaf
     my $x = $l->[$i + 1];
     return (node('address', @$r[1 .. $#$r], node($x->{content})), $i + 2)
-        if @$r == 2 && $r->[0]{content} eq 'address' && $r->[1]{content} =~ /^(?:char|u8|i8)$/ && $j == $i + 2 && leaf($x) && !exists $opix{ $x->{content} } && !defined lit_count($t, $x);
+        if oldtextish($r) && $j == $i + 2 && leaf($x) && !exists $opix{ $x->{content} };
     (node('cast:', @$r, @$v), $j);
 }
 # a compound literal at $i: the node before, the index after its items
@@ -725,21 +735,63 @@ sub olddef {
     my ($r, $j) = oldrun($t, $k, $i);
     # (an aggregate's items: a : of its own one of an aggregate in it)
     my $agg = $r->[0]{content} =~ /^(?:array|vector)$/ || @$r == 1 && $t->{rec}{ $r->[0]{content} };
-    (oldvals($t, [@$k[0 .. $i - 1]]), @$r, $agg ? olditems($t, [@$k[$j .. $#$k]]) : oldvals($t, [@$k[$j .. $#$k]]));
+    my @items = @$k[$j .. $#$k];
+    # (a leaf under char * pointer is text, a record's name too: never a literal)
+    return (oldvals($t, [@$k[0 .. $i - 1]]), @$r, node($items[0]{content})) if !$agg && oldtextish($r) && @items == 1 && text_leaf($items[0]);
+    (oldvals($t, [@$k[0 .. $i - 1]]), @$r, $agg ? olditems($t, \@items, $r) : oldvals($t, \@items));
+}
+# a type run before that is text's (address / char, u8, i8)
+sub oldtextish { my ($r) = @_; @$r == 2 && $r->[0]{content} eq 'address' && $r->[1]{content} =~ /^(?:char|u8|i8)$/ }
+# a leaf that may be a text: no operator, no postfix, no prefix
+sub text_leaf { my ($n) = @_; leaf($n) && !exists $opix{ $n->{content} } && !is_post($n) && !is_prefix($n) && $n->{content} ne ':' && $n->{content} ne '.' }
+# the places of the aggregate of type run $r (before): for place n, whether
+# it takes text (an array's elements of char * pointer or char; a struct's
+# field so) and its type run before (of a : in it); none when $r is none,
+# a union or a struct with an anonymous member
+sub text_places {
+    my ($t, $r) = @_;
+    return (sub { 0 }, sub { undef }) unless $r;
+    if ($r->[0]{content} eq 'array') {
+        my @e = @$r[1 .. $#$r - 1];
+        my $text = oldtextish(\@e) || @e == 1 && $e[0]{content} =~ /^(?:char|u8|i8)$/;
+        return (sub { $text }, sub { \@e });
+    }
+    # (a struct's places: its fields but padding; none of a union, nor of a
+    # struct with an anonymous member)
+    my $rec = @$r == 1 && $t->{rec}{ $r->[0]{content} };
+    return (sub { 0 }, sub { undef }) unless $rec && $rec->{kind} ne 'union' && !grep { $_->{anon} } @{ $rec->{fields} };
+    my @f = grep { !$_->{pad} } @{ $rec->{fields} };
+    my @p = map { my $f = $_->{run}; textish($f) || @$f == 1 && $f->[0]{content} eq 'array' && do { my @c = kids($f->[0]); @c == 2 && leaf($c[0]) && $c[0]{content} =~ /^(?:char|u8|i8)$/ } } @f;
+    (sub { $p[ $_[0] ] }, sub { my $f = $f[ $_[0] ] or return; my ($o) = oldrun($t, $f->{run}, 0); $o });
 }
 
 # a declaration's items now: a : (or items) that is an item of its own is
-# the items of an aggregate in it (C's braces), its own items in turn
+# the items of an aggregate in it (C's braces), its own items in turn; $r the
+# aggregate's type run before (its places that take text keep a leaf as
+# text, a record's name too), $pn the count of its places so far
 sub olditems {
-    my ($t, $l) = @_;
+    my ($t, $l, $r, $pn) = @_;
     my @out;
+    my ($text, $run) = text_places($t, $r);
+    my $p = 0;
+    $pn //= \$p;
     for (my $i = 0; $i < @$l;) {
+        my $n = $l->[$i];
+        # (the items of a long list, the places go on)
+        if (!leaf($n) && $n->{content} eq 'items') { push @out, node('items', olditems($t, [kids($n)], $r, $pn)); $i++; next }
+        # (a leaf alone in a place that takes text: the text, a record's name too)
+        if ($text->($$pn) && text_leaf($n) && ($i + 1 == @$l || !leaf($l->[$i + 1]) || !exists $opix{ $l->[$i + 1]{content} } && !is_post($l->[$i + 1]))) {
+            push @out, node($n->{content});
+            $i++;
+            $$pn++;
+            next;
+        }
         my $e = item_end($l, $i, $t, 1);
         $e = $i + 1 if $e <= $i;
-        my $n = $l->[$i];
-        if ($e == $i + 1 && !leaf($n) && ($n->{content} eq ':' && !grep({ is($_, '.') } kids($n)) || $n->{content} eq 'items')) { push @out, node($n->{content}, olditems($t, [kids($n)])) }
+        if ($e == $i + 1 && !leaf($n) && $n->{content} eq ':' && !grep({ is($_, '.') } kids($n))) { push @out, node(':', olditems($t, [kids($n)], $run->($$pn))) }
         else { push @out, oldvals($t, [@$l[$i .. $e - 1]]) }
         $i = $e;
+        $$pn++;
     }
     @out;
 }
