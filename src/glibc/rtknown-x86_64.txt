@@ -167,3 +167,10 @@ _nl_current_LC_NUMERIC_used	46587ed1b7d7	false alarm	glibc's C has it only as se
 _nl_current_LC_PAPER_used	46587ed1b7d7	false alarm	glibc's C has it only as setlocale.c's weak extern; lc-paper.c defines it by a top-level asm (.set _nl_current_LC_PAPER_used, 2: an absolute symbol, setlocale tests its address); ff defines it there as a char of value 2, its address not 0, its value never read
 _nl_current_LC_TELEPHONE_used	46587ed1b7d7	false alarm	glibc's C has it only as setlocale.c's weak extern; lc-telephone.c defines it by a top-level asm (.set _nl_current_LC_TELEPHONE_used, 2: an absolute symbol, setlocale tests its address); ff defines it there as a char of value 2, its address not 0, its value never read
 _nl_current_LC_TIME_used	46587ed1b7d7	false alarm	glibc's C has it only as setlocale.c's weak extern; lc-time.c defines it by a top-level asm (.set _nl_current_LC_TIME_used, 2: an absolute symbol, setlocale tests its address); ff defines it there as a char of value 2, its address not 0, its value never read
+_Unwind_GetIPInfo	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_GetLanguageSpecificData	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_RaiseException_Phase2	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_Resume	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetGR	-	clang refuses	in file libgcc_unwind-dw2, see it
+_Unwind_SetIP	-	clang refuses	in file libgcc_unwind-dw2, see it
+uw_identify_context	-	clang refuses	in file libgcc_unwind-dw2, see it

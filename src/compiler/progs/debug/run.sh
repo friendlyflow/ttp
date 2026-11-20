@@ -146,4 +146,26 @@ if test $t = riscv64 && test -n "$C2FF_CLANG"; then
     lns "$o/c2ff/cline.ff.txt" > "$o/c2ff/got.lines"
     cmp "$o/c2ff/want.lines" "$o/c2ff/got.lines" || { diff "$o/c2ff/want.lines" "$o/c2ff/got.lines"; fail "c2ff's line nodes of cline.c are not progs/cline.ff's"; }
 fi
-echo "debug-$t: sections, symbols as the listing, objdump, frames; gdb: $(cat "$o/bt.names"); libgcc: $(cat "$o/unwind.out"); lines: ff view (cdebug.ff.txt), C view (cline.c), list, addr2line; cline as without its line nodes$(test -f "$o/c2ff/got.lines" && echo ", as c2ff writes them")"
+# exception tables (gen/patches/ehtable.pl): progs/ccleanupeh.ff has the
+# unwinder's names, so its frames are there without -g (PT_GNU_EH_FRAME), its
+# functions with a cleanup have an LSDA (the second CIE, zPLR; on arm an
+# .ARM.extab entry, which readelf finds in no section) and _Unwind_Resume,
+# which calls __builtin_eh_return, has a0 and a1 at CFA - 32 and - 24;
+# ccleanup, without those names, has no frames
+(cd "$c" && timeout 120 $TTPC --target $t shared.ff progs/ccleanupeh.ff "$o/ccleanupeh" > "$o/ccleanupeh.lst" && timeout 120 $TTPC -g --target $t shared.ff progs/ccleanupeh.ff "$o/ccleanupeh.g" > "$o/ccleanupeh.g.lst" \
+    && timeout 120 $TTPC --target $t shared.ff progs/ccleanup.ff "$o/ccleanup" > "$o/ccleanup.lst")
+readelf -lW "$o/ccleanupeh" | grep -q GNU_EH_FRAME || fail "ccleanupeh: no PT_GNU_EH_FRAME without -g"
+! readelf -lW "$o/ccleanup" | grep -q GNU_EH_FRAME || fail "ccleanup: frames without the unwinder"
+s=0; timeout 20 $q "$o/ccleanupeh" || s=$?
+test $s = 42 || fail "ccleanupeh: exit $s, not 42"
+if test $t = arm; then
+    readelf -u "$o/ccleanupeh.g" 2>&1 | grep -q "ARM.extab" || fail "ccleanupeh: no .ARM.extab entry"
+    eh="extab"
+else
+    readelf -wf "$o/ccleanupeh.g" > "$o/ccleanupeh.frames"
+    grep -q '"zPLR"' "$o/ccleanupeh.frames" || fail "ccleanupeh: no zPLR CIE"
+    test "$(grep -c 'Augmentation data: *[0-9a-f][0-9a-f] [0-9a-f][0-9a-f] [0-9a-f][0-9a-f] [0-9a-f][0-9a-f]$' "$o/ccleanupeh.frames")" -ge 3 || fail "ccleanupeh: fewer than 3 LSDAs"
+    grep -q "at cfa-32" "$o/ccleanupeh.frames" || fail "ccleanupeh: no data register at CFA - 32"
+    eh="zPLR, $(grep -c 'Augmentation data: *[0-9a-f][0-9a-f] [0-9a-f][0-9a-f] [0-9a-f][0-9a-f] [0-9a-f][0-9a-f]$' "$o/ccleanupeh.frames") LSDAs"
+fi
+echo "debug-$t: sections, symbols as the listing, objdump, frames; gdb: $(cat "$o/bt.names"); libgcc: $(cat "$o/unwind.out"); lines: ff view (cdebug.ff.txt), C view (cline.c), list, addr2line; cline as without its line nodes$(test -f "$o/c2ff/got.lines" && echo ", as c2ff writes them"); exception tables ($eh)"

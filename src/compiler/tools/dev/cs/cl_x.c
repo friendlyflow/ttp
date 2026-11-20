@@ -1289,7 +1289,8 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   if (cl_eq (name, "__builtin_copysignf16") || cl_eq (name, "__builtin_huge_valf16")) { cl_push (o, cl_call_node (name, n)); return; }
   if (cl_builtin_listed (name) || cl_eq (name, "__atomic_always_lock_free")) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target != 3 && (cl_eq (name, "__builtin_unwind_init") || cl_eq (name, "__builtin_dwarf_cfa") || cl_eq (name, "__builtin_dwarf_sp_column") || cl_eq (name, "__builtin_eh_return") || cl_eq (name, "__builtin_eh_return_data_regno") || cl_eq (name, "__builtin_frob_return_addr") || cl_eq (name, "__builtin_init_dwarf_reg_size_table"))) { cl_push (o, cl_call_node (name, n)); return; }
-  if (C->target == 3 && cl_eq (name, "__builtin_frob_return_addr")) { cl_push (o, cl_call_node (name, n)); return; }
+  /* (arm's EHABI unwinder: __gcc_personality_v0 names the landing pad's registers too) */
+  if (C->target == 3 && (cl_eq (name, "__builtin_frob_return_addr") || cl_eq (name, "__builtin_eh_return_data_regno"))) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_autia1716") || cl_eq (name, "__builtin_aarch64_autib1716") || cl_eq (name, "__builtin_aarch64_chkfeat") || cl_eq (name, "__builtin_aarch64_gcspr") || cl_eq (name, "__builtin_aarch64_gcspopm") || cl_eq (name, "__builtin___clear_cache"))) { cl_push (o, cl_call_node (name, n)); return; }
   if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_get_fpcr") || cl_eq (name, "__builtin_aarch64_get_fpsr")) && !na) { cl_push (o, cl_n (name)); return; }
   if (C->target == 2 && (cl_eq (name, "__builtin_aarch64_set_fpcr") || cl_eq (name, "__builtin_aarch64_set_fpsr"))) { cl_push (o, cl_call_node (name, n)); return; }
