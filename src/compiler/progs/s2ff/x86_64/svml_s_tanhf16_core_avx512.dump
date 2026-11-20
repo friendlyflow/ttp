@@ -1,0 +1,68 @@
+
+mathvec/svml_s_tanhf16_core_avx512.ref.o:     file format elf64-x86-64
+
+
+Disassembly of section .text.evex512:
+
+0000000000000000 <_ZGVeN16v_tanhf_skx>:
+   0:	62 f1 7d 58 db 0d 00 00 00 00 	vpandd 0x0(%rip){1to16},%zmm0,%zmm1        # a <_ZGVeN16v_tanhf_skx+0xa>
+   a:	62 f1 75 58 fa 15 00 00 00 00 	vpsubd 0x0(%rip){1to16},%zmm1,%zmm2        # 14 <_ZGVeN16v_tanhf_skx+0x14>
+  14:	62 f1 65 48 ef db    	vpxord %zmm3,%zmm3,%zmm3
+  1a:	62 f2 6d 48 3d db    	vpmaxsd %zmm3,%zmm2,%zmm3
+  20:	62 f2 65 58 39 1d 00 00 00 00 	vpminsd 0x0(%rip){1to16},%zmm3,%zmm3        # 2a <_ZGVeN16v_tanhf_skx+0x2a>
+  2a:	62 f1 65 48 72 d3 15 	vpsrld $0x15,%zmm3,%zmm3
+  31:	62 f3 75 58 1f 0d 00 00 00 00 06 	vpcmpnled 0x0(%rip){1to16},%zmm1,%k1        # 3c <_ZGVeN16v_tanhf_skx+0x3c>
+  3c:	62 f1 7c 48 28 2d 00 00 00 00 	vmovaps 0x0(%rip),%zmm5        # 46 <_ZGVeN16v_tanhf_skx+0x46>
+  46:	62 f2 65 48 7f 2d 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm5        # 50 <_ZGVeN16v_tanhf_skx+0x50>
+  50:	62 f1 7c 48 28 15 00 00 00 00 	vmovaps 0x0(%rip),%zmm2        # 5a <_ZGVeN16v_tanhf_skx+0x5a>
+  5a:	62 f2 65 48 7f 15 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm2        # 64 <_ZGVeN16v_tanhf_skx+0x64>
+  64:	62 f1 7c 48 28 25 00 00 00 00 	vmovaps 0x0(%rip),%zmm4        # 6e <_ZGVeN16v_tanhf_skx+0x6e>
+  6e:	62 f1 5c 48 55 c8    	vandnps %zmm0,%zmm4,%zmm1
+  74:	62 f1 74 18 5c cd    	vsubps {rn-sae},%zmm5,%zmm1,%zmm1
+  7a:	62 f1 7c 48 28 2d 00 00 00 00 	vmovaps 0x0(%rip),%zmm5        # 84 <_ZGVeN16v_tanhf_skx+0x84>
+  84:	62 f2 65 48 7f 2d 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm5        # 8e <_ZGVeN16v_tanhf_skx+0x8e>
+  8e:	62 f1 7c 48 28 35 00 00 00 00 	vmovaps 0x0(%rip),%zmm6        # 98 <_ZGVeN16v_tanhf_skx+0x98>
+  98:	62 f2 65 48 7f 35 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm6        # a2 <_ZGVeN16v_tanhf_skx+0xa2>
+  a2:	62 f2 75 18 a8 d5    	vfmadd213ps {rn-sae},%zmm5,%zmm1,%zmm2
+  a8:	62 f2 75 18 a8 d6    	vfmadd213ps {rn-sae},%zmm6,%zmm1,%zmm2
+  ae:	62 f1 7c 48 28 3d 00 00 00 00 	vmovaps 0x0(%rip),%zmm7        # b8 <_ZGVeN16v_tanhf_skx+0xb8>
+  b8:	62 f2 65 48 7f 3d 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm7        # c2 <_ZGVeN16v_tanhf_skx+0xc2>
+  c2:	62 71 7c 48 28 05 00 00 00 00 	vmovaps 0x0(%rip),%zmm8        # cc <_ZGVeN16v_tanhf_skx+0xcc>
+  cc:	62 72 65 48 7f 05 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm8        # d6 <_ZGVeN16v_tanhf_skx+0xd6>
+  d6:	62 f2 75 18 a8 d7    	vfmadd213ps {rn-sae},%zmm7,%zmm1,%zmm2
+  dc:	62 d2 75 18 a8 d0    	vfmadd213ps {rn-sae},%zmm8,%zmm1,%zmm2
+  e2:	62 71 7c 48 28 0d 00 00 00 00 	vmovaps 0x0(%rip),%zmm9        # ec <_ZGVeN16v_tanhf_skx+0xec>
+  ec:	62 72 65 48 7f 0d 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm9        # f6 <_ZGVeN16v_tanhf_skx+0xf6>
+  f6:	62 71 7c 48 28 15 00 00 00 00 	vmovaps 0x0(%rip),%zmm10        # 100 <_ZGVeN16v_tanhf_skx+0x100>
+ 100:	62 72 65 48 7f 15 00 00 00 00 	vpermt2ps 0x0(%rip),%zmm3,%zmm10        # 10a <_ZGVeN16v_tanhf_skx+0x10a>
+ 10a:	62 d2 75 18 a8 d1    	vfmadd213ps {rn-sae},%zmm9,%zmm1,%zmm2
+ 110:	62 d2 75 18 a8 d2    	vfmadd213ps {rn-sae},%zmm10,%zmm1,%zmm2
+ 116:	c5 f8 93 d1          	kmovw  %k1,%edx
+ 11a:	85 d2                	test   %edx,%edx
+ 11c:	75 08                	jne    126 <_ZGVeN16v_tanhf_skx+0x126>
+ 11e:	62 f3 6d 48 25 c4 ec 	vpternlogd $0xec,%zmm4,%zmm2,%zmm0
+ 125:	c3                   	ret
+ 126:	41 55                	push   %r13
+ 128:	53                   	push   %rbx
+ 129:	55                   	push   %rbp
+ 12a:	49 89 e5             	mov    %rsp,%r13
+ 12d:	48 83 e4 c0          	and    $0xffffffffffffffc0,%rsp
+ 131:	48 83 c4 80          	add    $0xffffffffffffff80,%rsp
+ 135:	62 f1 7c 48 29 44 24 01 	vmovaps %zmm0,0x40(%rsp)
+ 13d:	62 f3 6d 48 25 c4 ec 	vpternlogd $0xec,%zmm4,%zmm2,%zmm0
+ 144:	62 f1 7c 48 29 04 24 	vmovaps %zmm0,(%rsp)
+ 14b:	c5 f8 77             	vzeroupper
+ 14e:	89 d3                	mov    %edx,%ebx
+ 150:	31 ed                	xor    %ebp,%ebp
+ 152:	f3 0f bc eb          	tzcnt  %ebx,%ebp
+ 156:	c5 fa 10 44 ac 40    	vmovss 0x40(%rsp,%rbp,4),%xmm0
+ 15c:	e8 00 00 00 00       	call   161 <_ZGVeN16v_tanhf_skx+0x161>
+ 161:	c5 fa 11 04 ac       	vmovss %xmm0,(%rsp,%rbp,4)
+ 166:	c4 e2 60 f3 cb       	blsr   %ebx,%ebx
+ 16b:	75 e3                	jne    150 <_ZGVeN16v_tanhf_skx+0x150>
+ 16d:	62 f1 7c 48 28 04 24 	vmovaps (%rsp),%zmm0
+ 174:	4c 89 ec             	mov    %r13,%rsp
+ 177:	5d                   	pop    %rbp
+ 178:	5b                   	pop    %rbx
+ 179:	41 5d                	pop    %r13
+ 17b:	c3                   	ret
