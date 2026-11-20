@@ -1772,7 +1772,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
       cl_push (o, r);
       return;
     }
-    cl_push (o, cl_n (cl_lname (nm)));
+    cl_push (o, cl_n (cl_ffname (nm)));
     return;
   }
   if (k == E_OFFSETOF) { cl_offsetof (n, o); return; }
@@ -2215,7 +2215,7 @@ static struct node *cl_decl (struct cs_decl *v, int global, char *name)
   struct cs_ex *init = 0;
   char *j, *nm;
   struct cs_ty *vc = cs_canon (v->t);
-  if (name) nm = name; else nm = cl_lname (cl_dn (v));
+  if (name) nm = name; else nm = cl_ffname (cl_dn (v));
   long long vcv;
   if (!global && vc->k == TY_ARRAY && vc->n == -2 && vc->count && !cl_vla_const (vc, &vcv)) {
     struct cl_list *c = cl_l (), *x = cl_l ();
@@ -3195,7 +3195,7 @@ static struct node *cl_function (char *name, struct cs_decl *d)
     if (d->ps[i].name && d->ps[i].nlen) pn = cl_copy (d->ps[i].name, d->ps[i].nlen);
     else pn = cl_cat ("p", cl_num (i + 1));
     t = cl_ct (d->ps[i].t);
-    cl_push (head, cl_nl (cl_cat (cl_lname (pn), ":"), t));
+    cl_push (head, cl_nl (cl_cat (cl_ffname (pn), ":"), t));
     i++;
   }
   if (f->var) cl_push (head, cl_n ("..."));

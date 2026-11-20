@@ -8,13 +8,12 @@
    table's) and as a struct's tag of another unit, as coreutils' one program
    has gnulib hash.c's struct hash_entry and df.c's local hash_entry (a
    struct devlist *): ttpc took glibc's type for the local in hash_entry /
-   seen_last, in a function of a group (unknown name: seen_last); csema
-   writes a program's name that is a type of the tree otherwise (hash_entry').
-   Here, in no group, ttpc took the local before too. And a string that is
-   a type's name, of another unit's (coreutils env.c's "BLOCK", ptx.c's
-   typedef of a struct) or of glibc's ("timespec"): ttpc took it for a
-   compound literal of that type with no items (cannot compile: with no
-   name); csema writes it as its bytes. */
+   seen_last, in an inner block of a function of a group (unknown name:
+   seen_last; ttpc's localpath.pl). Here, in no group, ttpc took the local
+   before too. And a string that is a type's name, of another unit's
+   (coreutils env.c's "BLOCK", ptx.c's typedef of a struct) or of glibc's
+   ("timespec"): ttpc took it for a compound literal of that type with no
+   items (cannot compile: with no name); csema writes it as its bytes. */
 #include <stdio.h>
 
 struct hash_entry { int data; struct hash_entry *next; };
