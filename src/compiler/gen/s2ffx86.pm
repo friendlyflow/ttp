@@ -304,6 +304,26 @@ sub num {
 }
 
 my %numeric;    # how many times each numeric label has come so far
+# a CFI directive as its cfi word: registers by name (no %) or DWARF number,
+# numbers worked out; startproc, endproc and label none; personality and
+# lsda (morestack.S's __morestack) none yet: its LSDA is left out too
+my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel_offset => [1, 0], restore => [1],
+    register => [1, 1], undefined => [1], same_value => [1], def_cfa_offset => [0], adjust_cfa_offset => [0],
+    remember_state => [], restore_state => [], signal_frame => []);
+my @pcfi;       # cfi words held for the procedure's first label or instruction
+my $cfiproc;    # since .cfi_startproc, no label or instruction yet
+sub cfi_flush { $cfiproc = 0; push @{ into() }, splice @pcfi if @pcfi }
+sub cfi {
+    my ($d, @o) = @_;
+    return if $d =~ /^(startproc|endproc|label|personality|lsda)$/;
+    my $w = 'cfi ' . ($d =~ tr/_/ /r);
+    my $n = sub { my $v = num($_[0]); defined $v or fail "not a number: $_[0]"; node($v) };
+    return node($w, map { $n->($_) } @o) if $d eq 'escape';
+    my $k = $cfiregs{$d} or fail "a CFI directive with no cfi word: .cfi_$d";
+    @o == @$k or fail ".cfi_$d takes " . @$k . " operands: @o";
+    node($w, map { $k->[$_] ? node($o[$_] =~ s/^%//r) : $n->($o[$_]) } 0 .. $#o);
+}
+
 sub label {
     my ($o) = @_;
     $o =~ s/\@(PLT|plt)$//;
@@ -636,6 +656,7 @@ sub read_src {
 # and .fini: the end of crti's _init and _fini, as the linker puts them
 # after crti's)
 sub run {
+    @pcfi = (); $cfiproc = 0;
     my ($mode, $src, $dump, %opt) = @_;
     load();
     $where = $src;
@@ -1014,6 +1035,7 @@ sub walk_stmt {
             $block = node("$name:", node('asm'), node('comment', node("glibc-2.44 $file:$line")));
             push @{ $fn->{children} }, $block;
             undef $align;
+            cfi_flush();
         } else {
             finish();
             $fn = node("$name:", node('asm'), (defined $align ? node('align', node($align)) : ()), node('comment', node("glibc-2.44 $file:$line")));
@@ -1021,6 +1043,7 @@ sub walk_stmt {
             undef $block;
             undef $align;
             $ends = 0;
+            cfi_flush();
         }
     }
     return if $st eq '';
@@ -1036,11 +1059,25 @@ sub walk_stmt {
             $align = $a;     # (before a function's label: its alignment)
             return;
         }
+        # GNU's CFI as the ff's cfi words (ttpc's asmcfi.pl), as s2ff.pl's cfi
+        if ($op =~ /^\.cfi_(\w+)$/) {
+            my $d = $1;
+            my $w = cfi($d, split_ops($rest));
+            # (after .cfi_startproc, before the procedure's first
+            # instruction or label: its own, held until then, as libgcc's
+            # resms64*.h put them before the label)
+            $cfiproc = 1 if $d eq 'startproc';
+            if ($w) {
+                if ($cfiproc || !$fn) { push @pcfi, $w } else { push @{ into() }, $w }
+            }
+            return;
+        }
         return if $op =~ /^\.(globl|global|weak|hidden|protected|type|size|cfi_\w+|loc|file|ident|code64|att_syntax)$/;
         fail "a directive with no ff form: $st";
     }
     undef $align;
     fail "an instruction outside a function: $st" unless $fn;
+    cfi_flush() if $cfiproc || @pcfi;
     $op = lc $op;
     # a prefix: a call of its own, its byte the first of GNU's next instruction
     while ($PREFIX{$op}) {
