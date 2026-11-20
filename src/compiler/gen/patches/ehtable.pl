@@ -47,7 +47,9 @@
 #
 # The two passes: the same tree, -g and cfind's answers give the same LPs and
 # regions in both; the room is sized from counts only (LSDA functions,
-# flagged functions, regions) with fixed-size encodings. Run on ttpc.ff after
+# flagged functions, regions) with fixed-size encodings. With -j a sample
+# (par_vars) keeps eh_ncs, eh_kl and eh_kf; eh_cs and dbg_fx are where the
+# first pass wrote them, as dbg_fns' entries. Run on ttpc.ff after
 # ehframe.pl, ehframerv.pl and scopeexit.pl.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
@@ -76,6 +78,32 @@ once(\$t, "  dbg_shs:\n    reserve\n      8192\n",
         [eh_inlp => 8], [eh_ro => 8], [eh_fnon => 8], [eh_persn => 8], [eh_sp => 8], [eh_stk => 512], [eh_lpc => 2048],
         [eh_snap => 24], [eh_nodes => 256], [eh_vname => 8], [eh_kids => 8], [eh_callp => 8],
         [eh_cs => 32 * 65536], [dbg_fx => 8 * 65536]), 'dbg_shs');
+
+# ---- -j (par.pl): a sample keeps the counts too; the entries of eh_cs and
+# dbg_fx, as dbg_fns', are where the first pass put them
+edit(\$t, 'par_vars', asm(4, "
+    dword 1
+    dword dbg_lines
+    dword 0
+    dword 8
+"), asm(4, "
+    dword 1
+    dword dbg_lines
+    dword 0
+    dword 8
+    dword 1
+    dword eh_ncs
+    dword 0
+    dword 8
+    dword 1
+    dword eh_kl
+    dword 0
+    dword 8
+    dword 1
+    dword eh_kf
+    dword 0
+    dword 8
+"));
 
 # ---- the names, after scopeexit.pl's words
 once(\$t, "\n  cl_word:\n    ascii\n      cleanup\n",
