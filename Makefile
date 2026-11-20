@@ -181,10 +181,18 @@ pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKL
 # checks at once took 2 hours each instead of 15 minutes); the time it prints
 # includes the wait for the lock.
 PCLOCK ?= $(HOME)/.cache/ttp/ports-check.lock
+# Once it holds the lock, the branch must contain origin/ports as it is then
+# (fetched), so that a green check of a lane is a green check of ports
+# with it: ports takes it by fast-forward, no second check (2026-11-20; a
+# lane whose base had moved cost one more 3-hour check each time).
+# PC_ANYBASE=1 checks a branch as it is. Its steps get the slot no lane
+# takes, slot.pc (TTP_PCSLOT, gen/slot.sh).
+PC_BASE = test -n "$(PC_ANYBASE)" || { git fetch -q origin ports 2> /dev/null; \
+	git merge-base --is-ancestor origin/ports HEAD || { echo "ports-check: this branch lacks origin/ports $$(git rev-parse --short origin/ports): merge it, then run the check again"; exit 3; }; }
 ports-check:
 	@rm -rf $(CHECKLOG) && mkdir -p $(CHECKLOG)
 	@flock -n $(PCLOCK) true || echo "ports-check: another ports-check runs (lock $(PCLOCK)), waiting for it"
-	@s=$$(date +%s); flock $(PCLOCK) $(MAKE) --no-print-directory -j$(PCJOBS) $(PC_STEPS:%=pc-%); \
+	@s=$$(date +%s); flock $(PCLOCK) sh -c '$(PC_BASE) && TTP_PCSLOT=1 exec $(MAKE) --no-print-directory -j$(PCJOBS) $(PC_STEPS:%=pc-%)' || test $$? -ne 3 || exit 1; \
 	echo "ports-check: $$(( $$(date +%s) - s )) s, logs in $(CHECKLOG)"; \
 	ok=1; for t in $(PC_STEPS); do cat $(CHECKLOG)/$$t.result 2> /dev/null || echo "SKIP $$t"; grep -qs '^PASS' $(CHECKLOG)/$$t.result || ok=; done; \
 	test -n "$$ok"

@@ -122,8 +122,17 @@ $(OBJ)/config.status:
 	    CC="$(GLIBC_CC)" CXX= $(TOOLS) > configure.log 2>&1 \
 	    || { tail -30 configure.log; exit 1; }
 
+# refguard (2026-11-20): make never works in a shared reference, nor
+# through a link, unless TTP_REF_WRITE=1 asks for it. It sits on the line of
+# $(MAKE) itself, because make runs that line even under -n: on 2026-11-20
+# two lanes' make -n through obj links rewrote glibc-gcc16/obj's configure
+# files and build.log, and a third lane's make then rebuilt there.
+REFROOTS := $(HOME)/.cache/ttp/glibc-gcc16 $(HOME)/.cache/ttp/glibc $(HOME)/.cache/ttp/libgcc-gcc16
+refguard = d=$$(readlink -f $(1)); for r in $(REFROOTS); do case "$$d/" in "$$r"/*) test -n "$(TTP_REF_WRITE)" \
+	|| { echo "glibc: $(1) is in the shared reference $$r: not remade from here (TTP_REF_WRITE=1 rebuilds it on purpose)" >&2; exit 1; };; esac; done; \
+	test ! -L $(1) || test -n "$(TTP_REF_WRITE)" || { echo "glibc: $(1) is a link (to $$d): not remade through it" >&2; exit 1; };
 $(OBJ)/libc.a: $(OBJ)/config.status
-	$(MAKE) -C $(OBJ) -j$(JOBS) > $(OBJ)/build.log 2>&1 \
+	$(call refguard,$(OBJ)) $(MAKE) -C $(OBJ) -j$(JOBS) > $(OBJ)/build.log 2>&1 \
 	    || { tail -40 $(OBJ)/build.log; exit 1; }
 	@echo "glibc-ref: $(OBJ)/libc.a, each object's command in $(OBJ)/build.log"
 
@@ -1845,7 +1854,8 @@ $(TOBJ)/libc.a:
 	$(RUN) -t 3600 $(MAKE) --no-print-directory BUILD=$(TBUILD) AREA= glibc-ref
 
 $(TOBJ)/$(AREA).log: | $(TOBJ)/libc.a
-	-$(RUN) -t 3600 $(MAKE) -C $(TOBJ) -k -j$(JOBS) subdirs=$(AREA) check run-built-tests=no > $@.tmp 2>&1
+	@$(call refguard,$(TOBJ)) true
+	-$(call refguard,$(TOBJ)) $(RUN) -t 3600 $(MAKE) -C $(TOBJ) -k -j$(JOBS) subdirs=$(AREA) check run-built-tests=no > $@.tmp 2>&1
 	mv $@.tmp $@
 
 $(TBUILD)/$(AREA).mk: $(TOBJ)/$(AREA).log tests.pl

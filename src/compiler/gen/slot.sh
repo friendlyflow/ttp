@@ -118,18 +118,26 @@ n=${TTP_NSLOTS:-3}
 mkdir -p "$dir"
 waited=
 start=$(date +%s)
+# The ports-check that holds the lock (TTP_PCSLOT set) has one more slot,
+# slot.pc, that no lane takes: on 2026-11-19 its steps waited 4.4 h for slots
+# while four lanes held the three. It tries that one first.
+take() {
+    s=$1; shift
+    exec 9>> "$dir/slot.$s"
+    if flock -n 9; then
+        test -n "$waited" && echo "slot.sh: got slot $s" >&2
+        test -n "${TTP_SLOTLOG:-}" && echo "$(( $(date +%s) - start )) $*" | cut -c1-200 >> "$TTP_SLOTLOG"
+        TTP_SLOT=$s; export TTP_SLOT
+        scoped "$@"
+    fi
+    exec 9>&-
+}
 while :; do
     brake
+    test -n "${TTP_PCSLOT:-}" && take pc "$@"
     i=1
     while test $i -le $n; do
-        exec 9>> "$dir/slot.$i"
-        if flock -n 9; then
-            test -n "$waited" && echo "slot.sh: got slot $i" >&2
-            test -n "${TTP_SLOTLOG:-}" && echo "$(( $(date +%s) - start )) $*" | cut -c1-200 >> "$TTP_SLOTLOG"
-            TTP_SLOT=$i; export TTP_SLOT
-            scoped "$@"
-        fi
-        exec 9>&-
+        take $i "$@"
         i=$((i + 1))
     done
     test -n "$waited" || { echo "slot.sh: all $n slots busy, waiting" >&2; waited=1; }
