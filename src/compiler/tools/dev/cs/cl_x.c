@@ -1661,10 +1661,13 @@ static struct node *cl_g2 (char *op, struct node *a)
   cl_push (x, a);
   return cl_nl (":", x);
 }
+static int cl_cx_is (struct cs_ty *t);
 static struct cs_ex *cl_cx_real_of (struct cs_ex *e)
 {
   struct cs_ex *s = e;
   while (s->k == E_PAREN) s = cl_k (s, 0);
+  /* (a real operand, as clang's AST keeps it: converted to the part type alone) */
+  if (!cl_cx_is (s->t)) return s;
   if ((s->k == E_ICE || s->k == E_CAST) && (s->op == CK_FLOATINGREALTOCOMPLEX || s->op == CK_INTEGRALREALTOCOMPLEX)) return cl_k (s, 0);
   return 0;
 }
@@ -1812,11 +1815,49 @@ static int cl_cx_conv (struct cs_ex *n, struct cl_list *o)
     cl_fail ("a conversion of an integer complex type", 0);
   return 0;
 }
+/* a complex value tested for truth (a condition, !, && and ||'s operands, ?:'s condition, which clang's AST
+   leaves as they are): either part nonzero, a : of its temporary and that test */
+static void cl_cx_truth (struct cs_ex *e, struct cl_list *o)
+{
+  struct cl_list *g = cl_l ();
+  char *a;
+  int ar;
+  if (C->in_global) cl_fail ("a complex value's truth in a global's value", 0);
+  cl_cx_tmp (e, e->t, g, &a, &ar);
+  cl_push (g, cl_g3 (cl_g3 (cl_cx_part (a, 0, 0), "!=", cl_cx_zero (e->t)), "||", cl_g3 (cl_cx_part (a, 0, 1), "!=", cl_cx_zero (e->t))));
+  cl_push (o, cl_nl (":", g));
+}
+/* a value tested for truth: a complex one by its parts */
+static void cl_testx (struct cs_ex *e, struct cl_list *o)
+{
+  struct cs_ex *s = e;
+  while (s->k == E_PAREN) s = cl_k (s, 0);
+  if (cl_cx_is (s->t)) cl_cx_truth (s, o); else cl_itemx (e, o);
+}
 static void cl_expr (struct cs_ex *n, struct cl_list *o)
 {
   int k = n->k;
   /* (C's complex values: their conversions and operators of their parts) */
   if ((k == E_ICE || k == E_CAST) && cl_cx_conv (n, o)) return;
+  if (k == E_UN && cl_name_is (n, "!") && cl_cx_is (cl_k (n, 0)->t)) { cl_push (o, cl_n ("!")); cl_cx_truth (cl_k (n, 0), o); return; }
+  if (k == E_BIN && n->nk == 2 && (cl_name_is (n, "&&") || cl_name_is (n, "||")) && (cl_cx_is (cl_k (n, 0)->t) || cl_cx_is (cl_k (n, 1)->t))) {
+    long j = 0;
+    while (j < 2) {
+      struct cs_ex *x = cl_k (n, j);
+      if (cl_cx_is (x->t)) cl_cx_truth (x, o); else cl_push (o, cl_nl (":", cl_ex (x)));
+      if (j == 0) cl_push (o, cl_n (cl_name_of (n)));
+      j++;
+    }
+    return;
+  }
+  if (k == E_COND && cl_cx_is (cl_k (n, 0)->t)) {
+    cl_cx_truth (cl_k (n, 0), o);
+    cl_push (o, cl_n ("?"));
+    cl_operand (cl_k (n, 1), 4, 0, o);
+    cl_push (o, cl_n (":"));
+    cl_operand (cl_k (n, 2), 3, 1, o);
+    return;
+  }
   if (k == E_BIN && n->nk == 2) {
     char *bop = cl_name_of (n);
     if ((cl_eq (bop, "+") || cl_eq (bop, "-") || cl_eq (bop, "*") || cl_eq (bop, "/")) && cl_cx_is (n->t)) { cl_cx_bin (bop, cl_k (n, 0), cl_k (n, 1), n->t, o); return; }
@@ -2682,7 +2723,7 @@ static void cl_labelled (struct cs_st *n, struct cl_list *o)
 static void cl_ifs (char *word, struct cs_st *n, struct cl_list *o)
 {
   struct cl_list *x = cl_l ();
-  cl_itemx (cl_p (n->e), x);
+  cl_testx (cl_p (n->e), x);
   cl_sub_body (n->a, x);
   cl_push (o, cl_nl (word, x));
   if (n->b) {
@@ -2757,7 +2798,7 @@ static void cl_clause_expr (struct cs_ex *e, int eff, struct cl_list *o)
 {
   if (!e) { cl_push (o, cl_n (":")); return; }
   e = cl_p (e);
-  if (eff) cl_effect (e, o); else cl_itemx (e, o);
+  if (eff) cl_effect (e, o); else cl_testx (e, o);
 }
 static void cl_stmt (struct cs_st *n, struct cl_list *o)
 {
@@ -2786,14 +2827,14 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
   case S_IF: cl_ifs ("if", n, o); return;
   case S_WHILE: {
     struct cl_list *x = cl_l ();
-    cl_itemx (cl_p (n->e), x);
+    cl_testx (cl_p (n->e), x);
     cl_sub_body (n->a, x);
     cl_push (o, cl_nl ("while", x));
     return;
   }
   case S_DO: {
     struct cl_list *x = cl_l ();
-    cl_itemx (cl_p (n->e), x);
+    cl_testx (cl_p (n->e), x);
     cl_sub_body (n->a, x);
     cl_push (o, cl_nl ("do while", x));
     return;

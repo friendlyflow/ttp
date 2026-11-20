@@ -327,6 +327,7 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	for t in riscv64 $(TARGETS); do \
 	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/csfnamefail.ff $(P)/csfnamefail.$$t.celf 2> $(P)/csfnamefail.$$t.err || exit 1; \
 	    grep -q "no definition of the runtime function __addtf3$$" $(P)/csfnamefail.$$t.err || exit 1; done
+	for t in riscv64 $(TARGETS); do \
 	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/ccxopfail.ff $(P)/ccxopfail.$$t.celf 2> $(P)/ccxopfail.$$t.err || exit 1; \
 	    grep -q "a complex value as an operand: C's complex + - \* / == != are csema's" $(P)/ccxopfail.$$t.err || exit 1; done
 	@echo "ctime: compile time runs and stays out of the program"

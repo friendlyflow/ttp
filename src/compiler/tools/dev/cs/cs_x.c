@@ -704,8 +704,8 @@ static struct cs_ex *cs_binary (char *op, struct cs_ex *l, struct cs_ex *r)
   if (same ((unsigned char *) op, cstrlen (op), "<") || same ((unsigned char *) op, cstrlen (op), ">") || same ((unsigned char *) op, cstrlen (op), "<=")
       || same ((unsigned char *) op, cstrlen (op), ">=") || same ((unsigned char *) op, cstrlen (op), "==") || same ((unsigned char *) op, cstrlen (op), "!="))
     return cs_compare (op, l, r);
-  if (op[0] == '&' && op[1] == '&') { l = cs_test (cs_uuc (l)); r = cs_test (cs_uuc (r)); return cs_bin (op, T->intt, l, r); }
-  if (op[0] == '|' && op[1] == '|') { l = cs_test (cs_uuc (l)); r = cs_test (cs_uuc (r)); return cs_bin (op, T->intt, l, r); }
+  if (op[0] == '&' && op[1] == '&') { l = cs_uuc (l); r = cs_uuc (r); return cs_bin (op, T->intt, l, r); }
+  if (op[0] == '|' && op[1] == '|') { l = cs_uuc (l); r = cs_uuc (r); return cs_bin (op, T->intt, l, r); }
   if (op[0] == ',') { l = cs_ignored (l); r = cs_rv (r); return cs_bin (op, r->t, l, r); }
   if ((op[0] == '<' || op[0] == '>') && op[1]) { l = cs_uuc (l); r = cs_uuc (r); return cs_bin (op, l->t, l, r); }
   t = cs_uac (&l, &r, 0);
@@ -824,7 +824,7 @@ static struct cs_ex *cs_unary (struct node *n)
     return cs_named (e, "*");
   }
   if (same (t, len, "+") || same (t, len, "-") || same (t, len, "~")) { o = cs_uuc (o); e = cs_mk1 (E_UN, o->t, 0, o); e->name = t; e->nlen = len; return e; }
-  if (same (t, len, "!")) { o = cs_test (o); e = cs_mk1 (E_UN, T->intt, 0, o); return cs_named (e, "!"); }
+  if (same (t, len, "!")) { o = cs_rv (o); e = cs_mk1 (E_UN, T->intt, 0, o); return cs_named (e, "!"); }
   if (same (t, len, "++") || same (t, len, "--")) { e = cs_mk1 (E_UN, cs_unqual (o->t), 0, o); e->name = t; e->nlen = len; return e; }
   if (same (t, len, "post ++")) { e = cs_mk1 (E_UN, cs_unqual (o->t), 0, o); return cs_named (e, "post++"); }
   if (same (t, len, "post --")) { e = cs_mk1 (E_UN, cs_unqual (o->t), 0, o); return cs_named (e, "post--"); }
@@ -990,7 +990,7 @@ static struct cs_ex *cs_ex_of1 (struct node *n)
   }
   if (same (t, len, "stmt expr")) return cs_stmt_expr (n->kids[0]);
   if (same (t, len, "?") && c == 3) {
-    struct cs_ex *cd = cs_test (cs_uuc (cs_ex_of (n->kids[0]))), *l = cs_ex_of (n->kids[1]), *r = cs_ex_of (n->kids[2]), *e;
+    struct cs_ex *cd = cs_uuc (cs_ex_of (n->kids[0])), *l = cs_ex_of (n->kids[1]), *r = cs_ex_of (n->kids[2]), *e;
     struct cs_ty *ty = cs_arms (&l, &r);
     e = cs_mk (E_COND, ty, 0);
     cs_add (e, cd);

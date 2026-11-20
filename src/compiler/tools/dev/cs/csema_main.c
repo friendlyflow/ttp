@@ -68,6 +68,7 @@ static char *builtins[] = {
   "float __builtin_fmaxf (float, float);", "double __builtin_fmax (double, double);", "float __builtin_fminf (float, float);", "double __builtin_fmin (double, double);",
   "long __builtin_lrintf (float);", "long __builtin_lrint (double);", "long long __builtin_llrintf (float);", "long long __builtin_llrint (double);",
   "long __builtin_lroundf (float);", "long __builtin_lround (double);", "long long __builtin_llroundf (float);", "long long __builtin_llround (double);",
+  "extern void __builtin_complex ();",
   "typedef int __csema_mid;",
   "extern int __builtin_va_arg_pack_len (void);", "extern int __builtin_va_arg_pack (void);",
   "extern double __builtin_tgmath ();",

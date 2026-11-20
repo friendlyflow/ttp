@@ -234,16 +234,6 @@ static struct cs_ex *cs_uuc (struct cs_ex *e)
   }
   return e;
 }
-/* a value tested for truth (a condition, !, && and ||' operands): a complex one converted to bool as
-   clang's AST has it (FloatingComplexToBoolean: either part nonzero); an rvalue, else as it was */
-static struct cs_ex *cs_test (struct cs_ex *e)
-{
-  struct cs_ty *t;
-  e = cs_rv (e);
-  t = cs_canon (e->t);
-  if (t->k != TY_COMPLEX) return e;
-  return cs_ice (e, cs_basic (TY_BOOL), cs_k_int (cs_canon (t->to)->k) ? CK_INTEGRALCOMPLEXTOBOOLEAN : CK_FLOATINGCOMPLEXTOBOOLEAN);
-}
 static struct cs_ex *cs_arg_promo (struct cs_ex *e)
 {
   e = cs_uuc (e);
@@ -316,8 +306,16 @@ static struct cs_ty *cs_uac (struct cs_ex **l, struct cs_ex **r, int comp)
       struct cs_ty *e = cs_flt_rank (le) >= cs_flt_rank (re) || !cs_is_flt (re) ? (cs_is_flt (le) ? le : re) : re;
       res = cs_ty_new (TY_COMPLEX); res->to = cs_canon (e);
     } else { res = cs_is_complex (lt) ? lt : rty; }
-    if (!cs_same_ty (rty, res)) *r = cs_ice (*r, res, cs_is_complex (rty) ? (cs_is_flt (cs_canon (rty)->to) ? CK_FLOATINGCOMPLEXCAST : CK_INTEGRALCOMPLEXTOFLOATINGCOMPLEX) : (cs_is_flt (rty) ? CK_FLOATINGREALTOCOMPLEX : CK_INTEGRALREALTOCOMPLEX));
-    if (!comp && !cs_same_ty (lt, res)) *l = cs_ice (*l, res, cs_is_complex (lt) ? (cs_is_flt (cs_canon (lt)->to) ? CK_FLOATINGCOMPLEXCAST : CK_INTEGRALCOMPLEXTOFLOATINGCOMPLEX) : (cs_is_flt (lt) ? CK_FLOATINGREALTOCOMPLEX : CK_INTEGRALREALTOCOMPLEX));
+    /* (clang's handleComplexFloatConversion: a complex operand converted to the result's complex type,
+       a real one to its part type alone, which stays real: gcc's arithmetic keeps it real too) */
+    {
+      struct cs_ty *pe = cs_canon (res)->to;
+      if (cs_is_complex (rty)) { if (!cs_same_ty (rty, res)) *r = cs_ice (*r, res, cs_is_flt (cs_canon (rty)->to) ? CK_FLOATINGCOMPLEXCAST : CK_INTEGRALCOMPLEXTOFLOATINGCOMPLEX); }
+      else if (!cs_same_ty (rty, pe)) *r = cs_ice (*r, pe, cs_is_flt (rty) ? CK_FLOATINGCAST : cs_is_flt (pe) ? CK_INTEGRALTOFLOATING : CK_INTEGRALCAST);
+      if (comp) ;
+      else if (cs_is_complex (lt)) { if (!cs_same_ty (lt, res)) *l = cs_ice (*l, res, cs_is_flt (cs_canon (lt)->to) ? CK_FLOATINGCOMPLEXCAST : CK_INTEGRALCOMPLEXTOFLOATINGCOMPLEX); }
+      else if (!cs_same_ty (lt, pe)) *l = cs_ice (*l, pe, cs_is_flt (lt) ? CK_FLOATINGCAST : cs_is_flt (pe) ? CK_INTEGRALTOFLOATING : CK_INTEGRALCAST);
+    }
     return res;
   }
   /* (fixed point, clang's handleFloatConversion and handleFixedPointConversion: a floating
