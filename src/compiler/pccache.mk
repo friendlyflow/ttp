@@ -26,8 +26,10 @@
 # Left out: RUN_<t>'s qemu is in, slot.sh is not (where a command runs, not
 # what it does); the paths of the worktree (W) and the BUILD (B).
 
-pck_nl := $(subst x,,x
-x)
+define pck_nl
+
+
+endef
 PCK_GEN := fftext.pl unlicense.pl trim.pl frozen.pl mkhost.pl mkwhole.pl mkff.pl decls.pl licenses.pl insize.pl ffmerge.sh \
 	cparsecheck.sh csemacheck.sh clangsema.pl csemacmp.pl s2ff.pl s2ff-aarch64.pl s2ff-arm.pl $(notdir $(wildcard gen/*.pm))
 PCK_FILES := $(TREES) $(LICENSED) LICENSES shared.ff.txt $(X86GNU) $(PCK_GEN:%=gen/%) ../glibc/mki.pl ../glibc/s2ffcheck.sh \

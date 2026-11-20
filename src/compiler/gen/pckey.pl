@@ -44,7 +44,8 @@ if (($mode // '') eq 'region' && @ARGV == 4) { print region(@ARGV[1 .. 3]), "\n"
 die "usage: pckey.pl key|save|restore SPEC FILE\n" unless defined $out && $mode =~ /^(key|save|restore)$/;
 
 open my $sh, '<', $spec or die "pckey: $spec: $!\n";
-my @spec = map { chomp; length ? $_ : () } <$sh>;
+# (make's foreach puts a space before each line but the first)
+my @spec = map { chomp; s/^\s+//; length ? $_ : () } <$sh>;
 close $sh;
 
 my @roots = sort { length $b->[1] <=> length $a->[1] } map { /^R (\S+) (\S+)$/ ? [$1, $2 =~ s{/+$}{}r] : () } @spec;
