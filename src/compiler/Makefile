@@ -144,7 +144,17 @@ LICENSED := $(TREES) $(COPIES) $(X86GNU) shared.ff.txt $(wildcard macros/*.ff.tx
 
 # Every program, after its 120-byte ELF header, must be byte-identical to
 # its GNU twin.
-check: roundtrip decls $(PROGS:%=$(P)/%.elf) $(PROGS:%=$(P)/%.twin.bin)
+# The language's text: language.ff.txt makes language.ff (gen/fftext.pl)
+# and comes back from it unchanged, and no line of it is over a node's 255
+# bytes: a longer one goes on in children (the long-comment rule, never
+# shortened), so a long line fails here rather than breaking language.ff.
+langcheck:
+	@LC_ALL=C awk '{ t = $$0; sub(/^ +/, "", t); if (length(t) > 255) { print "langcheck: language.ff.txt:" NR ": " length(t) " bytes (max 255): go on in children"; bad = 1 } } END { exit bad }' language.ff.txt
+	@perl gen/fftext.pl ff language.ff.txt | cmp -s - language.ff || { echo "langcheck: language.ff is not language.ff.txt's (perl gen/fftext.pl ff language.ff.txt > language.ff)"; exit 1; }
+	@perl gen/fftext.pl txt language.ff | cmp -s - language.ff.txt || { echo "langcheck: language.ff as text is not language.ff.txt"; exit 1; }
+	@echo "langcheck: language.ff.txt and language.ff the same, no line over 255 bytes"
+.PHONY: langcheck
+check: roundtrip decls langcheck $(PROGS:%=$(P)/%.elf) $(PROGS:%=$(P)/%.twin.bin)
 	@for p in $(PROGS); do \
 	    tail -c +121 $(P)/$$p.elf | cmp - $(P)/$$p.twin.bin || exit 1; \
 	    echo "check: $$p: ttpc and GNU as agree"; \
