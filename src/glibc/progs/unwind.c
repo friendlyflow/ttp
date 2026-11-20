@@ -293,10 +293,12 @@ int main (int argc, char **argv)
     g1 (1);
   printf ("forced:%s (longjmp %d, CFAs %s)\n", seen, j, rising ? "rising" : "not rising");
   seen[at = 0] = 0;
+  int before = sink;
   j = setjmp (out);
   if (j == 0)
     k1 (5);
   printf ("cleanups:%s (longjmp %d, %d)\n", seen, j, cleaned);
+  sink = before;
   if (argc < 2 || !load (argv[1]))
     {
       printf ("no frames of gcc's\n");
