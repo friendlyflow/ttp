@@ -2021,9 +2021,14 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           (for (long double i = 1; ; i++), which ttpc kept at 1: it added
 #           1 to the bits; gen/patches/fltinc.pl); every target
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check fltinc-check
-ALLPROGS := locale enums statics anonrec x87math sincosf fltinc
+#   weakref a weak reference pulls nothing in (ld and an archive member):
+#           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
+#           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check fltinc-check weakref-check
+ALLPROGS := locale enums statics anonrec x87math sincosf fltinc weakref
 ALLPROG_fltinc := fltinc
+ALLPROG_weakref := weakref
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_sincosf := sincosf

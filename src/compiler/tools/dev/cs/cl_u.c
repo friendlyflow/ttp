@@ -20,11 +20,17 @@ struct cl_unit {
   struct cs_cst *t;
   void *s;
   struct cl_map own, constint, ownfn, text_item, owntd, ownrec, ownanon;
+  struct cl_map wcand, wdef;   /* its names declared weak (attribute or #pragma weak), its definitions: a weak reference is the first without the second */
+  struct cl_list absnames;     /* its top-level asm's absolute symbols (cl_asm_absdefs): every definition of it has them under with */
+  struct cl_list wcl;          /* its wcand, in order */
+  struct cl_list used;         /* its definitions of the used attribute (libio_static_fn_required's statics): under with of the others, as they stay in its object */
+  struct cl_list wwith; int wdone;   /* what its definitions have under with (cl_unit_with), once worked out */
   struct cl_list ctors;        /* its constructors and destructors */
   struct cl_shared *shared;    /* its records of the first's text */
 };
 struct cl_shared { char *key; struct cs_rec *d; struct cl_shared *nxt; };
 struct cl_state {
+  struct cl_map wrset; struct cl_list wrl;   /* the names some unit references weakly (cl_unit_weak) */
   int target;                  /* 0 riscv64, 1 x86_64, 2 aarch64, 3 arm */
   char *page;
   char *ifile, *glibc_src, *libgcc_src, *shared;
