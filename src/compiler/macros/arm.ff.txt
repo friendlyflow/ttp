@@ -298,6 +298,7 @@ elf:
       64
   comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
+    _end is the linker's end of the bss (ld's default script), mem_end: glibc's minimal malloc (ld.so's, dl-minimal-malloc.c) starts there.
   frame:
     origin
       elf_base
@@ -317,6 +318,7 @@ elf:
     file_end:
     bss
     mem_end:
+    _end:
 c:
   comment
     The C layer of ttpc, for arm in A32: the primitives it emits, in its own terms. V is the value (r0), L the left operand (r12), X a scale or count (lr), FP the frame (r11), SP the stack (sp), LR the return address (lr).

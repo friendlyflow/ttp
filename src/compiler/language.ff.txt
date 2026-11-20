@@ -322,6 +322,7 @@ ff, the language ttpc compiles
       base pcs, first under a function's name and before its type, gives it arm's base procedure call standard (C's pcs ("aapcs")): its floats and doubles in core registers and on the stack, as a variadic function's
       a base pcs function's calls (through a pointer of its type too), prologue and return are so; on the other targets the word changes nothing
       constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
+      _end, the linker's end of the bss (ld's default script), is the end of the program's memory (mem_end, ttpc's frame): _end / & address, as glibc's minimal malloc takes it
       ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled
       constructor / 101 gives it a priority, lower first, those without one last
       destructor, the same way, runs it at exit (C's __attribute__ ((destructor))): between __fini_array_start and __fini_array_end, walked from the end
