@@ -19,7 +19,7 @@ static int __attribute__ ((noinline)) add (int x, int y) { return x + y; }
 static int __attribute__ ((noinline)) sub (int x, int y) { return x - y; }
 int __attribute__ ((noinline)) ret (int x) { return x + 1; }
 int b = 7;
-static const char str[] = "str";
+static const char str[] = "s-t-r";   /* (its text no name: a text leaf naming a global is read as that name, a fault of its own) */
 long orr = 0x0f, lb = 3, sd = 4, ldr = 5, mov = 6, setne = 8, cmovz = 9;
 static int __attribute__ ((noinline)) cbz (int x) { return x == 0; }
 static int __attribute__ ((noinline)) fence (int (*f) (int, int)) { return f (40, 2); }

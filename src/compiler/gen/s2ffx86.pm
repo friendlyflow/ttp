@@ -757,33 +757,19 @@ sub carry_rodata {
     }
 }
 # Read-only data no function of the file names, a table of its own under a
-# global name (libmvec's svml_*_data.S, which hold only .rodata): a global
-# of its bytes, little-endian, at its alignment, as csema writes C's tables
-# (array u8, its items in groups of 255); the entry's other names aliases
-# of it. A label's difference or a negative .quad (no number) stops.
+# global name (libmvec's svml_*_data.S, which hold only .rodata): an asm
+# definition of its data, asm first, at its alignment, its bytes as GNU's
+# directives (dword ...), as a function carries its tables, in layers past a
+# node's 255 (asm first in layer 0); the entry's other names aliases of it.
+# A data label of an asm unit is an entry, seen from other units, only so:
+# other units' asm names it (.Lgot / dword / name).
 sub data_globals {
     for my $r (@runs) {
         for my $e (@$r) {
             my ($names, $bytes, $a) = @$e;
             next if grep { $emitted{$_} } @$names;
             my ($name) = grep { !/^\.L/ } @$names or next;
-            my @b;
-            for my $d (@$bytes) {
-                my ($k, $v) = ($d->{content}, $d->{children}[0]);
-                my $w = { byte => 1, half => 2, word => 4, dword => 8 }->{$k};
-                if ($w) {
-                    fail "read-only data of no function that are no bytes: $name" unless $v && !@{ $v->{children} } && $v->{content} =~ /^(-?)(\d+)$/;
-                    my $u = $1 ? -$2 : $2 + 0;   # (>> takes a negative one as its two's complement)
-                    push @b, map { (($u >> (8 * $_)) & 255) } 0 .. $w - 1;
-                    next;
-                }
-                if ($k eq 'reserve' && $v && !@{ $v->{children} }) { my $n = num($v->{content}) // fail "read-only data of no function that are no bytes: $name"; push @b, (0) x $n; next }
-                if ($k eq 'ascii' && $v) { push @b, map { ord($_) & 255 } split //, $v->{content}; next }
-                fail "read-only data of no function that are no bytes: $name";
-            }
-            my @it;
-            for (my $i = 0; $i < @b; $i += 255) { my $j = $i + 254 < $#b ? $i + 254 : $#b; push @it, node('items', map { node($_) } @b[$i .. $j]) }
-            push @fns, node(rn($name) . ":", ($a // 1) > 1 ? node('align', node($a)) : (), node('array', node('u8'), node(scalar @b)), @it);
+            push @fns, node(rn($name) . ":", FF::layers(node('asm'), ($a // 1) > 1 ? node('align', node($a)) : (), @$bytes));
             push @fns, map { node(rn($_) . ":", node('alias'), node(rn($name))) } grep { $_ ne $name && !/^\.L/ } @$names;
         }
     }

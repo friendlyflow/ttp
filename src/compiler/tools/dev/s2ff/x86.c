@@ -1615,39 +1615,11 @@ static void carry_rodata (void)
   }
 }
 
-/* (a run entry's bytes, little-endian, as byte leaves onto out; 0 where one is no number: a label's
-   difference, a negative .quad's Perl NV) */
-static int rodata_bytes (struct vec *b, struct vec *out)
-{
-  long i, j;
-  for (i = 0; i < b->n; i++) {
-    struct nd *d = b->v[i], *v = d->k->n ? d->k->v[0] : 0;
-    long w = s_is (d->c, "byte") ? 1 : s_is (d->c, "half") ? 2 : s_is (d->c, "word") ? 4 : s_is (d->c, "dword") ? 8 : 0;
-    if (w) {
-      unsigned long u = 0;
-      long q = 0, neg = 0;
-      if (!v || v->k->n || !v->c->n) return 0;
-      if (v->c->p[0] == '-') { neg = 1; q = 1; }
-      if (q >= v->c->n) return 0;
-      for (; q < v->c->n; q++) { if (v->c->p[q] < '0' || v->c->p[q] > '9') return 0; u = u * 10 + (unsigned long) (v->c->p[q] - '0'); }
-      if (neg) u = (unsigned long) 0 - u;
-      for (j = 0; j < w; j++) v_push (out, nd_new (s_num ((long) ((u >> (8 * j)) & 255))));
-      continue;
-    }
-    if (s_is (d->c, "reserve") && v && !v->k->n) {
-      long n;
-      if (!xnum (v->c, &n)) return 0;
-      for (j = 0; j < n; j++) v_push (out, nd_new (s_num (0)));
-      continue;
-    }
-    if (s_is (d->c, "ascii") && v) { for (j = 0; j < v->c->n; j++) v_push (out, nd_new (s_num (v->c->p[j] & 255))); continue; }
-    return 0;
-  }
-  return 1;
-}
 /* (read-only data no function of the file names, a table of its own under a global name: libmvec's
-   svml_*_data.S, which hold only .rodata: a global of its bytes, at its alignment, as csema writes C's
-   tables (array u8, its items in groups of 255), the entry's other names aliases of it) */
+   svml_*_data.S, which hold only .rodata: an asm definition of its data, asm first, at its alignment, its
+   bytes as GNU's directives (dword ...), as a function carries its tables, in layers past a node's 255 (asm
+   first in layer 0); the entry's other names aliases of it. A data label of an asm unit is an entry, seen from
+   other units, only so: other units' asm names it, .Lgot / dword / name) */
 static void data_globals (void)
 {
   long r, q, z, i;
@@ -1656,24 +1628,16 @@ static void data_globals (void)
     for (q = 0; q < run->n; q++) {
       struct runent *e = run->v[q];
       struct str *name = 0, *x;
-      struct vec *by;
       struct nd *gl;
       for (z = 0; z < e->names->n; z++) if (h_has (xemitted, e->names->v[z])) break;
       if (z < e->names->n) continue;
       for (z = 0; z < e->names->n && !name; z++) if (!m (e->names->v[z], "^\\.L")) name = e->names->v[z];
       if (!name) continue;
-      by = v_new ();
-      if (!rodata_bytes (e->bytes, by)) { x = s_of ("read-only data of no function that are no bytes: "); s_app (x, name); fail_s (x); }
       x = s_dup (resname (name)); s_cat (x, ":");
-      gl = nd_new (x);
+      gl = nd1 (x, ndc ("asm"));
       if (e->has_align && e->align > 1) nd_add (gl, nd1 (s_of ("align"), LN (e->align)));
-      nd_add (gl, nd2 (s_of ("array"), ndc ("u8"), LN (by->n)));
-      for (i = 0; i < by->n; i += 255) {
-        struct nd *it = nd_new (s_of ("items"));
-        long j;
-        for (j = i; j < by->n && j < i + 255; j++) nd_add (it, by->v[j]);
-        nd_add (gl, it);
-      }
+      for (i = 0; i < e->bytes->n; i++) nd_add (gl, e->bytes->v[i]);
+      gl->k = x86_layers (gl->k, 0, gl->k->n);
       v_push (fns, gl);
       for (z = 0; z < e->names->n; z++) if (e->names->v[z] != name && !m (e->names->v[z], "^\\.L")) v_push (fns, alias_of (e->names->v[z], name));
     }
