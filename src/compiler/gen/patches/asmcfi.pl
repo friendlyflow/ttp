@@ -88,6 +88,8 @@ edit(\$t, 'compile_page', asm(6, "
     la eh_cfun t0
     li -1 t1
     sd 0 t1 t0
+    la eh_cfp t0
+    sd 0 zero t0
 "));
 
 # ---- -j: a sample keeps them

@@ -42,3 +42,22 @@ Disassembly of section .text:
   34:	d503245f 	hint	#0x22
   38:	14000000 	b	0 <main>
 			38: R_AARCH64_JUMP26	main
+
+/home/nico/.cache/ttp/build/tools/glibc/aarch64/i/csu/start.ref.o:     file format elf64-littleaarch64
+
+Contents of the .eh_frame section:
+
+
+00000000 0000000000000010 00000000 CIE
+  Version:               1
+  Augmentation:          "zR"
+  Code alignment factor: 4
+  Data alignment factor: -8
+  Return address column: 30
+  Augmentation data:     1b
+  DW_CFA_def_cfa: r31 (sp) ofs 0
+
+00000014 0000000000000010 00000018 FDE cie=00000000 pc=0000000000000000..000000000000003c
+  DW_CFA_advance_loc: 4 to 0000000000000004
+  DW_CFA_undefined: r30 (x30)
+
