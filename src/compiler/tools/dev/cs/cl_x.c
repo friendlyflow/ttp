@@ -2761,6 +2761,32 @@ static int cl_cx_group (struct cs_ex *e)
   if ((e->k == E_ICE || e->k == E_CAST) && (e->op == CK_FLOATINGREALTOCOMPLEX || e->op == CK_INTEGRALREALTOCOMPLEX || e->op == CK_FLOATINGCOMPLEXCAST)) return 1;
   return 0;
 }
+/* (a local of a struct, union or complex type takes a lone : after it, or several items, as its items: an
+   initializer that would be written so, a statement expression, ?:, a comma in parentheses or complex
+   arithmetic (cl_cx_group), is assigned after the declaration instead; parentheses around another one are
+   dropped, a copy either way: glibc's math_check_force_underflow_complex, __typeof (x) tmp = (x), read the
+   copy's first part from x) */
+static int cl_agg_split (struct cs_decl *d)
+{
+  struct cs_ex *e, *x;
+  int k = cs_kind (d->t);
+  if (k != TY_STRUCT && k != TY_UNION && k != TY_COMPLEX) return 0;
+  /* (the value under its conversions and parentheses: the kids as they are, a paren count or an E_PAREN; cl_k
+     would make a count an E_PAREN) */
+  e = d->init;
+  while ((e->k == E_PAREN || e->k == E_ICE) && e->nk) e = e->kid[0];
+  if (e->k == E_INIT || e->k == E_CLIT) return 0;
+  if (e->k == E_STMTX || e->k == E_COND || e->k == E_BCOND || (e->k == E_BIN && cl_name_is (e, ",")) || cl_cx_group (d->init)) return 1;
+  /* (else no parentheses, which a : would write: a copy of the value) */
+  while (d->init->k == E_PAREN && d->init->nk) d->init = d->init->kid[0];
+  for (x = d->init; x; ) {
+    x->paren = 0;
+    if (x->k != E_ICE || !x->nk) break;
+    while (x->kid[0]->k == E_PAREN && x->kid[0]->nk) x->kid[0] = x->kid[0]->kid[0];
+    x = x->kid[0];
+  }
+  return 0;
+}
 static void cl_decl_stmt (struct cs_st *n, struct cl_list *o)
 {
   struct cs_dl *x = n->dl;
@@ -2783,7 +2809,7 @@ static void cl_decl_stmt (struct cs_st *n, struct cl_list *o)
       if (k > 1) g = cl_cat3 (g, " ", cl_num (k));
       d->global = g;
       cl_out (cl_decl (d, 1, g));
-    } else if (d->init && cl_cx_group (d->init)) {
+    } else if (d->init && cl_agg_split (d)) {
       struct cs_ex *v = d->init;
       d->init = 0;
       cl_push (o, cl_decl (d, 0, 0));

@@ -2064,8 +2064,14 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           and setns, the program's add, ret, b, str ...): csema writes
 #           them name', and s2ff the asm's definitions of them so too
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check
-ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames
+#   agginit a struct's, union's or complex local's value written as a lone :
+#           or several items, (x), ?:, ({ ... }), (a, b): assigned after its
+#           declaration (glibc's math_check_force_underflow_complex)
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit
+ALLPROG_agginit := agginit
+ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
 ALLPROG_cxops := cxops
 ALLPROG_insnames := insnames
 ALLPROG_fltinc := fltinc

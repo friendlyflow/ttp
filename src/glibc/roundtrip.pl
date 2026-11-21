@@ -963,16 +963,23 @@ sub S {
         next unless $n && $n->{kind};
         next if $n->{cxdone};
         my $k = $n->{kind};
-        # (csema's complex local whose value is its complex arithmetic: declared,
-        # then assigned it, a lone : after a struct local being its items)
+        # (csema's local of a struct, union or complex type whose value would be
+        # written as a lone : or several items, which after it are its items:
+        # declared, then assigned it; its complex arithmetic, a statement
+        # expression, ?: or a comma)
         if ($side eq 'ff' && $k eq 'DeclStmt' && kids($n) == 1 && ($n->{inner}[0]{kind} // '') eq 'VarDecl' && !grep { $_->{kind} !~ /Attr$/ } kids($n->{inner}[0])) {
             my $d = $n->{inner}[0];
+            my $q = $d->{type}{desugaredQualType} // $d->{type}{qualType} // '';
             my $as = $ix < $#all ? unparen($all[$ix + 1]) : undef;
-            if ($as && ($as->{kind} // '') eq 'BinaryOperator' && $as->{opcode} eq '=' && (strip((kids($as))[0])->{referencedDecl}{name} // '') eq ($d->{name} // '-')
-                && (my ($f) = cxlow(unparen((kids($as))[1])))) {
-                push @out, '(var ' . ($d->{name} =~ s/'$//r) . ' ' . tcls($d) . " $f)";
-                $all[$ix + 1]{cxdone} = 1;
-                next;
+            if ($q =~ /^(?:(?:const |volatile )*(?:struct|union) |.*_Complex)/ && $q !~ /[*\[(]/ && $as && ($as->{kind} // '') eq 'BinaryOperator' && $as->{opcode} eq '='
+                && (strip((kids($as))[0])->{referencedDecl}{name} // '') eq ($d->{name} // '-')) {
+                my $r = unparen((kids($as))[1]);
+                my $rk = $r->{kind} // '';
+                if (cxlow($r) || $rk =~ /^(StmtExpr|ConditionalOperator|BinaryConditionalOperator)$/ || ($rk eq 'BinaryOperator' && $r->{opcode} eq ',')) {
+                    push @out, '(var ' . ($d->{name} =~ s/'$//r) . ' ' . tcls($d) . ' ' . E((kids($as))[1]) . ')';
+                    $all[$ix + 1]{cxdone} = 1;
+                    next;
+                }
             }
         }
         if ($k eq 'CompoundStmt') {
