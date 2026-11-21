@@ -966,9 +966,10 @@ static int cl_isf_word (char *s) { return cl_eq (s, "float") || cl_eq (s, "doubl
    with the arguments' own values converted to its parameters. */
 static struct cs_ex *cl_tgmath (struct cs_ex *n)
 {
-  struct cs_ex *f[3], *e, *arg1;
-  struct cs_ty *ft[3], *fc;
+  struct cs_ex *f[6], *e, *arg1;
+  struct cs_ty *ft[6], *fc;
   long na = n->nk - 1, i = 1, nf = 0, nv, r = 0;
+  int cxa = 0;
   while (i <= na) {
     struct cs_ex *s = cl_strip (cl_k (n, i));
     char *spelt;
@@ -983,7 +984,7 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
       while (spelt[q]) { if (spelt[q] == '(') paren = 1; q++; }
       if (!paren) break;
     }
-    if (nf < 3) { f[nf] = cl_k (n, i); ft[nf] = cs_canon (s->t); }
+    if (nf < 6) { f[nf] = cl_k (n, i); ft[nf] = cs_canon (s->t); }
     nf++;
     i++;
   }
@@ -1009,20 +1010,34 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
       if (!cl_eq (cl_td_key (ft[0]->ps[q]), cl_td_key (ft[1]->ps[q]))) {
         char *t = cl_bare (v[q]->t);
         long rk = 1;
-        if (cs_kind (v[q]->t) == TY_COMPLEX) cl_fail ("__builtin_tgmath of a complex argument", 0);
+        /* (a complex argument by its parts' type, and a complex function of six, cs_x.c's choice) */
+        if (cs_kind (v[q]->t) == TY_COMPLEX) { cxa = 1; t = cl_bare (cs_canon (v[q]->t)->to); }
         if (cl_eq (t, "float")) rk = 0;
         else if (cl_eq (t, "long double")) rk = 2;
         if (rk > r) r = rk;
       }
       q++;
     }
+    if (cxa && nf >= 6) r = r + 3;
+    if (cxa && nf >= 6 && ft[r]->k != TY_FUNC) cl_fail ("__builtin_tgmath of a complex argument and no complex function", 0);
     fc = ft[r];
     e = cs_mk (E_CALL, fc->to, 0);
     cs_add (e, f[r]);
     q = 0;
     while (q < nv) {
       char *from = cl_bare (v[q]->t), *to = cl_td_key (fc->ps[q]);
+      struct cs_ty *pt = cs_canon (fc->ps[q]);
       if (cl_eq (from, to)) arg1 = v[q];
+      else if (pt->k == TY_COMPLEX) {
+        /* (to a complex parameter: a complex argument's parts converted, a real one converted to the parts'
+           type, then to the complex type) */
+        if (cs_kind (v[q]->t) == TY_COMPLEX) arg1 = cs_ice (v[q], fc->ps[q], CK_FLOATINGCOMPLEXCAST);
+        else {
+          struct cs_ex *re = v[q];
+          if (!cl_eq (from, cl_bare (pt->to))) re = cs_ice (v[q], pt->to, cs_is_flt (v[q]->t) ? CK_FLOATINGCAST : CK_INTEGRALTOFLOATING);
+          arg1 = cs_ice (re, fc->ps[q], CK_FLOATINGREALTOCOMPLEX);
+        }
+      }
       else if (cl_isf_word (to)) arg1 = cs_ice (v[q], fc->ps[q], cl_isf_word (from) ? CK_FLOATINGCAST : CK_INTEGRALTOFLOATING);
       else arg1 = cs_ice (v[q], fc->ps[q], CK_INTEGRALCAST);
       cs_add (e, arg1);

@@ -592,6 +592,7 @@ static struct cs_ex *cs_call (struct node *n)
      or an integer the second, else the float one; test-tgmath-ret's sizeof (ilogb (x)), an int) */
   if (cs_is_ident (c) && same (c->text, c->len, "__builtin_tgmath")) {
     long nf = 0, q = 0, r = 0;
+    int cxa = 0;
     while (nf < na && cs_canon (args[nf]->t)->k == TY_FUNC) nf++;
     if (nf >= 3) {
       struct cs_ty *t0 = cs_canon (args[0]->t), *t1 = cs_canon (args[1]->t), *t2 = cs_canon (args[2]->t);
@@ -601,13 +602,17 @@ static struct cs_ex *cs_call (struct node *n)
           struct cs_ty *at = cs_canon (args[nf + q]->t);
           int k = at->k == TY_COMPLEX ? cs_kind (at->to) : cs_kind (at);
           long rk = 1;
+          if (at->k == TY_COMPLEX) cxa = 1;
           if (k == TY_FLOAT) rk = 0;
           else if (k == TY_LDOUBLE) rk = 2;
           if (rk > r) r = rk;
         }
         q++;
       }
-      if (r == 0) e->t = cs_unqual (t0->to);
+      /* (six functions, the real ones and the complex ones, cos's and ccos's: a complex argument takes a
+         complex one, C's rule; csema's cl_tgmath picks the same) */
+      if (cxa && nf >= 6) e->t = cs_unqual (cs_canon (args[3 + r]->t)->to);
+      else if (r == 0) e->t = cs_unqual (t0->to);
       else if (r == 1) e->t = cs_unqual (t1->to);
       else e->t = cs_unqual (t2->to);
     }
