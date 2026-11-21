@@ -359,7 +359,7 @@ ff, the language ttpc compiles
           4
     text
       a leaf under char / * pointer (a declaration's item, or the value after a cast to it) is text, whatever it reads as (a number, a name): its bytes and a NUL are put in the program, the value is their address; (cast / char / * pointer), then 3, is "3"
-      a leaf item of a char array (a global's) is its text, whatever it names (a global, a function, a local): a number is a char's value
+      a leaf item of a char array is its text, whatever it names (a global, a function, a local): a number is a char's value; in a local, its bytes from the element where it stands, then its NUL where there is room
       in a local's item under char / * pointer (or i8 / * pointer), a leaf that names a local is that local: an array's address (C's decay), a pointer's value; every other leaf is text
       a text holds at most 255 bytes, a node's text: text leaves in a row are one text, as C's "ab" "cd"
       an array char n takes text leaves in a row for its items, as C's char s[16] = "hi", the rest 0 (in a global)
