@@ -265,7 +265,9 @@ RUNN := sh ../compiler/gen/slot.sh -n -v $(CAPKB)
 # as glibc's own startup does)
 M1 := strlen memcpy memset strcmp strchr
 OBJS_string := $(foreach f,$(M1),string/$(f) string/$(f)-generic) string/wordcopy string/strchrnul misc/hwprobe elf/dl-support
-ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment
+# (strcpy-vector: strcpy, reached from __dcigettext and dlinfo, has its ifunc on the page: its resolver takes
+# &__strcpy_vector, which was an address of nothing before ttpc stopped at it, unknown name)
+ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment string/strcpy-vector
 ROOTS_string := $(M1) $(ROOTS_string_$(GTARGET))
 ROOTS_string_riscv64 := __riscv_hwprobe
 
