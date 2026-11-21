@@ -6,7 +6,7 @@
 # globals' initializers (a global of char, i8 or u8 elements, a struct's
 # field of them, an array's element: their leaves, after the type run) that
 # are also a name the trees define: a function, a global or an enum
-# constant. ttpc reads such a leaf as text whatever it names (textname.pl;
+# constant. ttpc reads such a leaf as text whatever it names (charitem.pl;
 # before it, the name won: glibc nss's nss_function_name_array "getpwnam_r"
 # was getpwnam_r's address), and csema writes an enum constant that is a
 # byte's item as its number (nss's per_database_defaults), so a leaf there

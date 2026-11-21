@@ -228,6 +228,7 @@ elf:
       64
   comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
+    _end is the linker's end of the bss (ld's default script), mem_end: glibc's minimal malloc (ld.so's, dl-minimal-malloc.c) starts there.
   frame:
     origin
       elf_base
@@ -247,6 +248,7 @@ elf:
     file_end:
     bss
     mem_end:
+    _end:
 opt:
   comment
     -O (gen/patches/opt.pl): cc_ldfp_* off: V = the local at FP + off, as cc_li off V, cc_addfp, cc_load_* do; cc_stfp_* off: [FP + off] = V, as cc_li off L, cc_addfp_l, cc_store_* (L is not set); off in -255..255, one instruction.

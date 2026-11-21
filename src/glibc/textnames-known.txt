@@ -1,6 +1,6 @@
 # The text items of byte arrays in glibc's globals that are also a name of
 # glibc (gen/textnames.pl, make textnames-check; ports-check's textnames
-# steps), each judged: ttpc reads them as text (gen/patches/textname.pl), and
+# steps), each judged: ttpc reads them as text (gen/patches/charitem.pl, which has textname.pl's rule), and
 # here each one is the text C has. Global[.field] text kind, then why.
 _nl_C_name C global text: locale/C_name.c's _nl_C_name "C", the C locale's name (textitem.pl too)
 nss_function_name_array endaliasent fn text: the name nss looks a module's function up by (nss_module.c's nss_function_name_array, from function.def)

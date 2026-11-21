@@ -78,6 +78,56 @@ static void cl_leave_out (char *name)
   err_str (name);
   err_str ("\n");
 }
+/* what a unit's definitions have under with: its top-level asm's absolute
+   symbols (glibc's _NL_CURRENT_DEFINE flags), its globals of the used
+   attribute (stdio.c's _IO_file_doallocate_p, which keeps filedoalloc.o in
+   a static link) and what it defines that some unit references weakly
+   (malloc.c's __ptmalloc_init, which libc_early_init.c calls only if
+   linked): placing any of its definitions places these too, as ld's object
+   member brings all its symbols */
+static struct cl_list *cl_unit_with (struct cl_unit *u)
+{
+  long i = 0;
+  if (u->wdone) return &u->wwith;
+  u->wdone = 1;
+  while (i < u->absnames.n) { cl_push (&u->wwith, u->absnames.v[i]); i++; }
+  i = 0;
+  while (i < u->used.n) { cl_push (&u->wwith, u->used.v[i]); i++; }
+  i = 0;
+  while (i < C->wrl.n) {
+    char *nm = (char *) C->wrl.v[i]->text;
+    struct cs_decl *d = cl_get (&C->fn, nm);
+    struct cl_unit *du = 0;
+    if (!d) d = cl_get (&C->var, nm);
+    if (d) du = d->unit;
+    else if (cl_get (&C->alias, nm)) du = cl_get (&C->aliasunit, nm);
+    else if (cl_get (&C->absdef, nm)) du = cl_get (&C->absdef, cl_cat (nm, " unit"));
+    if (du == u && !cl_get (&C->absdef, nm)) cl_push (&u->wwith, C->wrl.v[i]);
+    i++;
+  }
+  return &u->wwith;
+}
+/* with / names first under a definition x of the unit u (cl_unit_with), but
+   the names it is itself */
+static void cl_with_first (struct node *x, struct cl_unit *u, char *self)
+{
+  struct node *w;
+  struct cl_list *l;
+  long i = 0;
+  if (!u || !x) return;
+  l = cl_unit_with (u);
+  w = cl_n ("with");
+  while (i < l->n) {
+    char *nm = (char *) l->v[i]->text;
+    if (!cl_eq (nm, self)) { nd_add (w, cl_n (cl_ffname (nm))); cl_want (nm); }
+    i++;
+  }
+  if (!w->count) return;
+  nd_add (x, w);
+  i = x->count - 1;
+  while (i > 0) { x->kids[i] = x->kids[i - 1]; i--; }
+  x->kids[0] = w;
+}
 static void cl_reach (void)
 {
   char *name;
@@ -109,6 +159,7 @@ static void cl_reach (void)
       }
       f = cl_function (name, d);
       C->jb = 0;
+      cl_with_first (f, d->unit, name);
       cl_out (f);
       continue;
     }
@@ -128,6 +179,7 @@ static void cl_reach (void)
       v = cl_decl (d, 1, nn);
       C->has_cur_global = 0;
       C->jb = 0;
+      cl_with_first (v, d->unit, name);
       cl_out (v);
       continue;
     }

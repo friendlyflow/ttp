@@ -11,7 +11,7 @@
    texts (nss_database_name_array "passwd", nss_function_name_array
    "getpwnam_r"), and a database's default from per_database_defaults, an
    array of bytes of enum constants: ttpc took those texts for the names of
-   the functions and globals of the same names (textname.pl), and csema
+   the functions and globals of the same names (before charitem.pl), and csema
    writes those constants as numbers. */
 #include <grp.h>
 #include <pwd.h>

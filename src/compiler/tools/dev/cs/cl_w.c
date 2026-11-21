@@ -479,10 +479,13 @@ static int cl_is_mark (char *s)
 {
   return cl_eq (s, "thread local") || cl_eq (s, "weak") || cl_eq (s, "base pcs") || cl_eq (s, "function") || cl_eq (s, "ifunc") || cl_eq (s, "section") || cl_eq (s, "alias") || cl_eq (s, "asm") || cl_eq (s, "struct") || cl_eq (s, "union") || cl_eq (s, "enum");
 }
+/* with / names first under a definition: what placing it places too */
+static int cl_is_with (struct node *n) { return n && !cl_leaf (n) && cl_is (n, "with"); }
 static long cl_marks (struct cl_list *k)
 {
   long i = 0;
-  if (k->n && cl_is_align (k->v[0])) i++;
+  if (k->n && cl_is_with (k->v[0])) i++;
+  if (i < k->n && cl_is_align (k->v[i])) i++;
   if (i < k->n && cl_is_cleanup (k->v[i])) i++;
   while (i < k->n && cl_leaf (k->v[i]) && cl_is_mark (cl_txt (k->v[i]))) {
     if (cl_is (k->v[i], "ifunc") || cl_is (k->v[i], "section")) i += 2; else i += 1;
