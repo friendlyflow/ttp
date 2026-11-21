@@ -575,33 +575,6 @@ static struct node *cl_wide_text (struct cs_ex *n, long long *el, long ne)
   return cl_n1 ("address", cl_n1 (name, cl_n ("0")));
 }
 
-/* (whether a text is a whole number as a leaf: a sign, decimal digits with a fraction and an exponent, or 0x
-   and hex ones with a p exponent, then C's suffix letters: as a leaf after cast / char / * pointer it would be
-   that number, 0 the null pointer; such a text goes in a char array of its own, the master's choice of
-   2026-11-21) */
-static int cl_numberish (char *s)
-{
-  long i = 0, dg = 0;
-  if (s[i] == '+' || s[i] == '-') i++;
-  if (s[i] == '0' && (s[i + 1] == 'x' || s[i + 1] == 'X')) {
-    i = i + 2;
-    while ((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f') || (s[i] >= 'A' && s[i] <= 'F') || s[i] == '.') { if (s[i] != '.') dg++; i++; }
-    if (s[i] == 'p' || s[i] == 'P') { i++; if (s[i] == '+' || s[i] == '-') i++; while (s[i] >= '0' && s[i] <= '9') i++; }
-  } else {
-    while ((s[i] >= '0' && s[i] <= '9') || s[i] == '.') { if (s[i] != '.') dg++; i++; }
-    if (dg && (s[i] == 'e' || s[i] == 'E')) { i++; if (s[i] == '+' || s[i] == '-') i++; while (s[i] >= '0' && s[i] <= '9') i++; }
-  }
-  while (s[i] == 'u' || s[i] == 'U' || s[i] == 'l' || s[i] == 'L' || s[i] == 'f' || s[i] == 'F' || s[i] == 'q' || s[i] == 'Q') i++;
-  return dg > 0 && !s[i];
-}
-/* (whether a text's pieces hold a whole number, one leaf of them) */
-static int cl_pieces_numberish (struct cl_list *pc)
-{
-  long i = 0;
-  if (!pc) return 0;
-  while (i < pc->n) { struct node *x = pc->v[i]; if (!x->count && cl_numberish (cl_copy (x->text, x->len))) return 1; i++; }
-  return 0;
-}
 static void cl_string_bytes (unsigned char *p, long n, struct cl_list *o)
 {
   struct cl_list *pc = 0;
@@ -610,7 +583,7 @@ static void cl_string_bytes (unsigned char *p, long n, struct cl_list *o)
   long i = 0;
   while (i < n) { if (p[i] == 0) hasnul = 1; i++; }
   if (!hasnul && n <= 255) pc = cl_pieces (p, n, 0);
-  if (!hasnul && n <= 255 && !cl_isop (s) && !cl_eq (s, "?") && !cl_eq (s, ":") && !cl_eq (s, ".") && !cl_eq (s, "...") && !cl_eq (s, "?\n") && !cl_eq (s, ":\n") && !cl_eq (s, ".\n") && !cl_eq (s, "...\n") && !cl_val (&C->reserved, s) && !cl_numberish (s) && !cl_pieces_numberish (pc) && (n == 0 || pc)) {
+  if (!hasnul && n <= 255 && !cl_isop (s) && !cl_eq (s, "?") && !cl_eq (s, ":") && !cl_eq (s, ".") && !cl_eq (s, "...") && !cl_eq (s, "?\n") && !cl_eq (s, ":\n") && !cl_eq (s, ".\n") && !cl_eq (s, "...\n") && !cl_val (&C->reserved, s) && (n == 0 || pc)) {
     struct node *a = cl_n ("address");
     nd_add (a, cl_n ("char"));
     if (n == 0) nd_add (a, cl_n (""));
@@ -662,8 +635,7 @@ static void cl_array_text (struct cs_ex *e, struct cl_list *o)
   while (b.n > 0 && b.p[b.n - 1] == 0) b.n = b.n - 1;
   if (b.n == 0) return;
   if (C->in_global) pc = cl_pieces (b.p, b.n, 1);
-  /* (a piece that is a whole number would be that number, a byte: the bytes then, cl_numberish) */
-  if (pc && pc->n && !cl_pieces_numberish (pc)) { cl_append (o, pc); return; }
+  if (pc && pc->n) { cl_append (o, pc); return; }
   while (i < b.n) { cl_push (o, cl_num_node (b.p[i])); i++; }
 }
 static struct cs_ex *cl_bare_string (struct cs_ex *n)
