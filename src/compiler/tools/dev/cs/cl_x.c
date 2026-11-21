@@ -1137,6 +1137,13 @@ static int cl_asm_value_callee (struct cs_decl *d, char *name)
   }
   return 1;
 }
+/* a weak reference: a name the unit (of the definition being translated)
+   declares weak and does not define; written weak / name, which pulls
+   nothing in (ttpc: the definition's address if something else reaches it, else 0) */
+static int cl_wref (char *nm)
+{
+  return C->cu && cl_val (&C->cu->wcand, nm) && !cl_val (&C->cu->wdef, nm);
+}
 static void cl_call (struct cs_ex *n, struct cl_list *o)
 {
   struct cs_ex *callee = cl_k (n, 0), *c = cl_strip (callee);
@@ -1357,7 +1364,8 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     char *sn = 0;
     if (c->d->k == DK_VAR && c->d->global) sn = c->d->global;
     if (!sn) sn = cl_ffname (name);
-    cl_push (o, cl_call_node (sn, n));
+    if (c->d->k == DK_FUNC && cl_wref (cl_dn (c->d))) cl_push (o, cl_n1 ("weak", cl_call_node (sn, n)));
+    else cl_push (o, cl_call_node (sn, n));
   }
 }
 
@@ -2132,6 +2140,7 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     if (d->k == DK_FUNC || (d->k == DK_VAR && !d->local)) {
       char *g = cl_own (nm);
       cl_want (g);
+      if (cl_wref (nm)) { cl_push (o, cl_n1 ("weak", cl_n (cl_ffname (g)))); return; }
       cl_push (o, cl_n (cl_ffname (g)));
       return;
     }

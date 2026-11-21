@@ -60,7 +60,9 @@ my @top = do { open my $h, '<', $in or die "ff2c: $in: $!\n"; local $/; read_txt
     { open my $h, '<:raw', "$FindBin::Bin/../shared.ff" or die "ff2c: shared.ff: $!\n"; local $/; Words::typenames($t, FF::read_ff(<$h>)) }
     # (through the layers of a node past 255, 0: 1: ...: one list again)
     my $flat;
-    $flat = sub { my ($n) = @_; $n->{children} = [map { FF::is_layer($_) ? @{ $flat->($_)->{children} } : $flat->($_) } @{ $n->{children} }]; $n };
+    # (and weak / x, a weak reference, as x: C writes the reference so, weak by its declaration)
+    my $unweak = sub { my ($n) = @_; $n = $n->{children}[0] while $n->{content} eq 'weak' && @{ $n->{children} } == 1; $n };
+    $flat = sub { my ($n) = @_; $n->{children} = [map { FF::is_layer($_) ? @{ $flat->($_)->{children} } : $flat->($unweak->($_)) } @{ $n->{children} }]; $n };
     $flat->($_) for @top;
     Words::long32() if $target eq 'arm';
     @top = Words::oldwords($t, @top);
@@ -145,6 +147,8 @@ for my $page (@top) {
         # strfrom's or e_acosh's blocks have: one; if they differ, C says so)
         if (my $prev = $firstdef{$name}) { next if node_text($prev) eq node_text($d) }
         $firstdef{$name} = $d;
+        # (with / names first: what placing it places too, which C does not say)
+        shift @{ $d->{children} } if @{ $d->{children} } && c($d->{children}[0]) eq 'with' && !leaf($d->{children}[0]);
         my @k = kids($d);
         my $w = @k ? c($k[0]) : '';
         # a global's align n first (C's aligned attribute): the words after it as before
@@ -518,6 +522,8 @@ sub operand {
     my ($n) = @_;
     my $w = c($n);
     my @k = kids($n);
+    # (weak / name or a call: the reference C writes, weak by its declaration)
+    return operand($k[0]) if $w eq 'weak' && @k == 1;
     # a path from an expression: the node cut at the ., the rest a path
     if (my ($dot) = grep { leaf($k[$_]) && c($k[$_]) eq '.' } 0 .. $#k) {
         my ($s, $t) = operand({ content => $w, children => [@k[0 .. $dot - 1]] });

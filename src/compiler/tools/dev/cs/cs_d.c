@@ -288,6 +288,7 @@ static void cs_attrs (struct node *a, struct cs_spec *spc)
       spc->hasaln = 1;
     }
     else if (cs_attr_is (w, "weak")) spc->weak = 1;
+    else if (cs_attr_is (w, "used")) spc->used = 1;
     else if (cs_attr_is (w, "pcs")) spc->pcs = 1;
     else if (cs_attr_is (w, "error")) spc->err = 1;
     else if (cs_attr_is (w, "alias") && e > s) spc->aliasee = cs_attr_text (a, s + 1, e);
