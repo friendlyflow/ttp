@@ -316,10 +316,13 @@ my $cfiproc;    # since .cfi_startproc, no label or instruction yet
 # or one with no word at all (gcc's FDE of the CIE's rules alone), gets one
 # where it starts (its first label or instruction) that says them again,
 # cfi def cfa offset / 8, as s2ff.pl's: ttpc's procedure is an asm
-# function, or an entry block in it that starts with a cfi word.
-my $proc;       # since .cfi_startproc: {into, at} where it starts, top (a function's own), n its words, s 1 with one there
+# function, or an entry block in it that starts with a cfi word. Whether
+# it starts an entry is known at the end (merge_runons makes a function
+# an entry of the one before): each procedure's first node, its words.
+my $proc;       # since .cfi_startproc: {into, at} where it starts, n its words
+my @procs;      # {first, n} of each
 sub cfi_flush {
-    if ($cfiproc && $proc && !$proc->{into}) { $proc->{into} = into(); $proc->{at} = scalar @{ into() }; $proc->{top} = !in_block(); $proc->{s} = 1 if @pcfi }
+    if ($cfiproc && $proc && !$proc->{into}) { $proc->{into} = into(); $proc->{at} = scalar @{ into() } }
     $cfiproc = 0; push @{ into() }, splice @pcfi if @pcfi;
 }
 sub cfi {
@@ -549,7 +552,6 @@ sub take {
     $m;
 }
 sub into { ($block // $fn)->{children} }
-sub in_block { defined $block }
 # the end of a function: the words its GOT and TLS operands read (a TLS
 # word its offset from fs: tprel / sym), after all of its code (placed
 # last: crtn's part of crti's _init comes after it); a weak name's GOT
@@ -666,7 +668,7 @@ sub read_src {
 # and .fini: the end of crti's _init and _fini, as the linker puts them
 # after crti's)
 sub run {
-    @pcfi = (); $cfiproc = 0; undef $proc;
+    @pcfi = (); $cfiproc = 0; undef $proc; @procs = ();
     my ($mode, $src, $dump, %opt) = @_;
     load();
     $where = $src;
@@ -726,6 +728,20 @@ sub run {
     # merge_runons made it an entry of too)
     for my $c (@carried) { my $f = $c->[0]; $f = $into{$f} while $into{$f}; push @{ $f->{children} }, @{ $c->[1] } }
     carry_rodata();
+    # (a procedure with no word, or one that starts an entry block with none
+    # there: cfi def cfa offset / 8 first where it starts; the last first)
+    {
+        my %top = map { $_ => 1 } @fns;
+        my %parent;
+        my $walk; $walk = sub { for my $k (@{ $_[0]{children} }) { $parent{$k} = $_[0]; $walk->($k) } };
+        $walk->($_) for @fns;
+        for my $p (reverse @procs) {
+            my $par = $parent{ $p->{first} } or next;
+            next if $top{$par} ? $p->{n} : $p->{first}{content} =~ /^cfi /;
+            my ($i) = grep { $par->{children}[$_] == $p->{first} } 0 .. $#{ $par->{children} };
+            splice @{ $par->{children} }, $i, 0, node('cfi def cfa offset', node(8));
+        }
+    }
     # (a node of more than 255 children, a table of libmvec's read-only
     # data or a long block: its children in numbered layers, 0: 1: ...; a
     # function past 255 stops, its entries would be in a layer)
@@ -1078,13 +1094,12 @@ sub walk_stmt {
             # resms64*.h put them before the label)
             if ($d eq 'startproc') { $cfiproc = 1; $proc = { n => 0 } }
             if ($d eq 'endproc') {
-                splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', node(8)) if $proc && $proc->{into} && ($proc->{top} ? !$proc->{n} : !$proc->{s});
+                push @procs, { first => $proc->{into}[ $proc->{at} ], n => $proc->{n} } if $proc && $proc->{into} && $proc->{at} < @{ $proc->{into} };
                 undef $proc;
             }
             if ($w) {
                 $proc->{n}++ if $proc;
-                if ($cfiproc || !$fn) { push @pcfi, $w }
-                else { $proc->{s} = 1 if $proc && $proc->{into} && into() == $proc->{into} && @{ into() } == $proc->{at}; push @{ into() }, $w }
+                if ($cfiproc || !$fn) { push @pcfi, $w } else { push @{ into() }, $w }
             }
             return;
         }

@@ -10,24 +10,41 @@
 #   cfi escape / byte ...      cfi signal frame
 #
 # A register is its name as the target's asm writes it (ra, s9, fs0; rbp,
-# rip; x29, sp, d8) or its DWARF number. There is no startproc or endproc:
-# the asm function is the procedure. code_call takes a cfi word before any
-# other (ehcfi): it records a row, the bytes of its DWARF instruction after
-# an advance from the row before (DW_CFA_advance_loc*, by the distance in
-# code, the same in both passes), under the asm function it is in (the
-# latest placed label whose first child is asm, an index of the label
-# table). Where the program has its frames (ehtable.pl: -g or the unwinder),
-# dbgeh writes an FDE per such function after the C layer's (the CIE of the
-# target, whose first rules are GNU's: riscv64 and aarch64 CFA = sp,
-# x86_64 CFA = rsp + 8 and the return address at CFA - 8), its range the
-# label's, and its entry in .eh_frame_hdr, whose table is sorted then. The
-# room (dbgarea) is sized from the counts at the library's end: rows, FDEs
-# (24 bytes each at most past their rows) and bytes; -j's samples keep them.
-# The CFA's offset is followed while recording (rel offset and adjust cfa
-# offset need it, remember and restore state keep it). cfi signal frame
-# records nothing (none of glibc's on these targets). On arm the cfi words
-# record nothing: gcc puts them in .debug_frame there, its unwinder reads
-# EHABI's tables.
+# rip; x29, sp, d8, vg) or its DWARF number. There is no startproc or
+# endproc: a procedure is an asm function, or an entry block in it that
+# starts with a cfi word (after asm, its comment and align). code_call
+# takes a cfi word before any other (ehcfi): it records a row, the bytes of
+# its DWARF instruction after an advance from the row before
+# (DW_CFA_advance_loc*, by the distance in code, the same in both passes),
+# under the procedure it is in (ehcfn: the latest placed label that is the
+# function, the outermost open asm one of scopes, or such an entry; an
+# index of the label table), with its function (ehfun). Where the program
+# has its frames (ehtable.pl: -g or the unwinder), dbgeh writes an FDE per
+# procedure after the C layer's (the CIE of the target, whose first rules
+# are GNU's: riscv64 and aarch64 CFA = sp, x86_64 CFA = rsp + 8 and the
+# return address at CFA - 8), from its label to the next procedure or its
+# function's end (ehpend), and its entry in .eh_frame_hdr, whose table is
+# sorted then. The room (dbgarea) is sized from the counts at the library's
+# end: rows, FDEs (24 bytes each at most past their rows) and bytes; -j's
+# samples keep them. The CFA's offset is followed while recording (rel
+# offset and adjust cfa offset need it, remember and restore state keep
+# it); one below 0 is DW_CFA_def_cfa_offset_sf. cfi signal frame records
+# nothing (none of glibc's on these targets).
+#
+# arm (EHABI, which its unwinder reads; gcc puts the CFI in .debug_frame
+# there, so the cfi words record nothing): the ehabi words, GNU's
+# directives without fnstart and fnend,
+#
+#   ehabi save / r4 / lr       ehabi pad / 8             ehabi cantunwind
+#
+# record rows of their own (the word and its registers' mask or offset),
+# and ehexidx writes each procedure's .ARM.exidx entry from them as GNU as
+# does (ehabops: a pad pending until the next save or the end, each save's
+# pops, all of them last first): its unwinding instructions inline (3 at
+# most), or a personality-1 .ARM.extab entry after .ARM.exidx's room
+# (ehxtab), or EXIDX_CANTUNWIND; an EXIDX_CANTUNWIND entry where it ends
+# unless another procedure starts there; then the table with the C layer's
+# entries sorted, of two at one place the EXIDX_CANTUNWIND left out (ehxsort).
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
 
 sub cfn {

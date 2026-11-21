@@ -800,14 +800,17 @@ static struct vec *xpcfi;
 static int xcfiproc;
 /* a procedure that starts at an entry block with no word of its own there,
    or one with no word at all, gets cfi def cfa offset / 8 where it starts
-   (its first label or instruction), as s2ffx86.pm's $proc */
+   (its first label or instruction), as s2ffx86.pm's $proc: known at the
+   end (merge_runons), each procedure's first node and its words' count */
 static struct vec *xpr_into;
 static long xpr_at, xpr_n;
-static int xpr_on, xpr_top, xpr_s;
+static int xpr_on;
+struct xproc { struct nd *first; long n; };
+static struct vec *xprocs;
 static void xcfi_flush (void)
 {
   long i;
-  if (xcfiproc && xpr_on && !xpr_into) { xpr_into = xinto_ ()->k; xpr_at = xpr_into->n; xpr_top = !block; if (xpcfi && xpcfi->n) xpr_s = 1; }
+  if (xcfiproc && xpr_on && !xpr_into) { xpr_into = xinto_ ()->k; xpr_at = xpr_into->n; }
   xcfiproc = 0;
   if (!xpcfi) return;
   for (i = 0; i < xpcfi->n; i++) nd_add (xinto_ (), xpcfi->v[i]);
@@ -1304,15 +1307,15 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
     if (m (op, "^\\.cfi_(\\w+)$")) {
       struct str *d = g (1);
       struct nd *w = xcfi (d, x_split_ops (rest));
-      if (s_is (d, "startproc")) { xcfiproc = 1; xpr_on = 1; xpr_into = 0; xpr_n = 0; xpr_s = 0; xpr_top = 0; }
+      if (s_is (d, "startproc")) { xcfiproc = 1; xpr_on = 1; xpr_into = 0; xpr_n = 0; }
       if (s_is (d, "endproc")) {
-        if (xpr_on && xpr_into && (xpr_top ? !xpr_n : !xpr_s)) { long i; v_push (xpr_into, 0); for (i = xpr_into->n - 1; i > xpr_at; i--) xpr_into->v[i] = xpr_into->v[i - 1]; xpr_into->v[xpr_at] = nd1 (s_of ("cfi def cfa offset"), nd_new (s_of ("8"))); }
+        if (xpr_on && xpr_into && xpr_at < xpr_into->n) { struct xproc *p = alloc (sizeof (struct xproc)); p->first = xpr_into->v[xpr_at]; p->n = xpr_n; v_push (xprocs, p); }
         xpr_on = 0;
       }
       if (w) {
         if (xpr_on) xpr_n++;
         if (xcfiproc || !fn) { if (!xpcfi) xpcfi = v_new (); v_push (xpcfi, w); }
-        else { if (xpr_on && xpr_into && xinto_ ()->k == xpr_into && xinto_ ()->k->n == xpr_at) xpr_s = 1; nd_add (xinto_ (), w); }
+        else nd_add (xinto_ (), w);
       }
       return;
     }
@@ -1690,7 +1693,7 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
   xCODE = h_new ();
   xcode_ = 0;
   xn = 0; xpos = 0; xends = 1; xmaxalign_def = 0; fn = 0; block = 0; xother = 0; xalign_def = 0;
-  xcfiproc = 0; if (xpcfi) xpcfi->n = 0; xpr_on = 0; xpr_into = 0;
+  xcfiproc = 0; if (xpcfi) xpcfi->n = 0; xpr_on = 0; xpr_into = 0; xprocs = v_new ();
   fns = v_new (); xpending = v_new (); xdatadef = h_new (); xnumeric = h_new (); xgot = h_new (); xtls = h_new (); xmacro = h_new ();
   xsections = v_new (); xprefixes = v_new (); xrodata = h_new (); xro = h_new (); xcarry = v_new (); xroset = h_new (); xweak = h_new ();
   xcarried = v_new (); xweakgot = h_new (); xruns = v_new (); xrunof = h_new (); xrunidx = h_new (); xinto = h_new ();
@@ -1769,6 +1772,20 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
     for (j = 0; j < c->nodes->n; j++) nd_add (f, c->nodes->v[j]);
   }
   carry_rodata ();
+  /* (a procedure with no word, or one that starts an entry block with none there: cfi def cfa offset / 8 first where it starts; the last first) */
+  for (i = xprocs->n - 1; i >= 0; i--) {
+    struct xproc *p = xprocs->v[i];
+    struct nd *par = 0;
+    long at = 0, q;
+    int top = 0;
+    for (q = 0; q < fns->n && !par; q++) find_parent (fns->v[q], p->first, &par, &at);
+    if (!par) continue;
+    for (q = 0; q < fns->n; q++) if (fns->v[q] == par) top = 1;
+    if (top ? p->n : m (p->first->c, "^cfi ")) continue;
+    v_push (par->k, 0);
+    for (q = par->k->n - 1; q > at; q--) par->k->v[q] = par->k->v[q - 1];
+    par->k->v[at] = nd1 (s_of ("cfi def cfa offset"), nd_new (s_of ("8")));
+  }
   /* (a node of more than 255 children, a table of libmvec's read-only data or a long block: its children
      in numbered layers, 0: 1: ...; a function past 255 stops, its entries would be in a layer) */
   for (i = 0; i < fns->n; i++) {

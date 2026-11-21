@@ -918,8 +918,14 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC) | $(FFTEXTT)
 # unwinding instructions). ASMCFIKNOWN_<target>: parts known to differ,
 # not checked. riscv64: libgcc's save-restore.S, whose __riscv_save_*
 # return to t0 (.cfi_return_column, a CIE of its own: no cfi word says it,
-# s2ff leaves their frames out).
+# s2ff leaves their frames out). x86_64: where a second procedure starts
+# inside an asm function, at no entry block (a .cfi_endproc and
+# .cfi_startproc between two instructions: clone.S's and clone3.S's child,
+# setcontext.S's __start_context's .L label, libgcc's morestack.S's
+# __morestack, whose .cfi_personality and .cfi_lsda have no word either):
+# ttpc's procedure is the asm function, its rows go on in its FDE.
 ASMCFIKNOWN_riscv64 := libgcc/save-restore
+ASMCFIKNOWN_x86_64 := misc/clone misc/clone3 stdlib/setcontext libgcc/morestack
 ASMCFICHECK = $(filter-out $(ASMCFIKNOWN_$(GTARGET)),$(ASMCHECK) $(LIBGCC_ASMCHECK:%=libgcc/%))
 # (a make of its own, as asm-check's: libgcc's list comes after this rule)
 asmcfi-check:
