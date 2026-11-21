@@ -1088,12 +1088,13 @@ for my $g (grep { $_->[3] eq 'global' } @globals) {
 }
 my %seen;
 my %gextern;
+my %gasm;
 # one unit's normal forms: its functions wanted (by their C name here), its
 # globals wanted, what it only declares
 sub unit_norms {
     my ($ast, $j) = @_;
     my %want;
-    my (%gf, %ge);
+    my (%gf, %ge, %gs);
     local %enumval = enumvals($ast);
     local $side = 'glibc';
     local $unit_i = $j =~ s/\.json$/.i/r;
@@ -1114,6 +1115,25 @@ sub unit_norms {
             $regvar{ $d->{name} } = $d->{mangledName} // $l->{label};
         }
         $def{ $d->{name} } = $d if $d->{kind} eq 'FunctionDecl' && grep { $_->{kind} eq 'CompoundStmt' } kids($d);
+    }
+    # (a top-level asm's .globl N and .set N, V, .equ N, V or N = V, V a number: an
+    # absolute symbol the unit defines, which csema writes as a char global of value V,
+    # cl_asm_absdefs: glibc's _nl_current_LC_*_used; its definition here is that)
+    for my $a (grep { $_->{kind} eq 'FileScopeAsmDecl' } kids($ast)) {
+        my $s = (kids($a))[0]{value} // '';
+        $s =~ s/^"|"$//g;
+        $s =~ s/\\[nt]/\n/g;
+        my (%gl, %v);
+        for my $l (split /[\n;]/, $s) {
+            $l =~ s/^\s+|\s+$//g;
+            if ($l =~ /^\.globl\s+([.\w]+)$/) { $gl{$1} = 1 }
+            elsif ($l =~ /^\.(?:set|equ)\s+([.\w]+)\s*,\s*(-?\d+)$/ || $l =~ /^([.\w]+)\s*=\s*(-?\d+)$/) { $v{$1} = $2 }
+        }
+        for my $n (grep { $gl{$_} && $gwant{$_} } keys %v) {
+            my $ty = { qualType => 'char' };
+            $gs{$n} = gnorm({ kind => 'VarDecl', name => $n, type => $ty, inner => [{ kind => 'ImplicitCastExpr', castKind => 'IntegralCast', type => $ty,
+                inner => [{ kind => 'IntegerLiteral', value => $v{$n}, type => { qualType => 'int' } }] }] });
+        }
     }
     # its globals: a definition (an extern declaration is none), the first unit's
     for my $d (kids($ast)) {
@@ -1146,7 +1166,7 @@ sub unit_norms {
         my $d = $def{$o} or next;
         $want{$cid} = fnorm($d);
     }
-    { j => $j, want => \%want, gf => \%gf, ge => \%ge };
+    { j => $j, want => \%want, gf => \%gf, ge => \%ge, gs => \%gs };
 }
 # and held against the C written back
 sub unit_compare {
@@ -1154,6 +1174,7 @@ sub unit_compare {
     my $j = $u->{j};
     $gfound{$_} //= $u->{gf}{$_} for keys %{ $u->{gf} };
     $gextern{$_} //= $u->{ge}{$_} for keys %{ $u->{ge} };
+    $gasm{$_} //= $u->{gs}{$_} for keys %{ $u->{gs} // {} };
     for my $b (@{ $byunit{$j} // [] }) {
         my ($cid, $o) = @$b;
         my $want = $u->{want}{$cid} // do { push @diff, [$cid, "no function $o in $j"]; next };
@@ -1198,7 +1219,7 @@ my ($gsame, @gdiff) = (0);
 for my $g (@globals) {
     my ($cid, $o, $hint, $k) = @$g;
     if ($k eq 'gfailed') { push @gdiff, [$cid, 'ff2c could not write it back']; next }
-    my $want = $gfound{$cid} // $gextern{$o} // do { push @gdiff, [$cid, "no definition of $o in glibc's units ($hint)"]; next };
+    my $want = $gfound{$cid} // $gasm{$o} // $gextern{$o} // do { push @gdiff, [$cid, "no definition of $o in glibc's units ($hint)"]; next };
     my $got = $backg{$cid} // do { push @gdiff, [$cid, 'not in the C written back']; next };
     print "glibc: $want\nff:    $got\n" if ($ENV{ROUNDTRIP_SHOW} // '') eq $cid;
     if ($want eq $got) { $gsame++; next }

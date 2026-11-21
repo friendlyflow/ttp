@@ -265,7 +265,9 @@ RUNN := sh ../compiler/gen/slot.sh -n -v $(CAPKB)
 # as glibc's own startup does)
 M1 := strlen memcpy memset strcmp strchr
 OBJS_string := $(foreach f,$(M1),string/$(f) string/$(f)-generic) string/wordcopy string/strchrnul misc/hwprobe elf/dl-support
-ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment
+# (strcpy-vector: strcpy, reached from __dcigettext and dlinfo, has its ifunc on the page: its resolver takes
+# &__strcpy_vector, which was an address of nothing before ttpc stopped at it, unknown name)
+ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment string/strcpy-vector
 ROOTS_string := $(M1) $(ROOTS_string_$(GTARGET))
 ROOTS_string_riscv64 := __riscv_hwprobe
 
@@ -2089,9 +2091,14 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           (for (long double i = 1; ; i++), which ttpc kept at 1: it added
 #           1 to the bits; gen/patches/fltinc.pl); every target
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check fltinc-check
-ALLPROGS := locale enums statics anonrec x87math sincosf fltinc
+#   weakref a weak reference pulls nothing in (ld and an archive member):
+#           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
+#           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check fltinc-check weakref-check
+ALLPROGS := locale enums statics anonrec x87math sincosf fltinc weakref
 ALLPROG_fltinc := fltinc
+ALLPROG_weakref := weakref
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_sincosf := sincosf
