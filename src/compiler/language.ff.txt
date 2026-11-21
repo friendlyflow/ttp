@@ -589,6 +589,7 @@ ff, the language ttpc compiles
       calling a variable indexes or selects: xs i an element, p x a field (also through an address), r b x both in a row
       a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is : / (cast / point / * pointer) / p / . / y, (*p).len is : / p / * pointer / . / len
       a : that holds one expression, a unit with a prefix or a postfix (cast / long, x; p / * pointer), is that expression, as C's parentheses: no scope of its own; so is one as the operand of a cast or of * pointer
+      a : that holds a declaration is a statement expression (GNU C's ({ ... })), never braces; its value, one of its locals of a type in memory, is copied out before its room goes
       the address of a function is a function pointer, called where it stands, its result of the type its definition says: C's ((void) x, &f) (a, b) is : / (: / (cast / void) / x / f / & address) / . / a / b
       x / & address is C's &x, p / * pointer C's *p, read, or written on the left of =
     registers
