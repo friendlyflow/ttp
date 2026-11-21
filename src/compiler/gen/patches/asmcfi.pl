@@ -1766,8 +1766,9 @@ $data .= "  msg_cfi:\n    ascii\n      ttpc: not a cfi or ehabi word:\\x20\n"
     . "  msg_cfin:\n    ascii\n      ttpc: a cfi word's operand is no number:\\x20\n"
     . "  msg_cfir:\n    ascii\n      ttpc: a cfi word's register is none of the target's:\\x20\n";
 once(\$t, "\n1:\n", "\n${code}1:\n", 'the end of layer 0');
-# (the data at the start of layer 2, before its variables and bss: layer 0
-# has room for the functions only)
+# (the data at the start of layer 2, before its variables and bss, and the
+# functions layer 0 has no room for, aligned: layer 1 ends with text, and
+# aarch64's and arm's hosts take no instruction at an odd place)
 once(\$t, "\n2:\n  comment\n    the variables, then the memory (bss): the trees, the labels, the buffers, the C layer's tables\n",
-    "\n2:\n  comment\n    the variables, then the memory (bss): the trees, the labels, the buffers, the C layer's tables\n$code2$data", 'the start of layer 2');
+    "\n2:\n  comment\n    the variables, then the memory (bss): the trees, the labels, the buffers, the C layer's tables\n  align\n    8\n$code2$data", 'the start of layer 2');
 save();
