@@ -909,7 +909,7 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC) | $(FFTEXTT)
 	echo "asm-check: $*: ttpc and glibc's compiler agree ($$size bytes)" > $@
 
 # asmcfi-check, the frames' asm-check: each asm part of asm-check's list
-# and libgcc's (LIBGCC_ASMCHECK), as asm-check made it (its .asm.ff, its
+# and libgcc's (LIBGCC_ASMCHECK), as the asm checks made it (its .asm.ff, its
 # facts), built again by ttpc with -g, which writes the frames of its asm
 # functions from their cfi and ehabi words (asmcfi.pl), against the frames
 # of glibc's compiler's object, per function (cficheck.pl): on riscv64,
@@ -926,11 +926,17 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC) | $(FFTEXTT)
 # ttpc's procedure is the asm function, its rows go on in its FDE.
 ASMCFIKNOWN_riscv64 := libgcc/save-restore
 ASMCFIKNOWN_x86_64 := misc/clone misc/clone3 stdlib/setcontext libgcc/morestack
-ASMCFICHECK = $(filter-out $(ASMCFIKNOWN_$(GTARGET)),$(ASMCHECK) $(LIBGCC_ASMCHECK:%=libgcc/%))
+# glibc's (asmcfi-check, after asm-check) and libgcc's (libgcc-asmcfi-check,
+# after libgcc-asm-check) apart, as their asm checks are.
+ASMCFICHECK = $(filter-out $(ASMCFIKNOWN_$(GTARGET)),$(ASMCHECK))
+LIBGCC_ASMCFICHECK = $(filter-out $(ASMCFIKNOWN_$(GTARGET)),$(LIBGCC_ASMCHECK:%=libgcc/%))
 # (a make of its own, as asm-check's: libgcc's list comes after this rule)
-asmcfi-check:
+asmcfi-check: asm-check
 	@$(MAKE) --no-print-directory $(ASMCFICHECK:%=$(I)/%.cfiok)
 	@for a in $(ASMCFICHECK); do cat $(I)/$$a.cfiok; done
+libgcc-asmcfi-check: libgcc-asm-check
+	@$(MAKE) --no-print-directory $(LIBGCC_ASMCFICHECK:%=$(I)/%.cfiok)
+	@for a in $(LIBGCC_ASMCFICHECK); do cat $(I)/$$a.cfiok; done
 $(I)/%.cfiok: $(I)/%.asmok cficheck.pl
 	@rm -f $@; a=$(I)/$*; \
 	$(RUN) -n -t 60 $(TTPC_RUN) -g $(SHARED) $$a.asm.ff $$a.asmg > $$a.asmg.lst || exit 1; \
@@ -939,7 +945,7 @@ $(I)/%.cfiok: $(I)/%.asmok cficheck.pl
 	hdr=$(if $(filter x86_64,$(GTARGET)),$$(sed -n 's/^align //p' $$a.facts | awk '{ print int(($(ASMHDR) + $$1 - 1) / $$1) * $$1 }'),$(ASMHDR)); \
 	perl cficheck.pl $(XPRE)readelf $(GTARGET) $$a.ref.o $$skip $$a.asmg $$hdr $$size > $$a.cfi || { echo "asmcfi-check: $*:"; cat $$a.cfi; exit 1; }; \
 	echo "asmcfi-check: $*: ttpc's frames are glibc's compiler's ($$(head -1 $$a.cfi))" > $@
-.PHONY: asmcfi-check
+.PHONY: asmcfi-check libgcc-asmcfi-check
 
 # progs/strlen.ff includes string.ff from its own folder, so both go there
 strlen-check: $(FF)/string.ff progs/strlen.ff asm-check
