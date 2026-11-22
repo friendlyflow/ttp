@@ -4,7 +4,9 @@
 # literal of the type: its first field's braces, selfcl.pl) took it for
 # braces, so struct pt d = ({ struct pt t = q; t.x += 10; t; }) put the
 # group's address in d.x and zeros in y and z. Now clself says no for such
-# a : (stexpr), and decl compiles it as an expression and copies it, as an
+# a : (stexpr; a child : of inner braces, content ":" alone, is no
+# declaration: libgcc2's __negti2, const DWunion w = { { .low = ..., .high
+# = ... } }), and decl compiles it as an expression and copies it, as an
 # assignment did; vgroup keeps its value (valrec.pl). Part of the master's
 # fault 14, 2026-11-21. Test: progs/cvalrec.
 our ($t, $tf); do "$ENV{PATCHLIB}" or die $@;
@@ -30,7 +32,8 @@ E1:
     lbu NODE_children_len t0 t1
     beqz E2 t1
     lbu NODE_content_len t0 t1
-    beqz E2 t1
+    li 2 t3
+    bltu rel:E2 t3 t1
     ld NODE_content t0 t2
     add t1 t2 t2
     lbu -1 t2 t2
@@ -45,7 +48,7 @@ E9:
     mv s6 a0
     leave3
 ", 6);
-    $f =~ s/^(.*\n)/$1        comment\n          1 when the : a0 holds a declaration (a child x: with children): a statement expression, no braces\n/;
+    $f =~ s/^(.*\n)/$1        comment\n          1 when the : a0 holds a declaration (a child x: with children, x a name: a : of braces is none): a statement expression, no braces\n/;
     substr($t, $to, 0) = $f;
 }
 save();
