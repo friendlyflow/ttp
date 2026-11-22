@@ -361,7 +361,9 @@ c2ff-crosscheck:
 # goes into main (cpp-tests-crosscheck needs their tests builds, GBUILD/tests
 # and GBUILD/<target>/tests: make tests-ref AREA=x, or obj a link to another
 # tests build's). Their output in CHECKLOG/<check>-<target>.log.
-XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck cpp-tests-crosscheck fftext-crosscheck
+# (csema-crosscheck: gcc's build of csema's dev C against the ttpc-built one on
+# all of glibc's page, byte for byte: some 25 minutes a target)
+XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck cpp-tests-crosscheck fftext-crosscheck csema-crosscheck
 crosschecks:
 	@mkdir -p $(CHECKLOG); ok=1; for c in $(XCHECKS); do for t in riscv64 aarch64 x86_64 arm; do \
 	    if $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$$(test $$t = riscv64 || echo /$$t) GTARGET=$$t $$c > $(CHECKLOG)/$$c-$$t.log 2>&1; \
