@@ -184,8 +184,10 @@ CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
 CSHEAP_glibc := 64
 csheap = $(or $(CSHEAP_$(GTARGET)_$(1)),$(CSHEAP_$(1)))
-# (slot.sh -v: the address space; with the heap in a file it is the file's)
-csmem = -v $(if $(call csheap,$(1)),70000000,9000000)
+# (slot.sh -v: the address space; with the heap in a file it is the file's:
+# all of glibc on x86_64 measured VmPeak 67.1 GB, the 64 GB heap and 3 GB
+# more, its RSS 8.1 GB, 2026-11-22: 72 GB, not 70)
+csmem = -v $(if $(call csheap,$(1)),72000000,9000000)
 cstrans = $(CPRUN) $(CSEMA) -l $(CSFLAGS) $(if $(call csheap,$(1)),-M $(FF)/$(1).heap $(call csheap,$(1)))
 # (a unit as csema reads it: x86_64's of gcc's SSE4.2 intrinsics through
 # clang's copy, CLANGVEC below, as clang reads it)
