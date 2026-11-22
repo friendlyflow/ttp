@@ -1140,7 +1140,7 @@ $(SHAV)/want:
 	mv $(SHAV)/want.tmp $@
 
 tools: $(TOOLS:%=$(TL)/$(TOOLT)/%)
-tools-check: $(TOOLTARGETS:%=tools-check-%) tools-dev-check
+tools-check: $(TOOLTARGETS:%=tools-check-%) tools-dev-check tools-dev-valgrind
 # tools/c.ff, cparse.ff, cprint.ff, csem.ff, csema*.ff against their dev C
 # (tools/dev): made again in build/dev by clang and gen/c2ff.pl they must be
 # the committed ones; sh tools/dev/mk.sh -i if they should be what it makes.
@@ -1151,8 +1151,23 @@ tools-dev-check: | $(BUILD)
 	@printf '_start:\n  void\n  cl:\n    long\n    0\n' > $(BUILD)/regcheck.ff.txt
 	@! perl gen/regcheck.pl $(SHARED) $(BUILD)/regcheck.ff.txt > $(BUILD)/regcheck.out
 	@grep -q "cl is a register of x86_64" $(BUILD)/regcheck.out
-	@sh tools/dev/mk.sh
+	@sh tools/dev/mk.sh -n
 .PHONY: tools-dev-check
+# csema's dev C built by gcc (mk.sh -n) under valgrind on a handful of the
+# units, the C layer's way (-l): an uninitialized read shows at once. On
+# 2026-11-22 cs_spec's used was never set: gcc's csema read it from the stack
+# and wrote other with lists than the ttpc-built one, which zeroes a local
+# (src/glibc's csema-crosscheck holds the two against each other on all of
+# glibc). Some seconds.
+CSVG := $(BUILD)/../dev/cs
+CSVG_UNITS := $(addprefix $(TL)/cparse/in/,weakref.i statics-a.i statics-b.i units-a.i units-b.i units-c.i stdio.i)
+tools-dev-valgrind: tools-dev-check $(CSVG_UNITS)
+	@test -n "$(GLIBC_SRC)" || { echo "tools-dev-valgrind needs nix develop (GLIBC_SRC, valgrind)"; exit 1; }
+	@valgrind -q --error-exitcode=9 $(CSVG)/csema -l -t riscv64 -s "$(GLIBC_SRC)" -S $(SHARED) -k $(CSVG_UNITS) -- main > $(CSVG)/vg.out 2> $(CSVG)/vg.err \
+	    || { grep -v '^csema: ' $(CSVG)/vg.err | head -30; exit 1; }
+	@! grep -q '^==[0-9]*== [A-Z]' $(CSVG)/vg.err || { echo "tools-dev-valgrind: csema's dev C:"; grep '^==' $(CSVG)/vg.err | head -30; exit 1; }
+	@echo "tools-dev-valgrind: csema's dev C (gcc) under valgrind on $(words $(CSVG_UNITS)) units: nothing uninitialized, no bad access"
+.PHONY: tools-dev-valgrind
 
 # progs/pp, the C preprocessor's test (tools-check): each target's build of
 # cpp on progs/pp/main.c (macros, padding, a system header's tokens, the

@@ -1142,6 +1142,26 @@ FFXCMP = s=0; $(1) > $$d/p.out 2> $$d/p.err || s=$$?; echo "exit $$s" >> $$d/p.e
 	s=0; $(2) > $$d/f.out 2> $$d/f.err || s=$$?; echo "exit $$s" >> $$d/f.err; \
 	cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.err $$d/f.err || { echo "fftext-crosscheck: $(3) is not the Perl's ($$d)"; exit 1; }
 FFXLIC = $(call FFXCMP,$(LICENSES_PL) $(1),$(LICENSES) $(1),licenses $(1)); n=$$((n + 1))
+# csema's dev C built by gcc (tools/dev/cs and c/, as mk.sh -n builds it)
+# against the ttpc-built csema (CSEMA): all of glibc's page as csema writes
+# it, byte for byte, and its statics, on the BUILD's glibc.ff (read only; the
+# run's heap, statics and page in CSX). An uninitialized read or an overrun in
+# the dev C shows here (2026-11-22: cs_spec's used, other with lists). About
+# 25 minutes and 8 GB a target.
+CSX = $(BUILD)/csx
+csema-crosscheck:
+	@test -s $(FF)/glibc.ff.txt && test -s $(FF)/glibc.statics || { echo "csema-crosscheck: no glibc.ff.txt in $(FF)"; exit 1; }
+	@mkdir -p $(CSX) && cp ../compiler/tools/dev/cs/* ../compiler/tools/dev/c/c.h ../compiler/tools/dev/c/c.c ../compiler/tools/dev/c/cpr.c $(CSX)/ \
+	    && cd $(CSX) && gcc -O1 -w -o csema shim.c c.c cs.c csema_main.c
+	@cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(CSX)/glibc.ff.txt
+	@$(SLOT) $(call csmem,glibc) -t 3600 $(CSX)/csema -l $(CSFLAGS) -M $(CSX)/glibc.heap $(call csheap,glibc) -k -K $(CSX)/glibc.statics $(foreach z,$(ZEROS_glibc),-Z $(z)) $(foreach w,$(WEAKS_glibc),-W $(w)) \
+	    @$(FF)/glibc.csunits -- @$(FF)/glibc.roots >> $(CSX)/glibc.ff.txt 2> $(CSX)/glibc.csema.err || { tail -5 $(CSX)/glibc.csema.err; exit 1; }
+	@n=$$(wc -c < $(CSX)/glibc.ff.txt); cmp -n $$n $(CSX)/glibc.ff.txt $(FF)/glibc.ff.txt \
+	    && tail -c +$$((n + 1)) $(FF)/glibc.ff.txt | head -1 | grep -qx 'glibc asm:' \
+	    && cmp $(CSX)/glibc.statics $(FF)/glibc.statics \
+	    || { echo "csema-crosscheck: gcc's csema and the ttpc-built one write other pages of all of glibc ($(GTARGET)): $(CSX)"; exit 1; }
+	@echo "csema-crosscheck: gcc's csema and the ttpc-built one write the same page of all of glibc ($(GTARGET)) and the same statics"
+.PHONY: csema-crosscheck
 fftext-crosscheck: | $(FFTEXTT) $(LICENSEST)
 	@set -e; d=$(FFX); mkdir -p $$d; n=0; \
 	for f in $$(find $(wildcard $(FF) $(I) $(DCDIR) $(TBUILD)/ff) -name '*.ff.txt' | sort); do test -e $${f%.txt} || continue; \
