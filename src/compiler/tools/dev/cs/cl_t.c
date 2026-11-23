@@ -625,7 +625,25 @@ static int cl_same_def (struct cs_rec *a, struct cs_rec *b)
   if (a == b) return 1;
   return cl_same_text (a->dtext, a->dlen, b->dtext, b->dlen);
 }
-/* the text of a function's or a variable's definition: from its specifiers to its last token (def_text, clang's range) */
+/* the end of the token at offset e (1 on): a word or number (its exponent's sign too), a text or character, or one character */
+static long cl_tok_end (long e)
+{
+  unsigned char *p = T->src + e - 1;
+  long i = 0;
+  if (*p == '"' || *p == '\'') {
+    unsigned char q = *p;
+    i = 1;
+    while (p[i] && p[i] != q) { if (p[i] == '\\' && p[i + 1]) i++; i++; }
+    return e + i + (p[i] ? 1 : 0);
+  }
+  if (!cl_alpha (*p) && !cl_digit (*p) && *p != '.') return e + 1;
+  while (cl_alpha (p[i]) || cl_digit (p[i]) || p[i] == '.'
+         || ((p[i] == '+' || p[i] == '-') && i && (p[i - 1] == 'e' || p[i - 1] == 'E' || p[i - 1] == 'p' || p[i - 1] == 'P') && (cl_digit (*p) || *p == '.'))) i++;
+  return e + i;
+}
+/* the text of a function's or a variable's definition: from its specifiers to its last token (def_text, clang's range),
+   a variable's with that token: clang's range ends where it begins, and two units' static const double big, 0x1.8p45
+   and 0x1.8p36, were one (arm's cos, sin: c2ff.pl shares them still, gen/c2ffknown.pl) */
 static void cl_def_text (struct cs_top *t)
 {
   struct cs_decl *d = t->d;
@@ -633,6 +651,7 @@ static void cl_def_text (struct cs_top *t)
   if (!d || d->dtext) return;
   if (t->specs) b = c_off_of (t->specs);
   if (t->src) e = c_off_of (t->src);
+  if (e && t->k == TOP_VAR) e = cl_tok_end (e);
   if (b && e && e >= b) { d->dtext = T->src + b - 1; d->dlen = e - b; }
   else { d->dtext = (unsigned char *) ""; d->dlen = 0; }
 }

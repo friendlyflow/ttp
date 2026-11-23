@@ -26,7 +26,11 @@
 # each is a later lane's): a function's statics named by their unit; a
 # global's item `: sizeof`; C's complex arithmetic written of its parts
 # (__cx_N, __mulXc3); x86_64's "=x" barrier of an asm; the call of a cast
-# function; weak and with; arm's __gcc_personality_v0.
+# function; weak and with; arm's __gcc_personality_v0; two units' static
+# const of one name whose texts differ in their last token alone (since
+# 2026-11-23 csema's def text has that token, c2ff.pl's clang range ends
+# where it begins: e_asin's and s_sin's static const double big, 0x1.8p36
+# and 0x1.8p45, are two in csema's page, one in c2ff.pl's).
 #
 # A host tool (Perl).
 use strict;
