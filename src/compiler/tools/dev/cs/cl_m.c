@@ -468,7 +468,10 @@ static void cl_read_shared (void)
   long n;
   unsigned char *p;
   struct node *root;
-  static char *w[] = { "char", "short", "int", "long", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "i128", "u128", "float16", "bfloat16", "short fract", "fract", "long fract", "short accum", "accum", "long accum", "unsigned short fract", "unsigned fract", "unsigned long fract", "unsigned short accum", "unsigned accum", "unsigned long accum", "sat short fract", "sat fract", "sat long fract", "sat short accum", "sat accum", "sat long accum", "sat unsigned short fract", "sat unsigned fract", "sat unsigned long fract", "sat unsigned short accum", "sat unsigned accum", "sat unsigned long accum", "void", "type", "va_list", "float", "double", "long double", "float128", 0 };
+  static char *w[] = { "char", "short", "int", "long", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "i128", "u128", "float16", "bfloat16", "short fract", "fract", "long fract", "short accum", "accum", "long accum", "unsigned short fract", "unsigned fract", "unsigned long fract", "unsigned short accum", "unsigned accum", "unsigned long accum", "sat short fract", "sat fract", "sat long fract", "sat short accum", "sat accum", "sat long accum", "sat unsigned short fract", "sat unsigned fract", "sat unsigned long fract", "sat unsigned short accum", "sat unsigned accum", "sat unsigned long accum", "void", "type", "va_list", "float", "double", "long double", "float128",
+    /* (and the complex types: address / complex float, a pointer to one, was void * pointer then complex float:
+       test-tgmath2's __typeof__ (rettype) *ptype) */
+    "complex float", "complex double", "complex long double", "complex float128", "complex float16", 0 };
   long i = 0;
   while (w[i]) { cl_make (&C->word, w[i])->num = 1; i++; }
   p = cp_file (C->shared, &n);
