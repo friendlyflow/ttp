@@ -621,6 +621,34 @@ ff, the language ttpc compiles
             a0
             a0
           ret
+    asm frames
+      cfi words, GNU's .cfi_* directives (the directive's name spaced, after cfi), stand between an asm function's instructions where gcc has them; they emit no bytes
+      cfi def cfa / r / n, cfi def cfa offset / n, cfi def cfa register / r, cfi offset / r / n, cfi rel offset / r / n, cfi adjust cfa offset / n, cfi restore / r
+      cfi remember state, cfi restore state, cfi register / r / r2, cfi undefined / r, cfi same value / r, cfi escape / byte ..., cfi signal frame
+      a register is the target's name of it (ra, fs0; rbp, rip; x29, sp, d8, vg) or its DWARF number; an offset is from the CFA, in bytes
+      a procedure is an asm function, or an entry block in it that starts with a cfi word (after asm and its comment): there is no startproc or endproc
+      where the program has frames (-g, or libgcc's unwinder), ttpc writes an FDE of each procedure's rows, from its label to the next procedure or its function's end
+      cfi def cfa offset / 0 (x86_64: / 8) says the CIE's rules again: s2ff puts it first in a procedure that gcc's FDE gives no row there and that is an entry block, or that has none at all
+      s2ff writes the cfi words from glibc's .S on riscv64 and x86_64, from its object's frames (objdump --dwarf=frames) on aarch64; .cfi_personality and .cfi_lsda have no word yet
+      on arm the unwinder reads EHABI's tables: ehabi save / r4 / lr (GNU's .save), ehabi pad / 8 (.pad), ehabi cantunwind (.cantunwind), where the procedure starts; no fnstart or fnend
+      ttpc makes its .ARM.exidx entry of them as GNU as does: its unwinding instructions inline (3 at most) or in an .ARM.extab entry of personality 1; ehabi pad / 0 an entry with none
+      s2ff writes the ehabi words from the object's entries (readelf -u); cfi words record nothing on arm (gcc puts them in .debug_frame there)
+      example (riscv64)
+        framed:
+          asm
+          addi
+            -16
+            sp
+            sp
+          cfi def cfa offset
+            16
+          sd
+            8
+            ra
+            sp
+          cfi offset
+            ra
+            -8
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
       nor like an instruction of the target (its instruction groups' forms on the shared page): C's names that are one csema writes name', and s2ff the asm's (setns', brk')

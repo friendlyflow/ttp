@@ -795,6 +795,66 @@ static struct xm *xtake (void)
   return mm;
 }
 static struct nd *xinto_ (void) { return block ? block : fn; }
+
+/* GNU's CFI as the ff's cfi words, as s2ffx86.pm's cfi: registers by name
+   (no %) or DWARF number, numbers worked out; startproc, endproc, label,
+   personality and lsda none (0). Those after .cfi_startproc and before the
+   procedure's first label or instruction are held for it (xpcfi). */
+static struct vec *xpcfi;
+static int xcfiproc;
+/* a procedure that starts at an entry block with no word of its own there,
+   or one with no word at all, gets cfi def cfa offset / 8 where it starts
+   (its first label or instruction), as s2ffx86.pm's $proc: known at the
+   end (merge_runons), each procedure's first node and its words' count */
+static struct vec *xpr_into;
+static long xpr_at, xpr_n;
+static int xpr_on;
+struct xproc { struct nd *first; long n; };
+static struct vec *xprocs;
+static void xcfi_flush (void)
+{
+  long i;
+  if (xcfiproc && xpr_on && !xpr_into) { xpr_into = xinto_ ()->k; xpr_at = xpr_into->n; }
+  xcfiproc = 0;
+  if (!xpcfi) return;
+  for (i = 0; i < xpcfi->n; i++) nd_add (xinto_ (), xpcfi->v[i]);
+  xpcfi->n = 0;
+}
+static struct nd *xcfi_num (struct str *v)
+{
+  long n;
+  if (!xnum (v, &n)) { struct str *e = s_of ("not a number: "); s_app (e, v); fail_s (e); }
+  return nd_new (s_num (n));
+}
+static struct nd *xcfi (struct str *d, struct vec *o)
+{
+  static char *regs[] = { "def_cfa", "11", "def_cfa_register", "1", "offset", "10", "rel_offset", "10", "restore", "1",
+    "register", "11", "undefined", "1", "same_value", "1", "def_cfa_offset", "0", "adjust_cfa_offset", "0",
+    "remember_state", "", "restore_state", "", "signal_frame", "", 0 };
+  struct str *w;
+  struct nd *x;
+  char *k = 0;
+  long i;
+  if (m (d, "^(startproc|endproc|label|personality|lsda)$")) return 0;
+  w = s_of ("cfi ");
+  for (i = 0; i < d->n; i++) { char c[2] = { d->p[i] == '_' ? ' ' : (char) d->p[i], 0 }; s_cat (w, c); }
+  x = nd_new (w);
+  if (s_is (d, "escape")) { for (i = 0; i < o->n; i++) nd_add (x, xcfi_num (o->v[i])); return x; }
+  for (i = 0; regs[i]; i += 2) if (s_is (d, regs[i])) k = regs[i + 1];
+  if (!k) { struct str *e = s_of ("a CFI directive with no cfi word: .cfi_"); s_app (e, d); fail_s (e); }
+  if (o->n != slen (k)) {
+    struct str *e = s_of (".cfi_");
+    s_app (e, d); s_cat (e, " takes "); s_app (e, s_num (slen (k))); s_cat (e, " operands: ");
+    for (i = 0; i < o->n; i++) { if (i) s_cat (e, " "); s_app (e, o->v[i]); }
+    fail_s (e);
+  }
+  for (i = 0; i < o->n; i++) {
+    struct str *v = o->v[i];
+    if (k[i] == '1') { if (v->n && v->p[0] == '%') v = s_sub (v, 1, v->n); nd_add (x, nd_new (v)); }
+    else nd_add (x, xcfi_num (v));
+  }
+  return x;
+}
 struct carried { struct nd *f; struct vec *nodes; };
 static void xfinish (void)
 {
@@ -1216,6 +1276,7 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
       block = nd2 (x, ndc ("asm"), nd1 (s_of ("comment"), nd_new (cm)));
       nd_add (fn, block);
       xalign_def = 0;
+      xcfi_flush ();
     } else {
       struct str *cm = s_of ("glibc-2.44 ");
       xfinish ();
@@ -1228,6 +1289,7 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
       block = 0;
       xalign_def = 0;
       xends = 0;
+      xcfi_flush ();
     }
   }
   if (st->n == 0) return;
@@ -1247,11 +1309,28 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
       xalign = alv; xalign_def = 1;
       return;
     }
+    /* GNU's CFI as the ff's cfi words (ttpc's asmcfi.pl) */
+    if (m (op, "^\\.cfi_(\\w+)$")) {
+      struct str *d = g (1);
+      struct nd *w = xcfi (d, x_split_ops (rest));
+      if (s_is (d, "startproc")) { xcfiproc = 1; xpr_on = 1; xpr_into = 0; xpr_n = 0; }
+      if (s_is (d, "endproc")) {
+        if (xpr_on && xpr_into && xpr_at < xpr_into->n) { struct xproc *p = alloc (sizeof (struct xproc)); p->first = xpr_into->v[xpr_at]; p->n = xpr_n; v_push (xprocs, p); }
+        xpr_on = 0;
+      }
+      if (w) {
+        if (xpr_on) xpr_n++;
+        if (xcfiproc || !fn) { if (!xpcfi) xpcfi = v_new (); v_push (xpcfi, w); }
+        else nd_add (xinto_ (), w);
+      }
+      return;
+    }
     if (m (op, "^\\.(globl|global|weak|hidden|protected|type|size|cfi_\\w+|loc|file|ident|code64|att_syntax)$")) return;
     fail2 ("a directive with no ff form: ", st);
   }
   xalign_def = 0;
   if (!fn) fail2 ("an instruction outside a function: ", st);
+  if (xcfiproc || (xpcfi && xpcfi->n)) xcfi_flush ();
   op = s_lc (op);
   while (is_prefix (op)) {
     v_push (xprefixes, op);
@@ -1655,6 +1734,7 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
   xCODE = h_new ();
   xcode_ = 0;
   xn = 0; xpos = 0; xends = 1; xmaxalign_def = 0; fn = 0; block = 0; xother = 0; xalign_def = 0;
+  xcfiproc = 0; if (xpcfi) xpcfi->n = 0; xpr_on = 0; xpr_into = 0; xprocs = v_new ();
   fns = v_new (); xpending = v_new (); xdatadef = h_new (); xnumeric = h_new (); xgot = h_new (); xtls = h_new (); xmacro = h_new ();
   xsections = v_new (); xprefixes = v_new (); xrodata = h_new (); xro = h_new (); xcarry = v_new (); xroset = h_new (); xweak = h_new ();
   xcarried = v_new (); xweakgot = h_new (); xruns = v_new (); xrunof = h_new (); xrunidx = h_new (); xinto = h_new ();
@@ -1736,6 +1816,20 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
   }
   carry_rodata ();
   data_globals ();
+  /* (a procedure with no word, or one that starts an entry block with none there: cfi def cfa offset / 8 first where it starts; the last first) */
+  for (i = xprocs->n - 1; i >= 0; i--) {
+    struct xproc *p = xprocs->v[i];
+    struct nd *par = 0;
+    long at = 0, q;
+    int top = 0;
+    for (q = 0; q < fns->n && !par; q++) find_parent (fns->v[q], p->first, &par, &at);
+    if (!par) continue;
+    for (q = 0; q < fns->n; q++) if (fns->v[q] == par) top = 1;
+    if (top ? p->n : m (p->first->c, "^cfi ")) continue;
+    v_push (par->k, 0);
+    for (q = par->k->n - 1; q > at; q--) par->k->v[q] = par->k->v[q - 1];
+    par->k->v[at] = nd1 (s_of ("cfi def cfa offset"), nd_new (s_of ("8")));
+  }
   /* (a node of more than 255 children, a table of libmvec's read-only data or a long block: its children
      in numbered layers, 0: 1: ...; a function past 255 stops, its entries would be in a layer) */
   for (i = 0; i < fns->n; i++) {
