@@ -23,5 +23,8 @@ PKG_CONFIGURE := --disable-nls --disable-extensions --disable-mpfr --disable-pma
 PKG_CHECKRUN = $(SUBMAKE) -C test check
 PKG_CHECKFILES := -path './test/_*'
 PKG_RESULTS := $(CURDIR)/results.sh
+# (ttpc: up to 3 hours for gawk's 13 MB of tree, port.mk's PKG_TTPCSECS:
+# on x86_64 it took 61 minutes on 2026-11-23, with another ttpc running)
+PKG_TTPCSECS := 10800
 PKG_LOCALES := en_US:UTF-8:en_US.utf8 fr_FR:UTF-8:fr_FR.utf8 ja_JP:UTF-8:ja_JP.utf8 ru_RU:UTF-8:ru_RU.utf8
 include ../port.mk
