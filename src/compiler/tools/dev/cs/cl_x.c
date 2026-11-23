@@ -2105,6 +2105,14 @@ static void cl_init_item (struct cs_ex *n, struct cl_list *o)
   {
     struct cl_list *e = cl_l ();
     cl_itemx (n, e);
+    /* a byte's item that is a leaf naming a variable (grep's char eolbytes[3]
+       = { 0, eolbyte, 0 }): in a : , since to ttpc a leaf item of a char
+       array is its text, whatever it names; a number stays a leaf */
+    if (e->n == 1 && cl_leaf (e->v[0]) && !cl_reads_number (cl_txt (e->v[0]))
+        && (cs_kind (n->t) == TY_CHAR || cs_kind (n->t) == TY_SCHAR || cs_kind (n->t) == TY_UCHAR || cs_kind (n->t) == TY_BOOL)) {
+      cl_push (o, cl_nl (":", e));
+      return;
+    }
     cl_push (o, cl_one (e));
   }
 }

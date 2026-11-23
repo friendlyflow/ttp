@@ -2092,6 +2092,7 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   typefn  a program's function named as a type of glibc's (yyalloc)
 #   fnptr   a global pointer to a function, only called through, in another unit
 #   charenum  a local char set from an enum constant (gnulib's modechange.c)
+#   chararr a local byte array whose items are variables (grep's eolbytes)
 #   gencond _Generic of a conditional (gnulib's string.h strchr, time_rz.c)
 #   gsizeof a global whose first item is a sizeof (gnulib's quotearg.c slotvec0)
 #   structlit  a struct set from a compound literal (gnulib's parse-datetime.y)
@@ -2125,8 +2126,8 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
 #           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check fltinc-check weakref-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf fltinc weakref
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check fltinc-check weakref-check chararr-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf fltinc weakref
 ALLPROG_ptrsum := ptrsum
 ALLPROG_fltinc := fltinc
 ALLPROG_weakref := weakref
@@ -2146,6 +2147,7 @@ ALLPROG_gsizeof := gsizeof
 ALLPROG_structlit := structlit
 ALLPROG_gencond := gencond
 ALLPROG_charenum := charenum
+ALLPROG_chararr := chararr
 ALLPROG_fnptr := fnptr-a fnptr-b
 ALLPROG_typefn := typefn
 ALLPROG_extown := extown-a extown-b
