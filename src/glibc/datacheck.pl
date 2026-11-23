@@ -30,6 +30,11 @@
 #     compared (gcc's object file does not record an object's alignment, and
 #     ttpc lays globals out by its own rules), nor the padding between objects.
 #   - an object gcc puts in .bss (zero) is compared as zero bytes.
+#   - a static gcc folded away (a static const every use of which gcc wrote
+#     as its value: no symbol, only its DWARF's DW_AT_const_value) is
+#     compared with its unit's static of ttpc's, where the unit's code in ff
+#     names it (with --index: glibc.ff.txt beside it), so that two units'
+#     statics csema made one are seen where their values differ.
 #
 # A static is found by ttpc's name for it: a file's static "x" is "x" or, where
 # two units have one, "x unit"; a function's static (gcc's "x.N") is "f x"
@@ -599,11 +604,17 @@ for my $g (@gsyms) {
         notcomp($id, $y->{bind} ? "not in ttpc's program (not reached, or not in ff)" : "a static ttpc's program has no name for (not reached, not in ff, or gcc's own)");
         next;
     }
-    # (several candidates: x, x', x'' of one function; equal if one is)
-    my ($t, @diff);
+    # (several candidates: x, x', x'' of one function; equal if one is. One
+    # compared already, csema's one static of the units whose static has the
+    # same text, is compared again, last: where this unit's differs, two
+    # units' statics are one that C has as two (e_asin's and s_sin's static
+    # const double big, 0x1.8p36 and 0x1.8p45, were one: their text the same
+    # but for its last token))
+    my ($t, @diff, $tdone);
     my $sz = $y->{size};
-    for my $c (@t) {
-        next if $done{"$c->{name}\0$c->{value}"};
+    my @order = ((grep { !$done{"$_->{name}\0$_->{value}"} } @t), (grep { $done{"$_->{name}\0$_->{value}"} } @t));
+    for my $c (@order) {
+        my $was = $done{"$c->{name}\0$c->{value}"};
         my @d;
         # ttpc's .symtab gives each object its place up to the next name's (the
         # literals of its initializer, which ttpc puts right after it, are in
@@ -611,10 +622,11 @@ for my $g (@gsyms) {
         my $m = $c->{size} < $sz ? $c->{size} : $sz;
         push @d, "size: ttpc's place is $c->{size} bytes, gcc's object $sz (the next name of ttpc's: " . tdesc($c->{value} + $c->{size}) . ")" if $c->{size} < $sz;
         push @d, cmprange($o, $y->{shndx}, $y->{value}, $c->{value}, $m, 0);
-        if (!@d) { $t = $c; @diff = (); last }
-        if (!$t) { $t = $c; @diff = @d }
+        if (!@d) { $t = $c; @diff = (); $tdone = $was; last }
+        if (!$t) { $t = $c; @diff = @d; $tdone = $was }
     }
-    if (!$t) { notcomp($id, "ttpc's is compared already (csema's one static of units of the same text, or x and x' both compared)", join(', ', map { $_->{name} } @t)); next }
+    if ($tdone && !@diff) { notcomp($id, "ttpc's is compared already (csema's one static of units of the same text, or x and x' both compared)", join(', ', map { $_->{name} } @t)); next }
+    push @diff, "(ttpc's is another unit's static too, compared already: one static where C has two)" if $tdone;
     $done{"$t->{name}\0$t->{value}"}++ if !@diff || @t == 1;
     push @diff, '(' . scalar(@t) . " candidates of ttpc's, none the same)" if @diff && @t > 1;
     $count{compared}++;
@@ -622,8 +634,106 @@ for my $g (@gsyms) {
     if (@diff) {
         $count{differ}++;
         $count{"differ $kind"}++;
-        $res{ $t->{name} } = [$id, $kind, join('; ', @diff)];
+        $res{ exists $res{ $t->{name} } || $tdone ? "$t->{name} ($o)" : $t->{name} } = [$id, $kind, join('; ', @diff)];
     } else { $count{equal}++; $count{"equal $kind"}++ }
+}
+
+# gcc's statics it folded away: a static const whose every use gcc wrote
+# as its value has no symbol in the object, only its DWARF's
+# DW_AT_const_value (C's file-scope variable, not external). Each unit's
+# is compared with ttpc's static of that unit, by the same names as a
+# static with a symbol: two units' statics that csema made one, where
+# their values differ, differ here (e_asin's and s_sin's static const
+# double big, 0x1.8p36 and 0x1.8p45, were one on arm; gcc has no symbol
+# of either).
+sub dwconsts {
+    no warnings 'portable';
+    my ($o) = @_;
+    my (%die, @v, $cur);
+    open my $h, '-|', "$readelf --debug-dump=info '$objdir/$o.o' 2> /dev/null" or die "datacheck: readelf: $!\n";
+    while (<$h>) {
+        if (/^\s*<(\d+)><(\w+)>: Abbrev Number: (\d+)(?: \((DW_TAG_\w+)\))?/) {
+            $cur = { depth => $1, tag => $4 // '' };
+            $die{ hex $2 } = $cur;
+            push @v, $cur if $cur->{tag} eq 'DW_TAG_variable' && $1 == 1;
+            next;
+        }
+        next unless $cur;
+        if (/DW_AT_name\s*:\s*(?:\(indirect[^)]*\):\s*)?(\S+)\s*$/) { $cur->{name} = $1 }
+        elsif (/DW_AT_external\s*:/) { $cur->{ext} = 1 }
+        elsif (/DW_AT_type\s*:\s*<0x(\w+)>/) { $cur->{type} = hex $1 }
+        elsif (/DW_AT_byte_size\s*:\s*(\d+)/) { $cur->{size} = $1 }
+        elsif (/DW_AT_const_value\s*:\s*\d+ byte block:\s*((?:[0-9a-f]+ ?)*)/) { $cur->{bytes} = join '', map { chr hex } split ' ', $1 }
+        elsif (/DW_AT_const_value\s*:\s*(-?\d+)\s*$/) { $cur->{int} = $1 }
+        elsif (/DW_AT_const_value\s*:\s*0x([0-9a-f]+)\s*$/) { $cur->{int} = hex $1 }
+    }
+    close $h;
+    my @r;
+    for my $v (@v) {
+        next if $v->{ext} || !defined $v->{name} || !defined $v->{bytes} && !defined $v->{int};
+        my $b = $v->{bytes};
+        if (!defined $b) {
+            # (an integer: as many bytes as its type, through const and typedef)
+            my ($t, $n, $sz) = ($v->{type}, 0);
+            while (defined $t && $die{$t} && $n++ < 16) { $sz = $die{$t}{size}, last if defined $die{$t}{size}; $t = $die{$t}{type} }
+            next unless $sz && $sz <= 8;
+            $b = substr(pack($v->{int} < 0 ? 'q<' : 'Q<', $v->{int}), 0, $sz);
+        }
+        push @r, [$v->{name}, $b];
+    }
+    @r;
+}
+# (what each unit's functions in ff name: a static gcc folded is compared
+# where its unit's code names it, x or "x unit", as ttpc has it then; one
+# no code names (atnat.h's f3 in s_atan, unused) is not ttpc's to have,
+# and its plain name would be another unit's)
+my %unames;
+if (defined $index && (my $ft = $index =~ s{/glibc/index\.ff$}{/glibc.ff.txt}r) ne $index) {
+    open my $h, '<', $ft or die "datacheck: $ft: $!\n";
+    my (@stack, $def, $dd, %w, %unit);
+    while (my $l = <$h>) {
+        chomp $l;
+        my ($sp, $c) = $l =~ /^( *)(.*)$/;
+        my $d = length($sp) / 2;
+        $#stack = $d - 1;
+        $stack[$d] = $c;
+        next if $d == 0 || $stack[0] !~ /^glibc .*:$/;
+        my $i = 1;
+        $i++ while $i < $d && $stack[$i] =~ /^\d+:$/;
+        if ($i == $d) { $def = $c =~ /^(.+):$/ ? $1 : undef; $dd = $d; next }
+        next unless defined $def;
+        if ($d == $dd + 2 && $stack[$d - 1] eq 'comment' && $c =~ m{/i/(\S+)\.i$}) { $unit{$def} = $1; next }
+        $w{$def}{$c} = 1 if $c !~ /:$/;
+    }
+    close $h;
+    for my $f (keys %unit) { $unames{ $unit{$f} }{$_} = 1 for keys %{ $w{$f} } }
+}
+for my $o (grep { $isC{$_} } sort keys %G) {
+    my %has = map { $_->{name} => 1 } grep { $_->{bind} == 0 && $_->{type} == 1 } @{ $G{$o}{sym} };
+    for my $c (dwconsts($o)) {
+        my ($n, $b) = @$c;
+        next if $has{$n};
+        my $id = "$n ($o)";
+        if (%unames && !grep { $unames{$o}{$_} } $n, "$n $o", "$n'") { notcomp($id, "a static gcc folded (its DWARF's value) that its unit's code in ff does not name"); next }
+        my @t = tnames($o, { name => $n, bind => 0 });
+        if (!@t) { notcomp($id, "a static gcc folded (its DWARF's value) that ttpc's program has no name for (not reached, or folded too)"); next }
+        my ($t, @diff);
+        for my $y (@t) {
+            my $tb = tbytes($y->{value}, length $b);
+            my @d = !defined $tb ? (sprintf('ttpc has no %d bytes at 0x%x', length $b, $y->{value}))
+                : $tb ne $b ? ('value: ttpc ' . hexs($tb) . ", gcc's (folded: its DWARF's) " . hexs($b)) : ();
+            push @d, "size: ttpc's place is $y->{size} bytes, gcc's value " . length($b) if !@d && $y->{size} < length $b;
+            if (!@d) { $t = $y; @diff = (); last }
+            if (!$t) { $t = $y; @diff = @d }
+        }
+        $count{compared}++;
+        $count{'compared folded'}++;
+        if (@diff) {
+            $count{differ}++;
+            $count{'differ folded'}++;
+            $res{"$t->{name} ($o)"} = [$id, 'folded', join('; ', @diff)];
+        } else { $count{equal}++; $count{'equal folded'}++ }
+    }
 }
 
 # what ttpc's program has that no object of gcc's names (a static gcc dropped)
@@ -637,8 +747,8 @@ if (defined $report) { open $out, '>', $report or die "datacheck: $report: $!\n"
 for my $k (sort keys %res) { print $out "datacheck: $k: $res{$k}[0], $res{$k}[1]: $res{$k}[2]\n" }
 print $out "$_\n" for @lines;
 for my $w (sort { $why{$b} <=> $why{$a} || $a cmp $b } keys %why) { print $out "datacheck: not compared: $why{$w}: $w\n" }
-printf $out "datacheck ($target): %d compared (%d with a value, %d zero): %d equal, %d differ (%d with a value, %d zero); %d of gcc's not compared; %d objects of ttpc's program no object of gcc's names\n",
-    $count{compared}, $count{'compared init'} // 0, $count{'compared zero'} // 0, $count{equal}, $count{differ}, $count{'differ init'} // 0, $count{'differ zero'} // 0, $count{notcomp}, $tonly;
+printf $out "datacheck ($target): %d compared (%d with a value, %d zero, %d folded by gcc): %d equal, %d differ (%d with a value, %d zero, %d folded); %d of gcc's not compared; %d objects of ttpc's program no object of gcc's names\n",
+    $count{compared}, $count{'compared init'} // 0, $count{'compared zero'} // 0, $count{'compared folded'} // 0, $count{equal}, $count{differ}, $count{'differ init'} // 0, $count{'differ zero'} // 0, $count{'differ folded'} // 0, $count{notcomp}, $tonly;
 
 # ---- against the known list -------------------------------------------------------------
 exit 0 unless defined $known;
