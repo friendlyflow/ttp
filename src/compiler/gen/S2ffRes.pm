@@ -51,6 +51,9 @@ sub gnu {
 # (the instruction forms alone, of a target's groups: c2ffknown.pl's)
 my (%forms, %baseres);
 sub init {
+    # (its $! kept: a lazy init in the .s read left 0 where tools/dev s2ff,
+    # which reads the page first, has the read's ENOTTY, its exit status)
+    local $!;
     my ($target) = @_;
     my %r = map { $_ => 1 } @words;
     my $dir = "$FindBin::Bin/..";
