@@ -716,6 +716,7 @@
     x86_64's long double is the x87's 80-bit extended format (gcc's), in 16 bytes: the u64 at 0 its significand (the integer bit explicit, bit 63), the low 16 bits of the u64 at 8 the sign (bit 15) and exponent (32767: infinity and NaN), the rest padding.
     So gcc's builtins of its bits: __builtin_isnan, __builtin_isinf_sign, __builtin_signbit and __builtin_fpclassify on a long double, __builtin_fabsl, __builtin_copysignl, __builtin_huge_vall and __builtin_nanl.
     An unnormal, a pseudo-NaN and a pseudo-infinity (a nonzero exponent, the integer bit 0) are the x87's invalid operands, NaNs to its compares and so to gcc's (tst-ldbl-nonnormal-printf).
+    A pseudo-denormal (exponent 0, the integer bit 1) is to the x87 the number of exponent 1, as large as the smallest normal or more: gcc's fpclassify (a compare with the smallest normal) calls it normal (test-misc).
     builtins.ff.txt's are binary128's, which x87builtins.pl makes float128's here (and leaves these out).
   __builtin_isnan long double:
     int
@@ -922,7 +923,15 @@
       return
         finf
     if
-      e
+      :
+        e
+        !=
+        0
+      ||
+      :
+        m
+        >>
+        63
       !=
       0
       return
