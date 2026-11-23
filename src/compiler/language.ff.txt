@@ -557,6 +557,7 @@ ff, the language ttpc compiles
       a function's body, an if, else or while body and a lambda are blocks; a declaration is seen from below it to the end of its block, inner blocks too
       used above its declaration is an error, used after its block an unknown name
       a local hides a global, a parameter or a struct type of the same name (in every block: its leaf is the local, not a compound literal), an inner block's local hides the outer one; declared twice in one block, the later one counts
+      it hides the type only in its function's own code: another function's parameters and a struct's members still see the type (C's struct timespec timespec[2]; utimensat (fd, name, timespec, 0))
       a function does not see the locals of its caller
       example
         x:
