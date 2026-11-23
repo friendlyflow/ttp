@@ -157,6 +157,20 @@ sub leaf {
     return node($o);
 }
 sub ins { my ($op, @a) = @_; node($op, map { ref $_ ? $_ : leaf($_) } @a) }
+# a CFI directive as its cfi word: registers by name (or DWARF number),
+# numbers worked out; startproc, endproc and label none
+my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel_offset => [1, 0], restore => [1],
+    register => [1, 1], undefined => [1], same_value => [1], def_cfa_offset => [0], adjust_cfa_offset => [0],
+    remember_state => [], restore_state => [], signal_frame => []);
+sub cfi {
+    my ($d, @o) = @_;
+    return if $d =~ /^(startproc|endproc|label)$/;
+    my $w = 'cfi ' . ($d =~ tr/_/ /r);
+    return node($w, map { leaf(num($_)) } @o) if $d eq 'escape';
+    my $k = $cfiregs{$d} or fail "a CFI directive with no cfi word: .cfi_$d";
+    @o == @$k or fail ".cfi_$d takes " . @$k . " operands: @o";
+    node($w, map { $k->[$_] ? leaf($o[$_] =~ s/^%//r) : leaf(num($o[$_])) } 0 .. $#o);
+}
 sub rel { node('rel', node($_[0])) }
 
 my %rtype = map { $_ => 1 } qw(add sub and or xor sll srl sra slt sltu addw subw sllw srlw sraw
@@ -264,6 +278,15 @@ sub canon {
 
 # ---- the source --------------------------------------------------------------
 my (@fns, $fn, $block, $file, $line);
+# ttpc's procedure is an asm function, or an entry block in it that starts
+# with a cfi word. So a procedure (.cfi_startproc ... .cfi_endproc) that
+# starts at an entry block with no word of its own there, or one with no
+# word at all (gcc's FDE of the CIE's rules alone, a leaf's), gets one
+# where it starts that says the CIE's rules again, cfi def cfa offset / 0.
+# One with .cfi_return_column (libgcc's __riscv_save_*, whose return
+# address is t0: a CIE of its own) has none.
+my $proc;       # since .cfi_startproc: {into, at} where it starts (its first label, word or instruction), top (a function's own), n its words, s 1 with one there, skip
+sub proc_at { if ($proc && !$proc->{into}) { $proc->{into} = $_[0]; $proc->{at} = scalar @{ $_[0] }; $proc->{top} = $_[0] == $fn->{children} } }
 ($file, $line) = ($src =~ s{.*/}{}r, 0);     # (a .s of gcc's has no line marks)
 # (the name of its tree, glibc-2.44, or gcc-16.2.0 for libgcc's, whose
 # files are named from gcc's folder)
@@ -377,6 +400,7 @@ while (my $l = <$s>) {
                 fail "label $name outside a function" unless $fn;
                 $block = node("$name:");
                 push @{$fn->{children}}, $block;
+                proc_at($block->{children});
             } elsif ($fn && !$ends) {
                 # the function before runs on into this one: it holds it, as
                 # a label, so that they are placed together; asm first (which
@@ -384,12 +408,14 @@ while (my $l = <$s>) {
                 # the function that holds it
                 $block = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
                 push @{$fn->{children}}, $block;
+                proc_at($block->{children});
             } else {
                 finish();
                 $fn = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
                 push @fns, $fn;
                 undef $block;
                 $ends = 0;      # none of its own yet: it runs on into what follows
+                proc_at($fn->{children});
             }
         }
         next if $st eq '';
@@ -408,6 +434,31 @@ while (my $l = <$s>) {
                 }
                 next;
             }
+            # GNU's CFI as the ff's cfi words (ttpc's asmcfi.pl): between the
+            # instructions where it stands, no bytes; the procedure is the
+            # function (no startproc, endproc), .cfi_label names nothing
+            if ($op =~ /^\.cfi_(\w+)$/) {
+                my $d = $1;
+                if ($d eq 'startproc') { $proc = { n => 0 }; next }
+                if ($d eq 'endproc') {
+                    splice @{ $proc->{into} }, $proc->{at}, 0, node('cfi def cfa offset', leaf(0))
+                        if $proc && !$proc->{skip} && $proc->{into} && ($proc->{top} ? !$proc->{n} : !$proc->{s});
+                    undef $proc;
+                    next;
+                }
+                if ($d eq 'return_column') { fail ".cfi_return_column after cfi words" if $proc && $proc->{n}; $proc->{skip} = 1 if $proc; next }
+                next if $proc && $proc->{skip};
+                my $w = cfi($d, split_ops($rest));
+                if ($w) {
+                    fail "a CFI directive outside a function: $st" unless $fn;
+                    my $c = ($block // $fn)->{children};
+                    proc_at($c);
+                    push @$c, $w;
+                    $proc->{n}++ if $proc;
+                    $proc->{s} = 1 if $proc && $c == $proc->{into} && $#$c == $proc->{at};
+                }
+                next;
+            }
             next if $op =~ /^\.(globl|global|weak|hidden|type|size|align|p2align|text|attribute|cfi_\w+|file|ident)$/;
             next if $op eq '.option' && $rest =~ /^(push|pop|arch\b.*|norelax|relax|pic|nopic|rvc|norvc)$/;
             fail "a directive with no ff form: $st";
@@ -418,6 +469,7 @@ while (my $l = <$s>) {
         # program has no PLT)
         my @o = map { /^(\d+)([fb])$/ ? ".L$1 " . (($numeric{$1} // 0) + ($2 eq 'f' ? 1 : 0)) : s/\@plt$//r } split_ops($rest);
         my $into = ($block // $fn)->{children};
+        proc_at($into);
         # li is what GNU as made of it for its value (addi, or lui and addiw)
         if ($op eq 'li') {
             my $v = num($o[1]);

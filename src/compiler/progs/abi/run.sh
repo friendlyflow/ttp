@@ -23,7 +23,8 @@ ulimit -v 8000000
 "$cc" -O1 $gf -fno-pic -fno-asynchronous-unwind-tables -fno-unwind-tables -S "$here/abi_gcc.c" -o "$o/abi_gcc.s"
 test $src = s || perl "$c/gen/$s2ff" --locals "$o/abi_gcc.s" > "$o/abi_gcc.$src"
 "$cc" -c $asl -x assembler "$o/abi_gcc.$src" -o "$o/abi_gcc.o"
-${x}objdump -d $dopt "$o/abi_gcc.o" > "$o/abi_gcc.dump"
+# (aarch64's and arm's dump with the object's frames after its code, as src/glibc's)
+{ ${x}objdump -d $dopt "$o/abi_gcc.o" && case $t in aarch64) ${x}objdump --dwarf=frames "$o/abi_gcc.o" ;; arm) ${x}readelf -u "$o/abi_gcc.o" ;; esac; } > "$o/abi_gcc.dump"
 perl "$c/gen/$s2ff" --page 'abi gcc' "$o/abi_gcc.$src" "$o/abi_gcc.dump" > "$o/abi_gcc.ff.txt"
 perl "$c/gen/fftext.pl" ff "$o/abi_gcc.ff.txt" > "$o/abi_gcc.ff"
 timeout 60 "$C2FF_CLANG" -x c $cf -Xclang -ast-dump=json -fsyntax-only --target=$ct -std=gnu11 -w -I"$here" "$here/abi_main.c" > "$o/abi_main.json"

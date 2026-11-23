@@ -41,3 +41,8 @@ Disassembly of section .text:
 00000038 <__wrap_main>:
   38:	eafffffe 	b	0 <main>
 			38: R_ARM_JUMP24	main
+
+Unwind section '.ARM.exidx' at offset 0x74 contains 1 entry:
+
+0x0: 0x1 [cantunwind]
+
