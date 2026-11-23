@@ -222,14 +222,112 @@ static struct def *decode (struct a64m *mm, long *vals)
 static struct hash *sym;      /* "sec value" -> vec of names */
 static struct hash *sect;     /* name -> its section */
 static struct hash *codes;
+/* the frames: the cfi words at each address of .text where rows start
+   (s2ff-aarch64.pl's %cfiat), an address's (its decimal) vec emptied as
+   they are placed */
+static struct hash *cfiat;
+/* each word with its FDE; the FDEs in order and by where they start */
+struct afde { long b, n; struct nd *first; int s; };
+struct cfiw { struct afde *f; struct nd *w; };
+static struct vec *afdes;
+static struct hash *fdeat;
+static long hexs (struct str *s) { long v = 0, k; for (k = 0; k < s->n; k++) v = v * 16 + hexv (s->p[k]); return v; }
+static void cfiat_add (long at, struct nd *w)
+{
+  struct str *k = s_num (at);
+  struct vec *l = h_pv (cfiat, k);
+  struct cfiw *c = alloc (sizeof (struct cfiw));
+  if (!l) { l = v_new (); h_setp (cfiat, k, l); }
+  c->f = afdes->v[afdes->n - 1]; c->w = w;
+  v_push (l, c);
+}
+static void cfiput (struct vec *c, struct vec *l, long a)
+{
+  long i;
+  for (i = 0; i < l->n; i++) { struct cfiw *x = l->v[i]; v_push (c, x->w); x->f->n++; if (a == x->f->b) x->f->s = 1; }
+  l->n = 0;
+}
+/* the node that holds node t under f (and t's place in it), if any */
+static int find_parent (struct nd *f, struct nd *t, struct nd **p, long *at)
+{
+  long i;
+  for (i = 0; i < ndn (f); i++) {
+    if (ndk (f, i) == t) { *p = f; *at = i; return 1; }
+    if (find_parent (ndk (f, i), t, p, at)) return 1;
+  }
+  return 0;
+}
+static struct str *cfireg (struct str *r)
+{
+  if (!m (r, "^r\\d+ \\(([\\w.]+)\\)$")) { struct str *x = s_of ("a frame's register "); s_app (x, r); fail_s (x); }
+  return g (1);
+}
+static void frameword (long at, struct str *op, struct str *a)
+{
+  struct nd *w;
+  if (s_is (op, "DW_CFA_def_cfa") && m (a, "^(r\\d+ \\([\\w.]+\\)) ofs (-?\\d+)$")) { struct str *r = g (1), *o = g (2); w = nd2 (s_of ("cfi def cfa"), nd_new (cfireg (r)), nd_new (o)); }
+  else if (m (op, "^DW_CFA_def_cfa_offset(_sf)?$") && m (a, "^(-?\\d+)$")) w = nd1 (s_of ("cfi def cfa offset"), nd_new (g (1)));
+  else if (s_is (op, "DW_CFA_def_cfa_register")) w = nd1 (s_of ("cfi def cfa register"), nd_new (cfireg (a)));
+  else if (m (op, "^DW_CFA_offset(_extended(_sf)?)?$") && m (a, "^(r\\d+ \\([\\w.]+\\)) at cfa([+-])(\\d+)$")) {
+    struct str *r = g (1), *sg = g (2), *v = g (3);
+    long n = dec (v);
+    if (sg->p[0] == '-') n = -n;
+    w = nd2 (s_of ("cfi offset"), nd_new (cfireg (r)), nd_new (s_num (n)));
+  }
+  else if (m (op, "^DW_CFA_restore(_extended)?$")) w = nd1 (s_of ("cfi restore"), nd_new (cfireg (a)));
+  else if (s_is (op, "DW_CFA_remember_state") && a->n == 0) w = ndc ("cfi remember state");
+  else if (s_is (op, "DW_CFA_restore_state") && a->n == 0) w = ndc ("cfi restore state");
+  else if (s_is (op, "DW_CFA_register") && m (a, "^(r\\d+ \\([\\w.]+\\)) in (r\\d+ \\([\\w.]+\\))$")) { struct str *r = g (1), *q = g (2); struct str *rr = cfireg (r); w = nd2 (s_of ("cfi register"), nd_new (rr), nd_new (cfireg (q))); }
+  else if (s_is (op, "DW_CFA_undefined")) w = nd1 (s_of ("cfi undefined"), nd_new (cfireg (a)));
+  else if (s_is (op, "DW_CFA_same_value")) w = nd1 (s_of ("cfi same value"), nd_new (cfireg (a)));
+  else { struct str *x = s_of ("a frame's "); s_app (x, op); s_cat (x, " "); s_app (x, a); s_cat (x, ", which no cfi word says"); fail_s (x); w = 0; }
+  cfiat_add (at, w);
+}
 static struct vec *a64_readdump (struct str *file, int symbols)
 {
   struct str *t = p_slurp ((char *) file->p, "s2ff"), *insec = s_of ("");
   struct lines *ls = split_lines (t);
   struct vec *mv = v_new ();
-  long i;
+  long i, heads = 0, loc = 0;
+  int incie = 0, fde_on = 0;
   for (i = 0; i < ls->n; i++) {
     struct str *l = chomp (ls->l[i]);
+    if (m (l, "^\\S.*:\\s+file format ")) { heads++; continue; }
+    if (heads > 1) {
+      if (!symbols) continue;
+      if (m (l, "^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+ CIE$")) { fde_on = 0; incie = 1; continue; }
+      if (m (l, "^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+ FDE cie=[0-9a-f]+ pc=([0-9a-f]+)\\.\\.([0-9a-f]+)$")) {
+        long b = hexs (g (1));
+        struct afde *f = alloc (sizeof (struct afde));
+        struct vec *fl = h_pv (fdeat, s_num (b));
+        incie = 0; fde_on = 1; loc = b;
+        f->b = b;
+        v_push (afdes, f);
+        if (!fl) { fl = v_new (); h_setp (fdeat, s_num (b), fl); }
+        v_push (fl, f);
+        continue;
+      }
+      if (m (l, "^\\s+DW_CFA_advance_loc\\d?: \\d+ to ([0-9a-f]+)$")) { loc = hexs (g (1)); continue; }
+      if (m (l, "^\\s+DW_CFA_nop$")) continue;
+      if (m (l, "^\\s+(DW_CFA_\\w+):?\\s*(.*?)\\s*$")) {
+        struct str *op = g (1), *a = g (2);
+        if (incie) {
+          struct str *x = s_dup (op);
+          s_cat (x, " "); s_app (x, a);
+          if (!s_is (x, "DW_CFA_def_cfa r31 (sp) ofs 0")) { struct str *y = s_of ("a CIE that says "); s_app (y, op); s_cat (y, " "); s_app (y, a); s_cat (y, ", not GNU's"); fail_s (y); }
+          continue;
+        }
+        if (!fde_on) { struct str *y = s_dup (op); s_cat (y, " outside an FDE"); fail_s (y); }
+        frameword (loc, op, a);
+        continue;
+      }
+      if (incie && m (l, "^\\s+(Augmentation|Code alignment factor|Data alignment factor|Return address column):\\s+(.*?)\\s*$")) {
+        struct str *k = g (1), *v = g (2);
+        char *gnu = s_is (k, "Augmentation") ? "\"zR\"" : s_is (k, "Code alignment factor") ? "4" : s_is (k, "Data alignment factor") ? "-8" : "30";
+        if (!s_is (v, gnu)) { struct str *y = s_of ("a CIE whose "); s_app (y, k); s_cat (y, " is "); s_app (y, v); s_cat (y, ", not GNU's"); fail_s (y); }
+      }
+      continue;
+    }
     if (symbols && m (l, "^([0-9a-f]{16}) (.{7}) (\\S+)\\t[0-9a-f]+ (.+)$")) {
       struct str *vs = g (1), *flags = g (2), *sec = g (3), *name = g (4), *key;
       unsigned long v = 0;
@@ -277,6 +375,7 @@ static struct vec *a64_readdump (struct str *file, int symbols)
     }
   }
   perrno = 0;   /* (close $d) */
+  if (symbols && heads < 2) fail_c ("the dump has no frames (objdump --dwarf=frames after its code): make it again");
   return mv;
 }
 
@@ -622,7 +721,7 @@ static void a64_main (struct vec *files)
     long k = 0, q = 0;
     while (k < 16) { long a = q; char *w; while (c[q] && c[q] != ' ') q++; w = alloc (q - a + 1); mcopy ((unsigned char *) w, (unsigned char *) c + a, q - a); conds[k++] = w; if (c[q]) q++; }
   }
-  sym = h_new (); sect = h_new (); codes = h_words (".text .init .fini");
+  sym = h_new (); sect = h_new (); codes = h_words (".text .init .fini"); cfiat = h_new (); afdes = v_new (); fdeat = h_new ();
   a_line = h_new (); a_alias = h_new (); rodata = h_new (); weakref = h_new (); a_data = v_new ();
   at_ = h_new (); labelat = h_new (); a_got = h_new (); ro = h_new (); weakb = h_new (); fnof = h_new (); weakgot = v_new ();
   all = a64_readdump (dump_s, 1);
@@ -694,7 +793,35 @@ static void a64_main (struct vec *files)
       }
     }
     if (!fn) { struct str *x = s_of ("an instruction outside a function at "); s_app (x, s_num (mm->addr)); fail_s (x); }
+    /* (the cfi words of the rows that start at it, before it; the first node there of each FDE that starts there) */
+    if (s_is (mm->sec, ".text")) {
+      struct vec *c = (block ? block : fn)->k, *fl = h_pv (fdeat, s_num (mm->addr)), *w = h_pv (cfiat, s_num (mm->addr));
+      long at = c->n;
+      if (w && w->n) cfiput (c, w, mm->addr);
+      a64_emit (mm);
+      if (fl) for (k = 0; k < fl->n; k++) { struct afde *f = fl->v[k]; if (!f->first) f->first = c->v[at]; }
+      continue;
+    }
     a64_emit (mm);
+  }
+  /* (rows where .text's instructions end: after the last) */
+  {
+    long end = 0, k;
+    struct vec *w, *left = v_new ();
+    for (k = 0; k < mv->n; k++) if (s_is (((struct a64m *) mv->v[k])->sec, ".text")) end = ((struct a64m *) mv->v[k])->addr + 4;
+    w = h_pv (cfiat, s_num (end));
+    if (fn && w && w->n) cfiput ((block ? block : fn)->k, w, end);
+    for (k = 0; k < cfiat->keys->n; k++) { struct hent *e = cfiat->keys->v[k]; if (((struct vec *) e->pv)->n) v_push (left, e); }
+    if (left->n) {
+      struct hent *lo = left->v[0];
+      struct str *x;
+      for (k = 1; k < left->n; k++) if (dec (((struct hent *) left->v[k])->k) < dec (lo->k)) lo = left->v[k];
+      x = s_of ("a frame's row at "); s_app (x, lo->k); s_cat (x, ", where .text has no instruction"); fail_s (x);
+    }
+    for (k = 0; k < afdes->n; k++) {
+      struct afde *f = afdes->v[k];
+      if (!f->first) { struct str *x = s_of ("an FDE at "); s_app (x, s_num (f->b)); s_cat (x, ", where .text has no instruction"); fail_s (x); }
+    }
   }
   a64_finish ();
   if (then_v->n) {
@@ -752,6 +879,19 @@ static void a64_main (struct vec *files)
       fns = nf;
     }
     i--;
+  }
+  /* (an FDE with no rows, or one that starts an entry block with no row there: cfi def cfa offset / 0 first where it starts; the last first) */
+  for (i = afdes->n - 1; i >= 0; i--) {
+    struct afde *f = afdes->v[i];
+    struct nd *p = 0;
+    long at = 0, q;
+    int top = 0;
+    for (q = 0; q < fns->n && !p; q++) find_parent (fns->v[q], f->first, &p, &at);
+    for (q = 0; q < fns->n; q++) if (fns->v[q] == p) top = 1;
+    if (top ? f->n : f->s) continue;
+    v_push (p->k, 0);
+    for (q = p->k->n - 1; q > at; q--) p->k->v[q] = p->k->v[q - 1];
+    p->k->v[at] = nd1 (s_of ("cfi def cfa offset"), ndc ("0"));
   }
   {
     struct vec *out = fns;

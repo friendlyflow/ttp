@@ -82,3 +82,23 @@ Disassembly of section .text:
 00000000000000bc <.Lnomatch>:
   bc:	d2800000 	movz	x0, #0x0
   c0:	d65f03c0 	ret
+
+/home/nico/.cache/ttp/build/tools/glibc/aarch64/i/string/memchr.ref.o:     file format elf64-littleaarch64
+
+Contents of the .eh_frame section:
+
+
+00000000 0000000000000010 00000000 CIE
+  Version:               1
+  Augmentation:          "zR"
+  Code alignment factor: 4
+  Data alignment factor: -8
+  Return address column: 30
+  Augmentation data:     1b
+  DW_CFA_def_cfa: r31 (sp) ofs 0
+
+00000014 0000000000000010 00000018 FDE cie=00000000 pc=0000000000000000..00000000000000c4
+  DW_CFA_nop
+  DW_CFA_nop
+  DW_CFA_nop
+

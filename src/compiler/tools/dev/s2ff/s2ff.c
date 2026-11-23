@@ -264,6 +264,39 @@ static struct nd *leaf (struct str *o)
 static struct nd *LO (struct str *o) { return leaf (o); }
 static struct nd *LC (char *o) { return leaf (s_of (o)); }
 static struct nd *LN (long v) { return nd_new (s_num (v)); }
+
+/* a CFI directive (.cfi_D) as its cfi word, as gen/s2ff.pl's cfi: the
+   registers by name (or DWARF number), the numbers worked out; startproc,
+   endproc and label none (0) */
+static struct nd *cfi_word (struct str *d, struct vec *o)
+{
+  static char *regs[] = { "def_cfa", "11", "def_cfa_register", "1", "offset", "10", "rel_offset", "10", "restore", "1",
+    "register", "11", "undefined", "1", "same_value", "1", "def_cfa_offset", "0", "adjust_cfa_offset", "0",
+    "remember_state", "", "restore_state", "", "signal_frame", "", 0 };
+  struct str *w;
+  struct nd *x;
+  char *k = 0;
+  long i;
+  if (m (d, "^(startproc|endproc|label)$")) return 0;
+  w = s_of ("cfi ");
+  for (i = 0; i < d->n; i++) { char c[2] = { d->p[i] == '_' ? ' ' : (char) d->p[i], 0 }; s_cat (w, c); }
+  x = nd_new (w);
+  if (s_is (d, "escape")) { for (i = 0; i < o->n; i++) nd_add (x, LN (num (o->v[i]))); return x; }
+  for (i = 0; regs[i]; i += 2) if (s_is (d, regs[i])) k = regs[i + 1];
+  if (!k) { struct str *e = s_of ("a CFI directive with no cfi word: .cfi_"); s_app (e, d); fail_s (e); }
+  if (o->n != slen (k)) {
+    struct str *e = s_of (".cfi_");
+    s_app (e, d); s_cat (e, " takes "); s_app (e, s_num (slen (k))); s_cat (e, " operands: ");
+    for (i = 0; i < o->n; i++) { if (i) s_cat (e, " "); s_app (e, o->v[i]); }
+    fail_s (e);
+  }
+  for (i = 0; i < o->n; i++) {
+    struct str *v = o->v[i];
+    if (k[i] == '1') { if (v->n && v->p[0] == '%') v = s_sub (v, 1, v->n); nd_add (x, leaf (v)); }
+    else nd_add (x, LN (num (v)));
+  }
+  return x;
+}
 static struct nd *ins0 (struct str *op) { return nd_new (op); }
 static struct nd *ins1 (struct str *op, struct nd *a) { return nd1 (op, a); }
 static struct nd *ins2 (struct str *op, struct nd *a, struct nd *b) { return nd2 (op, a, b); }
@@ -391,6 +424,15 @@ static struct nd *canon (struct made *mm)
 /* ---- the source */
 static struct vec *fns;
 static struct nd *fn, *block;
+/* a procedure (.cfi_startproc ... .cfi_endproc) that starts at an entry
+   block with no word of its own there, or one with no word at all, gets
+   cfi def cfa offset / 0 where it starts (its first label, word or
+   instruction), as gen/s2ff.pl's $proc; one with .cfi_return_column none */
+static struct vec *pr_into;
+static long pr_at, pr_n;
+static int pr_on, pr_skip, pr_top, pr_s;
+static void v_insert (struct vec *a, long at, void *x) { long i; v_push (a, x); for (i = a->n - 1; i > at; i--) a->v[i] = a->v[i - 1]; a->v[at] = x; }
+static void proc_at (struct vec *k) { if (pr_on && !pr_into) { pr_into = k; pr_at = k->n; pr_top = k == fn->k; } }
 static long n_at, pos, ends;
 static struct hash *tls, *got, *numeric, *dlabel, *datadef;
 static struct str *label;
@@ -599,15 +641,18 @@ static void rv_main (void)
           x = s_dup (name); s_cat (x, ":");
           block = nd_new (x);
           nd_add (fn, block);
+          proc_at (block->k);
         } else if (fn && !ends) {
           block = fn_head (name, file, lineno);
           nd_add (fn, block);
+          proc_at (block->k);
         } else {
           finish ();
           fn = fn_head (name, file, lineno);
           v_push (fns, fn);
           block = 0;
           ends = 0;
+          proc_at (fn->k);
         }
       }
       if (st->n == 0) continue;
@@ -622,6 +667,30 @@ static void rv_main (void)
             mm = take ();
             nd_add (into_of (), mm->bytes == 2 ? ndc ("c.nop") : ins3 (S ("addi"), LN (0), LC ("zero"), LC ("zero")));
             ends = 0;
+          }
+          continue;
+        }
+        /* GNU's CFI as the ff's cfi words, between the instructions where it stands */
+        if (m (op, "^\\.cfi_(\\w+)$")) {
+          struct str *d = g (1);
+          struct nd *w;
+          if (s_is (d, "startproc")) { pr_on = 1; pr_into = 0; pr_n = 0; pr_skip = 0; pr_s = 0; pr_top = 0; continue; }
+          if (s_is (d, "endproc")) {
+            if (pr_on && !pr_skip && pr_into && (pr_top ? !pr_n : !pr_s)) v_insert (pr_into, pr_at, nd1 (S ("cfi def cfa offset"), LN (0)));
+            pr_on = 0;
+            continue;
+          }
+          if (s_is (d, "return_column")) { if (pr_on && pr_n) fail_c (".cfi_return_column after cfi words"); if (pr_on) pr_skip = 1; continue; }
+          if (pr_on && pr_skip) continue;
+          w = cfi_word (d, split_ops (rest));
+          if (w) {
+            struct vec *c;
+            if (!fn) fail2 ("a CFI directive outside a function: ", st);
+            c = into_of ()->k;
+            proc_at (c);
+            v_push (c, w);
+            if (pr_on) pr_n++;
+            if (pr_on && c == pr_into && c->n - 1 == pr_at) pr_s = 1;
           }
           continue;
         }
@@ -645,6 +714,7 @@ static void rv_main (void)
         } else o->v[i] = ssub (x, "@plt$", "", "");
       }
       into = into_of ();
+      proc_at (into->k);
       if (op_is (op, "li")) {
         long v = num (O (o, 1)), count = v >= -2048 && v < 2048 ? 1 : (v & 0xfff) == 0 ? 1 : 2;
         if (!(v >= -2147483648LL && v < 2147483648LL)) { struct str *x = S ("li of "); s_app (x, s_num (v)); s_cat (x, ", wider than 32 bits"); fail_s (x); }

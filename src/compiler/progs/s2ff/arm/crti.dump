@@ -43,3 +43,5 @@ Disassembly of section .fini:
 
 00000000 <_fini>:
    0:	e92d4008 	push	{r3, lr}
+
+There are no unwind sections in this file.

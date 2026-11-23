@@ -134,7 +134,8 @@ patch:
 # (units-ready, its milestones of LINKED_x86_64 as aarch64's, then the
 # generic program's; its asm check; libgcc's tree's licenses and asm check,
 # as each target's) and arm's (units-ready, LINKED_arm's
-# milestones, its asm check), and on each the stdbit program's check and textcount's check and round trip. Each step
+# milestones, its asm check), each asm check with the frames' (asmcfi-check,
+# libgcc-asmcfi-check), and on each the stdbit program's check and textcount's check and round trip. Each step
 # prints PASS or FAIL and its time as it ends, its output in
 # CHECKLOG/<step>.log, and at the end all of them in order; make fails if
 # one did. Each heavy command takes a slot of its own
@@ -235,7 +236,7 @@ pc-generic-riscv64: pc-units-riscv64
 # libgcc in ff (src/libgcc): its tree's licenses (its functions are the
 # milestones gccrt's and unwind's, their round trip gccrt's)
 pc-libgcc-riscv64: pc-units-riscv64
-	$(call pc_step,libgcc-riscv64,$(call PC_GLIBC) libgcc-licenses libgcc-asm-check)
+	$(call pc_step,libgcc-riscv64,$(call PC_GLIBC) libgcc-licenses libgcc-asmcfi-check)
 # the C parser in ff (T3a) on every unit and milestone program's .i
 pc-cparse-riscv64: pc-compiler-check $(PC_MS:%=pc-%-check)
 	$(call pc_step,cparse-riscv64,$(call PC_GLIBC) cparse-check)
@@ -262,9 +263,9 @@ pc-$(1)-roundtrip-aarch64: pc-$(1)-aarch64
 endef
 $(foreach m,$(PC_A64),$(eval $(call pc_a64,$(m))))
 pc-libgcc-aarch64: pc-units-aarch64
-	$(call pc_step,libgcc-aarch64,$(call PC_GLIBC,aarch64) libgcc-licenses libgcc-asm-check)
+	$(call pc_step,libgcc-aarch64,$(call PC_GLIBC,aarch64) libgcc-licenses libgcc-asmcfi-check)
 pc-asm-aarch64: pc-units-aarch64
-	$(call pc_step,asm-aarch64,$(call PC_GLIBC,aarch64) asm-check)
+	$(call pc_step,asm-aarch64,$(call PC_GLIBC,aarch64) asmcfi-check)
 pc-generic-aarch64: pc-units-aarch64
 	$(call pc_step,generic-aarch64,$(call PC_GLIBC,aarch64) generic-check generic-roundtrip)
 pc-units-x86_64: pc-bootstrap pc-tools pc-gbuild
@@ -279,9 +280,9 @@ $(foreach m,$(PC_X64),$(eval $(call pc_x64,$(m))))
 pc-generic-x86_64: pc-units-x86_64
 	$(call pc_step,generic-x86_64,$(call PC_GLIBC,x86_64) generic-check generic-roundtrip)
 pc-asm-x86_64: pc-bootstrap pc-tools pc-gbuild
-	$(call pc_step,asm-x86_64,$(call PC_GLIBC,x86_64) asm-check)
+	$(call pc_step,asm-x86_64,$(call PC_GLIBC,x86_64) asmcfi-check)
 pc-libgcc-x86_64: pc-units-x86_64
-	$(call pc_step,libgcc-x86_64,$(call PC_GLIBC,x86_64) libgcc-licenses libgcc-asm-check)
+	$(call pc_step,libgcc-x86_64,$(call PC_GLIBC,x86_64) libgcc-licenses libgcc-asmcfi-check)
 # arm: its milestones of LINKED_arm, as x86_64's, and its asm check (no
 # generic program: progs/generic.c takes a long for 64 bits)
 pc-units-arm: pc-bootstrap pc-tools pc-gbuild
@@ -294,9 +295,9 @@ pc-$(1)-roundtrip-arm: pc-$(1)-arm
 endef
 $(foreach m,$(PC_ARM),$(eval $(call pc_arm,$(m))))
 pc-libgcc-arm: pc-units-arm
-	$(call pc_step,libgcc-arm,$(call PC_GLIBC,arm) libgcc-licenses libgcc-asm-check)
+	$(call pc_step,libgcc-arm,$(call PC_GLIBC,arm) libgcc-licenses libgcc-asmcfi-check)
 pc-asm-arm: pc-bootstrap pc-tools pc-gbuild
-	$(call pc_step,asm-arm,$(call PC_GLIBC,arm) asm-check)
+	$(call pc_step,asm-arm,$(call PC_GLIBC,arm) asmcfi-check)
 # -O (ttpc's peephole): each target's milestones built with -O, after
 # their checks (src/glibc's check-O)
 pc-check-O-riscv64: $(PC_MS:%=pc-%-check)
