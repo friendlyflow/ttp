@@ -116,6 +116,8 @@
             # builds): perf samples it, gdb looks inside
             perf
             gdb
+            # the dev C of the tools under valgrind (src/compiler's tools-dev-valgrind)
+            valgrind
             lazygit # git in the terminal
           ]) ++ (glibcTools pkgs) ++ pkgs.lib.optional (isX86Linux pkgs) (raddbg pkgs);
 

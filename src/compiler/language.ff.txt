@@ -367,7 +367,8 @@ ff, the language ttpc compiles
           4
     text
       a leaf under char / * pointer (a declaration's item, or the value after a cast to it) is text, whatever it reads as (a number, a name): its bytes and a NUL are put in the program, the value is their address; (cast / char / * pointer), then 3, is "3"
-      a leaf item of a char array (a global's) is its text, whatever it names (a global, a function, a local): a number is a char's value
+      a leaf item of a char array is its text, whatever it names (a global, a function, a local): a number is a char's value; in a local, its bytes from the element where it stands, then its NUL where there is room
+      in a local's item under char / * pointer (or i8 / * pointer), a leaf that names a local is that local: an array's address (C's decay), a pointer's value; every other leaf is text
       a text holds at most 255 bytes, a node's text: text leaves in a row are one text, as C's "ab" "cd"
       an array char n takes text leaves in a row for its items, as C's char s[16] = "hi", the rest 0 (in a global)
       char with text is an error (a local was silently a char / * pointer, a global a char array)
@@ -598,6 +599,7 @@ ff, the language ttpc compiles
       calling a variable indexes or selects: xs i an element, p x a field (also through an address), r b x both in a row
       a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is : / (cast / point / * pointer) / p / . / y, (*p).len is : / p / * pointer / . / len
       a : that holds one expression, a unit with a prefix or a postfix (cast / long, x; p / * pointer), is that expression, as C's parentheses: no scope of its own; so is one as the operand of a cast or of * pointer
+      a : that holds a declaration is a statement expression (GNU C's ({ ... })), never braces; its value, one of its locals of a type in memory, is copied out before its room goes
       the address of a function is a function pointer, called where it stands, its result of the type its definition says: C's ((void) x, &f) (a, b) is : / (: / (cast / void) / x / f / & address) / . / a / b
       x / & address is C's &x, p / * pointer C's *p, read, or written on the left of =
     registers
