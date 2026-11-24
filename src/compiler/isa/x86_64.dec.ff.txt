@@ -225823,6 +225823,9 @@ x86_64 forms:
     fucomip.st1
       fucomip %st(1), %st
       params
+    fcomip.st1
+      fcomip %st(1), %st
+      params
     fstp.st0
       fstp %st(0)
       params
@@ -226231,6 +226234,7 @@ x86_64 forms:
         disp:disp
         base:base
         rd:l
+  127:
     cvttss2sil.x
       {disp32} {rex} cvttss2si <disp>(<base>,<index>,<scale>), <rd>
       params
@@ -226239,7 +226243,6 @@ x86_64 forms:
         index:index
         scale:scale
         rd:l
-  127:
     cvttss2siq
       {rex} cvttss2si <rs>, <rd>
       params

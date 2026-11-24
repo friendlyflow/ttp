@@ -64,6 +64,9 @@ use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use FF qw(node write_txt);
+use S2ffRes;
+# a name as csema writes it (S2ffRes.pm: name' where it reserves the name)
+sub rn { S2ffRes::name('arm', $_[0]) }
 use armdec;
 
 my $page = 'glibc asm';
@@ -223,25 +226,25 @@ $secend{$_} = undef for @then ? @secs : ();
 my (@aliases, @data, $file, $line, %dlab, %got, %weakref, %srcalias);
 (my $base = $src) =~ s{.*/}{}; $base =~ s/\.s$//;
 # the offset of a symbol's word in the file's GOT
-sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("$base got"), node("$base got $t"), node('a0')) }
+sub gotoff { my ($t) = @_; $got{$t} = node('word', node(rn($t))); node('sub', node("$base got"), node("$base got $t"), node('a0')) }
 {
     open my $s, '<', $src or die "s2ff-arm: cannot open $src: $!\n";
     my ($other, $blk, %numeric, @stack);
     my $close = sub {
         return unless $blk;
         if (@{ $blk->{nodes} }) {
-            push @data, node("$blk->{name}:", node('asm'), node('comment', node('glibc-2.44 ' . ($blk->{file} // $src))), @{ $blk->{nodes} });
+            push @data, node(rn($blk->{name}) . ":", node('asm'), node('comment', node('glibc-2.44 ' . ($blk->{file} // $src))), @{ $blk->{nodes} });
             for (@{ $blk->{labels} }) {
                 my ($l, $o) = @$_;
                 next if $l eq $blk->{name};
                 if ($l =~ /^\.L/) { $dlab{$l} = [$blk->{name}, $o] }
-                elsif ($o == 0) { push @aliases, node("$l:", node('alias'), node($blk->{name})) }
+                elsif ($o == 0) { push @aliases, node(rn($l) . ":", node('alias'), node(rn($blk->{name}))) }
                 else { fail "the label $l at $o in a block of data" }
             }
         } elsif (@{ $blk->{labels} }) {
             # labels with no bytes after them (start.S's __data_start, ...): only aliases
             my ($first) = map { $_->[0] } grep { $_->[0] !~ /^\.L/ } @{ $blk->{labels} };
-            push @aliases, map { node("$_->[0]:", node('alias'), node($first)) } grep { $_->[0] !~ /^\.L/ && $_->[0] ne $first } @{ $blk->{labels} } if $first;
+            push @aliases, map { node(rn($_->[0]) . ":", node('alias'), node(rn($first))) } grep { $_->[0] !~ /^\.L/ && $_->[0] ne $first } @{ $blk->{labels} } if $first;
         }
         undef $blk;
     };
@@ -270,7 +273,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
             if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) {
                 my ($x, $y) = ($1, $2);
                 if ($y =~ /^-?\d+$/) { warn "s2ff-arm: $where: $x = $y, a constant, left out\n"; next }
-                push @aliases, node("$x:", node('alias'), node($y));
+                push @aliases, node(rn($x) . ":", node('alias'), node(rn($y)));
                 $srcalias{$x} = 1;
                 next;
             }
@@ -302,7 +305,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
                 my @ls = grep { $_->[0] !~ /^\.L/ } @{ $blk->{labels} };
                 if (@ls) {
                     my ($first, @more) = map { $_->[0] } @ls;
-                    push @aliases, map { node("$_:", node('alias'), node($first)) } @more if !%zeroed || $zeroed{$first};
+                    push @aliases, map { node(rn($_) . ":", node('alias'), node(rn($first))) } @more if !%zeroed || $zeroed{$first};
                     warn "s2ff-arm: $where: $first is zero, c2ff --zero $first makes it\n";
                     undef $blk;
                     next;
@@ -406,7 +409,7 @@ for my $s (@secs) {
     $zeros->($secend{$s}) if defined $secend{$s};
     # the blocks: a label at each entry and each address a branch goes to
     my ($first) = @{ $names{ $lines[0]{addr} } };
-    my $fn = node("$first:", node('asm'), node('comment', node('glibc-2.44 ' . ($file // $src) . " ($s)")));
+    my $fn = node(rn($first) . ":", node('asm'), node('comment', node('glibc-2.44 ' . ($file // $src) . " ($s)")));
     my $into = $fn;
     my $lastat = $lines[0]{addr};
     for my $o (@out) {
@@ -416,14 +419,14 @@ for my $s (@secs) {
             # (the other names there, ieee754-df.S's __aeabi_dadd at
             # __adddf3: entries of their own, empty, before it: ttpc knows an
             # alias of a function, not of an entry in one)
-            push @{ $fn->{children} }, map { node("$_:", node('asm')) } @{ $names{$at} }[1 .. $#{ $names{$at} }] if $names{$at};
+            push @{ $fn->{children} }, map { node(rn($_) . ":", node('asm')) } @{ $names{$at} }[1 .. $#{ $names{$at} }] if $names{$at};
             $into = node("$l:", $names{$at} ? (node('asm')) : ());
             push @{ $fn->{children} }, $into;
         }
         $lastat = $at;
         push @{ $into->{children} }, $n;
     }
-    push @aliases, map { node("$_:", node('alias'), node($first)) } @{ $names{ $lines[0]{addr} } }[1 .. $#{ $names{ $lines[0]{addr} } }];
+    push @aliases, map { node(rn($_) . ":", node('alias'), node(rn($first))) } @{ $names{ $lines[0]{addr} } }[1 .. $#{ $names{ $lines[0]{addr} } }];
     push @{ $fn->{children} }, map { node(".Lweak $_:", node('udf', node(0))) } sort keys %weakb;
     %weakb = ();
     push @fns, $fn;
@@ -438,7 +441,7 @@ sub symbol {
     $t =~ s/\^([A-Z@\[\\\]^_])/chr(ord($1) - 64)/ge;
     if ($dlab{$t}) {
         my ($b, $o) = @{ $dlab{$t} };
-        return $o ? node('addi', node($o), node($b), node('a0')) : node($b);
+        return $o ? node('addi', node($o), node(rn($b)), node('a0')) : node(rn($b));
     }
     if ($t =~ /^\.L/) {
         # (objdump shows a control character of a name as ^B in a relocation)
@@ -447,7 +450,8 @@ sub symbol {
         fail "the local symbol $t is in $symsec{$n}, not yet" unless $sec{ $symsec{$n} };
         return node($lname->($sym{$n}));
     }
-    node($t);
+    # (a symbol: as csema names it, name' where it reserves the name)
+    node(rn($t));
 }
 # the word of data a relocation fills in
 sub data_reloc {
@@ -460,7 +464,7 @@ sub data_reloc {
     if ($type eq 'R_ARM_GOTPC') { return node('word', $plus->(node('sub', node('pc'), node("$base got"), node('a0')))) }
     if ($type eq 'R_ARM_GOT32') { return node('word', $plus->(gotoff($t))) }
     if ($type eq 'R_ARM_GOTOFF32') { return node('word', $plus->(node('sub', node("$base got"), symbol($t, $lname), node('a0')))) }
-    if ($type eq 'R_ARM_TLS_IE32') { $got{"$t tp"} = node('word', node('tprel', node($t))); return node('word', $plus->(node('sub', node('pc'), node("$base got $t tp"), node('a0')))) }
+    if ($type eq 'R_ARM_TLS_IE32') { $got{"$t tp"} = node('word', node('tprel', node(rn($t)))); return node('word', $plus->(node('sub', node('pc'), node("$base got $t tp"), node('a0')))) }
     fail "a word with $type";
 }
 
@@ -473,11 +477,11 @@ if (defined $facts) { open my $h, ">", $facts or die "s2ff: cannot write $facts:
 # left undefined a C global, its address (0), as asm names no C weak
 if (%got) {
     push @data, node("$base got:", node('asm'), node('align', node(4)));
-    push @data, map { $weakref{$_} && $undef{$_} ? node("$base got $_:", node('void'), node('* pointer'), node($_), node('& address'))
+    push @data, map { $weakref{$_} && $undef{$_} ? node("$base got $_:", node('void'), node('* pointer'), node(rn($_)), node('& address'))
         : node("$base got $_:", node('asm'), $got{$_}) } sort keys %got;
 }
 # a weak name the file declares and does not define (crti's __gmon_start__)
-push @fns, map { node("$_:", node('weak'), node('function'), node('void')) } sort grep { $undef{$_} } keys %weakref;
+push @fns, map { node(rn($_) . ":", node('weak'), node('function'), node('void')) } sort grep { $undef{$_} } keys %weakref;
 # each alias once, and none of a name that is a function or a label of the
 # code already (strchr.S's index = strchr, where index, first by name, is
 # the function: strchr its alias, not both ways round)

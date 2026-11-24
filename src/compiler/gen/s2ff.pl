@@ -50,6 +50,9 @@ use FindBin;
 use lib $FindBin::Bin;
 use FF qw(node write_txt);
 use Header qw(license_nodes unit_label);
+use S2ffRes;
+# a name as csema writes it (S2ffRes.pm: name' where it reserves the name)
+sub rn { S2ffRes::name('riscv64', $_[0]) }
 
 my $page = 'glibc asm';
 my @files;
@@ -84,7 +87,7 @@ sub fail { die "s2ff: $where: @_\n" }
 sub facts { return unless defined $facts; open my $h, ">", $facts or die "s2ff: cannot write $facts: $!\n"; print $h map { "$_\n" } @_ }
 # the name of gcc's local data label as an asm function's (.LC0 of x.s: LC0 x)
 my %dlabel;
-sub dname { my ($l) = @_; $dlabel{$l} ? ($l =~ s/^\.//r) . ' ' . ($src =~ s{.*/}{}r =~ s/\.\w+$//r) : $l }
+sub dname { my ($l) = @_; $dlabel{$l} ? ($l =~ s/^\.//r) . ' ' . ($src =~ s{.*/}{}r =~ s/\.\w+$//r) : $l ne '' && $l !~ /^\./ ? rn($l) : $l }
 
 # x86_64 (the dump says so) has its own arm, s2ffx86.pm: one AT&T
 # instruction is many encodings there, and it takes the form whose bytes
@@ -314,8 +317,8 @@ sub take {
 # offset from tp) and its pic la's (addresses)
 sub finish {
     return unless $fn && (%tls || %got);
-    push @{ $fn->{children} }, node('align', node(8)), (map { node(".Ltls $_:", node('dword', node('tprel', node($_)))) } sort keys %tls),
-        map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got;
+    push @{ $fn->{children} }, node('align', node(8)), (map { node(".Ltls $_:", node('dword', node('tprel', node(rn($_))))) } sort keys %tls),
+        map { node(".Lgot $_:", node('dword', node(rn($_)))) } sort keys %got;
     %tls = %got = ();
 }
 # gcc's read-only data labels, known before the code that names them
@@ -363,7 +366,7 @@ while (my $l = <$s>) {
             if ($st =~ /^([.\w]+):$/) { push @pending, $1; undef $dobj; next }
             # (an alias of a label with no bytes, start.S's data_start, has
             # nothing to name)
-            if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)) if $datadef{$2}; next }
+            if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node(rn($1) . ":", node('alias'), node(rn($2))) if $datadef{$2}; next }
             next if $other =~ /^\.(pre)?init_array$|^\.fini_array$/ && $st =~ /^\.dc\.a\s+[.\w]+$/;
             # gcc's read-only data: an object per label, of its bytes
             if ($other =~ /^\.s?rodata/) {
@@ -386,7 +389,7 @@ while (my $l = <$s>) {
             if ($st =~ /^\.(zero|space)\s+(\d+)$/ && @pending) {
                 my ($first, @more) = @pending;
                 $datadef{$_} = 1 for @pending;
-                push @fns, map { node("$_:", node('alias'), node($first)) } @more;
+                push @fns, map { node(rn($_) . ":", node('alias'), node(rn($first))) } @more;
                 warn "s2ff: $where: $first is zero, c2ff --zero $first makes it\n";
                 @pending = ();
                 next;
@@ -408,12 +411,12 @@ while (my $l = <$s>) {
                 # a label, so that they are placed together; asm first (which
                 # in asm is nothing) makes it an entry C may call: ttpc places
                 # the function that holds it
-                $block = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
+                $block = node(rn($name) . ":", node('asm'), node('comment', node("$label $file:$line")));
                 push @{$fn->{children}}, $block;
                 proc_at($block->{children});
             } else {
                 finish();
-                $fn = node("$name:", node('asm'), node('comment', node("$label $file:$line")));
+                $fn = node(rn($name) . ":", node('asm'), node('comment', node("$label $file:$line")));
                 push @fns, $fn;
                 undef $block;
                 $ends = 0;      # none of its own yet: it runs on into what follows
@@ -422,7 +425,7 @@ while (my $l = <$s>) {
         }
         next if $st eq '';
         # X = Y (a weak_alias), or .set X, Y (vfork's __vfork): another name for Y
-        if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)); next }
+        if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) { push @fns, node(rn($1) . ":", node('alias'), node(rn($2))); next }
         my ($op, $rest) = $st =~ /^(\S+)\s*(.*)$/;
         if ($op =~ /^\./) {
             # the nops GNU as put in to align a function, kept where it runs
@@ -516,7 +519,7 @@ while (my $l = <$s>) {
         }
         my $m = take();
         # a call or a tail is two instructions, the macro's
-        if ($op =~ /^(call|tail)$/) { take(); push @$into, node($op, node($o[-1])); next }
+        if ($op =~ /^(call|tail)$/) { take(); push @$into, node($op, node(dname($o[-1]))); next }
         my $i;
         if ($m->{bytes} == 2) {
             my ($target) = grep { /^\.L/ } @o;

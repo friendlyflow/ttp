@@ -50,14 +50,14 @@ TTPC1_FF := ttpc1.ff
 TTPC2_SRC := ttpc2.defs.ff ttpc2.ff
 TTPC3_SRC := ttpc3.defs.ff ttpc3.ff
 PROGS := exit42 hello wide
-CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup ccleanupeh chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups ctextname clocalabel cgfold cjitdata cenum ctsize cflexinit cenumtext cselfinit cpacked cgsizeof cenumchar cselfcl caggitem cstartparam casmaddr ctlslate cvalgroup cvecops casmlayers clocalpath ctextdef casmalignpage cfltinc cweakref clocalpathlib cvalpath caddrname casmdata ccasescope cldend ccharitem cdecay clocaltext cvalrec cmanytexts cbraces
+CPROGS := cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll ctasm ctmix celse casm casm2 casmfail cstring cscope cint cint64 ci128 cf16 cfixed cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit casmfn cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon casmentry cloopsp cvamem cnullary clayers clayerslib clazy ctlstp cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit clicense calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection creach cldneg ctextitem cemptyitem cctor cnarrowret cdatasep cenumtype ctlitstmt calignattr ccleanup ccleanupeh chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups ctextname clocalabel cgfold cjitdata cenum ctsize cflexinit cenumtext cselfinit cpacked cgsizeof cenumchar cselfcl caggitem cstartparam casmaddr ctlslate cvalgroup cvecops casmlayers clocalpath ctextdef casmalignpage cfltinc cweakref clocalpathlib cvalpath caddrname casmdata ccasescope cldend ccharitem cdecay clocaltext cvalrec cmanytexts cbraces cctlong ccomplexlit cvoidcast cgtextoff cfcmpsig ccharsole cstructlazy cparamscope
 SHARED := shared.ff
 # the forms GNU as picks for x86_64, for its asm alone (gen/mkgnuff.pl)
 X86GNU := x86_64gnu.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(wildcard tools/*.ff) $(wildcard isa/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff progs/cgfoldfail.ff \
 	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
-	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff progs/clocalabeldefs.ff progs/cenumdefs.ff progs/cenumtextdefs.ff language.ff progs/cselfclfail.ff progs/clitplacefail.ff progs/casmaddrdefs.ff progs/ctlslatedefs.ff progs/csfnamefail.ff progs/casmlayersdefs.ff progs/clocalpathdefs.ff progs/ctextdefdefs.ff progs/cfltincdefs.ff progs/cweakrefdefs.ff progs/clocalpathlibdefs.ff progs/casmdatadefs.ff progs/caddrnamefail1.ff progs/caddrnamefail2.ff progs/caddrnamefail3.ff progs/caddrnamefail4.ff
+	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff progs/clocalabeldefs.ff progs/cenumdefs.ff progs/cenumtextdefs.ff progs/cselfclfail.ff progs/clitplacefail.ff progs/csfnamefail.ff language.ff progs/casmaddrdefs.ff progs/ctlslatedefs.ff progs/casmlayersdefs.ff progs/clocalpathdefs.ff progs/ctextdefdefs.ff progs/cfltincdefs.ff progs/cweakrefdefs.ff progs/clocalpathlibdefs.ff progs/casmdatadefs.ff progs/caddrnamefail1.ff progs/caddrnamefail2.ff progs/caddrnamefail3.ff progs/caddrnamefail4.ff progs/ccxopfail.ff progs/cfcmpsigdefs.ff
 P := $(BUILD)/progs
 
 # The trees as the frozen ttpcs read them (stage0 and the seeds of the
@@ -144,7 +144,17 @@ LICENSED := $(TREES) $(COPIES) $(X86GNU) shared.ff.txt $(wildcard macros/*.ff.tx
 
 # Every program, after its 120-byte ELF header, must be byte-identical to
 # its GNU twin.
-check: roundtrip decls $(PROGS:%=$(P)/%.elf) $(PROGS:%=$(P)/%.twin.bin)
+# The language's text: language.ff.txt makes language.ff (gen/fftext.pl)
+# and comes back from it unchanged, and no line of it is over a node's 255
+# bytes: a longer one goes on in children (the long-comment rule, never
+# shortened), so a long line fails here rather than breaking language.ff.
+langcheck:
+	@LC_ALL=C awk '{ t = $$0; sub(/^ +/, "", t); if (length(t) > 255) { print "langcheck: language.ff.txt:" NR ": " length(t) " bytes (max 255): go on in children"; bad = 1 } } END { exit bad }' language.ff.txt
+	@perl gen/fftext.pl ff language.ff.txt | cmp -s - language.ff || { echo "langcheck: language.ff is not language.ff.txt's (perl gen/fftext.pl ff language.ff.txt > language.ff)"; exit 1; }
+	@perl gen/fftext.pl txt language.ff | cmp -s - language.ff.txt || { echo "langcheck: language.ff as text is not language.ff.txt"; exit 1; }
+	@echo "langcheck: language.ff.txt and language.ff the same, no line over 255 bytes"
+.PHONY: langcheck
+check: roundtrip decls langcheck $(PROGS:%=$(P)/%.elf) $(PROGS:%=$(P)/%.twin.bin)
 	@for p in $(PROGS); do \
 	    tail -c +121 $(P)/$$p.elf | cmp - $(P)/$$p.twin.bin || exit 1; \
 	    echo "check: $$p: ttpc and GNU as agree"; \
@@ -291,7 +301,7 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # more arguments than parameters (on every target), cnoitems, a struct
 # type as a value with no items after it (on every target), cselfclfail, a union global from a compound literal of its type, clitplacefail, a literal's struct place of a number (on every target), csfnamefail, a runtime function ttpc calls (__addtf3) that nothing defines, named (on every target),
 # caddrnamefail1-4, name / & address of a name defined nowhere (a local's item, after =, after a cast) and a goto to a
-# label the function lacks: unknown name (on every target). (cvecx64, x86_64's vector
+# label the function lacks: unknown name, ccxopfail, a complex operand of + (on every target). (cvecx64, x86_64's vector
 # test, no longer stops riscv64's ttpc: vectors are every target's, vecops.pl, cvecops.)
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
@@ -335,6 +345,9 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	for t in riscv64 $(TARGETS); do for p in 1:nosuch1 2:nosuch2 3:nosuch3 4:nolabel4; do \
 	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/caddrnamefail$${p%:*}.ff $(P)/caddrnamefail$${p%:*}.$$t.celf 2> $(P)/caddrnamefail$${p%:*}.$$t.err || exit 1; \
 	    grep -q "unknown name: $${p#*:}$$" $(P)/caddrnamefail$${p%:*}.$$t.err || exit 1; done; done
+	for t in riscv64 $(TARGETS); do \
+	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/ccxopfail.ff $(P)/ccxopfail.$$t.celf 2> $(P)/ccxopfail.$$t.err || exit 1; \
+	    grep -q "a complex value as an operand: C's complex + - \* / == != are csema's" $(P)/ccxopfail.$$t.err || exit 1; done
 	@echo "ctime: compile time runs and stays out of the program"
 
 # Build files. progs/cws.ff is one, run as ttpc progs/cws.ff with nothing
@@ -403,7 +416,7 @@ cws: $(P)/chello.celf $(P)/x86_64/chello.celf $(P)/cexit.celf $(P)/cfib.celf
 # its .expect says (progs/<name>.<target>.expect where the target differs),
 # compile time still running on riscv64.
 TARGETS := x86_64 aarch64 arm
-CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup ccleanupeh chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups ctextname clocalabel cgfold cjitdata cenum ctsize cflexinit cenumtext cselfinit cpacked cgsizeof cenumchar cselfcl caggitem cstartparam casmaddr ctlslate cvalgroup cvecops casmlayers clocalpath ctextdef casmalignpage cfltinc cweakref clocalpathlib cvalpath caddrname casmdata ccasescope cldend ccharitem cdecay clocaltext cvalrec cmanytexts cbraces
+CPORTABLE := cfixed cexit cfib cloop chello cexpr cstruct cnow cct cct2 cunroll celse casm casm2 cstring cscope cint cint64 cflow ctypes cself cunion cbits cinit ccalls cvarargs ctls clib cifunc cifuncaddr cifunclib ccomplit cincdec cparen cdot cgroups ccast caddrc cweak cifvalue cvapack cfloat cfloats cfloats32 cgnu cpath ccond clabels calloca caddrlit canon cloopsp cvamem cnullary clayers clayerslib clazy cpair cpaircall cpairmul cchar cfnaddr cvlasize carraylit calign cldlit cgroupdot casmalign ccomplex cbodylayers cgeneric csection cglobcast creach cldneg ctextitem cemptyitem cctor cnarrowret cenumtype ctlitstmt calignattr ccleanup ccleanupeh chexinf cvaptr cmanyargs cdeclcolon ccomplexq cdebug cline cldalign cglobroom cwidestmt clocalign32 cenumbits cempty cvlaglob cctemit canonlit cunionld carrayop clocaltype clibscope cprogroups ctextname clocalabel cgfold cjitdata cenum ctsize cflexinit cenumtext cselfinit cpacked cgsizeof cenumchar cselfcl caggitem cstartparam casmaddr ctlslate cvalgroup cvecops casmlayers clocalpath ctextdef casmalignpage cfltinc cweakref clocalpathlib cvalpath caddrname casmdata ccasescope cldend ccharitem cdecay clocaltext cvalrec cmanytexts cbraces ccomplexlit cvoidcast cgtextoff cfcmpsig ccharsole cstructlazy cparamscope
 # cgnu has bitfields of u64, which arm does not have yet (a pair as the unit).
 CSKIP_arm := cgnu
 # x86_64's long double is the x87's (gen/patches/x87.pl): the tests of
@@ -429,6 +442,8 @@ $(P)/cweakref.celf $(TARGETS:%=$(P)/%/cweakref.celf): $(CWEAKREF)
 # (progs/mkasmdata.pl writes them all)
 CASMDATA := progs/casmdatadefs.ff $(wildcard progs/casmdatalib/*.ff)
 $(P)/casmdata.celf $(TARGETS:%=$(P)/%/casmdata.celf): $(CASMDATA)
+# cfcmpsig includes progs/cfcmpsigdefs.ff (progs/mkfcmpsig.pl writes both)
+$(P)/cfcmpsig.celf $(TARGETS:%=$(P)/%/cfcmpsig.celf): progs/cfcmpsigdefs.ff
 
 CROSS_x86_64 := x86_64-elf-
 TASFLAGS_x86_64 := -mindex-reg

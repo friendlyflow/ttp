@@ -2710,8 +2710,8 @@ builtins:
       !=
       0
   comment
-    __builtin_isunordered on floats: either is a NaN.
-    __builtin_isless and the other comparisons of C's math.h: the compare, but never on a NaN (they raise no invalid exception for one, as C's < does).
+    __builtin_isunordered on floats: either is a NaN, as C's quiet comparison: x != x, which raises Invalid for a signaling NaN alone (the other operand too), as gcc's does; isgreater ... and glibc's fmaximum_num test it so.
+    __builtin_isless and the other comparisons of C's math.h: the compare, but never on a NaN (they raise no invalid exception for a quiet one, as C's < does; for a signaling one isunordered's).
   __builtin_isunordered float:
     int
     x:
@@ -2720,26 +2720,14 @@ builtins:
       float
     return
       :
-        __builtin_fpclassify float
-          0
-          1
-          4
-          3
-          2
-          x
-        ==
-        0
-      ||
+        x
+        !=
+        x
+      |
       :
-        __builtin_fpclassify float
-          0
-          1
-          4
-          3
-          2
-          y
-        ==
-        0
+        y
+        !=
+        y
   comment
     __builtin_isless on floats: x < y, 0 for a NaN.
   __builtin_isless float:
@@ -2813,7 +2801,7 @@ builtins:
       >=
       y
   comment
-    __builtin_isunordered on doubles: either is a NaN.
+    __builtin_isunordered on doubles: either is a NaN, as C's quiet comparison: x != x, which raises Invalid for a signaling NaN alone (the other operand too), as gcc's does; isgreater ... and glibc's fmaximum_num test it so.
   __builtin_isunordered double:
     int
     x:
@@ -2822,26 +2810,14 @@ builtins:
       double
     return
       :
-        __builtin_fpclassify double
-          0
-          1
-          4
-          3
-          2
-          x
-        ==
-        0
-      ||
+        x
+        !=
+        x
+      |
       :
-        __builtin_fpclassify double
-          0
-          1
-          4
-          3
-          2
-          y
-        ==
-        0
+        y
+        !=
+        y
   comment
     __builtin_isless on doubles: x < y, 0 for a NaN.
   __builtin_isless double:
@@ -2915,7 +2891,7 @@ builtins:
       >=
       y
   comment
-    __builtin_isunordered on long doubles: either is a NaN.
+    __builtin_isunordered on long doubles: either is a NaN, as C's quiet comparison: x != x, which raises Invalid for a signaling NaN alone (the other operand too), as gcc's does; isgreater ... and glibc's fmaximum_num test it so.
   __builtin_isunordered long double:
     int
     x:
@@ -2924,26 +2900,14 @@ builtins:
       long double
     return
       :
-        __builtin_fpclassify long double
-          0
-          1
-          4
-          3
-          2
-          x
-        ==
-        0
-      ||
+        x
+        !=
+        x
+      |
       :
-        __builtin_fpclassify long double
-          0
-          1
-          4
-          3
-          2
-          y
-        ==
-        0
+        y
+        !=
+        y
   comment
     __builtin_isless on long doubles: x < y, 0 for a NaN.
   __builtin_isless long double:
@@ -3016,6 +2980,108 @@ builtins:
       x
       >=
       y
+  comment
+    __builtin_islessgreater on floats: x < y or x > y, 0 for a NaN (no invalid for a quiet one).
+  __builtin_islessgreater float:
+    int
+    x:
+      float
+    y:
+      float
+    if
+      __builtin_isunordered float
+        x
+        y
+      return
+        0
+    return
+      x
+      !=
+      y
+  comment
+    __builtin_isnormal on floats: fpclassify's FP_NORMAL.
+  __builtin_isnormal float:
+    int
+    x:
+      float
+    return
+      __builtin_fpclassify float
+        0
+        1
+        4
+        3
+        2
+        x
+      ==
+      4
+  comment
+    __builtin_islessgreater on doubles: x < y or x > y, 0 for a NaN (no invalid for a quiet one).
+  __builtin_islessgreater double:
+    int
+    x:
+      double
+    y:
+      double
+    if
+      __builtin_isunordered double
+        x
+        y
+      return
+        0
+    return
+      x
+      !=
+      y
+  comment
+    __builtin_isnormal on doubles: fpclassify's FP_NORMAL.
+  __builtin_isnormal double:
+    int
+    x:
+      double
+    return
+      __builtin_fpclassify double
+        0
+        1
+        4
+        3
+        2
+        x
+      ==
+      4
+  comment
+    __builtin_islessgreater on long doubles: x < y or x > y, 0 for a NaN (no invalid for a quiet one).
+  __builtin_islessgreater long double:
+    int
+    x:
+      long double
+    y:
+      long double
+    if
+      __builtin_isunordered long double
+        x
+        y
+      return
+        0
+    return
+      x
+      !=
+      y
+  comment
+    __builtin_isnormal on long doubles: fpclassify's FP_NORMAL.
+  __builtin_isnormal long double:
+    int
+    x:
+      long double
+    return
+      __builtin_fpclassify long double
+        0
+        1
+        4
+        3
+        2
+        x
+      ==
+      4
   comment
     gcc's __builtin_fabsf: x without its sign, from its bits.
   __builtin_fabsf:

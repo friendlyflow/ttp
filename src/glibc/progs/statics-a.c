@@ -13,6 +13,12 @@
 
 int bump_b (void);
 int table_b (int i);
+int scale_b (int x);
+
+/* (a function static by its prototype, defined with no storage class: still
+   this unit's, C11 6.2.2; the other unit has one of the name too, as glibc's
+   e_lgamma_r.c and e_gamma_r.c each have as_logd) */
+static int scale (int);
 
 static int counter;
 static const int table[3] = { 10, 20, 30 };
@@ -24,6 +30,12 @@ bump_a (void)
 }
 
 int
+scale (int x)
+{
+  return x + 1;
+}
+
+int
 main (void)
 {
   int a1 = bump_a ();
@@ -31,5 +43,6 @@ main (void)
   int b1 = bump_b ();
   int a3 = bump_a ();
   printf ("a %d %d %d, b %d, tables %d %d\n", a1, a2, a3, b1, table[1], table_b (2));
+  printf ("scale %d %d\n", scale (5), scale_b (5));
   return 0;
 }

@@ -450,7 +450,7 @@ static struct str *aother;
 static struct nd *gotoff (struct str *t)
 {
   struct str *x = s_dup (abase), *y = s_dup (abase);
-  h_setp (agot, t, nd1 (s_of ("word"), nd_new (t)));
+  h_setp (agot, t, nd1 (s_of ("word"), nd_new (resname (t))));
   s_cat (x, " got"); s_cat (y, " got "); s_app (y, t);
   return nd_add (nd2 (s_of ("sub"), nd_new (x), nd_new (y)), ndc ("a0"));
 }
@@ -467,7 +467,7 @@ static void ablk_close (void)
   long i;
   if (!blk) return;
   if (blk->nodes->n) {
-    struct str *nm = s_dup (blk->has_name ? blk->name : s_of ("")), *cm = s_of ("glibc-2.44 ");
+    struct str *nm = s_dup (blk->has_name ? resname (blk->name) : s_of ("")), *cm = s_of ("glibc-2.44 ");
     struct nd *x;
     s_cat (nm, ":");
     s_app (cm, blk->file ? blk->file : src_s);
@@ -648,7 +648,7 @@ static struct nd *asymbol (struct str *t)
   if (h_pv (dlab_b, t)) {
     struct str *b = h_pv (dlab_b, t);
     long o = h_iv (dlab_o, t);
-    return o ? nd_add (nd2 (s_of ("addi"), LN (o), nd_new (b)), ndc ("a0")) : nd_new (b);
+    return o ? nd_add (nd2 (s_of ("addi"), LN (o), nd_new (resname (b))), ndc ("a0")) : nd_new (resname (b));
   }
   if (m (t, "^\\.L")) {
     struct str *n = ctl_names (t), *sc;
@@ -657,7 +657,8 @@ static struct nd *asymbol (struct str *t)
     if (!h_pv (asecs, sc)) { struct str *x = s_of ("the local symbol "); s_app (x, t); s_cat (x, " is in "); s_app (x, sc); s_cat (x, ", not yet"); arm_fail (x); }
     return nd_new (alname (h_iv (asym, n)));
   }
-  return nd_new (t);
+  /* (a symbol: as csema names it, name' where it reserves the name) */
+  return nd_new (resname (t));
 }
 static struct nd *aplus (long a, struct nd *n) { return a ? nd_add (nd2 (s_of ("addi"), LN (a), n), ndc ("a0")) : n; }
 static struct nd *pcsub (struct nd *n) { return nd_add (nd2 (s_of ("sub"), ndc ("pc"), n), ndc ("a0")); }
@@ -675,7 +676,7 @@ static struct nd *data_reloc (struct areloc *r, long v)
   if (s_is (ty, "R_ARM_TLS_IE32")) {
     struct str *k = s_dup (t), *w = s_dup (gb);
     s_cat (k, " tp");
-    h_setp (agot, k, nd1 (s_of ("word"), nd1 (s_of ("tprel"), nd_new (t))));
+    h_setp (agot, k, nd1 (s_of ("word"), nd1 (s_of ("tprel"), nd_new (resname (t)))));
     s_cat (w, " "); s_app (w, t); s_cat (w, " tp");
     return nd1 (s_of ("word"), aplus (a, pcsub (nd_new (w))));
   }
@@ -859,7 +860,7 @@ static void arm_main (struct vec *files)
     first = ((struct vec *) h_pv (anames, s_num (l0)))->v[0];
     cm = s_of ("glibc-2.44 "); s_app (cm, afile ? afile : src_s); s_cat (cm, " ("); s_app (cm, s); s_cat (cm, ")");
     {
-      struct str *x = s_dup (first);
+      struct str *x = s_dup (resname (first));
       s_cat (x, ":");
       fnx = nd2 (x, ndc ("asm"), nd1 (s_of ("comment"), nd_new (cm)));
     }
@@ -872,7 +873,7 @@ static void arm_main (struct vec *files)
       if (at != lastat && (nv || h_has (tgtset, s_num (at)))) {
         struct str *lb = s_dup (alname (at));
         long k;
-        if (nv) for (k = 1; k < nv->n; k++) { struct str *x = s_dup (nv->v[k]); s_cat (x, ":"); nd_add (fnx, nd1 (x, ndc ("asm"))); }
+        if (nv) for (k = 1; k < nv->n; k++) { struct str *x = s_dup (resname (nv->v[k])); s_cat (x, ":"); nd_add (fnx, nd1 (x, ndc ("asm"))); }
         s_cat (lb, ":");
         into = nd_new (lb);
         if (nv) nd_add (into, ndc ("asm"));
@@ -908,13 +909,13 @@ static void arm_main (struct vec *files)
     for (i = 0; i < k->n; i++) {
       struct str *n = k->v[i], *y = s_dup (abase);
       s_cat (y, " got "); s_app (y, n); s_cat (y, ":");
-      if (h_iv (aweakref, n) && h_iv (aundef, n)) v_push (adata, nd_add (nd_add (nd_add (nd1 (y, ndc ("void")), nd_new (w_ptr ())), nd_new (n)), nd_new (w_addr ())));
+      if (h_iv (aweakref, n) && h_iv (aundef, n)) v_push (adata, nd_add (nd_add (nd_add (nd1 (y, ndc ("void")), nd_new (w_ptr ())), nd_new (resname (n))), nd_new (w_addr ())));
       else v_push (adata, nd2 (y, ndc ("asm"), h_pv (agot, n)));
     }
   }
   {
     struct vec *k = h_sorted (aweakref);
-    for (i = 0; i < k->n; i++) if (h_iv (aundef, k->v[i])) { struct str *x = s_dup (k->v[i]); s_cat (x, ":"); v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void"))); }
+    for (i = 0; i < k->n; i++) if (h_iv (aundef, k->v[i])) { struct str *x = s_dup (resname (k->v[i])); s_cat (x, ":"); v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void"))); }
   }
   {
     struct hash *seen = h_new (), *entry = h_new ();

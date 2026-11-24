@@ -9,9 +9,8 @@
 # [success=merge] systemd) died in asprintf. gaddrin finds such a node in a
 # : (its value the node to name, 0 if none). And the address + offset of
 # gval (: / an address / + or - / n, the address a name or cast / type and
-# a value), whose n had to be a number, takes a : of a number too (ctrun,
-# as L12; LGO, LGO4), so __nss_shlib_revision is the
-# text's address + 16 (then L22, as for a number). msg_gfold in
+# a value), whose n had to be a number, takes a : of a number too: that is
+# gtextoff.pl's in ports now, which this runs after. msg_gfold in
 # ttpc.defs.ff (msg_gfold_len): run on
 # ttpc.ff after localabel.pl, then with T=ttpc.defs.ff. Test: cgfold
 # (cgfoldfail stops).
@@ -139,57 +138,16 @@ GA9:
     leave5
 ", 6) . "      gval:\n", 'gval');
 
-my $third = "          ld\n            NODE_children\n            s5\n            t2\n          ld\n            16\n            t2\n            t3\n          lbu\n            NODE_children_len\n            t3\n            t0\n          bnez\n            L12\n            t0\n";
-my $num = "          call\n            parse_num\n          beqz\n            L12\n            a1\n          mv\n            a0\n            s6\n";
-my $load = "          ld\n            NODE_content\n            t3\n            a0\n          lbu\n            NODE_content_len\n            t3\n            a1\n";
+# (the address + offset with a : of a number, LGO and LGO4 here once, is
+# ports' gtextoff.pl's now, 2026-11-24: gval works the offset out; what is
+# left is the stop at L12, the compile-time run's last way)
 edit(\$t, 'gval',
-    $third . $load . $num, ($third =~ s/            L12\n            t0\n$/            LGO\n            t0\n/r) . $load . $num,
-    "          ld\n            24\n            t2\n            t3\n          lbu\n            NODE_children_len\n            t3\n            t0\n          bnez\n            L12\n            t0\n",
-    "          ld\n            24\n            t2\n            t3\n          lbu\n            NODE_children_len\n            t3\n            t0\n          bnez\n            LGO4\n            t0\n",
     "        L12:\n", "        L12:\n" . asm(10, "
     mv s5 a0
     call gaddrin
     bnez LGB a0
 "),
     "        L21:\n", asm(8, "
-LGO:
-    ld NODE_children s5 t2
-    ld 16 t2 a0
-    call gaddrin
-    bnez LGB a0
-    ld NODE_children s5 t2
-    ld 16 t2 a0
-    la ctconst a1
-    call ctrun
-    mv a0 s6
-    ld NODE_children s5 t2
-    ld 8 t2 a0
-    call opof
-    li OP_add t0
-    beq rel:L22 t0 a0
-    li OP_sub t0
-    bne rel:L12 t0 a0
-    neg s6 s6
-    j L22
-LGO4:
-    ld NODE_children s5 t2
-    ld 24 t2 a0
-    call gaddrin
-    bnez LGB a0
-    ld NODE_children s5 t2
-    ld 24 t2 a0
-    la ctconst a1
-    call ctrun
-    mv a0 s6
-    ld NODE_children s5 t2
-    ld 16 t2 a0
-    call opof
-    li OP_add t0
-    beq rel:L22 t0 a0
-    li OP_sub t0
-    bne rel:L12 t0 a0
-    neg s6 s6
-    j L22
 LGB:
     la msg_gfold a1
     li msg_gfold_len a2
