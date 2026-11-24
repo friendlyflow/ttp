@@ -278,6 +278,8 @@ ff, the language ttpc compiles
       then both operands get one type: of 8 bytes if either is (unsigned if an 8-byte one is), else unsigned int if either is one, else int
       a shift has the type of its left operand; a comparison and ! are int
       a value is as wide as its type: an int or an unsigned int wraps at 32 bits; what is stored, the value of = += -= ++ --, and a conversion are cut to their type
+      = and a local's value (a declaration's, an item of a local struct or array) convert to the left side's type as a cast does, an integer from a floating value toward zero (the user's choice A)
+      the compound ones (-= += *= /= ...) work in the usual arithmetic conversion's type and convert the result back the same way: C's long long y; y -= 0.5 is y = (long long) (y - 0.5)
       a number is an int if it fits one, else a long; one in hex is the first that fits of int, unsigned int, long, unsigned long
       example
         u:
