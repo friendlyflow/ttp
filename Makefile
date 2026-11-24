@@ -366,12 +366,15 @@ $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_cpp,$(t))))
 # (the asm steps' keys)
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval pck-asm-$(t): ; $$(call pc_kstep,asm-$(t),$(filter-out riscv64,$(t)),asm-check)))
 # Each cached step's key, HIT or MISS: what its inputs are made of is made
-# (a page, a part's .dump), nothing else runs. Then compiler-check's
-# tools-check-<t> (src/compiler's pc-keys, which builds the tools)
+# (a page, a part's .dump), nothing else runs: each command of src/glibc
+# in a slot of its own, as in ports-check (not all in one: csema -l's cap is
+# above a slot's 8 GB). Then compiler-check's tools-check-<t>
+# (src/compiler's pc-keys, which builds the tools: in a slot, as
+# compiler-check). Run it after make bootstrap and the tools step.
 pc-keys:
 	@mkdir -p $(CHECKLOG)-keys
 	@$(MAKE) --no-print-directory -k $(PC_CACHED:%=pck-%)
-	@$(MAKE) -C src/compiler --no-print-directory BUILD=$(BUILD)/compiler PCKEYDIR=$(CHECKLOG)-keys pc-keys
+	@$(PC_SLOT_CC) $(MAKE) -C src/compiler --no-print-directory BUILD=$(BUILD)/compiler PCKEYDIR=$(CHECKLOG)-keys pc-keys
 .PHONY: pc-keys $(PC_CACHED:%=pck-%)
 
 # The cross-check of the frozen c2ff.pl (src/glibc's c2ff-crosscheck) on the
