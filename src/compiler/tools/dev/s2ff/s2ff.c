@@ -912,6 +912,7 @@ int s2ff_main (int argc, char **argv)
     break;
   }
   if (is_opt (tgt_name, "aarch64")) {
+    aplt = h_new ();
     while (i < argc) {
       char *a = argv[i++];
       if (is_opt (a, "--page")) { page = i < argc ? s_of (argv[i++]) : s_of (""); continue; }
@@ -922,6 +923,7 @@ int s2ff_main (int argc, char **argv)
       if (is_opt (a, "--facts")) { facts_f = i < argc ? s_of (argv[i++]) : 0; continue; }
       if (is_opt (a, "--then")) { long k; then_v = v_new (); for (k = 0; k < 2 && i < argc; k++) v_push (then_v, s_of (argv[i++])); continue; }
       if (is_opt (a, "--zero")) { h_set (zeroed, i < argc ? s_of (argv[i++]) : s_of (""), 1); continue; }
+      if (is_opt (a, "--plt")) { h_set (aplt, i < argc ? s_of (argv[i++]) : s_of (""), 1); continue; }
       v_push (files, s_of (a));
     }
     a64_main (files);
@@ -944,6 +946,7 @@ int s2ff_main (int argc, char **argv)
     return 0;
   }
   if (!is_opt (tgt_name, "riscv64") && !is_opt (tgt_name, "x86_64")) { e_str ("s2ff: --target riscv64, x86_64, aarch64 or arm\n"); cp_exit (2); }
+  aplt = h_new ();
   while (i < argc) {
     char *a = argv[i++];
     if (is_opt (a, "--page")) { page = i < argc ? s_of (argv[i++]) : s_of (""); continue; }
@@ -953,6 +956,7 @@ int s2ff_main (int argc, char **argv)
     if (is_opt (a, "--align")) { o_align = 1; continue; }
     if (is_opt (a, "--facts")) { facts_f = i < argc ? s_of (argv[i++]) : 0; continue; }
     if (is_opt (a, "--zero")) { if (i < argc) v_push (zero_v, s_of (argv[i++])); continue; }
+    if (is_opt (a, "--plt")) { h_set (aplt, i < argc ? s_of (argv[i++]) : s_of (""), 1); continue; }
     if (is_opt (a, "--then")) { long k; then_v = v_new (); for (k = 0; k < 2 && i < argc; k++) v_push (then_v, s_of (argv[i++])); continue; }
     v_push (files, s_of (a));
   }

@@ -60,7 +60,7 @@ my $facts;                # --facts FILE: the ff, and in FILE what --size
                           # and --align print ("size N", "align N"), so a
                           # check reads the .s once, not three times
 my $header;
-my (@zero, @then);               # --header file.s ...: the license of each one's file (Header.pm)
+my (@zero, @then, @plt);               # --header file.s ...: the license of each one's file (Header.pm)
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -71,6 +71,8 @@ while (@ARGV) {
     if ($a eq '--facts') { $facts = shift @ARGV; next }
     # (x86_64: c2ff --zero's objects; crtn's .s and dump, the end of crti's)
     if ($a eq '--zero') { push @zero, shift @ARGV; next }
+    # (x86_64: a call or jump to name, an ifunc, goes through __ff_plt_name)
+    if ($a eq '--plt') { push @plt, shift @ARGV; next }
     if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     push @files, $a;
 }
@@ -89,7 +91,7 @@ sub dname { my ($l) = @_; $dlabel{$l} ? ($l =~ s/^\.//r) . ' ' . ($src =~ s{.*/}
 # are GNU's (--align: the alignment of the first function)
 if (do { open my $h, "<", $dump or die "s2ff: cannot open $dump: $!\n"; local $/; <$h> } =~ /file format elf64-x86-64/) {
     require s2ffx86;
-    my %opt = (zero => \@zero, @then ? (then => \@then) : ());
+    my %opt = (zero => \@zero, plt => \@plt, @then ? (then => \@then) : ());
     if ($size || $alignopt) { print s2ffx86::run($size ? "size" : "align", $src, $dump, %opt), "\n"; exit }
     my $out = s2ffx86::run("ff", $src, $dump, %opt);
     facts("size $s2ffx86::facts{size}", "align $s2ffx86::facts{align}");

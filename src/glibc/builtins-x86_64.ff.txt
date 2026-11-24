@@ -1031,3 +1031,40 @@
     32767
     return
       r
+  comment
+    __ff_plt_<name>: what an asm call or jump to an ifunc reaches (s2ff --plt: __memcpy_chk's jmp memcpy and its kin), as ld's stub in gcc's static program: the function in its slot, whose label the ifunc's name is; r11, which no call passes anything in.
+  __ff_plt_memcpy:
+    asm
+    movq.p
+      memcpy
+      r11
+    jmp.r
+      r11
+  __ff_plt_memmove:
+    asm
+    movq.p
+      memmove
+      r11
+    jmp.r
+      r11
+  __ff_plt___mempcpy:
+    asm
+    movq.p
+      __mempcpy
+      r11
+    jmp.r
+      r11
+  __ff_plt_memset:
+    asm
+    movq.p
+      memset
+      r11
+    jmp.r
+      r11
+  __ff_plt_wmemset:
+    asm
+    movq.p
+      wmemset
+      r11
+    jmp.r
+      r11

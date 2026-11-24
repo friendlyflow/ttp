@@ -537,7 +537,7 @@ my (@made, $n, $pos, @fns, $fn, $block, $other, @pending, %datadef, $ends, %got,
 # --zero's names; .weak names; the words each function carries, placed at
 # the end (after crtn's part of it, --then); the weak names' GOT words, C
 # globals
-my (%MADE, %CODE, $code, %zeroed, %weak, @carried, %weakgot);
+my (%MADE, %CODE, $code, %zeroed, %weak, @carried, %weakgot, %plt);
 # the size and first alignment of the last run's .text (s2ff --facts)
 our %facts;
 my (%rodata, $roblob, %ro, @carry, %roset);    # read-only data: a label's bytes, the labels a function names
@@ -679,6 +679,7 @@ sub run {
     (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset, %weak, @carried, %weakgot, @runs, %runof, %runidx, %into) = ();
     undef $roalign;
     %zeroed = map { $_ => 1 } @{ $opt{zero} // [] };
+    %plt = map { $_ => 1 } @{ $opt{plt} // [] };
     undef $roblob;
     code_to('.text');
     walk_lines(read_src($src), 0);
@@ -1126,6 +1127,9 @@ sub walk_stmt {
         # function itself, as ld resolves it; libgcc's morestack.S)
         elsif ($op =~ /^(?:call|jmp)q?$/ && /^([.\w]+)\@PLT$/i) { $_ = $1 }
         elsif (/\@/) { fail "a relocation with no ff form: $_" }
+        # (--plt: a call or jump to an ifunc goes through __ff_plt_name, as
+        # ld's stub in gcc's static program: __memcpy_chk's jmp memcpy)
+        $_ = "__ff_plt_$_" if $op =~ /^(?:call|jmp)q?$/ && /^[.\w]+$/ && $plt{$_};
         $ro{$1} = 1 if /^([.\w]+)(?:[-+]\d+)?\(%rip\)$/ || /^\$(\.L\w+)$/;
         # (and libmvec's: a broadcast's {1toN} after it, an offset written
         # around the symbol, 64 +sym(%rip), ((0)+sym)(%rip))

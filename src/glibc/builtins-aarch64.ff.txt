@@ -1188,3 +1188,18 @@
         :
           x
           & address
+  comment
+    __ff_plt___strlen: what an asm branch to the ifunc __strlen reaches (s2ff --plt, rawmemchr.S's bl __strlen), as ld's stub in gcc's static program: the function in its slot, whose label __strlen is; x16 and x17, the intra-procedure-call registers.
+  __ff_plt___strlen:
+    asm
+    adrp
+      pagerel
+        __strlen
+      x16
+    ldr
+      lo12
+        __strlen
+      x16
+      x17
+    br
+      x17

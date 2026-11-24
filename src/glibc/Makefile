@@ -730,6 +730,33 @@ S2FFDEPS := $(S2FFT) ../compiler/shared.ff $(S2FFTAB_$(GTARGET))
 # (the asm's branches to an ifunc through a stub, builtins-arm.ff.txt's __ff_plt_<name>:
 # memmove.S's bls memcpy, as ld's stub in gcc's; every forward memmove hung)
 PLT_arm := memcpy
+# (aarch64: rawmemchr.S's bl __strlen, an ifunc's slot in ff; grep -z stopped on SIGILL there)
+PLT_aarch64 := __strlen
+# (x86_64: __memcpy_chk's jmp memcpy and its kin, multiarch/memcpy_chk.S; not
+# libmvec's calls of its own ifuncs, sin and _ZGVbN2v_sin..., which only gcc's
+# vectorized code reaches)
+PLT_x86_64 := memcpy memmove __mempcpy memset wmemset
+# (and not yet: libmvec's asm calls of ifuncs, its scalar fallbacks (sin, cosf ...)
+# and its narrower variants (_ZGVbN2v_sin ...), 121 names: each the same fault,
+# reached only by gcc's vectorized code; through --plt and a stub each when wanted)
+PLTLATER_x86_64 := atan cos cosf cosh exp2f expf expm1 log2 log2f logf powf sin sincos sincosf sinf \
+	sinh tan _ZGVbN2v_acos _ZGVbN2v_acosh _ZGVbN2v_asin _ZGVbN2v_asinh _ZGVbN2v_atan _ZGVbN2v_atanh \
+	_ZGVbN2v_cbrt _ZGVbN2v_cos _ZGVbN2v_cosh _ZGVbN2v_erf _ZGVbN2v_erfc _ZGVbN2v_exp _ZGVbN2v_exp10 \
+	_ZGVbN2v_exp2 _ZGVbN2v_expm1 _ZGVbN2v_log _ZGVbN2v_log10 _ZGVbN2v_log1p _ZGVbN2v_log2 _ZGVbN2v_sin \
+	_ZGVbN2v_sinh _ZGVbN2v_tan _ZGVbN2v_tanh _ZGVbN2vv_atan2 _ZGVbN2vv_hypot _ZGVbN2vv_pow \
+	_ZGVbN4v_acosf _ZGVbN4v_acoshf _ZGVbN4v_asinf _ZGVbN4v_asinhf _ZGVbN4v_atanf _ZGVbN4v_atanhf \
+	_ZGVbN4v_cbrtf _ZGVbN4v_cosf _ZGVbN4v_coshf _ZGVbN4v_erfcf _ZGVbN4v_erff _ZGVbN4v_exp10f \
+	_ZGVbN4v_exp2f _ZGVbN4v_expf _ZGVbN4v_expm1f _ZGVbN4v_log10f _ZGVbN4v_log1pf _ZGVbN4v_log2f \
+	_ZGVbN4v_logf _ZGVbN4v_sinf _ZGVbN4v_sinhf _ZGVbN4v_tanf _ZGVbN4v_tanhf _ZGVbN4vv_atan2f \
+	_ZGVbN4vv_hypotf _ZGVbN4vv_powf _ZGVdN4v_acos _ZGVdN4v_acosh _ZGVdN4v_asin _ZGVdN4v_asinh \
+	_ZGVdN4v_atan _ZGVdN4v_atanh _ZGVdN4v_cbrt _ZGVdN4v_cos _ZGVdN4v_cosh _ZGVdN4v_erf _ZGVdN4v_erfc \
+	_ZGVdN4v_exp _ZGVdN4v_exp10 _ZGVdN4v_exp2 _ZGVdN4v_expm1 _ZGVdN4v_log _ZGVdN4v_log10 _ZGVdN4v_log1p \
+	_ZGVdN4v_log2 _ZGVdN4v_sin _ZGVdN4v_sinh _ZGVdN4v_tan _ZGVdN4v_tanh _ZGVdN4vv_atan2 _ZGVdN4vv_hypot \
+	_ZGVdN4vv_pow _ZGVdN8v_acosf _ZGVdN8v_acoshf _ZGVdN8v_asinf _ZGVdN8v_asinhf _ZGVdN8v_atanf \
+	_ZGVdN8v_atanhf _ZGVdN8v_cbrtf _ZGVdN8v_cosf _ZGVdN8v_coshf _ZGVdN8v_erfcf _ZGVdN8v_erff \
+	_ZGVdN8v_exp10f _ZGVdN8v_exp2f _ZGVdN8v_expf _ZGVdN8v_expm1f _ZGVdN8v_log10f _ZGVdN8v_log1pf \
+	_ZGVdN8v_log2f _ZGVdN8v_logf _ZGVdN8v_sinf _ZGVdN8v_sinhf _ZGVdN8v_tanf _ZGVdN8v_tanhf \
+	_ZGVdN8vv_atan2f _ZGVdN8vv_hypotf _ZGVdN8vv_powf
 # the file s2ff reads: riscv64 the .s itself, aarch64 the .Ls (not .L.s:
 # that would be an .s of an object x.L, which mki.pl would be asked for)
 SSRC_riscv64 := .s
@@ -2143,6 +2170,8 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   fnptr   a global pointer to a function, only called through, in another unit
 #   charenum  a local char set from an enum constant (gnulib's modechange.c)
 #   chararr a local byte array whose items are variables (grep's eolbytes)
+#   ifuncjmp  glibc's asm branches to an ifunc (aarch64 rawmemchr's bl __strlen,
+#           x86_64 __memcpy_chk's jmp memcpy): through a stub (s2ff --plt)
 #   gencond _Generic of a conditional (gnulib's string.h strchr, time_rz.c)
 #   gsizeof a global whose first item is a sizeof (gnulib's quotearg.c slotvec0)
 #   structlit  a struct set from a compound literal (gnulib's parse-datetime.y)
@@ -2176,8 +2205,8 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
 #           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check fltinc-check weakref-check chararr-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf fltinc weakref
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check fltinc-check weakref-check chararr-check ifuncjmp-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr ifuncjmp gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf fltinc weakref
 ALLPROG_ptrsum := ptrsum
 ALLPROG_fltinc := fltinc
 ALLPROG_weakref := weakref
@@ -2198,6 +2227,7 @@ ALLPROG_structlit := structlit
 ALLPROG_gencond := gencond
 ALLPROG_charenum := charenum
 ALLPROG_chararr := chararr
+ALLPROG_ifuncjmp := ifuncjmp
 ALLPROG_fnptr := fnptr-a fnptr-b
 ALLPROG_typefn := typefn
 ALLPROG_extown := extown-a extown-b

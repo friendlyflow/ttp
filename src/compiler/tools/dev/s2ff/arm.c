@@ -443,7 +443,7 @@ static void arm_readdump (struct str *dump, int then)
 struct ablk { struct str *name; long off; struct vec *nodes, *labels; struct str *file; int has_name; };
 struct alab { struct str *l; long o; };
 static struct vec *aaliases, *adata;
-static struct hash *dlab_b, *dlab_o, *agot, *aweakref, *srcalias, *aplt;
+static struct hash *dlab_b, *dlab_o, *agot, *aweakref, *srcalias;
 static struct str *abase, *afile;
 static struct ablk *blk;
 static struct str *aother;

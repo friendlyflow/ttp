@@ -1347,6 +1347,8 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
       ops->v[i] = x = y;
     } else if (m (op, "^(?:call|jmp)q?$") && mf (x, "^([.\\w]+)@PLT$", "i")) ops->v[i] = x = g (1);
     else if (m (x, "@")) fail2 ("a relocation with no ff form: ", x);
+    /* (--plt: a call or jump to an ifunc goes through __ff_plt_name, as s2ffx86.pm) */
+    if (m (op, "^(?:call|jmp)q?$") && m (x, "^[.\\w]+$") && h_iv (aplt, x)) { struct str *y = s_of ("__ff_plt_"); s_app (y, x); ops->v[i] = x = y; }
     if (m (x, "^([.\\w]+)(?:[-+]\\d+)?\\(%rip\\)$") || m (x, "^\\$(\\.L\\w+)$")) h_set (xro, g (1), 1);
     /* (and libmvec's: a broadcast's {1toN} after it, an offset written around the symbol, 64 +sym(%rip),
        ((0)+sym)(%rip)) */

@@ -380,7 +380,7 @@ static struct vec *a64_readdump (struct str *file, int symbols)
 }
 
 /* ---- the source */
-static struct hash *a_line, *a_alias, *rodata, *weakref, *zeroed;
+static struct hash *a_line, *a_alias, *rodata, *weakref, *zeroed, *aplt;
 static struct vec *a_data;
 static struct str *ffname (struct str *n)
 {
@@ -623,7 +623,13 @@ static void a64_emit (struct a64m *mm)
       long to;
       struct str *l;
       if (is_rel26 (rt) && h_iv (weakref, rs) && und (rs)) { struct str *x = s_of (".Lweak "); s_app (x, rs); h_set (weakb, rs, 1); nd_add (ins, nd1 (s_of ("rel"), nd_new (x))); continue; }
-      if (is_rel26 (rt)) { nd_add (ins, nd1 (s_of ("rel"), nd_new (rs))); continue; }
+      if (is_rel26 (rt)) {
+        struct str *lb = rs;
+        /* (--plt: a branch to an ifunc goes through __ff_plt_name, as s2ff-aarch64.pl) */
+        if (h_iv (aplt, rs)) { lb = s_of ("__ff_plt_"); s_app (lb, rs); }
+        nd_add (ins, nd1 (s_of ("rel"), nd_new (lb)));
+        continue;
+      }
       if (rt && s_is (rt, "R_AARCH64_ADR_PREL_PG_HI21")) { nd_add (ins, nd1 (s_of ("pagerel"), nd_new (rs))); continue; }
       if (rt && s_is (rt, "R_AARCH64_ADR_GOT_PAGE")) { struct str *x = s_of (".Lgot "); s_app (x, rs); h_set (a_got, rs, 1); nd_add (ins, nd1 (s_of ("pagerel"), nd_new (x))); continue; }
       if (rt) { struct str *x = s_of ("a relocation "); s_app (x, rt); s_cat (x, " in "); s_app (x, mm->op); fail_s (x); }
