@@ -294,6 +294,7 @@ ff, the language ttpc compiles
       a local in a function, a global at the top of the page
       a global's items are worked out while compiling:
         a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a sizeof or an alignof, a : of one expression
+        not a call of a function of the program (the user's rule: never of one defined after it; today of none): g: / long / : / f / 4 stops ttpc, naming g and f
       with the target's sizes: sizeof and alignof of a long, a pointer or a long double are the program's (4, 4 and 8 on arm), though compile time runs on the host;
         the arithmetic is the host's but a long's, the target's (4 bytes and 32 bits on arm): sizeof (long long) is 8 on every target
       no items: zero

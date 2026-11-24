@@ -57,7 +57,7 @@ X86GNU := x86_64gnu.ff
 WHOLE := $(TTPC1_FF) $(PROGS:%=progs/riscv64/%.ff)
 TREES := $(WHOLE) $(SHARED) ttpc.defs.ff $(TTPC_FF) $(TTPC2_SRC) $(TTPC3_SRC) $(filter-out $(WHOLE) progs/clazylib/never.ff,$(wildcard progs/*/*.ff)) $(wildcard tools/*.ff) $(wildcard isa/*.ff) $(CPROGS:%=progs/%.ff) progs/cnowfail.ff progs/creserved.ff progs/cmisplaced.ff \
 	progs/cws.ff progs/cinclude.ff progs/cwsnofile.ff progs/cwsplace.ff progs/cincludelate.ff \
-	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff progs/cenumdefs.ff progs/cenumtextdefs.ff progs/cselfclfail.ff progs/clitplacefail.ff progs/csfnamefail.ff language.ff progs/casmaddrdefs.ff progs/ctlslatedefs.ff progs/casmlayersdefs.ff progs/clocalpathdefs.ff progs/ctextdefdefs.ff progs/cfltincdefs.ff progs/cweakrefdefs.ff progs/clocalpathlibdefs.ff progs/casmdatadefs.ff progs/caddrnamefail1.ff progs/caddrnamefail2.ff progs/caddrnamefail3.ff progs/caddrnamefail4.ff progs/ccxopfail.ff progs/cfcmpsigdefs.ff
+	progs/clibdefs.ff progs/cpathdefs.ff progs/cifuncdefs.ff progs/casmfndefs.ff progs/casmaligndefs.ff progs/casmentrydefs.ff progs/cweakdefs.ff progs/clayerslibdefs.ff progs/cuntyped.ff progs/citems.ff progs/cchartext.ff progs/ctypeout.ff progs/cbelow.ff progs/cargfew.ff progs/cargmany.ff progs/cctemitdefs.ff progs/creachdefs.ff progs/ctextitemdefs.ff progs/cctordefs.ff progs/clocaltypedefs.ff progs/cnoitems.ff progs/clibscopea.ff progs/clibscopeb.ff progs/cprogroupsdefs.ff progs/cenumdefs.ff progs/cenumtextdefs.ff progs/cselfclfail.ff progs/clitplacefail.ff progs/csfnamefail.ff language.ff progs/casmaddrdefs.ff progs/ctlslatedefs.ff progs/casmlayersdefs.ff progs/clocalpathdefs.ff progs/ctextdefdefs.ff progs/cfltincdefs.ff progs/cweakrefdefs.ff progs/clocalpathlibdefs.ff progs/casmdatadefs.ff progs/caddrnamefail1.ff progs/caddrnamefail2.ff progs/caddrnamefail3.ff progs/caddrnamefail4.ff progs/ccxopfail.ff progs/cfcmpsigdefs.ff progs/cgitemcall1.ff progs/cgitemcall2.ff
 P := $(BUILD)/progs
 
 # The trees as the frozen ttpcs read them (stage0 and the seeds of the
@@ -300,7 +300,8 @@ ctest: $(CPROGS:%=$(P)/%.celf)
 # more arguments than parameters (on every target), cnoitems, a struct
 # type as a value with no items after it (on every target), cselfclfail, a union global from a compound literal of its type, clitplacefail, a literal's struct place of a number (on every target), csfnamefail, a runtime function ttpc calls (__addtf3) that nothing defines, named (on every target),
 # caddrnamefail1-4, name / & address of a name defined nowhere (a local's item, after =, after a cast) and a goto to a
-# label the function lacks: unknown name, ccxopfail, a complex operand of + (on every target). (cvecx64, x86_64's vector
+# label the function lacks: unknown name, ccxopfail, a complex operand of + (on every target). cgitemcall1-2, a global's item calling
+# a function of the program, defined before it and after it (on every target). (cvecx64, x86_64's vector
 # test, no longer stops riscv64's ttpc: vectors are every target's, vecops.pl, cvecops.)
 ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	grep -qx compiling $(P)/cnow.lst
@@ -345,6 +346,9 @@ ctime: $(P)/cnow.celf $(P)/cct.celf $(P)/ctasm.celf $(P)/ctmix.celf
 	for t in riscv64 $(TARGETS); do \
 	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/ccxopfail.ff $(P)/ccxopfail.$$t.celf 2> $(P)/ccxopfail.$$t.err || exit 1; \
 	    grep -q "a complex value as an operand: C's complex + - \* / == != are csema's" $(P)/ccxopfail.$$t.err || exit 1; done
+	for t in riscv64 $(TARGETS); do for p in 1 2; do \
+	    ! $(QEMU) $(BOOT)/stage2 $(J) --target $$t $(SHARED) progs/cgitemcall$$p.ff $(P)/cgitemcall$$p.$$t.celf 2> $(P)/cgitemcall$$p.$$t.err || exit 1; \
+	    grep -q "a global's item may not call a function of the program at compile time: g calls f$$" $(P)/cgitemcall$$p.$$t.err || exit 1; done; done
 	@echo "ctime: compile time runs and stays out of the program"
 
 # Build files. progs/cws.ff is one, run as ttpc progs/cws.ff with nothing
