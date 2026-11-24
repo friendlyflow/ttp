@@ -5742,7 +5742,7 @@ rv64:
     bx
       r12
   comment
-    rv.jitcall rs: cacheflush (0xf0002) of 64 KiB from rs, then blx: the code of the C layer returns with bx lr, its value in r0 (V), sign-extended into a0.
+    rv.jitcall rs: cacheflush (0xf0002) of 64 KiB from rs, then blx: the code of the C layer returns with bx lr, its value in r0:r1 (a pair, jitpairs.pl), all of a0.
   rv.jitcall:
     rs
     ldr
@@ -5779,10 +5779,6 @@ rv64:
       r12
     blx
       r12
-    asri
-      31
-      r0
-      r1
     strd
       80
       r10
