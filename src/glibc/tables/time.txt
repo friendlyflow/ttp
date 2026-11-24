@@ -83,7 +83,7 @@ tests-ref time (x86_64): 39 tests, 36 equal, 3 differ, 0 not yet
   tst-tzname                 equal: exit 0 (PASS)
   tst-y2039                  equal: exit 0 (PASS)
 
-tests-ref time (aarch64): 39 tests, 35 equal, 4 differ, 0 not yet
+tests-ref time (aarch64): 39 tests, 36 equal, 3 differ, 0 not yet
   tst-adjtime                equal: exit 0 (PASS)
   tst-clock                  differ: ttpc's on max: other output
   tst-clock2                 equal: exit 0 (PASS)
@@ -95,7 +95,7 @@ tests-ref time (aarch64): 39 tests, 35 equal, 4 differ, 0 not yet
   tst-ctime                  equal: exit 0 (PASS)
   tst-difftime               equal: exit 0 (PASS)
   tst-ftime                  equal: exit 0 (PASS)
-  tst-ftime_l                differ: ttpc's on max: exit 1, gcc's 0
+  tst-ftime_l                equal: exit 0 (PASS) (tests3, 2026-11-24)
   tst-getdate                equal: exit 0 (PASS)
   tst-gettimeofday           equal: exit 0 (PASS)
   tst-gettimeofday-clobber   equal: exit 0 (PASS)
@@ -187,5 +187,5 @@ tests-ref time (arm): 59 tests, 54 equal, 5 differ, 0 not yet
 
 # reasons of what is not equal
 #   tst-clock, tst-clock-time64, tst-cpuclock1, tst-cpuclock1-time64: differ: the test prints PIDs and clock readings, other numbers each run; both pass
-#   tst-strftime3: differ: to look at (its weak-reach difference is gone since weakref.pl; another remains)
-#   tst-ftime_l (aarch64): differ: exit 1; to look at
+#   tst-strftime3: differ: the test reads unwritten w[] (undefined behaviour); gcc fails too: in the EUC-JP cases mbsrtowcs fails in both builds and the test prints 10 entries of its w[], gcc's stack the previous case's characters, ttpc's zeros; every other line is the same
+#   tst-ftime_l (aarch64): equal since tests3 (2026-11-24): csema wrote uselocale's block-scope extern _nl_current_LC_*_used (#pragma weak) as a strong reference, so its thread locals, weak and unreached, were 0 and uselocale stored to tp - __tls_start (aarch64: into __printf_buffer's code, SIGILL)
