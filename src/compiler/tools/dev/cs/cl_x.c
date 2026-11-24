@@ -966,9 +966,9 @@ static int cl_isf_word (char *s) { return cl_eq (s, "float") || cl_eq (s, "doubl
    with the arguments' own values converted to its parameters. */
 static struct cs_ex *cl_tgmath (struct cs_ex *n)
 {
-  struct cs_ex *f[6], *e, *arg1;
-  struct cs_ty *ft[6], *fc;
-  long na = n->nk - 1, i = 1, nf = 0, nv, r = 0;
+  struct cs_ex *f[32], *e, *arg1;
+  struct cs_ty *ft[32], *fc;
+  long na = n->nk - 1, i = 1, nf = 0, nv, r = 0, cx0 = -1;
   int cxa = 0;
   while (i <= na) {
     struct cs_ex *s = cl_strip (cl_k (n, i));
@@ -984,12 +984,13 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
       while (spelt[q]) { if (spelt[q] == '(') paren = 1; q++; }
       if (!paren) break;
     }
-    if (nf < 6) { f[nf] = cl_k (n, i); ft[nf] = cs_canon (s->t); }
+    if (nf < 32) { f[nf] = cl_k (n, i); ft[nf] = cs_canon (s->t); }
     nf++;
     i++;
   }
   nv = na - nf;
   if (nf < 3 || nv <= 0) cl_fail ("__builtin_tgmath without functions and arguments", 0);
+  if (nf > 32) cl_fail ("__builtin_tgmath of more than 32 functions", 0);
   /* (the float, double and long double functions by their results, or three of one result, ilogb's int, lrint's long,
      in that order as tgmath.h names them) */
   if (ft[0]->k != TY_FUNC || ft[1]->k != TY_FUNC || ft[2]->k != TY_FUNC || ft[0]->np != nv || ft[1]->np != nv
@@ -1010,7 +1011,7 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
       if (!cl_eq (cl_td_key (ft[0]->ps[q]), cl_td_key (ft[1]->ps[q]))) {
         char *t = cl_bare (v[q]->t);
         long rk = 1;
-        /* (a complex argument by its parts' type, and a complex function of six, cs_x.c's choice) */
+        /* (a complex argument by its parts' type, and the complex function, cs_x.c's choice) */
         if (cs_kind (v[q]->t) == TY_COMPLEX) { cxa = 1; t = cl_bare (cs_canon (v[q]->t)->to); }
         if (cl_eq (t, "float")) rk = 0;
         else if (cl_eq (t, "long double")) rk = 2;
@@ -1018,8 +1019,14 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
       }
       q++;
     }
-    if (cxa && nf >= 6) r = r + 3;
-    if (cxa && nf >= 6 && ft[r]->k != TY_FUNC) cl_fail ("__builtin_tgmath of a complex argument and no complex function", 0);
+    /* (the real functions, then the complex ones: the first that takes a complex parameter, then as many on
+       as the real one; six of tgmath.h's, or sixteen with the _FloatN ones: test-tgmath's ccos (dz) took cos) */
+    {
+      long k, p;
+      for (k = 0; k < nf && cx0 < 0; k++) for (p = 0; p < ft[k]->np; p++) if (cs_canon (ft[k]->ps[p])->k == TY_COMPLEX) cx0 = k;
+    }
+    if (cxa && cx0 >= 0) r = cx0 + r;
+    if (cxa && cx0 >= 0 && (r >= nf || ft[r]->k != TY_FUNC)) cl_fail ("__builtin_tgmath of a complex argument and no complex function", 0);
     fc = ft[r];
     e = cs_mk (E_CALL, fc->to, 0);
     cs_add (e, f[r]);
@@ -1243,7 +1250,13 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     if (cl_starts (b, "mem") || cl_starts (b, "str") || cl_starts (b, "stp") || cl_eq (b, "free") || cl_eq (b, "malloc")) name = b;
   }
 
-  if (cl_eq (name, "copysign") || cl_eq (name, "copysignf") || cl_eq (name, "copysignl") || cl_eq (name, "fabs") || cl_eq (name, "fabsf") || cl_eq (name, "fabsl")) name = cl_cat ("__builtin_", name);
+  /* (C's fabs and copysign as gcc's builtins, but where the unit defines the function itself: its own, as gcc
+     with -fno-builtin, which glibc's tests that define them have: test-tgmath and test-tgmath2 count the calls) */
+  if (cl_eq (name, "copysign") || cl_eq (name, "copysignf") || cl_eq (name, "copysignl") || cl_eq (name, "fabs") || cl_eq (name, "fabsf") || cl_eq (name, "fabsl")) {
+    struct cs_decl *dd = c->k == E_REF && c->d ? cs_lookup (c->d->name, c->d->nlen, 0) : 0;
+    while (dd && !(dd->k == DK_FUNC && dd->hasbody)) dd = dd->prev;
+    if (!dd || dd->builtin) name = cl_cat ("__builtin_", name);
+  }
   /* (where long double is double, arm's EABI: the double's) */
   if (C->target == 3 && (cl_eq (name, "__builtin_copysignl") || cl_eq (name, "__builtin_fabsl") || cl_eq (name, "__builtin_signbitl") || cl_eq (name, "__builtin_huge_vall") || cl_eq (name, "__builtin_infl") || cl_eq (name, "__builtin_nanl") || cl_eq (name, "__builtin_nansl"))) name = cl_copy ((unsigned char *) name, cstrlen (name) - 1);
   if (cl_eq (name, "copysignf128") || cl_eq (name, "fabsf128")) name = cl_cat ("__builtin_", name);
