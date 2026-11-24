@@ -1,0 +1,11 @@
+exit 0
+ok a shift and a sum
+ok a product and a quotient
+ok a remainder
+ok an unsigned shift
+ok a signed shift
+ok a compare
+ok a double product
+ok an i64 to double
+ok a double to i64
+ok an i64 to int
