@@ -425,6 +425,8 @@ static struct str *xlabel (struct str *o)
     s_app (x, d); s_cat (x, " "); s_app (x, s_num (h_iv (xnumeric, d) + (f ? 1 : 0)));
     return x;
   }
+  /* (a symbol: as csema names it, name' where it reserves the name) */
+  if (o->n && o->p[0] != '.') return resname (o);
   return o;
 }
 /* an operand bound to a parameter of kind k: its alternatives, each a value and a leaf */
@@ -778,6 +780,8 @@ static struct str *xother; static struct vec *xpending; static struct hash *xdat
 static long xalign; static int xalign_def; static long xmaxalign; static int xmaxalign_def;
 static struct vec *xprefixes, *xsections, *xcarried, *xcarry, *xruns;
 static struct hash *xMADE, *xCODE, *xrodata, *xro, *xroset, *xrunof, *xrunidx, *xinto;
+static struct hash *xemitted;   /* (the read-only data carry_rodata put in a function, by name) */
+static struct hash *xglobl;     /* (the names .globl makes global) */
 static struct str *xcode_;
 static struct vec *xroblob;
 static long xroalign; static int xroalign_def;
@@ -872,7 +876,7 @@ static void xfinish (void)
     k = h_sorted (xtls);
     for (i = 0; i < k->n; i++) { struct str *x = s_of (".Ltls "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (c->nodes, nd1 (x, nd1 (s_of ("dword"), nd1 (s_of ("tprel"), nd_new (k->v[i]))))); }
     k = h_sorted (xgot);
-    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (c->nodes, nd1 (x, nd1 (s_of ("dword"), nd_new (k->v[i])))); }
+    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (c->nodes, nd1 (x, nd1 (s_of ("dword"), nd_new (resname (k->v[i]))))); }
     v_push (xcarried, c);
   }
   h_clear (xtls); xgot = h_new ();
@@ -1095,7 +1099,8 @@ static void rodata_set (struct str *x)
   { struct vec *nb = v_new (); for (; i < b->n; i++) v_push (nb, b->v[i]); h_setp (xrodata, x, nb); }
 }
 static struct hash *xkw;
-static struct str *kwname (struct str *n) { if (h_has (xkw, n)) { struct str *x = s_dup (n); s_cat (x, "'"); return x; } return n; }
+/* (a label's name: csema's name' where it reserves the name, resname, which holds xkw's words too) */
+static struct str *kwname (struct str *n) { if (h_has (xkw, n)) { struct str *x = s_dup (n); s_cat (x, "'"); return x; } return resname (n); }
 
 /* a decimal number as the double nearest it (Perl's NV of the text) */
 static unsigned long dbl_bits (struct str *t);
@@ -1111,6 +1116,7 @@ static void walk_stmt (struct str *st, struct str *file, long lineno)
   long i;
   if (m (st, "^\\.pushsection\\s+\"?\\.note\\.gnu\\.property\"?")) { skipnote = 1; return; }
   if (skipnote) { if (s_is (st, ".popsection")) skipnote = 0; return; }
+  if (m (st, "^\\.(?:globl|global)\\s+(.+)$")) { struct vec *gl = ssplit ("\\s*,\\s*", g (1), 0); for (i = 0; i < gl->n; i++) h_set (xglobl, gl->v[i], 1); }
   if (m (st, "^\\.weak\\s+([.\\w]+)$")) h_set (xweak, g (1), 1);
   if (m (st, "^\\.(text|data|bss)$")) {
     struct str *s = s_of ("."); struct vec *p = v_new ();
@@ -1659,9 +1665,13 @@ static void carry_rodata (void)
         struct nd *last;
         struct str *x;
         if (q > st && (e->has_align ? e->align : 1) > 1) nd_add (f, nd1 (s_of ("align"), LN (e->align)));
-        for (z = 0; z + 1 < e->names->n; z++) { x = s_dup (e->names->v[z]); s_cat (x, ":"); nd_add (f, nd_new (x)); }
-        x = s_dup (e->names->v[e->names->n - 1]); s_cat (x, ":");
+        for (z = 0; z < e->names->n; z++) h_set (xemitted, e->names->v[z], 1);
+        /* (a global label of the data, an entry: asm its first child, as a function's, so that ttpc takes it
+           as one, seen from other units: libmvec's tables their functions name; also in layer 0 of a big one) */
+        for (z = 0; z + 1 < e->names->n; z++) { x = s_dup (resname (e->names->v[z])); s_cat (x, ":"); nd_add (f, h_has (xglobl, e->names->v[z]) ? nd1 (x, ndc ("asm")) : nd_new (x)); }
+        x = s_dup (resname (e->names->v[e->names->n - 1])); s_cat (x, ":");
         last = nd_new (x);
+        if (h_has (xglobl, e->names->v[e->names->n - 1])) nd_add (last, ndc ("asm"));
         for (z = 0; z < e->bytes->n; z++) nd_add (last, e->bytes->v[z]);
         nd_add (f, last);
       }
@@ -1672,12 +1682,43 @@ static void carry_rodata (void)
       struct nd *n2;
       long z;
       if (h_iv (xrunof, x)) continue;
+      h_set (xemitted, x, 1);
       nd_add (f, nd1 (s_of ("align"), ndc ("16")));
-      y = s_dup (x); s_cat (y, ":");
+      y = s_dup (resname (x)); s_cat (y, ":");
       n2 = nd_new (y);
+      if (h_has (xglobl, x)) nd_add (n2, ndc ("asm"));
       b = h_pv (xrodata, x);
       for (z = 0; z < b->n; z++) nd_add (n2, b->v[z]);
       nd_add (f, n2);
+    }
+  }
+}
+
+/* (read-only data no function of the file names, a table of its own under a global name: libmvec's
+   svml_*_data.S, which hold only .rodata: an asm definition of its data, asm first, at its alignment, its
+   bytes as GNU's directives (dword ...), as a function carries its tables, in layers past a node's 255 (asm
+   first in layer 0); the entry's other names aliases of it. A data label of an asm unit is an entry, seen from
+   other units, only so: other units' asm names it, .Lgot / dword / name) */
+static void data_globals (void)
+{
+  long r, q, z, i;
+  for (r = 0; r < xruns->n; r++) {
+    struct vec *run = xruns->v[r];
+    for (q = 0; q < run->n; q++) {
+      struct runent *e = run->v[q];
+      struct str *name = 0, *x;
+      struct nd *gl;
+      for (z = 0; z < e->names->n; z++) if (h_has (xemitted, e->names->v[z])) break;
+      if (z < e->names->n) continue;
+      for (z = 0; z < e->names->n && !name; z++) if (!m (e->names->v[z], "^\\.L")) name = e->names->v[z];
+      if (!name) continue;
+      x = s_dup (resname (name)); s_cat (x, ":");
+      gl = nd1 (x, ndc ("asm"));
+      if (e->has_align && e->align > 1) nd_add (gl, nd1 (s_of ("align"), LN (e->align)));
+      for (i = 0; i < e->bytes->n; i++) nd_add (gl, e->bytes->v[i]);
+      gl->k = x86_layers (gl->k, 0, gl->k->n);
+      v_push (fns, gl);
+      for (z = 0; z < e->names->n; z++) if (e->names->v[z] != name && !m (e->names->v[z], "^\\.L")) v_push (fns, alias_of (e->names->v[z], name));
     }
   }
 }
@@ -1698,6 +1739,8 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
   xsections = v_new (); xprefixes = v_new (); xrodata = h_new (); xro = h_new (); xcarry = v_new (); xroset = h_new (); xweak = h_new ();
   xcarried = v_new (); xweakgot = h_new (); xruns = v_new (); xrunof = h_new (); xrunidx = h_new (); xinto = h_new ();
   xroalign_def = 0;
+  xemitted = h_new ();
+  xglobl = h_new ();
   xzeroed = h_new ();
   for (i = 0; i < zerov->n; i++) h_set (xzeroed, zerov->v[i], 1);
   xroblob = 0;
@@ -1736,12 +1779,12 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
     for (i = 0; i < fns->n; i++) h_set (defined, unlabel (((struct nd *) fns->v[i])->c), 1);
     for (i = 0; i < k->n; i++) {
       struct str *w = k->v[i], *x;
-      if (h_has (defined, w) || m (w, "^DW\\.ref\\.")) continue;
-      x = s_dup (w); s_cat (x, ":");
+      if (h_has (defined, resname (w)) || m (w, "^DW\\.ref\\.")) continue;
+      x = s_dup (resname (w)); s_cat (x, ":");
       v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void")));
     }
     k = h_sorted (xweakgot);
-    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (fns, nd_add (nd_add (nd_add (nd1 (x, ndc ("void")), nd_new (w_ptr ())), nd_new (k->v[i])), nd_new (w_addr ()))); }
+    for (i = 0; i < k->n; i++) { struct str *x = s_of (".Lgot "); s_app (x, k->v[i]); s_cat (x, ":"); v_push (fns, nd_add (nd_add (nd_add (nd1 (x, ndc ("void")), nd_new (w_ptr ())), nd_new (resname (k->v[i]))), nd_new (w_addr ()))); }
   }
   if (xprefixes->n) { struct str *x = s_of ("a prefix with no instruction after it:"); for (i = 0; i < xprefixes->n; i++) { s_cat (x, " "); s_app (x, xprefixes->v[i]); } fail_s (x); }
   {
@@ -1772,6 +1815,7 @@ static long x86_run (int mode, struct str *src, struct str *dump, struct vec *ze
     for (j = 0; j < c->nodes->n; j++) nd_add (f, c->nodes->v[j]);
   }
   carry_rodata ();
+  data_globals ();
   /* (a procedure with no word, or one that starts an entry block with none there: cfi def cfa offset / 8 first where it starts; the last first) */
   for (i = xprocs->n - 1; i >= 0; i--) {
     struct xproc *p = xprocs->v[i];

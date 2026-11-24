@@ -218,6 +218,8 @@ static void cl_ins_other (char *line, struct cl_list *o)
     }
     /* the status word to ax (an "=a" output of 16 bits: libc_fetestexcept_387's fnstsw %0) */
     if ((cl_eq (op, "fnstsw") || cl_eq (op, "fstsw")) && na == 1 && cl_eq (a[0], "%ax")) { cl_push (o, cl_n1 (cl_cat (op, ".ai"), cl_n ("ax"))); return; }
+    /* (and with no operand, which GNU as takes as %ax: libm-test-support's fpstack_test, asm ("fnstsw" : "=a" (sw))) */
+    if ((cl_eq (op, "fnstsw") || cl_eq (op, "fstsw")) && !na) { cl_push (o, cl_n1 (cl_cat (op, ".ai"), cl_n ("ax"))); return; }
     if ((cl_eq (op, "xchgl") || cl_eq (op, "xchgq")) && na == 2) {
       long m = 0 - 1;
       if (cl_x86_mem (a[0], &disp, &rg)) m = 0; else if (cl_x86_mem (a[1], &disp, &rg)) m = 1;
@@ -599,6 +601,8 @@ static void cl_asm_other (struct cs_st *n, struct cl_list *o)
       if (cl_eq (k, "rm") || cl_eq (k, "g") || cl_eq (k, "rme") || cl_eq (k, "re") || cl_eq (k, "rmi") || cl_eq (k, "ri")) k = "r";
       if (cl_eq (k, "a")) fx = "rax"; else if (cl_eq (k, "b")) fx = "rbx"; else if (cl_eq (k, "d")) fx = "rdx"; else if (cl_eq (k, "c")) fx = "rcx"; else if (cl_eq (k, "S")) fx = "rsi"; else if (cl_eq (k, "D")) fx = "rdi";
     }
+    /* (g, any general operand, a register as on x86_64: the tests' asm ("" : "=g" (r) : "0" (r)), test-strcmp's) */
+    else if (cl_eq (k, "g")) k = "r";
     w[nw].i = i;
     w[nw].r = 0;
     w[nw].hasj = 0;

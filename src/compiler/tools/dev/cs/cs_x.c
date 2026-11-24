@@ -131,6 +131,27 @@ static struct cs_ex *cs_num_lit (struct node *n)
     x->src = n;
     return x;
   }
+  /* (an imaginary one, GNU C's 4.0i, I's 1.0iF: the floating literal without its i, of the complex type of it, which
+     cl writes as that complex type's value, complex double / 0 / 4 (it was taken as the real number, 3.0 + 4.0i as 7)) */
+  {
+    long q = 0, w = 0, im = 0;
+    while (q < len) { if (p[q] == 'i' || p[q] == 'I' || p[q] == 'j' || p[q] == 'J') im = 1; q++; }
+    if (im) {
+      struct node *nn = alloc (sizeof (struct node));
+      unsigned char *tx = alloc (len + 1);
+      struct cs_ex *f;
+      struct cs_ty *ct;
+      q = 0;
+      while (q < len) { if (!(p[q] == 'i' || p[q] == 'I' || p[q] == 'j' || p[q] == 'J')) { tx[w] = p[q]; w++; } q++; }
+      nn->count = 0; nn->room = 0; nn->kids = 0; nn->len = w; nn->text = tx;
+      f = cs_num_lit (nn);
+      if (f->k != E_FLT) cs_fail ("an imaginary literal of an integer", n);
+      ct = cs_ty_new (TY_COMPLEX);
+      ct->to = cs_canon (f->t);
+      f->t = ct;
+      return f;
+    }
+  }
   if (isf) {
     int fk = TY_DOUBLE;
     unsigned char c = p[len - 1];
@@ -543,6 +564,8 @@ static struct cs_ex *cs_call (struct node *n)
     if (ft->k == TY_PTR) ft = cs_canon (ft->to);
   }
   if (ft->k != TY_FUNC) cs_fail ("a call of what is not a function", c);
+  /* (__builtin_complex (a, b): its arguments as they are, no default promotion: CMPLXF's are floats) */
+  if (cs_is_ident (c) && same (c->text, c->len, "__builtin_complex")) rule = BA_RVALUE;
   e = cs_mk (E_CALL, cs_unqual (ft->to), 0);
   cs_add (e, f);
   if (rule == BA_UAC && na == 2) cs_uac (&args[0], &args[1], 0);
@@ -557,6 +580,42 @@ static struct cs_ex *cs_call (struct node *n)
     else a = cs_arg_promo (a);
     cs_add (e, a);
     i++;
+  }
+  /* (__builtin_complex (a, b), C's CMPLX: the complex type of its parts' type) */
+  if (cs_is_ident (c) && same (c->text, c->len, "__builtin_complex") && na == 2) {
+    struct cs_ty *ct = cs_ty_new (TY_COMPLEX);
+    ct->to = cs_canon (cs_unqual (args[0]->t));
+    e->t = ct;
+  }
+  /* (__builtin_tgmath, tgmath.h's: of the function C's rule takes, its result's type, not the double the
+     prelude declares: a long double argument where the functions' parameters differ takes the third, a double
+     or an integer the second, else the float one; test-tgmath-ret's sizeof (ilogb (x)), an int) */
+  if (cs_is_ident (c) && same (c->text, c->len, "__builtin_tgmath")) {
+    long nf = 0, q = 0, r = 0;
+    int cxa = 0;
+    while (nf < na && cs_canon (args[nf]->t)->k == TY_FUNC) nf++;
+    if (nf >= 3) {
+      struct cs_ty *t0 = cs_canon (args[0]->t), *t1 = cs_canon (args[1]->t), *t2 = cs_canon (args[2]->t);
+      while (q < na - nf && q < t0->np && q < t1->np) {
+        if (!cs_same_ty (cs_canon (t0->ps[q]), cs_canon (t1->ps[q]))) {
+          /* (a complex argument by its parts' type: carg's) */
+          struct cs_ty *at = cs_canon (args[nf + q]->t);
+          int k = at->k == TY_COMPLEX ? cs_kind (at->to) : cs_kind (at);
+          long rk = 1;
+          if (at->k == TY_COMPLEX) cxa = 1;
+          if (k == TY_FLOAT) rk = 0;
+          else if (k == TY_LDOUBLE) rk = 2;
+          if (rk > r) r = rk;
+        }
+        q++;
+      }
+      /* (six functions, the real ones and the complex ones, cos's and ccos's: a complex argument takes a
+         complex one, C's rule; csema's cl_tgmath picks the same) */
+      if (cxa && nf >= 6) e->t = cs_unqual (cs_canon (args[3 + r]->t)->to);
+      else if (r == 0) e->t = cs_unqual (t0->to);
+      else if (r == 1) e->t = cs_unqual (t1->to);
+      else e->t = cs_unqual (t2->to);
+    }
   }
   return e;
 }

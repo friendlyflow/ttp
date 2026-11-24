@@ -392,6 +392,85 @@ static int cl_str_empty (struct cs_ex *s)
   cl_str_walk (s, &b, &el, &ne);
   return b.n == 0 && ne == 0;
 }
+/* gcc's __builtin_nans* (a signaling NaN) and __builtin_nan* with a payload ("0x1", the libm tests'): the NaN's bits
+   as a literal one exponent past its type's range, its fraction the quiet bit (nan) and the payload, as gcc's real_nan:
+   a signaling one of no payload has the bit below the quiet one. 0 for another call (nan (""), glibc's, stays a call)
+   and for a payload in x86_64's long double (the x87's fraction is not binary128's). */
+static char *cl_nan_lit (struct cs_ex *n, char *name)
+{
+  int sig = cl_starts (name, "__builtin_nans"), mb, digits, pad, i;
+  char *w, *suf, *base;
+  struct cs_ex *s;
+  struct cl_bytes b;
+  long long *el;
+  long ne, j = 0;
+  unsigned long long p = 0;
+  int has = 0, rbase = 10;
+  unsigned char m[32];
+  struct cs_buf out;
+  if (!sig && !cl_starts (name, "__builtin_nan")) return 0;
+  base = sig ? name + 14 : name + 13;
+  if (!(cl_eq (base, "") || cl_eq (base, "f") || cl_eq (base, "l") || cl_eq (base, "f128"))) return 0;
+  if (n->nk != 2) return 0;
+  s = cl_strip (cl_k (n, 1));
+  while (s->k == E_ICE || s->k == E_PAREN) s = cl_strip (cl_k (s, 0));
+  if (s->k != E_STR) return 0;
+  cl_str_walk (s, &b, &el, &ne);
+  if (ne) return 0;
+  /* the payload as strtoull's base 0 reads it */
+  if (b.n) {
+    if (b.n > 2 && b.p[0] == '0' && (b.p[1] == 'x' || b.p[1] == 'X')) { rbase = 16; j = 2; }
+    else if (b.p[0] == '0') rbase = 8;
+    while (j < b.n) {
+      int d = cl_digit (b.p[j]) ? b.p[j] - '0' : (b.p[j] >= 'a' && b.p[j] <= 'f') ? b.p[j] - 'a' + 10 : (b.p[j] >= 'A' && b.p[j] <= 'F') ? b.p[j] - 'A' + 10 : 99;
+      if (d >= rbase) return 0;
+      p = p * rbase + d;
+      j++;
+    }
+    has = 1;
+  }
+  if (!sig && !has) return 0;
+  w = cl_tword (n);
+  if (C->target == 3 && cl_eq (w, "long double")) w = "double";
+  if (cl_eq (w, "float")) { mb = 23; suf = "p+128f"; }
+  else if (cl_eq (w, "double")) { mb = 52; suf = "p+1024"; }
+  else if (cl_eq (w, "long double")) { if (C->target == 1 && has) return 0; mb = 112; suf = "p+16384L"; }
+  else if (cl_eq (w, "float128")) { mb = 112; suf = "p+16384Q"; }
+  else return 0;
+  /* the fraction, mb bits, in m[] most significant bit first: the payload below the quiet bit, then the quiet bit
+     (nan) or, a signaling one of no payload, the bit below it */
+  i = 0;
+  while (i < 32) { m[i] = 0; i++; }
+  i = 0;
+  while (i < 64 && i < mb - 1) { if ((p >> i) & 1) { long bit = mb - 1 - i; m[bit / 8] = m[bit / 8] | (unsigned char) (128 >> (bit % 8)); } i++; }
+  {
+    int any = 0;
+    i = 1;
+    while (i < mb) { if ((m[i / 8] >> (7 - i % 8)) & 1) any = 1; i++; }
+    if (!sig) m[0] = m[0] | 128;
+    else if (!any) m[0] = m[0] | 64;
+  }
+  /* as hex digits after 0x1., the fraction padded on the right to a whole digit */
+  digits = (mb + 3) / 4;
+  pad = digits * 4 - mb;
+  cs_b_init (&out);
+  cs_b_str (&out, "0x1.");
+  i = 0;
+  while (i < digits) {
+    int v = 0, k = 0;
+    while (k < 4) {
+      long bit = i * 4 + k;
+      v = v * 2;
+      if (bit < mb && ((m[bit / 8] >> (7 - bit % 8)) & 1)) v = v + 1;
+      k++;
+    }
+    cs_b_byte (&out, "0123456789abcdef"[v]);
+    i++;
+  }
+  (void) pad;
+  cs_b_str (&out, suf);
+  return cl_copy (out.p, out.n);
+}
 static int cl_utf8_ok (unsigned char *p, long n)
 {
   long i = 0;
@@ -403,6 +482,9 @@ static int cl_utf8_ok (unsigned char *p, long n)
     if (c < 0xe0) more = 1; else if (c < 0xf0) more = 2; else if (c < 0xf8) more = 3; else if (c < 0xfc) more = 4; else if (c < 0xfe) more = 5; else return 0;
     if (i + more >= n + 0 && i + more > n - 1) return 0;
     while (j <= more) { if ((p[i + j] & 0xc0) != 0x80) return 0; j++; }
+    /* (an overlong form is not UTF-8, as Perl's utf8::decode has it, which
+       fftext and c2ff.pl read texts with: u8"\xE0\x9F\xBF", test-c8rtomb's) */
+    if ((c == 0xe0 && p[i + 1] < 0xa0) || (c == 0xf0 && p[i + 1] < 0x90) || (c == 0xf8 && p[i + 1] < 0x88) || (c == 0xfc && p[i + 1] < 0x84)) return 0;
     i += more + 1;
   }
   return 1;
@@ -758,7 +840,7 @@ static int cl_ovf_ok (char *name, char *sig)
   while (a[i]) { if (cl_eq (sig, a[i])) return 1; i++; }
   if (C->target == 3) {
     if (cl_eq (name, "__builtin_mul_overflow") && (cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "u32 int u32") || cl_eq (sig, "i64 int i64"))) return 1;
-    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "int u32 int") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "i64 int i64"))) return 1;
+    if (cl_eq (name, "__builtin_add_overflow") && (cl_eq (sig, "u32 int u32") || cl_eq (sig, "int u32 int") || cl_eq (sig, "u64 u32 int") || cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "i64 int i64") || cl_eq (sig, "i64 int long"))) return 1;
     if (cl_eq (name, "__builtin_sub_overflow") && (cl_eq (sig, "i64 i64 i64") || cl_eq (sig, "int i64 i64") || cl_eq (sig, "u32 u32 u32") || cl_eq (sig, "i64 i64 long"))) return 1;
   }
   return 0;
@@ -884,9 +966,10 @@ static int cl_isf_word (char *s) { return cl_eq (s, "float") || cl_eq (s, "doubl
    with the arguments' own values converted to its parameters. */
 static struct cs_ex *cl_tgmath (struct cs_ex *n)
 {
-  struct cs_ex *f[3], *e, *arg1;
-  struct cs_ty *ft[3], *fc;
+  struct cs_ex *f[6], *e, *arg1;
+  struct cs_ty *ft[6], *fc;
   long na = n->nk - 1, i = 1, nf = 0, nv, r = 0;
+  int cxa = 0;
   while (i <= na) {
     struct cs_ex *s = cl_strip (cl_k (n, i));
     char *spelt;
@@ -901,13 +984,17 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
       while (spelt[q]) { if (spelt[q] == '(') paren = 1; q++; }
       if (!paren) break;
     }
-    if (nf < 3) { f[nf] = cl_k (n, i); ft[nf] = cs_canon (s->t); }
+    if (nf < 6) { f[nf] = cl_k (n, i); ft[nf] = cs_canon (s->t); }
     nf++;
     i++;
   }
   nv = na - nf;
   if (nf < 3 || nv <= 0) cl_fail ("__builtin_tgmath without functions and arguments", 0);
-  if (ft[0]->k != TY_FUNC || ft[1]->k != TY_FUNC || ft[2]->k != TY_FUNC || cs_kind (ft[0]->to) != TY_FLOAT || cs_kind (ft[1]->to) != TY_DOUBLE || cs_kind (ft[2]->to) != TY_LDOUBLE || ft[0]->np != nv || ft[1]->np != nv)
+  /* (the float, double and long double functions by their results, or three of one result, ilogb's int, lrint's long,
+     in that order as tgmath.h names them) */
+  if (ft[0]->k != TY_FUNC || ft[1]->k != TY_FUNC || ft[2]->k != TY_FUNC || ft[0]->np != nv || ft[1]->np != nv
+      || !((cs_kind (ft[0]->to) == TY_FLOAT && cs_kind (ft[1]->to) == TY_DOUBLE && cs_kind (ft[2]->to) == TY_LDOUBLE)
+           || (cs_kind (ft[0]->to) == cs_kind (ft[1]->to) && cs_kind (ft[1]->to) == cs_kind (ft[2]->to) && cs_kind (ft[0]->to) != TY_FLOAT && cs_kind (ft[0]->to) != TY_DOUBLE && cs_kind (ft[0]->to) != TY_LDOUBLE)))
     cl_fail ("__builtin_tgmath of other functions than of float, double, long double", 0);
   {
     struct cs_ex **v = alloc ((nv + 1) * sizeof (struct cs_ex *));
@@ -923,20 +1010,34 @@ static struct cs_ex *cl_tgmath (struct cs_ex *n)
       if (!cl_eq (cl_td_key (ft[0]->ps[q]), cl_td_key (ft[1]->ps[q]))) {
         char *t = cl_bare (v[q]->t);
         long rk = 1;
-        if (cs_kind (v[q]->t) == TY_COMPLEX) cl_fail ("__builtin_tgmath of a complex argument", 0);
+        /* (a complex argument by its parts' type, and a complex function of six, cs_x.c's choice) */
+        if (cs_kind (v[q]->t) == TY_COMPLEX) { cxa = 1; t = cl_bare (cs_canon (v[q]->t)->to); }
         if (cl_eq (t, "float")) rk = 0;
         else if (cl_eq (t, "long double")) rk = 2;
         if (rk > r) r = rk;
       }
       q++;
     }
+    if (cxa && nf >= 6) r = r + 3;
+    if (cxa && nf >= 6 && ft[r]->k != TY_FUNC) cl_fail ("__builtin_tgmath of a complex argument and no complex function", 0);
     fc = ft[r];
     e = cs_mk (E_CALL, fc->to, 0);
     cs_add (e, f[r]);
     q = 0;
     while (q < nv) {
       char *from = cl_bare (v[q]->t), *to = cl_td_key (fc->ps[q]);
+      struct cs_ty *pt = cs_canon (fc->ps[q]);
       if (cl_eq (from, to)) arg1 = v[q];
+      else if (pt->k == TY_COMPLEX) {
+        /* (to a complex parameter: a complex argument's parts converted, a real one converted to the parts'
+           type, then to the complex type) */
+        if (cs_kind (v[q]->t) == TY_COMPLEX) arg1 = cs_ice (v[q], fc->ps[q], CK_FLOATINGCOMPLEXCAST);
+        else {
+          struct cs_ex *re = v[q];
+          if (!cl_eq (from, cl_bare (pt->to))) re = cs_ice (v[q], pt->to, cs_is_flt (v[q]->t) ? CK_FLOATINGCAST : CK_INTEGRALTOFLOATING);
+          arg1 = cs_ice (re, fc->ps[q], CK_FLOATINGREALTOCOMPLEX);
+        }
+      }
       else if (cl_isf_word (to)) arg1 = cs_ice (v[q], fc->ps[q], cl_isf_word (from) ? CK_FLOATINGCAST : CK_INTEGRALTOFLOATING);
       else arg1 = cs_ice (v[q], fc->ps[q], CK_INTEGRALCAST);
       cs_add (e, arg1);
@@ -1111,6 +1212,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     return;
   }
   if (cl_eq (name, "__builtin_tgmath")) { cl_expr (cl_tgmath (n), o); return; }
+  { char *lit = cl_nan_lit (n, name); if (lit) { cl_push (o, cl_n (lit)); return; } }
   if (C->in_global) { char *lit = cl_special_float (n, n); if (lit) { cl_push (o, cl_n (lit)); return; } }
   if (cl_eq (name, "__builtin_constant_p")) {
     struct cs_ex *a = cl_strip (cl_k (n, 1));
@@ -1147,6 +1249,28 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   if (cl_eq (name, "copysignf128") || cl_eq (name, "fabsf128")) name = cl_cat ("__builtin_", name);
   if (C->target != 1 && cl_ends (name, "f128") && (cl_eq (name, "__builtin_copysignf128") || cl_eq (name, "__builtin_fabsf128") || cl_eq (name, "__builtin_huge_valf128") || cl_eq (name, "__builtin_inff128") || cl_eq (name, "__builtin_nanf128") || cl_eq (name, "__builtin_nansf128") || cl_eq (name, "__builtin_signbitf128")))
     name = cl_cat (cl_copy ((unsigned char *) name, cstrlen (name) - 4), "l");
+  /* (__builtin_complex (a, b), C's CMPLX: its complex type's value, a and b its parts (the user's form, 2026-11-18)) */
+  if (cl_eq (name, "__builtin_complex") && na == 2) {
+    struct cl_list *x = cl_l ();
+    cl_append (x, cl_ct (n->t));
+    cl_itemx (cl_k (n, 1), x);
+    cl_itemx (cl_k (n, 2), x);
+    cl_push (o, cl_nl (":", x));
+    return;
+  }
+  /* (__builtin_inf is __builtin_huge_val, the same infinity: the libm tests' outside a constant) */
+  if (cl_eq (name, "__builtin_inf")) name = "__builtin_huge_val";
+  else if (cl_eq (name, "__builtin_infl")) name = "__builtin_huge_vall";
+  /* (gcc's object-size checked builtins, a program's own call of one, tst-gnuglob's __builtin___strcpy_chk (d, s, 255):
+     glibc's __strcpy_chk ..., as gcc calls them; with the size unknown, (size_t) -1, they check nothing) */
+  if (cl_starts (name, "__builtin___") && cl_ends (name, "_chk")) {
+    static char *chk[] = { "memcpy", "mempcpy", "memmove", "memset", "strcpy", "stpcpy", "strcat", "strncpy", "stpncpy", "strncat", 0 };
+    long q = 0;
+    while (chk[q]) {
+      if (cl_eq (name, cl_cat3 ("__builtin___", chk[q], "_chk"))) { cl_push (o, cl_call_node (cl_cat3 ("__", chk[q], "_chk"), n)); return; }
+      q++;
+    }
+  }
   if (cl_eq (name, "__builtin_alloca")) { cl_push (o, cl_call_node ("alloca", n)); return; }
   if (cl_eq (name, "__builtin_add_overflow") || cl_eq (name, "__builtin_sub_overflow") || cl_eq (name, "__builtin_mul_overflow")) {
 
@@ -1154,11 +1278,13 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     char *sig = "";
     if (a0->n == 1 && a1->n == 1 && a2->n == 2 && cl_is (a2->v[0], "address"))
       sig = cl_cat3 (cl_cat3 ((char *) a0->v[0]->text, " ", (char *) a1->v[0]->text), " ", (char *) a2->v[1]->text);
+    /* (a long long and an int into a long, tst-mktime4's: on a target of 8-byte words the long's own, as i64 is long there) */
+    if (C->target != 3 && cl_eq (name, "__builtin_add_overflow") && cl_eq (sig, "i64 int long")) sig = "long int long";
     if (!cl_ovf_ok (name, sig)) cl_fail (name, sig);
     cl_push (o, cl_call_node (cl_cat3 (name, " ", sig), n));
     return;
   }
-  if (cl_eq (name, "__builtin_isnan") || cl_eq (name, "__builtin_isinf_sign") || cl_eq (name, "__builtin_isinf") || cl_eq (name, "__builtin_signbit") || cl_eq (name, "__builtin_isfinite") || cl_eq (name, "__builtin_isunordered") || cl_eq (name, "__builtin_isless") || cl_eq (name, "__builtin_islessequal") || cl_eq (name, "__builtin_isgreater") || cl_eq (name, "__builtin_isgreaterequal") || cl_eq (name, "__builtin_fpclassify")) {
+  if (cl_eq (name, "__builtin_isnan") || cl_eq (name, "__builtin_isinf_sign") || cl_eq (name, "__builtin_isinf") || cl_eq (name, "__builtin_signbit") || cl_eq (name, "__builtin_isfinite") || cl_eq (name, "__builtin_isunordered") || cl_eq (name, "__builtin_isless") || cl_eq (name, "__builtin_islessequal") || cl_eq (name, "__builtin_isgreater") || cl_eq (name, "__builtin_isgreaterequal") || cl_eq (name, "__builtin_islessgreater") || cl_eq (name, "__builtin_isnormal") || cl_eq (name, "__builtin_fpclassify")) {
     char *t;
     if (cl_eq (name, "__builtin_fpclassify")) t = cl_tword_int (cl_k (n, n->nk - 1)); else t = cl_tword_int (cl_k (n, 1));
     if (!(cl_eq (t, "float") || cl_eq (t, "double") || cl_eq (t, "long double") || cl_eq (t, "float128") || cl_eq (t, "float16"))) cl_fail (name, t);
@@ -1537,9 +1663,257 @@ static struct node *cl_128_node (struct cl_v128 *v)
     return cl_n (cl_copy ((unsigned char *) buf + p, 23 - p));
   }
 }
+/* ---- C's complex arithmetic (the master's plan, 2026-11-18): ttpc has no operator of a complex value, so
+   each is written of its parts, as gcc does it: + and - part by part, * and / libgcc's __mulXc3 and __divXc3
+   (each type's, gcc's calls at -O0 and -O2), a real operand kept real (C's usual conversions made it complex:
+   gcc keeps it, so 3.0 + z leaves z's imaginary part as it is), == and != both parts. In a function the
+   operands go to temporaries first, each evaluated once: a : of them and the result (C's ({ ... })). */
+static long cl_cx_count;
+static int cl_cx_group (struct cs_ex *e);
+static struct node *cl_g3 (struct node *a, char *op, struct node *b)
+{
+  struct cl_list *x = cl_l ();
+  cl_push (x, a);
+  cl_push (x, cl_n (op));
+  cl_push (x, b);
+  return cl_nl (":", x);
+}
+static struct node *cl_g2 (char *op, struct node *a)
+{
+  struct cl_list *x = cl_l ();
+  cl_push (x, cl_n (op));
+  cl_push (x, a);
+  return cl_nl (":", x);
+}
+static int cl_cx_is (struct cs_ty *t);
+static struct cs_ex *cl_cx_real_of (struct cs_ex *e)
+{
+  struct cs_ex *s = e;
+  while (s->k == E_PAREN) s = cl_k (s, 0);
+  /* (a real operand, as clang's AST keeps it: converted to the part type alone) */
+  if (!cl_cx_is (s->t)) return s;
+  if ((s->k == E_ICE || s->k == E_CAST) && (s->op == CK_FLOATINGREALTOCOMPLEX || s->op == CK_INTEGRALREALTOCOMPLEX)) return cl_k (s, 0);
+  return 0;
+}
+static int cl_cx_is (struct cs_ty *t) { return cs_kind (t) == TY_COMPLEX; }
+/* an operand in a temporary of the function, its name in *nm, its declaration onto d; a real one (*real) of
+   the complex type's part type */
+static void cl_cx_tmp (struct cs_ex *e, struct cs_ty *ct, struct cl_list *d, char **nm, int *real)
+{
+  struct cs_ex *r = cl_cx_real_of (e);
+  struct cl_list *x = cl_l ();
+  cl_cx_count = cl_cx_count + 1;
+  *nm = cl_cat ("__cx_", cl_num (cl_cx_count));
+  *real = r != 0;
+  if (r) {
+    struct cl_list *v = cl_l ();
+    cl_append (x, cl_ct (cs_canon (ct)->to));
+    cl_itemx (r, v);
+    cl_push (x, cl_cast_node (cl_ct (cs_canon (ct)->to), v));
+  } else if (cl_cx_group (e)) {
+    /* (an operand itself written as a :, which after a declaration would be its items: assigned) */
+    cl_append (x, cl_ct (e->t));
+    cl_push (d, cl_nl (cl_cat (*nm, ":"), x));
+    cl_push (d, cl_n (*nm));
+    cl_push (d, cl_n ("="));
+    cl_itemx (e, d);
+    return;
+  } else {
+    if (!cl_cx_is (e->t)) cl_fail ("a complex operation's operand of no complex type", 0);
+    cl_append (x, cl_ct (e->t));
+    cl_itemx (e, x);
+  }
+  cl_push (d, cl_nl (cl_cat (*nm, ":"), x));
+}
+static struct node *cl_cx_part (char *nm, int real, int im)
+{
+  if (real) { if (im) return 0; return cl_n (nm); }
+  return cl_n1 (cs_pick (im, "imag", "real"), cl_n (nm));
+}
+static struct node *cl_cx_zero (struct cs_ty *ct)
+{
+  struct cl_list *v = cl_l ();
+  cl_push (v, cl_n ("0"));
+  return cl_cast_node (cl_ct (cs_canon (ct)->to), v);
+}
+/* libgcc's function of a complex multiply or divide of the parts' type */
+static char *cl_cx_fn (char *what, struct cs_ty *ct)
+{
+  int k = cs_kind (cs_canon (ct)->to);
+  char *m = "dc3";
+  if (k == TY_FLOAT) m = "sc3";
+  else if (k == TY_LDOUBLE) { if (C->target == 1) m = "xc3"; else if (C->target == 3) m = "dc3"; else m = "tc3"; }
+  else if (k == TY_FLOAT128) m = "tc3";
+  else if (k != TY_DOUBLE) cl_fail ("a complex multiply or divide of that type", 0);
+  return cl_cat3 ("__", what, m);
+}
+static void cl_cx_lit (struct cs_ty *ct, struct node *re, struct node *im, struct cl_list *g)
+{
+  cl_append (g, cl_ct (ct));
+  cl_push (g, re);
+  cl_push (g, im);
+}
+/* the value of l op r, op one of + - * / == !=, ct the complex type the operation is of */
+static void cl_cx_bin (char *op, struct cs_ex *l, struct cs_ex *r, struct cs_ty *ct, struct cl_list *o)
+{
+  struct cl_list *g = cl_l ();
+  char *a, *b;
+  int ar, br;
+  struct node *ra, *ia, *rb, *ib;
+  if (C->in_global) cl_fail ("complex arithmetic in a global's value", op);
+  cl_cx_tmp (l, ct, g, &a, &ar);
+  cl_cx_tmp (r, ct, g, &b, &br);
+  if (ar && br) cl_fail ("a complex operation of two real operands", op);
+  ra = cl_cx_part (a, ar, 0); ia = cl_cx_part (a, ar, 1);
+  rb = cl_cx_part (b, br, 0); ib = cl_cx_part (b, br, 1);
+  if (cl_eq (op, "+") || cl_eq (op, "-")) {
+    struct node *im;
+    if (!ar && !br) im = cl_g3 (ia, op, ib);
+    else if (br) im = ia;
+    else if (cl_eq (op, "+")) im = ib;
+    else im = cl_g2 ("-", ib);
+    cl_cx_lit (ct, cl_g3 (ra, op, rb), im, g);
+  } else if (cl_eq (op, "*") && (ar || br)) {
+    if (br) cl_cx_lit (ct, cl_g3 (ra, "*", rb), cl_g3 (ia, "*", rb), g);
+    else cl_cx_lit (ct, cl_g3 (ra, "*", rb), cl_g3 (ra, "*", ib), g);
+  } else if (cl_eq (op, "/") && br) {
+    cl_cx_lit (ct, cl_g3 (ra, "/", rb), cl_g3 (ia, "/", rb), g);
+  } else if (cl_eq (op, "*") || cl_eq (op, "/")) {
+    struct cl_list *args = cl_l ();
+    cl_push (args, ra);
+    if (ar) cl_push (args, cl_cx_zero (ct)); else cl_push (args, ia);
+    cl_push (args, rb);
+    cl_push (args, ib);
+    cl_push (g, cl_nl (cl_cx_fn (cs_pick (cl_eq (op, "*"), "mul", "div"), ct), args));
+  } else if (cl_eq (op, "==") || cl_eq (op, "!=")) {
+    struct node *c1 = cl_g3 (ra, op, rb), *c2;
+    if (!ia) ia = cl_cx_zero (ct);
+    if (!ib) ib = cl_cx_zero (ct);
+    c2 = cl_g3 (ia, op, ib);
+    cl_push (g, cl_g3 (c1, cs_pick (cl_eq (op, "=="), "&&", "||"), c2));
+  } else cl_fail ("the complex operator", op);
+  cl_push (o, cl_nl (":", g));
+}
+/* a conversion to, from or between complex types (CK_FLOATINGREALTOCOMPLEX ...), else 0 */
+static int cl_cx_conv (struct cs_ex *n, struct cl_list *o)
+{
+  int op = n->op;
+  struct cs_ex *e = cl_k (n, 0);
+  struct cl_list *g = cl_l ();
+  char *a;
+  int ar;
+  if (!(n->k == E_ICE || n->k == E_CAST)) return 0;
+  if (op == CK_FLOATINGREALTOCOMPLEX || op == CK_INTEGRALREALTOCOMPLEX) {
+    struct cl_list *v = cl_l ();
+    cl_itemx (e, v);
+    cl_cx_lit (n->t, cl_cast_node (cl_ct (cs_canon (n->t)->to), v), cl_cx_zero (n->t), g);
+    cl_push (o, cl_nl (":", g));
+    return 1;
+  }
+  if (op == CK_FLOATINGCOMPLEXTOREAL) {
+    /* (its real part: the operand once, no temporary) */
+    struct cl_list *v = cl_l (), *x = cl_l ();
+    cl_itemx (e, x);
+    cl_push (v, cl_nl ("real", x));
+    cl_push (o, cl_cast_node (cl_ct (n->t), v));
+    return 1;
+  }
+  if (op == CK_FLOATINGCOMPLEXCAST || op == CK_FLOATINGCOMPLEXTOBOOLEAN) {
+    struct cl_list *v1 = cl_l (), *v2 = cl_l ();
+    if (C->in_global) cl_fail ("a complex conversion in a global's value", 0);
+    cl_cx_tmp (e, e->t, g, &a, &ar);
+    if (op == CK_FLOATINGCOMPLEXCAST) {
+      cl_push (v1, cl_cx_part (a, 0, 0));
+      cl_push (v2, cl_cx_part (a, 0, 1));
+      cl_cx_lit (n->t, cl_cast_node (cl_ct (cs_canon (n->t)->to), v1), cl_cast_node (cl_ct (cs_canon (n->t)->to), v2), g);
+    } else if (op == CK_FLOATINGCOMPLEXTOREAL) {
+      cl_push (v1, cl_cx_part (a, 0, 0));
+      cl_push (g, cl_cast_node (cl_ct (n->t), v1));
+    } else {
+      cl_push (g, cl_g3 (cl_g3 (cl_cx_part (a, 0, 0), "!=", cl_cx_zero (e->t)), "||", cl_g3 (cl_cx_part (a, 0, 1), "!=", cl_cx_zero (e->t))));
+    }
+    cl_push (o, cl_nl (":", g));
+    return 1;
+  }
+  if (op == CK_INTEGRALCOMPLEXCAST || op == CK_INTEGRALCOMPLEXTOREAL || op == CK_INTEGRALCOMPLEXTOBOOLEAN || op == CK_FLOATINGCOMPLEXTOINTEGRALCOMPLEX || op == CK_INTEGRALCOMPLEXTOFLOATINGCOMPLEX)
+    cl_fail ("a conversion of an integer complex type", 0);
+  return 0;
+}
+/* a complex value tested for truth (a condition, !, && and ||'s operands, ?:'s condition, which clang's AST
+   leaves as they are): either part nonzero, a : of its temporary and that test */
+static void cl_cx_truth (struct cs_ex *e, struct cl_list *o)
+{
+  struct cl_list *g = cl_l ();
+  char *a;
+  int ar;
+  if (C->in_global) cl_fail ("a complex value's truth in a global's value", 0);
+  cl_cx_tmp (e, e->t, g, &a, &ar);
+  cl_push (g, cl_g3 (cl_g3 (cl_cx_part (a, 0, 0), "!=", cl_cx_zero (e->t)), "||", cl_g3 (cl_cx_part (a, 0, 1), "!=", cl_cx_zero (e->t))));
+  cl_push (o, cl_nl (":", g));
+}
+/* a value tested for truth: a complex one by its parts */
+static void cl_testx (struct cs_ex *e, struct cl_list *o)
+{
+  struct cs_ex *s = e;
+  while (s->k == E_PAREN) s = cl_k (s, 0);
+  if (cl_cx_is (s->t)) cl_cx_truth (s, o); else cl_itemx (e, o);
+}
 static void cl_expr (struct cs_ex *n, struct cl_list *o)
 {
   int k = n->k;
+  /* (C's complex values: their conversions and operators of their parts) */
+  if ((k == E_ICE || k == E_CAST) && cl_cx_conv (n, o)) return;
+  if (k == E_UN && cl_name_is (n, "!") && cl_cx_is (cl_k (n, 0)->t)) { cl_push (o, cl_n ("!")); cl_cx_truth (cl_k (n, 0), o); return; }
+  if (k == E_BIN && n->nk == 2 && (cl_name_is (n, "&&") || cl_name_is (n, "||")) && (cl_cx_is (cl_k (n, 0)->t) || cl_cx_is (cl_k (n, 1)->t))) {
+    long j = 0;
+    while (j < 2) {
+      struct cs_ex *x = cl_k (n, j);
+      if (cl_cx_is (x->t)) cl_cx_truth (x, o); else cl_push (o, cl_nl (":", cl_ex (x)));
+      if (j == 0) cl_push (o, cl_n (cl_name_of (n)));
+      j++;
+    }
+    return;
+  }
+  if (k == E_COND && cl_cx_is (cl_k (n, 0)->t)) {
+    cl_cx_truth (cl_k (n, 0), o);
+    cl_push (o, cl_n ("?"));
+    cl_operand (cl_k (n, 1), 4, 0, o);
+    cl_push (o, cl_n (":"));
+    cl_operand (cl_k (n, 2), 3, 1, o);
+    return;
+  }
+  if (k == E_BIN && n->nk == 2) {
+    char *bop = cl_name_of (n);
+    if ((cl_eq (bop, "+") || cl_eq (bop, "-") || cl_eq (bop, "*") || cl_eq (bop, "/")) && cl_cx_is (n->t)) { cl_cx_bin (bop, cl_k (n, 0), cl_k (n, 1), n->t, o); return; }
+    if ((cl_eq (bop, "==") || cl_eq (bop, "!=")) && (cl_cx_is (cl_k (n, 0)->t) || cl_cx_is (cl_k (n, 1)->t))) {
+      struct cs_ty *ct = cl_k (n, 0)->t;
+      if (!cl_cx_is (ct)) ct = cl_k (n, 1)->t;
+      cl_cx_bin (bop, cl_k (n, 0), cl_k (n, 1), ct, o);
+      return;
+    }
+  }
+  if (k == E_UN && cl_name_is (n, "-") && cl_cx_is (n->t)) {
+    struct cl_list *g = cl_l ();
+    char *a;
+    int ar;
+    if (C->in_global) cl_fail ("complex arithmetic in a global's value", "-");
+    cl_cx_tmp (cl_k (n, 0), n->t, g, &a, &ar);
+    cl_cx_lit (n->t, cl_g2 ("-", cl_cx_part (a, 0, 0)), cl_g2 ("-", cl_cx_part (a, 0, 1)), g);
+    cl_push (o, cl_nl (":", g));
+    return;
+  }
+  if (k == E_CASS && cl_cx_is (cl_k (n, 0)->t)) {
+    char *cop = cl_name_of (n);
+    struct cl_list *v = cl_l ();
+    long len = cstrlen (cop);
+    if (len != 2 || cop[1] != '=' || !(cop[0] == '+' || cop[0] == '-' || cop[0] == '*' || cop[0] == '/')) cl_fail ("the complex operator", cop);
+    if (!cl_pure (cl_k (n, 0))) cl_fail ("a complex compound assignment of an lvalue with effects", cop);
+    cl_cx_bin (cl_copy ((unsigned char *) cop, 1), cl_k (n, 0), cl_k (n, 1), cl_k (n, 0)->t, v);
+    cl_itemx (cl_k (n, 0), o);
+    cl_push (o, cl_n ("="));
+    cl_append (o, v);
+    return;
+  }
 
   if ((k == E_UN && cl_name_is (n, "&")) || k == E_SIZEOF) {
     if (k == E_SIZEOF) {
@@ -1738,6 +2112,23 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     return;
   }
   if (k == E_TRAIT) { cl_push (o, cl_num_node (n->val ? 1 : 0)); return; }
+  /* (an imaginary literal, a floating one of a complex type: that type's value, its real part 0 (the user's form,
+     2026-11-18: complex double / 0 / 4 is 4.0i)) */
+  if (k == E_FLT && cs_kind (n->t) == TY_COMPLEX) {
+    struct cs_ty *pt = cs_canon (n->t)->to;
+    struct cs_ex *re = cs_mk (E_FLT, pt, 0), *im = cs_mk (E_FLT, pt, 0);
+    struct node *z = alloc (sizeof (struct node));
+    struct cl_list *x = cl_l ();
+    z->len = 3;
+    z->text = (unsigned char *) "0.0";
+    re->src = z;
+    im->src = n->src;
+    cl_append (x, cl_ct (n->t));
+    cl_expr (re, x);
+    cl_expr (im, x);
+    cl_push (o, cl_nl (":", x));
+    return;
+  }
   if (k == E_FLT) {
     if (cl_isld (n)) { cl_push (o, cl_n (cl_ldhexfloat (cl_lit_text (n)))); return; }
     if (cl_eq (cl_tword (n), "float128")) { cl_push (o, cl_n (cl_with_suffix (cl_ldround (cl_lit_text (n), 113, -16494, 16383), "Q"))); return; }
@@ -2357,7 +2748,7 @@ static void cl_labelled (struct cs_st *n, struct cl_list *o)
 static void cl_ifs (char *word, struct cs_st *n, struct cl_list *o)
 {
   struct cl_list *x = cl_l ();
-  cl_itemx (cl_p (n->e), x);
+  cl_testx (cl_p (n->e), x);
   cl_sub_body (n->a, x);
   cl_push (o, cl_nl (word, x));
   if (n->b) {
@@ -2382,6 +2773,44 @@ static void cl_static_assert (struct cs_dl *d, struct cl_list *o)
   cl_push (o, cl_n1 ("comment", cl_n (cl_cat ("_Static_assert, checked by clang: ", text))));
 }
 static void cl_asm_stmt (struct cs_st *n, struct cl_list *o);
+/* (whether csema writes a complex value as a : of temporaries and the result, cl_cx_bin's and
+   cl_cx_conv's: a local of a struct type takes a : after it as its items, so such a value is assigned
+   after the declaration instead) */
+static int cl_cx_group (struct cs_ex *e)
+{
+  while (e->k == E_PAREN) e = cl_k (e, 0);
+  if (!cl_cx_is (e->t)) return 0;
+  if (e->k == E_BIN || e->k == E_CASS || e->k == E_STMTX) return 1;
+  if (e->k == E_UN && cl_name_is (e, "-")) return 1;
+  if ((e->k == E_ICE || e->k == E_CAST) && (e->op == CK_FLOATINGREALTOCOMPLEX || e->op == CK_INTEGRALREALTOCOMPLEX || e->op == CK_FLOATINGCOMPLEXCAST)) return 1;
+  return 0;
+}
+/* (a local of a struct, union or complex type takes a lone : after it, or several items, as its items: an
+   initializer that would be written so, a statement expression, ?:, a comma in parentheses or complex
+   arithmetic (cl_cx_group), is assigned after the declaration instead; parentheses around another one are
+   dropped, a copy either way: glibc's math_check_force_underflow_complex, __typeof (x) tmp = (x), read the
+   copy's first part from x) */
+static int cl_agg_split (struct cs_decl *d)
+{
+  struct cs_ex *e, *x;
+  int k = cs_kind (d->t);
+  if (k != TY_STRUCT && k != TY_UNION && k != TY_COMPLEX) return 0;
+  /* (the value under its conversions and parentheses: the kids as they are, a paren count or an E_PAREN; cl_k
+     would make a count an E_PAREN) */
+  e = d->init;
+  while ((e->k == E_PAREN || e->k == E_ICE) && e->nk) e = e->kid[0];
+  if (e->k == E_INIT || e->k == E_CLIT) return 0;
+  if (e->k == E_STMTX || e->k == E_COND || e->k == E_BCOND || (e->k == E_BIN && cl_name_is (e, ",")) || cl_cx_group (d->init)) return 1;
+  /* (else no parentheses, which a : would write: a copy of the value) */
+  while (d->init->k == E_PAREN && d->init->nk) d->init = d->init->kid[0];
+  for (x = d->init; x; ) {
+    x->paren = 0;
+    if (x->k != E_ICE || !x->nk) break;
+    while (x->kid[0]->k == E_PAREN && x->kid[0]->nk) x->kid[0] = x->kid[0]->kid[0];
+    x = x->kid[0];
+  }
+  return 0;
+}
 static void cl_decl_stmt (struct cs_st *n, struct cl_list *o)
 {
   struct cs_dl *x = n->dl;
@@ -2404,6 +2833,14 @@ static void cl_decl_stmt (struct cs_st *n, struct cl_list *o)
       if (k > 1) g = cl_cat3 (g, " ", cl_num (k));
       d->global = g;
       cl_out (cl_decl (d, 1, g));
+    } else if (d->init && cl_agg_split (d)) {
+      struct cs_ex *v = d->init;
+      d->init = 0;
+      cl_push (o, cl_decl (d, 0, 0));
+      d->init = v;
+      cl_push (o, cl_n (cl_ffname (cl_dn (d))));
+      cl_push (o, cl_n ("="));
+      cl_itemx (cl_p (v), o);
     } else cl_push (o, cl_decl (d, 0, 0));
     x = x->nxt;
   }
@@ -2412,7 +2849,7 @@ static void cl_clause_expr (struct cs_ex *e, int eff, struct cl_list *o)
 {
   if (!e) { cl_push (o, cl_n (":")); return; }
   e = cl_p (e);
-  if (eff) cl_effect (e, o); else cl_itemx (e, o);
+  if (eff) cl_effect (e, o); else cl_testx (e, o);
 }
 static void cl_stmt (struct cs_st *n, struct cl_list *o)
 {
@@ -2441,14 +2878,14 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
   case S_IF: cl_ifs ("if", n, o); return;
   case S_WHILE: {
     struct cl_list *x = cl_l ();
-    cl_itemx (cl_p (n->e), x);
+    cl_testx (cl_p (n->e), x);
     cl_sub_body (n->a, x);
     cl_push (o, cl_nl ("while", x));
     return;
   }
   case S_DO: {
     struct cl_list *x = cl_l ();
-    cl_itemx (cl_p (n->e), x);
+    cl_testx (cl_p (n->e), x);
     cl_sub_body (n->a, x);
     cl_push (o, cl_nl ("do while", x));
     return;
@@ -2871,7 +3308,8 @@ static int cl_regs_only (char *k)
 {
   long i = 0;
   if (!k[0]) return 0;
-  while (k[i]) { if (k[i] != 'r' && k[i] != 'J' && k[i] != 'K') return 0; i++; }
+  /* (g, any general operand: a register, test-strcmp's asm ("" : "=g" (r) : "0" (r))) */
+  while (k[i]) { if (k[i] != 'r' && k[i] != 'J' && k[i] != 'K' && k[i] != 'g') return 0; i++; }
   return 1;
 }
 static int cl_has_plus (char *c) { long i = 0; while (c[i]) { if (c[i] == '+') return 1; i++; } return 0; }

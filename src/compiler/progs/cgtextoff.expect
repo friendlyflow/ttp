@@ -1,0 +1,4 @@
+exit 0
+ok a text plus a sizeof
+ok a text plus a group
+ok an array plus a sizeof
