@@ -9,7 +9,11 @@
    program reaches, is 0; _nl_current_LC_CTYPE_used, of lc-ctype.o, which
    printf reaches (_nl_current_LC_CTYPE), is not (ttpc: weak / name, and
    with / names under every definition of lc-ctype.c's unit; tests2's repro,
-   setlocale's weak_extern of them).  */
+   setlocale's weak_extern of them). A block's extern declared weak is a
+   weak reference too: _nl_current_LC_MONETARY_used, as uselocale.c declares
+   each category's in a block, is 0 (csema wrote it as a plain name, which
+   pulled lc-monetary's in: uselocale then stored to the thread locals it
+   left out, tst-ftime_l's SIGILL on aarch64).  */
 extern char _nl_current_LC_TIME_used __attribute__ ((weak));
 extern char _nl_current_LC_CTYPE_used __attribute__ ((weak));
 extern int printf (const char *, ...);
@@ -18,5 +22,10 @@ int
 main (void)
 {
   printf ("LC_TIME %d, LC_CTYPE %d\n", &_nl_current_LC_TIME_used != 0, &_nl_current_LC_CTYPE_used != 0);
+  {
+    extern char _nl_current_LC_MONETARY_used;
+#pragma weak _nl_current_LC_MONETARY_used
+    printf ("LC_MONETARY %d\n", &_nl_current_LC_MONETARY_used != 0);
+  }
   return 0;
 }
