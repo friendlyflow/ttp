@@ -20,3 +20,5 @@ Disassembly of section .fini:
 
 00000000 <.fini>:
    0:	e8bd8008 	pop	{r3, pc}
+
+There are no unwind sections in this file.

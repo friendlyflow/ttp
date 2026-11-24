@@ -28,7 +28,9 @@
 #       other, and so does one of 5 in a line where the other side has one:
 #       where a build puts its stack or heap is its own; the
 #       program's name, test.ref or test-prog, as the test's; a temporary
-#       file's random XXXXXX in a line that differs only there)
+#       file's random XXXXXX in a line that differs only there; in string
+#       and wcsmbs the header line of the implementations, the same names in
+#       another order)
 #   perl tests.pl table <area> <target> <dir> <test>...
 #       the table of dir/<test>.result: a line of counts, then a line per test
 #
@@ -122,6 +124,13 @@ sub norm { my ($s, $t) = @_; unaddr($s) =~ s/\Q$t\E(?:\.ref|-prog)\b/$t/gr }
 # last 6 letters or digits are the random ones of its XXXXXX, as any other;
 # before a colon too: tst-freopen64-4's warning)
 sub tmpname { my ($s) = @_; $s =~ s{(/[^/\s"']*?)[A-Za-z0-9]{6}(?=[/\s"'):]|\z)}{$1XXXXXX}gr }
+# (and in string and wcsmbs the header line of the implementations,
+# printf ("%20s", "") and then "\t%s" of each name, test-string.h's IMPL
+# entries in the section impls, whose order is the compiler's: gcc lays a
+# unit's out last first, ttpc in the source's order; that line exactly, its
+# names compared as a set, every other line as it is)
+my $implarea = 0;
+sub implhead { my ($a, $b) = @_; my $h = qr/^ +(?:\t[A-Za-z_]\w*)+$/; $implarea && $a =~ $h && $b =~ $h && join(' ', sort split /\t/, $a) eq join(' ', sort split /\t/, $b) }
 sub same {
     my ($a, $b, $t) = @_;
     ($a, $b) = (norm($a, $t), norm($b, $t));
@@ -130,7 +139,7 @@ sub same {
     my @b = split /\n/, $b, -1;
     return 0 unless @a == @b;
     for my $i (0 .. $#a) {
-        next if $a[$i] eq $b[$i] || tmpname($a[$i]) eq tmpname($b[$i]);
+        next if $a[$i] eq $b[$i] || tmpname($a[$i]) eq tmpname($b[$i]) || implhead($a[$i], $b[$i]);
         return 0 unless "$a[$i]$b[$i]" =~ /0x\.\.\./ && unaddr5($a[$i]) eq unaddr5($b[$i]);
     }
     1;
@@ -152,6 +161,7 @@ if ($cmd eq 'locales') {
 
 if ($cmd eq 'run') {
     my ($dir, $t, $input) = splice @ARGV, 0, 3;
+    $implarea = $dir =~ m{/(?:string|wcsmbs)/*$};
     my %env;
     $env{$1} = $2 while @ARGV && $ARGV[0] =~ /^([A-Z_][A-Z0-9_]*)=(.*)$/s && shift @ARGV;
     my @slot;

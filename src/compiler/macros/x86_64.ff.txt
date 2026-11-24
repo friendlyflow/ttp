@@ -228,6 +228,7 @@ elf:
       64
   comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
+    _end is the linker's end of the bss (ld's default script), mem_end: glibc's minimal malloc (ld.so's, dl-minimal-malloc.c) starts there.
   frame:
     origin
       elf_base
@@ -247,6 +248,7 @@ elf:
     file_end:
     bss
     mem_end:
+    _end:
 opt:
   comment
     -O (gen/patches/opt.pl): cc_ldfp_* off: V = the local at FP + off, as cc_li off V, cc_addfp, cc_load_* do; cc_stfp_* off: [FP + off] = V, as cc_li off L, cc_addfp_l, cc_store_* (L is not set); off in -255..255, one instruction.
@@ -1159,7 +1161,8 @@ c:
       rdx
   comment
     C's floating point: float and double values are their bits in V (L for the left operand), worked on in xmm0 (L) and xmm1 (V).
-    A comparison is ucomis and a set, false when either is a NaN (the parity flag) but for !=; < and <= compare the other way round, as a and ae.
+    A comparison is ucomis (== and !=, quiet) or comis (< <= > >=, which C makes signaling: invalid on a quiet NaN)
+    and a set, false when either is a NaN (the parity flag) but for !=; < and <= compare the other way round, as a and ae.
     No SSE2 instruction converts between floating point and unsigned 64 bits. From it: a value with the top bit set is halved (its low bit kept, for the rounding), converted and doubled.
     To it: a value from 2^63 up is converted less 2^63 and gets the top bit back. rcx and rdx are kept on the stack.
   cc_fadd_s:
@@ -1261,7 +1264,7 @@ c:
     movd.tox
       eax
       xmm1
-    ucomiss
+    comiss
       xmm0
       xmm1
     seta
@@ -1276,7 +1279,7 @@ c:
     movd.tox
       eax
       xmm1
-    ucomiss
+    comiss
       xmm1
       xmm0
     seta
@@ -1291,7 +1294,7 @@ c:
     movd.tox
       eax
       xmm1
-    ucomiss
+    comiss
       xmm0
       xmm1
     setae
@@ -1306,7 +1309,7 @@ c:
     movd.tox
       eax
       xmm1
-    ucomiss
+    comiss
       xmm1
       xmm0
     setae
@@ -1521,7 +1524,7 @@ c:
     movq.tox
       rax
       xmm1
-    ucomisd
+    comisd
       xmm0
       xmm1
     seta
@@ -1536,7 +1539,7 @@ c:
     movq.tox
       rax
       xmm1
-    ucomisd
+    comisd
       xmm1
       xmm0
     seta
@@ -1551,7 +1554,7 @@ c:
     movq.tox
       rax
       xmm1
-    ucomisd
+    comisd
       xmm0
       xmm1
     setae
@@ -1566,7 +1569,7 @@ c:
     movq.tox
       rax
       xmm1
-    ucomisd
+    comisd
       xmm1
       xmm0
     setae
@@ -1852,7 +1855,7 @@ c:
     fldt.m
       0
       rax
-    fucomip.st1
+    fcomip.st1
     fstp.st0
     seta
       al
@@ -1866,7 +1869,7 @@ c:
     fldt.m
       0
       r10
-    fucomip.st1
+    fcomip.st1
     fstp.st0
     seta
       al
@@ -1880,7 +1883,7 @@ c:
     fldt.m
       0
       rax
-    fucomip.st1
+    fcomip.st1
     fstp.st0
     setae
       al
@@ -1894,7 +1897,7 @@ c:
     fldt.m
       0
       r10
-    fucomip.st1
+    fcomip.st1
     fstp.st0
     setae
       al

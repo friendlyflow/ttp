@@ -47,12 +47,26 @@
 #                   function / void, address 0; a branch to it goes to a
 #                   trap the function carries (.Lweak X: / udf 0)
 #
+#   EHABI           the dump also has the object's unwinding entries
+#                   (readelf -u, after its code): each entry's
+#                   instructions are the ehabi words of ttpc's asmcfi.pl
+#                   where it starts, as GNU as's directives would make
+#                   them (ehabi save / r4 / lr, a .save; ehabi pad / 8, a
+#                   .pad; ehabi cantunwind), first to last; an entry with
+#                   none has ehabi pad / 0. Where no symbol is, the entry
+#                   starts an entry block of its own, "<file> .text <hex>":
+#                   ttpc writes an entry for each asm function or entry
+#                   block with ehabi words, its procedure
+#
 # A host tool (core Perl only), not part of ttpc.
 use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use FF qw(node write_txt);
+use S2ffRes;
+# a name as csema writes it (S2ffRes.pm: name' where it reserves the name)
+sub rn { S2ffRes::name('arm', $_[0]) }
 use armdec;
 
 my $page = 'glibc asm';
@@ -80,6 +94,7 @@ my (%sym, %symsec);     # name -> address, section (from the symbol table)
 my (%secsyms, %secend);  # section -> [[address, name], ...] (functions and labels); its end
 my (@secs, %sec);       # sections of code in order; name -> { lines => [...] }
 my (%undef);             # names the symbol table has undefined
+my %ehabi;               # address of .text -> the ehabi words of the entry there
 # (crtn's, --then: its sections' instructions after crti's, from its end on)
 sub readdump {
 my ($dump, $then) = @_;
@@ -95,8 +110,28 @@ my $cur;
 my $last;
 open my $d, '<', $dump or die "s2ff-arm: cannot open $dump: $!\n";
 my $insyms = 0;
+# (readelf -u after the code: its entries, each's instructions' bytes)
+my ($unwind, $ent) = (0);
+my @ents;
 while (my $l = <$d>) {
     chomp $l;
+    if ($l eq 'There are no unwind sections in this file.') { $unwind = 1; next }
+    if ($l =~ /^Unwind section '(\S+)' at offset 0x[0-9a-f]+ contains \d+ entr(y|ies):$/) {
+        fail "unwinding entries of $1, not .text's" unless $1 eq '.ARM.exidx';
+        $unwind = 2; next;
+    }
+    if ($unwind) {
+        next if $then;
+        if ($l =~ /^0x([0-9a-f]+)(?: <[^>]*>)?: (\S+)/) {
+            $ent = { addr => hex $1, bytes => [] };
+            $ent->{cant} = 1 if $2 eq '0x1';
+            push @ents, $ent;
+            next;
+        }
+        next if $l =~ /^\s+Compact model index: [01]$/ || $l eq '' || $l =~ /^\s+\[cantunwind\]$/;
+        if ($ent && $l =~ /^\s+((?:0x[0-9a-f]{2} ?)+)\s+\S/) { push @{ $ent->{bytes} }, map { hex } grep { $_ ne '0xb0' } split ' ', $1; next }
+        fail "readelf -u: $l";
+    }
     if ($l =~ /^SYMBOL TABLE:/) { $insyms = 1; next }
     if ($insyms) {
         if ($l =~ /^([0-9a-f]{8}) (.{7}) (\S+)\t([0-9a-f]+) (.*)$/) {
@@ -141,6 +176,43 @@ while (my $l = <$d>) {
     }
 }
 close $d;
+fail "the dump has no unwinding entries (readelf -u after its code): make it again" unless $unwind || $then;
+ehabi($_) for @ents;
+}
+# an entry's instructions (the unwinder's order) as GNU as's directives,
+# first to last (ehabi words): its instructions last first, a pop of r4 to
+# r15 and one of r0 to r3 after it one save (a .save of both makes them),
+# vsp's additions one pad
+sub ehabi {
+    my ($e) = @_;
+    my @b = @{ $e->{bytes} };
+    my @ops;    # [kind, value], the unwinder's order
+    while (@b) {
+        my $x = shift @b;
+        if ($x < 0x40) { push @ops, [pad => ($x << 2) + 4] }
+        elsif ($x < 0x80) { push @ops, [pad => -((($x & 0x3f) << 2) + 4)] }
+        elsif ($x < 0x90) { my $y = shift @b // fail "an EHABI pop with no second byte"; my $m = (($x & 15) << 8 | $y) << 4; fail "EHABI's refuse to unwind" unless $m; push @ops, [save => $m] }
+        elsif ($x >= 0xa0 && $x < 0xb0) { my $m = 0; $m |= 1 << (4 + $_) for 0 .. ($x & 7); $m |= 1 << 14 if $x & 8; push @ops, [save => $m] }
+        elsif ($x == 0xb1) { my $y = shift @b // fail "an EHABI pop with no second byte"; fail "an EHABI pop of $y" unless $y && $y < 16; push @ops, [save => $y] }
+        elsif ($x == 0xb2) { my ($v, $k) = (0, 0); while (1) { my $y = shift @b // fail "an EHABI uleb128 cut short"; $v |= ($y & 0x7f) << $k; $k += 7; last unless $y & 0x80 } push @ops, [pad => 0x204 + ($v << 2)] }
+        else { fail sprintf("an EHABI instruction 0x%02x, which no ehabi word says", $x) }
+    }
+    my @w;
+    for my $o (reverse @ops) {
+        my ($k, $v) = @$o;
+        if (@w && $w[-1][0] eq $k && ($k eq 'pad' || ($v < 16 && $w[-1][1] >= 16 && !($w[-1][1] & 15)))) { $w[-1][1] += $v; next }
+        push @w, [$k, $v];
+    }
+    my @n;
+    my %rn = (13 => 'sp', 14 => 'lr', 15 => 'pc');
+    for (@w) {
+        my ($k, $v) = @$_;
+        if ($k eq 'pad') { push @n, node('ehabi pad', node($v)); next }
+        push @n, node('ehabi save', map { node($rn{$_} // "r$_") } grep { $v >> $_ & 1 } 0 .. 15);
+    }
+    @n = (node('ehabi cantunwind')) if $e->{cant};
+    @n = (node('ehabi pad', node(0))) unless @n;
+    push @{ $ehabi{ $e->{addr} } }, @n;
 }
 readdump($dump);
 readdump($then[1], 1) if @then;
@@ -154,25 +226,25 @@ $secend{$_} = undef for @then ? @secs : ();
 my (@aliases, @data, $file, $line, %dlab, %got, %weakref, %srcalias);
 (my $base = $src) =~ s{.*/}{}; $base =~ s/\.s$//;
 # the offset of a symbol's word in the file's GOT
-sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("$base got"), node("$base got $t"), node('a0')) }
+sub gotoff { my ($t) = @_; $got{$t} = node('word', node(rn($t))); node('sub', node("$base got"), node("$base got $t"), node('a0')) }
 {
     open my $s, '<', $src or die "s2ff-arm: cannot open $src: $!\n";
     my ($other, $blk, %numeric, @stack);
     my $close = sub {
         return unless $blk;
         if (@{ $blk->{nodes} }) {
-            push @data, node("$blk->{name}:", node('asm'), node('comment', node('glibc-2.44 ' . ($blk->{file} // $src))), @{ $blk->{nodes} });
+            push @data, node(rn($blk->{name}) . ":", node('asm'), node('comment', node('glibc-2.44 ' . ($blk->{file} // $src))), @{ $blk->{nodes} });
             for (@{ $blk->{labels} }) {
                 my ($l, $o) = @$_;
                 next if $l eq $blk->{name};
                 if ($l =~ /^\.L/) { $dlab{$l} = [$blk->{name}, $o] }
-                elsif ($o == 0) { push @aliases, node("$l:", node('alias'), node($blk->{name})) }
+                elsif ($o == 0) { push @aliases, node(rn($l) . ":", node('alias'), node(rn($blk->{name}))) }
                 else { fail "the label $l at $o in a block of data" }
             }
         } elsif (@{ $blk->{labels} }) {
             # labels with no bytes after them (start.S's __data_start, ...): only aliases
             my ($first) = map { $_->[0] } grep { $_->[0] !~ /^\.L/ } @{ $blk->{labels} };
-            push @aliases, map { node("$_->[0]:", node('alias'), node($first)) } grep { $_->[0] !~ /^\.L/ && $_->[0] ne $first } @{ $blk->{labels} } if $first;
+            push @aliases, map { node(rn($_->[0]) . ":", node('alias'), node(rn($first))) } grep { $_->[0] !~ /^\.L/ && $_->[0] ne $first } @{ $blk->{labels} } if $first;
         }
         undef $blk;
     };
@@ -201,7 +273,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
             if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) {
                 my ($x, $y) = ($1, $2);
                 if ($y =~ /^-?\d+$/) { warn "s2ff-arm: $where: $x = $y, a constant, left out\n"; next }
-                push @aliases, node("$x:", node('alias'), node($y));
+                push @aliases, node(rn($x) . ":", node('alias'), node(rn($y)));
                 $srcalias{$x} = 1;
                 next;
             }
@@ -233,7 +305,7 @@ sub gotoff { my ($t) = @_; $got{$t} = node('word', node($t)); node('sub', node("
                 my @ls = grep { $_->[0] !~ /^\.L/ } @{ $blk->{labels} };
                 if (@ls) {
                     my ($first, @more) = map { $_->[0] } @ls;
-                    push @aliases, map { node("$_:", node('alias'), node($first)) } @more if !%zeroed || $zeroed{$first};
+                    push @aliases, map { node(rn($_) . ":", node('alias'), node(rn($first))) } @more if !%zeroed || $zeroed{$first};
                     warn "s2ff-arm: $where: $first is zero, c2ff --zero $first makes it\n";
                     undef $blk;
                     next;
@@ -269,6 +341,9 @@ for my $s (@secs) {
     # its own, sigrestorer.S's nop for the unwinder, strcmp.S's tail: a
     # local name of it)
     $names{ $lines[0]{addr} } //= ["$base $s"];
+    # (an unwinding entry where no symbol is, vfork.S's after its first
+    # instruction, clone.S's child's .cantunwind: an entry block of its own)
+    if ($s eq '.text') { $names{$_} //= [sprintf "$base $s %x", $_] for keys %ehabi }
     my $lname = sub { my ($a) = @_; $names{$a} ? $names{$a}[0] : sprintf('.L %x', $a) };
     my (%target);     # addresses branches go to
     my @out;                # [address, node] in order
@@ -286,6 +361,8 @@ for my $s (@secs) {
     for my $i (@lines) {
         my $at = $i->{addr};
         $zeros->($at);
+        # (the ehabi words of the entry that starts here, before it)
+        push @out, map { [$at, $_] } @{ delete $ehabi{$at} } if $s eq '.text' && $ehabi{$at};
         $next = $at + ($i->{hex} =~ /^(\w{4}) (\w{4})$/ ? 4 : length($i->{hex}) / 2);
         my $rel = $i->{relocs}[0];
         if ($i->{op} =~ /^\.(word|short|byte)$/) {
@@ -332,22 +409,24 @@ for my $s (@secs) {
     $zeros->($secend{$s}) if defined $secend{$s};
     # the blocks: a label at each entry and each address a branch goes to
     my ($first) = @{ $names{ $lines[0]{addr} } };
-    my $fn = node("$first:", node('asm'), node('comment', node('glibc-2.44 ' . ($file // $src) . " ($s)")));
+    my $fn = node(rn($first) . ":", node('asm'), node('comment', node('glibc-2.44 ' . ($file // $src) . " ($s)")));
     my $into = $fn;
+    my $lastat = $lines[0]{addr};
     for my $o (@out) {
         my ($at, $n) = @$o;
-        if ($at != $lines[0]{addr} && ($names{$at} || $target{$at})) {
+        if ($at != $lastat && ($names{$at} || $target{$at})) {
             my $l = $lname->($at);
             # (the other names there, ieee754-df.S's __aeabi_dadd at
             # __adddf3: entries of their own, empty, before it: ttpc knows an
             # alias of a function, not of an entry in one)
-            push @{ $fn->{children} }, map { node("$_:", node('asm')) } @{ $names{$at} }[1 .. $#{ $names{$at} }] if $names{$at};
+            push @{ $fn->{children} }, map { node(rn($_) . ":", node('asm')) } @{ $names{$at} }[1 .. $#{ $names{$at} }] if $names{$at};
             $into = node("$l:", $names{$at} ? (node('asm')) : ());
             push @{ $fn->{children} }, $into;
         }
+        $lastat = $at;
         push @{ $into->{children} }, $n;
     }
-    push @aliases, map { node("$_:", node('alias'), node($first)) } @{ $names{ $lines[0]{addr} } }[1 .. $#{ $names{ $lines[0]{addr} } }];
+    push @aliases, map { node(rn($_) . ":", node('alias'), node(rn($first))) } @{ $names{ $lines[0]{addr} } }[1 .. $#{ $names{ $lines[0]{addr} } }];
     push @{ $fn->{children} }, map { node(".Lweak $_:", node('udf', node(0))) } sort keys %weakb;
     %weakb = ();
     push @fns, $fn;
@@ -362,7 +441,7 @@ sub symbol {
     $t =~ s/\^([A-Z@\[\\\]^_])/chr(ord($1) - 64)/ge;
     if ($dlab{$t}) {
         my ($b, $o) = @{ $dlab{$t} };
-        return $o ? node('addi', node($o), node($b), node('a0')) : node($b);
+        return $o ? node('addi', node($o), node(rn($b)), node('a0')) : node(rn($b));
     }
     if ($t =~ /^\.L/) {
         # (objdump shows a control character of a name as ^B in a relocation)
@@ -371,7 +450,8 @@ sub symbol {
         fail "the local symbol $t is in $symsec{$n}, not yet" unless $sec{ $symsec{$n} };
         return node($lname->($sym{$n}));
     }
-    node($t);
+    # (a symbol: as csema names it, name' where it reserves the name)
+    node(rn($t));
 }
 # the word of data a relocation fills in
 sub data_reloc {
@@ -384,10 +464,11 @@ sub data_reloc {
     if ($type eq 'R_ARM_GOTPC') { return node('word', $plus->(node('sub', node('pc'), node("$base got"), node('a0')))) }
     if ($type eq 'R_ARM_GOT32') { return node('word', $plus->(gotoff($t))) }
     if ($type eq 'R_ARM_GOTOFF32') { return node('word', $plus->(node('sub', node("$base got"), symbol($t, $lname), node('a0')))) }
-    if ($type eq 'R_ARM_TLS_IE32') { $got{"$t tp"} = node('word', node('tprel', node($t))); return node('word', $plus->(node('sub', node('pc'), node("$base got $t tp"), node('a0')))) }
+    if ($type eq 'R_ARM_TLS_IE32') { $got{"$t tp"} = node('word', node('tprel', node(rn($t)))); return node('word', $plus->(node('sub', node('pc'), node("$base got $t tp"), node('a0')))) }
     fail "a word with $type";
 }
 
+fail sprintf("an unwinding entry at 0x%x, where .text has no instruction", $_) for sort { $a <=> $b } keys %ehabi;
 if ($size) { print $bytes // 0, "\n"; exit }
 if (defined $facts) { open my $h, ">", $facts or die "s2ff: cannot write $facts: $!\n"; print $h "size ", $bytes // 0, "\n" }
 # the GOT: its start, then a word for each symbol read through it, each a
@@ -396,11 +477,11 @@ if (defined $facts) { open my $h, ">", $facts or die "s2ff: cannot write $facts:
 # left undefined a C global, its address (0), as asm names no C weak
 if (%got) {
     push @data, node("$base got:", node('asm'), node('align', node(4)));
-    push @data, map { $weakref{$_} && $undef{$_} ? node("$base got $_:", node('void'), node('* pointer'), node($_), node('& address'))
+    push @data, map { $weakref{$_} && $undef{$_} ? node("$base got $_:", node('void'), node('* pointer'), node(rn($_)), node('& address'))
         : node("$base got $_:", node('asm'), $got{$_}) } sort keys %got;
 }
 # a weak name the file declares and does not define (crti's __gmon_start__)
-push @fns, map { node("$_:", node('weak'), node('function'), node('void')) } sort grep { $undef{$_} } keys %weakref;
+push @fns, map { node(rn($_) . ":", node('weak'), node('function'), node('void')) } sort grep { $undef{$_} } keys %weakref;
 # each alias once, and none of a name that is a function or a label of the
 # code already (strchr.S's index = strchr, where index, first by name, is
 # the function: strchr its alias, not both ways round)

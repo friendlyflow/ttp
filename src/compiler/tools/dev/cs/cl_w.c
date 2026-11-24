@@ -479,10 +479,13 @@ static int cl_is_mark (char *s)
 {
   return cl_eq (s, "thread local") || cl_eq (s, "weak") || cl_eq (s, "base pcs") || cl_eq (s, "function") || cl_eq (s, "ifunc") || cl_eq (s, "section") || cl_eq (s, "alias") || cl_eq (s, "asm") || cl_eq (s, "struct") || cl_eq (s, "union") || cl_eq (s, "enum");
 }
+/* with / names first under a definition: what placing it places too */
+static int cl_is_with (struct node *n) { return n && !cl_leaf (n) && cl_is (n, "with"); }
 static long cl_marks (struct cl_list *k)
 {
   long i = 0;
-  if (k->n && cl_is_align (k->v[0])) i++;
+  if (k->n && cl_is_with (k->v[0])) i++;
+  if (i < k->n && cl_is_align (k->v[i])) i++;
   if (i < k->n && cl_is_cleanup (k->v[i])) i++;
   while (i < k->n && cl_leaf (k->v[i]) && cl_is_mark (cl_txt (k->v[i]))) {
     if (cl_is (k->v[i], "ifunc") || cl_is (k->v[i], "section")) i += 2; else i += 1;
@@ -607,6 +610,9 @@ static void cl_new_place (struct cl_list *run, struct cl_list *it, int depth, st
   if (agg) {
     if (it && it->n == 1 && cl_is (it->v[0], ":") && !cl_leaf (it->v[0])) { cl_new_lit (run, cl_sub (it->v[0], 0), depth + 1, o); return; }
     if (!it) { cl_new_lit (run, cl_l (), depth + 1, o); return; }
+    /* (an aggregate place left implicit, a : with nothing under it, or the 0 of an empty literal: its zeros written
+       out, as ttpc takes a place that is a struct; tst-itimer's &(struct itimerval) { }, whose first timeval was 0) */
+    if (it->n == 1 && cl_leaf (it->v[0]) && (cl_is (it->v[0], ":") || cl_is (it->v[0], "0"))) { cl_new_lit (run, cl_l (), depth + 1, o); return; }
   }
   if (!it) { cl_push (o, cl_n ("0")); return; }
   cl_newlist (it, CX_FN, o);

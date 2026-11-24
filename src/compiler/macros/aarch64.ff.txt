@@ -758,6 +758,7 @@ elf:
       64
   comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
+    _end is the linker's end of the bss (ld's default script), mem_end: glibc's minimal malloc (ld.so's, dl-minimal-malloc.c) starts there.
   frame:
     origin
       elf_base
@@ -777,6 +778,7 @@ elf:
     file_end:
     bss
     mem_end:
+    _end:
 c:
   comment
     The C layer of ttpc, for aarch64: the primitives it emits, in its own terms. V is the value (x0), L the left operand (x9), X a scale or count (x10), FP the frame (x29), SP the stack (sp).
@@ -1358,7 +1360,8 @@ c:
       x0
   comment
     C's floating point: float and double values are their bits in V (L for the left operand), worked on in s16/d16 (L) and s17/d17 (V).
-    A comparison is fcmp and cset (csinc with the opposite condition), false when either is a NaN but for !=: mi for <, ls for <=.
+    A comparison is fcmp (== and !=, quiet) or fcmpe (< <= > >=, which C makes signaling: invalid on a quiet NaN)
+    and cset (csinc with the opposite condition), false when either is a NaN but for !=: mi for <, ls for <=.
   cc_fadd_s:
     fmov.s.w
       w9
@@ -1452,7 +1455,7 @@ c:
     fmov.s.w
       w0
       s17
-    fcmp.s
+    fcmpe.s
       s17
       s16
     csinc
@@ -1467,7 +1470,7 @@ c:
     fmov.s.w
       w0
       s17
-    fcmp.s
+    fcmpe.s
       s17
       s16
     csinc
@@ -1482,7 +1485,7 @@ c:
     fmov.s.w
       w0
       s17
-    fcmp.s
+    fcmpe.s
       s17
       s16
     csinc
@@ -1497,7 +1500,7 @@ c:
     fmov.s.w
       w0
       s17
-    fcmp.s
+    fcmpe.s
       s17
       s16
     csinc
@@ -1636,7 +1639,7 @@ c:
     fmov.d.x
       x0
       d17
-    fcmp.d
+    fcmpe.d
       d17
       d16
     csinc
@@ -1651,7 +1654,7 @@ c:
     fmov.d.x
       x0
       d17
-    fcmp.d
+    fcmpe.d
       d17
       d16
     csinc
@@ -1666,7 +1669,7 @@ c:
     fmov.d.x
       x0
       d17
-    fcmp.d
+    fcmpe.d
       d17
       d16
     csinc
@@ -1681,7 +1684,7 @@ c:
     fmov.d.x
       x0
       d17
-    fcmp.d
+    fcmpe.d
       d17
       d16
     csinc

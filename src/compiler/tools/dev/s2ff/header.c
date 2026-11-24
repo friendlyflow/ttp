@@ -161,6 +161,8 @@ static struct str *spdx_one (struct str *h)
     if (!v) v = s_of ("2");
     lic = s_of ("GPL-"); s_app (lic, v); s_cat (lic, ".0-"); s_cat (lic, later ? "or-later" : "only");
   } else if (mf (t, "Developed at SunPro", "i") && mf (t, "freely granted, provided that this notice is preserved", "i")) lic = s_of ("SunPro");
+  /* (the FSF All Permissive License, as Header.pm) */
+  else if (mf (t, "Copying and distribution of this file, with or without modification, are permitted in any medium without royalty provided the copyright notice and this notice are preserved", "i")) lic = s_of ("FSFAP");
   else if (mf (t, "Permission to use, copy, modify, and(?:/or)? distribute this software for any purpose with or without fee is hereby granted", "i")) lic = s_of ("ISC");
   else if (mf (t, "Permission is hereby granted, free of charge, to any person obtaining a copy", "i")) lic = s_of ("MIT");
   else if (mf (t, "Redistribution and use in source and binary forms", "i")) {

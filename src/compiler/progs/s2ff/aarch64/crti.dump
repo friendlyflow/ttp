@@ -45,3 +45,6 @@ Disassembly of section .fini:
    0:	d503233f 	hint	#0x19
    4:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
    8:	910003fd 	add	x29, sp, #0x0
+
+/home/nico/.cache/ttp/build/tools/glibc/aarch64/i/csu/crti.ref.o:     file format elf64-littleaarch64
+

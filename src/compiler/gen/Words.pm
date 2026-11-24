@@ -431,11 +431,14 @@ sub is_align { my ($n) = @_; $n && $n->{content} eq 'align' && @{ $n->{children}
 # packed first: C's packed attribute of a field, or after struct or union of a record
 sub is_packed { my ($n) = @_; $n && $n->{content} eq 'packed' && leaf($n) }
 # cleanup / f first under a local, after its align: C's cleanup attribute
+sub is_with { my ($n) = @_; $n && $n->{content} eq 'with' && !leaf($n) }
 sub is_cleanup { my ($n) = @_; $n && $n->{content} eq 'cleanup' && @{ $n->{children} } == 1 && leaf($n->{children}[0]) }
 sub marks {
     my ($k) = @_;
     my $i = 0;
-    $i++ if is_align($k->[0]);
+    # (with / names first: what placing the definition places too)
+    $i++ if is_with($k->[0]);
+    $i++ if $i < @$k && is_align($k->[$i]);
     $i++ if $i < @$k && is_cleanup($k->[$i]);
     while ($i < @$k && leaf($k->[$i]) && $mark{ $k->[$i]{content} }) { $i += $k->[$i]{content} =~ /^(?:ifunc|section)$/ ? 2 : 1 }
     $i > @$k ? scalar @$k : $i;

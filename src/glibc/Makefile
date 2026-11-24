@@ -184,8 +184,10 @@ CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
 CSHEAP_glibc := 64
 csheap = $(or $(CSHEAP_$(GTARGET)_$(1)),$(CSHEAP_$(1)))
-# (slot.sh -v: the address space; with the heap in a file it is the file's)
-csmem = -v $(if $(call csheap,$(1)),70000000,9000000)
+# (slot.sh -v: the address space; with the heap in a file it is the file's:
+# all of glibc on x86_64 measured VmPeak 67.1 GB, the 64 GB heap and 3 GB
+# more, its RSS 8.1 GB, 2026-11-22: 72 GB, not 70)
+csmem = -v $(if $(call csheap,$(1)),72000000,9000000)
 cstrans = $(CPRUN) $(CSEMA) -l $(CSFLAGS) $(if $(call csheap,$(1)),-M $(FF)/$(1).heap $(call csheap,$(1)))
 # (a unit as csema reads it: x86_64's of gcc's SSE4.2 intrinsics through
 # clang's copy, CLANGVEC below, as clang reads it)
@@ -265,7 +267,9 @@ RUNN := sh ../compiler/gen/slot.sh -n -v $(CAPKB)
 # as glibc's own startup does)
 M1 := strlen memcpy memset strcmp strchr
 OBJS_string := $(foreach f,$(M1),string/$(f) string/$(f)-generic) string/wordcopy string/strchrnul misc/hwprobe elf/dl-support
-ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment
+# (strcpy-vector: strcpy, reached from __dcigettext and dlinfo, has its ifunc on the page: its resolver takes
+# &__strcpy_vector, which was an address of nothing before ttpc stopped at it, unknown name)
+ASMS_string := $(M1:%=string/%-vector) string/memcpy_noalignment string/strcpy-vector
 ROOTS_string := $(M1) $(ROOTS_string_$(GTARGET))
 ROOTS_string_riscv64 := __riscv_hwprobe
 
@@ -743,9 +747,20 @@ DUMPOPT_aarch64 := -r -t -M no-aliases
 $(I)/%.Ls: $(I)/%.s | $(S2FFDEPS)
 	$(S2FF) --locals $< > $@.tmp && mv $@.tmp $@
 
-$(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC)
+# aarch64's and arm's dump also hold the object's frames, after its code:
+# s2ff makes each row the word asmcfi.pl knows at the instruction it starts
+# at (aarch64: objdump --dwarf=frames, as cfi words; arm: readelf -u, the
+# EHABI entries, as ehabi words). The dump is made again where that command
+# changes (DUMPCMD, written to BUILD/dump.cmd only then; riscv64's and
+# x86_64's read the .s for CFI).
+DUMPFRAMES_aarch64 = $(XPRE)objdump --dwarf=frames
+DUMPFRAMES_arm = $(XPRE)readelf -u
+DUMPCMD = $(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(if $(DUMPFRAMES_$(GTARGET)),; $(DUMPFRAMES_$(GTARGET)))
+$(BUILD)/dump.cmd: FORCE
+	@mkdir -p $(@D); echo '$(DUMPCMD)' | cmp -s - $@ || echo '$(DUMPCMD)' > $@
+$(I)/%.dump $(I)/%.bin: $(I)/%$(SSRC) $(if $(DUMPFRAMES_$(GTARGET)),$(BUILD)/dump.cmd)
 	$(RUN) -t 60 $(GLIBC_CC) -c $(ASREF_$(GTARGET)) -x assembler $< -o $(I)/$*.ref.o
-	$(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o > $(I)/$*.dump
+	{ $(XPRE)objdump -d $(DUMPOPT_$(GTARGET)) $(I)/$*.ref.o$(if $(DUMPFRAMES_$(GTARGET)), && $(DUMPFRAMES_$(GTARGET)) $(I)/$*.ref.o); } > $(I)/$*.dump
 	$(XPRE)objcopy -O binary -j $(call codesec,$(I)/$*.ref.o) $(I)/$*.ref.o $(I)/$*.bin
 
 # the section of an object's code: .text, but on x86_64 the one it has
@@ -904,6 +919,45 @@ $(I)/%.asmok: $(I)/%.dump $(I)/%.bin $(S2FFDEPS) $(SHARED) $(TTPC) | $(FFTEXTT)
 	perl relmask.pl $$a.relocs $$a.got.raw $$skip $$sec > $$a.got || exit 1; \
 	cmp $$a.got $$a.want || exit 1; \
 	echo "asm-check: $*: ttpc and glibc's compiler agree ($$size bytes)" > $@
+
+# asmcfi-check, the frames' asm-check: each asm part of asm-check's list
+# and libgcc's (LIBGCC_ASMCHECK), as the asm checks made it (its .asm.ff, its
+# facts), built again by ttpc with -g, which writes the frames of its asm
+# functions from their cfi and ehabi words (asmcfi.pl), against the frames
+# of glibc's compiler's object, per function (cficheck.pl): on riscv64,
+# x86_64 and aarch64 each FDE (where it starts, where it ends, its rows as
+# readelf decodes them), on arm each EHABI entry (where it starts, its
+# unwinding instructions). ASMCFIKNOWN_<target>: parts known to differ,
+# not checked. riscv64: libgcc's save-restore.S, whose __riscv_save_*
+# return to t0 (.cfi_return_column, a CIE of its own: no cfi word says it,
+# s2ff leaves their frames out). x86_64: where a second procedure starts
+# inside an asm function, at no entry block (a .cfi_endproc and
+# .cfi_startproc between two instructions: clone.S's and clone3.S's child,
+# setcontext.S's __start_context's .L label, libgcc's morestack.S's
+# __morestack, whose .cfi_personality and .cfi_lsda have no word either):
+# ttpc's procedure is the asm function, its rows go on in its FDE.
+ASMCFIKNOWN_riscv64 := libgcc/save-restore
+ASMCFIKNOWN_x86_64 := misc/clone misc/clone3 stdlib/setcontext libgcc/morestack
+# glibc's (asmcfi-check, after asm-check) and libgcc's (libgcc-asmcfi-check,
+# after libgcc-asm-check) apart, as their asm checks are.
+ASMCFICHECK = $(filter-out $(ASMCFIKNOWN_$(GTARGET)),$(ASMCHECK))
+LIBGCC_ASMCFICHECK = $(filter-out $(ASMCFIKNOWN_$(GTARGET)),$(LIBGCC_ASMCHECK:%=libgcc/%))
+# (a make of its own, as asm-check's: libgcc's list comes after this rule)
+asmcfi-check: asm-check
+	@$(MAKE) --no-print-directory $(ASMCFICHECK:%=$(I)/%.cfiok)
+	@for a in $(ASMCFICHECK); do cat $(I)/$$a.cfiok; done
+libgcc-asmcfi-check: libgcc-asm-check
+	@$(MAKE) --no-print-directory $(LIBGCC_ASMCFICHECK:%=$(I)/%.cfiok)
+	@for a in $(LIBGCC_ASMCFICHECK); do cat $(I)/$$a.cfiok; done
+$(I)/%.cfiok: $(I)/%.asmok cficheck.pl
+	@rm -f $@; a=$(I)/$*; \
+	$(RUN) -n -t 60 $(TTPC_RUN) -g $(SHARED) $$a.asm.ff $$a.asmg > $$a.asmg.lst || exit 1; \
+	size=$$(sed -n 's/^size //p' $$a.facts); test -n "$$size" || exit 1; \
+	skip=$(if $(filter aarch64,$(GTARGET)),$$(sed -n 's/^skip //p' $$a.facts),0); \
+	hdr=$(if $(filter x86_64,$(GTARGET)),$$(sed -n 's/^align //p' $$a.facts | awk '{ print int(($(ASMHDR) + $$1 - 1) / $$1) * $$1 }'),$(ASMHDR)); \
+	perl cficheck.pl $(XPRE)readelf $(GTARGET) $$a.ref.o $$skip $$a.asmg $$hdr $$size > $$a.cfi || { echo "asmcfi-check: $*:"; cat $$a.cfi; exit 1; }; \
+	echo "asmcfi-check: $*: ttpc's frames are glibc's compiler's ($$(head -1 $$a.cfi))" > $@
+.PHONY: asmcfi-check libgcc-asmcfi-check
 
 #pccache> asm
 # progs/strlen.ff includes string.ff from its own folder, so both go there
@@ -1149,6 +1203,26 @@ FFXCMP = s=0; $(1) > $$d/p.out 2> $$d/p.err || s=$$?; echo "exit $$s" >> $$d/p.e
 	s=0; $(2) > $$d/f.out 2> $$d/f.err || s=$$?; echo "exit $$s" >> $$d/f.err; \
 	cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.err $$d/f.err || { echo "fftext-crosscheck: $(3) is not the Perl's ($$d)"; exit 1; }
 FFXLIC = $(call FFXCMP,$(LICENSES_PL) $(1),$(LICENSES) $(1),licenses $(1)); n=$$((n + 1))
+# csema's dev C built by gcc (tools/dev/cs and c/, as mk.sh -n builds it)
+# against the ttpc-built csema (CSEMA): all of glibc's page as csema writes
+# it, byte for byte, and its statics, on the BUILD's glibc.ff (read only; the
+# run's heap, statics and page in CSX). An uninitialized read or an overrun in
+# the dev C shows here (2026-11-22: cs_spec's used, other with lists). About
+# 25 minutes and 8 GB a target.
+CSX = $(BUILD)/csx
+csema-crosscheck:
+	@test -s $(FF)/glibc.ff.txt && test -s $(FF)/glibc.statics || { echo "csema-crosscheck: no glibc.ff.txt in $(FF)"; exit 1; }
+	@mkdir -p $(CSX) && cp ../compiler/tools/dev/cs/* ../compiler/tools/dev/c/c.h ../compiler/tools/dev/c/c.c ../compiler/tools/dev/c/cpr.c $(CSX)/ \
+	    && cd $(CSX) && gcc -O1 -w -o csema shim.c c.c cs.c csema_main.c
+	@cp $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(CSX)/glibc.ff.txt
+	@$(SLOT) $(call csmem,glibc) -t 3600 $(CSX)/csema -l $(CSFLAGS) -M $(CSX)/glibc.heap $(call csheap,glibc) -k -K $(CSX)/glibc.statics $(foreach z,$(ZEROS_glibc),-Z $(z)) $(foreach w,$(WEAKS_glibc),-W $(w)) \
+	    @$(FF)/glibc.csunits -- @$(FF)/glibc.roots >> $(CSX)/glibc.ff.txt 2> $(CSX)/glibc.csema.err || { tail -5 $(CSX)/glibc.csema.err; exit 1; }
+	@n=$$(wc -c < $(CSX)/glibc.ff.txt); cmp -n $$n $(CSX)/glibc.ff.txt $(FF)/glibc.ff.txt \
+	    && tail -c +$$((n + 1)) $(FF)/glibc.ff.txt | head -1 | grep -qx 'glibc asm:' \
+	    && cmp $(CSX)/glibc.statics $(FF)/glibc.statics \
+	    || { echo "csema-crosscheck: gcc's csema and the ttpc-built one write other pages of all of glibc ($(GTARGET)): $(CSX)"; exit 1; }
+	@echo "csema-crosscheck: gcc's csema and the ttpc-built one write the same page of all of glibc ($(GTARGET)) and the same statics"
+.PHONY: csema-crosscheck
 fftext-crosscheck: | $(FFTEXTT) $(LICENSEST)
 	@set -e; d=$(FFX); mkdir -p $$d; n=0; \
 	for f in $$(find $(wildcard $(FF) $(I) $(DCDIR) $(TBUILD)/ff) -name '*.ff.txt' | sort); do test -e $${f%.txt} || continue; \
@@ -1373,16 +1447,16 @@ c2ff-page-%: c2ff-passes $(FF)/%.ff
 	$(file >$(FF)/$*.units,$(foreach o,$(OBJS_all_$*),$(I)/$(o).json=$(I)/$(o).i$(nl)))
 	@$(RUN) -t 600 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(C2FFFLAGS_$*) $(foreach z,$(call with_start,ZEROS,$*),--zero $(z)) $(foreach w,$(call with_start,WEAKS,$*),--weak $(w)) @$(FF)/$*.units \
 	    -- @$(FF)/$*.rootlist $$(for a in $(ASMS_all_$*); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done | sort -u) > $(C2FFOUT)/$*.page 2> $(C2FFOUT)/$*.err
-	@sh ../compiler/gen/pageprefix.sh "c2ff-page $* ($(GTARGET))" $(or $(LICENSE_$*),license.ff.txt) $(C2FFOUT)/$*.page $(FF)/$*.ff.txt
+	@sh ../compiler/gen/pageprefix.sh "c2ff-page $* ($(GTARGET))" $(or $(LICENSE_$*),license.ff.txt) $(C2FFOUT)/$*.page $(FF)/$*.ff.txt $(GTARGET)
 c2ff-prog-%: $(FF)/%-prog.json $(FF)/%-prog.ff
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 300 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program $* $(if $(call progstart,$*),--start) \
 	    $(if $(filter $*,$(INDEXED)),--index $(FF)/$*/index.ff) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- main $(PROGROOTS_$*) > $(C2FFOUT)/$*-prog.ff.txt
-	@cmp $(C2FFOUT)/$*-prog.ff.txt $(FF)/$*-prog.ff.txt && echo "c2ff-prog $* ($(GTARGET)): c2ff.pl's program and csema's the same"
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/$*-prog.ff.txt | cmp $(C2FFOUT)/$*-prog.ff.txt - && echo "c2ff-prog $* ($(GTARGET)): c2ff.pl's program and csema's the same"
 c2ff-unit-%: $(FF)/%-prog.json %-roundtrip
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) $(FF)/$*-prog.json=$(FF)/$*-prog.i -- $(PROGRT_$*) > $(C2FFOUT)/$*-unit.ff.txt
-	@cmp $(C2FFOUT)/$*-unit.ff.txt $(FF)/$*-unit.ff.txt && echo "c2ff-unit $* ($(GTARGET)): c2ff.pl's page and csema's the same"
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/$*-unit.ff.txt | cmp $(C2FFOUT)/$*-unit.ff.txt - && echo "c2ff-unit $* ($(GTARGET)): c2ff.pl's page and csema's the same"
 # and every test program of glibc that a tests build has (make tests-ref AREA=x
 # first, for each of TAREAS), through both, byte for byte: 45 minutes for
 # 508 programs at -j3, so not in ports-check (../compiler/gen/cltests.sh).
@@ -1398,7 +1472,7 @@ c2ff-glibc: all-passes $(FF)/glibc.ff
 	@mkdir -p $(C2FFOUT)
 	@$(SLOT) -v 6000000 -t 3600 perl ../compiler/gen/c2ff.pl --keep-going --target $(GTARGET) --statics-out $(C2FFOUT)/glibc.statics $(foreach z,$(ZEROS_glibc),--zero $(z)) $(foreach w,$(WEAKS_glibc),--weak $(w)) \
 	    @$(FF)/glibc.units -- @$(FF)/glibc.roots > $(C2FFOUT)/glibc.page 2> $(C2FFOUT)/glibc.err
-	@sh ../compiler/gen/pageprefix.sh "c2ff-glibc ($(GTARGET))" $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(C2FFOUT)/glibc.page $(FF)/glibc.ff.txt
+	@sh ../compiler/gen/pageprefix.sh "c2ff-glibc ($(GTARGET))" $(if $(LIBGCC_glibc),license-libgcc.ff.txt,license.ff.txt) $(C2FFOUT)/glibc.page $(FF)/glibc.ff.txt $(GTARGET)
 	@cmp $(C2FFOUT)/glibc.statics $(FF)/glibc.statics && echo "c2ff-glibc ($(GTARGET)): the statics the same"
 .PHONY: c2ff-glibc
 
@@ -1426,10 +1500,10 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen
 	@grep -q '^twice units/units-p:' $(FF)/units/prog.ff.txt
 units-crosscheck: units-check
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --statics-out $(FF)/units/statics.c2ff $(foreach u,$(UNITS2),$(FF)/units/$(u).json=$(FF)/units/$(u).i) -- ua ub uc > $(FF)/units/page.c2ff.ff.txt 2> $(FF)/units/page.c2ff.err
-	@cmp $(FF)/units/page.c2ff.ff.txt $(FF)/units/page.ff.txt
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/units/page.ff.txt | cmp $(FF)/units/page.c2ff.ff.txt -
 	@cmp $(FF)/units/statics.c2ff $(FF)/units/statics
 	@$(RUN) -t 120 perl ../compiler/gen/c2ff.pl --target $(GTARGET) --program units --index $(FF)/units/tree/index.ff --statics $(FF)/units/statics --start $(FF)/units/units-p.json=$(FF)/units/units-p.i -- main > $(FF)/units/prog.c2ff.ff.txt 2> $(FF)/units/prog.c2ff.err
-	@cmp $(FF)/units/prog.c2ff.ff.txt $(FF)/units/prog.ff.txt
+	@perl ../compiler/gen/c2ffknown.pl --target $(GTARGET) $(FF)/units/prog.ff.txt | cmp $(FF)/units/prog.c2ff.ff.txt -
 	@echo "units-crosscheck ($(GTARGET)): c2ff.pl's pages, statics and program as csema's"
 .PHONY: units-check units-crosscheck
 
@@ -1616,7 +1690,16 @@ ZEROS_glibc := $(ZEROS_stdio) $(ZEROS_start) _r_debug
 # (address 0), as for a program that never unwinds
 LIBGCC_TARGETS := riscv64 x86_64 aarch64 arm
 UNWIND_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),,_Unwind_ForcedUnwind _Unwind_GetCFA _Unwind_Backtrace _Unwind_GetIP)
-LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH))
+# and libgcc's complex multiply and divide (_mulsc3 ... _divtc3, each of the
+# target's floating types), which csema calls for C's complex * and / as gcc
+# does (__muldc3 ...): roots of their own (CXROOTS), no glibc code calls them
+LIBGCC_CX_riscv64 := _mulsc3 _muldc3 _multc3 _divsc3 _divdc3 _divtc3
+LIBGCC_CX_aarch64 := $(LIBGCC_CX_riscv64)
+LIBGCC_CX_x86_64 := _mulsc3 _muldc3 _mulxc3 _multc3 _divsc3 _divdc3 _divxc3 _divtc3
+LIBGCC_CX_arm := _mulsc3 _muldc3 _divsc3 _divdc3
+LIBGCC_CX := $(LIBGCC_CX_$(GTARGET))
+CXROOTS = $(patsubst _%,__%,$(LIBGCC_CX))
+LIBGCC_glibc := $(if $(filter $(LIBGCC_TARGETS),$(GTARGET)),$(LIBGCC_EH) $(LIBGCC_CX))
 WEAKS_glibc := $(WEAKS_stdio) $(WEAKS_start) $(UNWIND_glibc) $(WEAKS_unwind_$(GTARGET))
 # (glibc's asm that s2ff takes: all of it; but on riscv64, crtn is the end
 # of crti's _init and _fini, s2ff --then, as in a milestone)
@@ -1626,7 +1709,8 @@ $(FF)/glibc.roots: $(call csdeps,$(ALL_C)) $(GLIBC_ASM:%=$(I)/%.dump) $(GLIBC_TH
 	mkdir -p $(FF)
 	{ for o in $(ALL_C); do $(XPRE)nm --defined-only -g $(OBJ)/$$o.o | awk 'NF == 3 { print $$3 }'; done; \
 	  for a in $(GLIBC_ASM); do $(XPRE)objdump -t $(I)/$$a.ref.o | awk '/\*UND\*/ { print $$NF }'; done; \
-	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)) $(if $(LIBGCC_glibc),_Unwind_Resume __gcc_personality_v0); do echo $$r; done; } | sort -u > $@
+	  for r in $(if $(filter arm,$(GTARGET)),,$(ROOTS_ldouble)) $(if $(LIBGCC_glibc),_Unwind_Resume __gcc_personality_v0 $(CXROOTS)); do echo $$r; done; } | sort -u > $@
+
 	for o in $(filter $(ALL_CRT),$(ALL_C)) $(filter-out $(ALL_CRT),$(ALL_C)); do echo "$(I)/$$o.json=$(I)/$$o.i"; done > $(FF)/glibc.units
 	for o in $(LIBGCC_glibc); do echo "$(I)/libgcc/$$o.json=$(I)/libgcc/$$o.i"; done >> $(FF)/glibc.units
 
@@ -1636,11 +1720,13 @@ $(FF)/glibc.ff: $(FF)/glibc.roots $(CSEMA) $(CSVIEW) $(GLIBC_ASM:%=$(I)/%$(SSRC)
 	$(SLOT) $(call csmem,glibc) -t 3600 $(call cstrans,glibc) -k -K $(FF)/glibc.statics $(foreach z,$(ZEROS_glibc),-Z $(z)) $(foreach w,$(WEAKS_glibc),-W $(w)) \
 	    @$(FF)/glibc.csunits -- @$(FF)/glibc.roots >> $(FF)/glibc.ff.txt 2> $(FF)/glibc.csema.err \
 	    || { tail -5 $(FF)/glibc.csema.err; exit 1; }
+	@# (each asm object's s2ff, a tenth of a second, in no slot: slot.sh -n; through the slots
+	@# x86_64's 373 waited some 6 hours behind the other lanes' long steps, 2026-11-17)
 	echo 'glibc asm:' > $(FF)/glibc.asm.page.txt
 	$(S2FFH) $(GLIBC_ASM:%=$(I)/%.s) > $(FF)/glibc.asm.hdr && sed 's/^/  /' $(FF)/glibc.asm.hdr >> $(FF)/glibc.asm.page.txt
 	for a in $(GLIBC_ASM); do \
 	    then=; test $$a = csu/crti && test -n "$(GLIBC_THEN)" && then="--then $(I)/csu/crtn$(SSRC) $(I)/csu/crtn.dump"; \
-	    $(RUN) -t 60 $(S2FF) --items $(foreach p,$(PLT_$(GTARGET)),--plt $(p)) $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
+	    $(RUN) -n -t 60 $(S2FF) --items $(foreach p,$(PLT_$(GTARGET)),--plt $(p)) $(if $(filter-out riscv64,$(GTARGET)),$(foreach z,$(ZEROS_glibc),--zero $(z))) $(I)/$$a$(SSRC) $(I)/$$a.dump $$then > $(FF)/glibc.asm.txt || exit 1; \
 	    sed 's/^/  /' $(FF)/glibc.asm.txt >> $(FF)/glibc.asm.page.txt; \
 	done
 	$(LAYERS) $(FF)/glibc.asm.page.txt >> $(FF)/glibc.ff.txt
@@ -1783,7 +1869,7 @@ $(FF)/libgcc.ff: $(FF)/libgcc.roots $(FF)/libgcc.units $(CSEMA) $(CSVIEW) builti
 c2ff-libgcc: $(LIBGCC_C:%=$(LI)/%.c2ff) $(FF)/libgcc.ff
 	@mkdir -p $(C2FFOUT)
 	@$(RUN) -t 900 perl ../compiler/gen/c2ff.pl --keep-going --page gcc --target $(GTARGET) @$(FF)/libgcc.units -- @$(FF)/libgcc.roots > $(C2FFOUT)/libgcc.page 2> $(C2FFOUT)/libgcc.err
-	@sh ../compiler/gen/pageprefix.sh "c2ff-libgcc ($(GTARGET))" ../libgcc/license.ff.txt $(C2FFOUT)/libgcc.page $(FF)/libgcc.ff.txt
+	@sh ../compiler/gen/pageprefix.sh "c2ff-libgcc ($(GTARGET))" ../libgcc/license.ff.txt $(C2FFOUT)/libgcc.page $(FF)/libgcc.ff.txt $(GTARGET)
 .PHONY: c2ff-libgcc
 
 # The tree's own check: libgcc-licenses, its license at its root and each
@@ -1998,6 +2084,11 @@ tests-locales: $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
 .PHONY: tests-locales
 TSTEP = $(MAKE) --no-print-directory $(TFF)/$*$(1) > $(TFF)/$*.$(2).log 2>&1 || \
 	{ echo "not yet: $(3): $$(perl tests.pl why $(TFF)/$*.$(2).log)" > $@; exit 0; }
+# The runs' slot command: RUN's; or a pool of their own beside the machine's
+# slots, where the master allows it (lane tests2, 2026-11-18: two at a time,
+# TRUNSLOT='env TTP_SLOTS=<dir> TTP_NSLOTS=2 sh ../compiler/gen/slot.sh -v 4000000'),
+# csema, ttpc and gcc's link still in the machine's slots
+TRUNSLOT ?= $(RUN)
 # (and what its steps' outputs depend on, ttpc's and csema's: each step is
 # a make of its own, so that one that fails is the result's reason)
 $(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $(TTPC) $(SHARED) $(CSEMA) $(CSVIEW) tests.pl $(TLOCALES:%=$(TLOCDIR)/localedata/%/LC_CTYPE)
@@ -2007,7 +2098,7 @@ $(TFF)/%.result: $(TBUILD)/$(AREA).mk $(TI)/support.ready $(FF)/glibc/index.ff $
 	$(call TSTEP,-prog.ff,c2ff,c2ff); \
 	$(call TSTEP,-prog,ttpc,ttpc); \
 	in=$(GLIBC_SRC)/$(AREA)/$*.input; test -e $$in || in=/dev/null; \
-	perl tests.pl run $(TFF) $* $$in $(TENV) $(RUN) -t 600 -- $(TRUN) > $@
+	perl tests.pl run $(TFF) $* $$in $(TENV) $(TRUNSLOT) -t 600 -- $(TRUN) > $@
 
 # (the .mk first: where glibc's tests build failed, it stops here, before
 # a make of each test would try that build again)
@@ -2047,14 +2138,35 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           and subscripts (sincosf_poly.h, ttpc's vecops.pl); gcc's with
 #           libm.a too
 #
+#   cxops   C's complex + - * / == !=, unary -, the compound assignments
+#           and the conversions on each complex type (csema writes them of
+#           the parts and calls libgcc's __mulXc3 and __divXc3, as gcc does)
+#
 #   fltinc  ++ and -- of float, double and long double, prefix and postfix,
 #           their values, a field and an element, and coreutils seq's loop
 #           (for (long double i = 1; ; i++), which ttpc kept at 1: it added
 #           1 to the bits; gen/patches/fltinc.pl); every target
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check fltinc-check
-ALLPROGS := locale enums statics anonrec x87math sincosf fltinc
+#   insnames C names that are instruction words of a target (glibc's brk
+#           and setns, the program's add, ret, b, str ...): csema writes
+#           them name', and s2ff the asm's definitions of them so too
+#
+#   agginit a struct's, union's or complex local's value written as a lone :
+#           or several items, (x), ?:, ({ ... }), (a, b): assigned after its
+#           declaration (glibc's math_check_force_underflow_complex)
+#
+#   weakref a weak reference pulls nothing in (ld and an archive member):
+#           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
+#           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref
+ALLPROG_agginit := agginit
+ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
+ALLPROG_cxops := cxops
+ALLPROG_insnames := insnames
 ALLPROG_fltinc := fltinc
+ALLPROG_weakref := weakref
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_sincosf := sincosf

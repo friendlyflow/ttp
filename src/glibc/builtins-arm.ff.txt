@@ -239,6 +239,48 @@
       r0
     ret
   comment
+    __builtin_add_overflow of a long long and an int into a long (tst-mktime4's): the sum wrapped to a long, and whether that is not the exact sum.
+  __builtin_add_overflow i64 int long:
+    int
+    a:
+      i64
+    b:
+      int
+    r:
+      long
+      * pointer
+    t:
+      i64
+      0
+    v:
+      int
+      __builtin_add_overflow i64 int i64
+        a
+        b
+        t
+        & address
+    n:
+      long
+      cast
+        long
+      t
+    w:
+      i64
+      cast
+        i64
+      n
+    r
+    * pointer
+    =
+    n
+    return
+      v
+      |
+      :
+        w
+        !=
+        t
+  comment
     __builtin_add_overflow of a long long and an int (mktime's): the sum wrapped, and whether it did.
   __builtin_add_overflow i64 int i64:
     int

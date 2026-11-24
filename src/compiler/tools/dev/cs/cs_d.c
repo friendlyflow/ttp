@@ -288,6 +288,7 @@ static void cs_attrs (struct node *a, struct cs_spec *spc)
       spc->hasaln = 1;
     }
     else if (cs_attr_is (w, "weak")) spc->weak = 1;
+    else if (cs_attr_is (w, "used")) spc->used = 1;
     else if (cs_attr_is (w, "pcs")) spc->pcs = 1;
     else if (cs_attr_is (w, "error")) spc->err = 1;
     else if (cs_attr_is (w, "alias") && e > s) spc->aliasee = cs_attr_text (a, s + 1, e);
@@ -372,7 +373,7 @@ static struct cs_ty *cs_type_of_specs (struct node *s, struct cs_spec *spc)
   while (k < 16) cnt[k++] = 0;
   spc->t = 0; spc->sc = SC_NONE; spc->istypedef = 0; spc->inl = 0; spc->noret = 0; spc->algn = 0; spc->mode = 0;
   spc->vec = 0; spc->packed = 0; spc->transparent = 0; spc->thr = 0; spc->defined_rec = 0; spc->autotype = 0;
-  spc->alnmax = 0; spc->hasaln = 0; spc->weak = 0; spc->ctor = 0; spc->err = 0; spc->ctorprio = -1; spc->pcs = 0;
+  spc->alnmax = 0; spc->hasaln = 0; spc->weak = 0; spc->ctor = 0; spc->err = 0; spc->ctorprio = -1; spc->pcs = 0; spc->used = 0;
   spc->aliasee = 0; spc->ifunc = 0; spc->section = 0; spc->cleanup = 0; spc->asmlabel = 0;
   alone = T->alone;
   T->alone = 0;
@@ -541,7 +542,7 @@ static struct cs_ty *cs_rec_spec (struct node *n, struct cs_spec *spc, int alone
   struct cs_spec ratt;
   long i = 0;
   ratt.algn = 0; ratt.packed = 0; ratt.transparent = 0; ratt.noret = 0; ratt.mode = 0; ratt.vec = 0; ratt.thr = 0;
-  ratt.alnmax = 0; ratt.hasaln = 0; ratt.weak = 0; ratt.ctor = 0; ratt.err = 0; ratt.aliasee = 0; ratt.ifunc = 0; ratt.section = 0; ratt.cleanup = 0; ratt.asmlabel = 0;
+  ratt.alnmax = 0; ratt.hasaln = 0; ratt.weak = 0; ratt.ctor = 0; ratt.err = 0; ratt.aliasee = 0; ratt.ifunc = 0; ratt.section = 0; ratt.cleanup = 0; ratt.asmlabel = 0; ratt.used = 0;
   while (i < n->count) {
     struct node *w = n->kids[i];
     if (cs_is (w, "{")) body = w;
@@ -960,6 +961,10 @@ static struct cs_decl *cs_declare_fn (unsigned char *name, long nlen, struct cs_
   d->name = name;
   d->nlen = nlen;
   d->sc = sc;
+  /* (C11 6.2.2: a function declared with no storage class, or extern, after a static declaration of it
+     has its internal linkage: glibc's as_logd of e_lgamma_r.c and of e_gamma_r.c, each static by its
+     prototype, defined as double as_logd (...); taken for one external, lgamma called tgamma's) */
+  if (old && old->k == DK_FUNC && old->sc == SC_STATIC && (sc == SC_NONE || sc == SC_EXTERN)) d->sc = SC_STATIC;
   if (spc->noret) t = cs_noreturn_of (t);
   if (old && old->k == DK_FUNC) {
     struct cs_ty *oc = cs_canon (old->t), *nc = cs_canon (t);

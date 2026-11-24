@@ -34,7 +34,8 @@ ff, the language ttpc compiles
       a group (a definition whose children are all definitions) is seen by the whole program, on every page, the program page's too: its definitions after the page's own top-level names, before the other pages; a nested function's children stay local
       a section is a group of groups: calling it puts the definitions of its groups in scope
       the C of a definition page (a library) looks a name up in its function's scopes, then the program page, then its own group, then the other pages in their order: two pages may each have a tok
-      an enum constant of another page hides no definition that comes before that page: the program's code sees the program page's definitions and its groups' enum constants first, library code its own group's; library code never sees the program page's enum constants (they have no linkage)
+      an enum constant of another page hides no definition that comes before that page: the program's code sees the program page's definitions and its groups' enum constants first, library code its own group's;
+        library code never sees the program page's enum constants (they have no linkage)
       a function whose name is only digits (0: 1: 2: ...) is a layer, the overflow of its parent past the 255 children a node holds: its children count as the parent's, in every scope, code and labels too
         a layer may hold layers, each level 255 more children
         a layer is never a name itself
@@ -155,9 +156,14 @@ ff, the language ttpc compiles
       float128 is binary128 (C's _Float128): x86_64's, beside its long double; long double elsewhere
       a long double literal has L after it, binary128's 113 bits: 0x1.921fb54442d18469898cc51701b8p+1L; a subnormal one is 0x0.<digits>p-16382L, zero 0x0p+0L; on x86_64 it is rounded to nearest even to the x87's 64 bits
       a float128 literal has Q after it: 0x1.921fb54442d18469898cc51701b8p+1Q, binary128 on every target
-      complex float, complex double, complex long double and complex float128 are C's complex types: a struct of two parts of that type, real part and imag part, copied, passed and returned as one; real z and imag z are its parts, also on the left of =; ~ z its conjugate
+      complex float, complex double, complex long double and complex float128 are C's complex types: a struct of two parts of that type, real part and imag part, copied, passed and returned as one; real z and imag z are its parts, also on the left of =;
+        ~ z its conjugate
+      a complex type as a value, its two parts after it, real then imaginary, is that complex number, as a struct's compound literal: complex double / 0x1.8p+1 / 0x1p+2 is C's 3.0 + 4.0i, in code and as a global's item in a :;
+        csema writes C's imaginary constants (4.0i, I) and __builtin_complex so
+      + - * / == != of a complex value stop ttpc: C's complex operators are csema's, written of the parts (real, imag, libgcc's __mulXc3 and __divXc3, as gcc calls them)
       a hex float one exponent past its type's range is its IEEE bits: 0x1p+1024 is infinity (0x1p+128f, 0x1p+16384L), one with a fraction a NaN, 0x1.8p+1024 the quiet one (C's HUGE_VAL, INFINITY and NAN in a constant); minus infinity is : / - / 0x1p+1024
       + - * / and the comparisons work on them, - negates, cast: converts between them and to and from the integers, on every target
+      < <= > >= on floating values signal (invalid on a quiet NaN, as C's: comis, fcmpe, vcmpe, flt and fle); == and != are quiet
       a floating type larger than a word (long double, float128; double on arm) is in memory as a struct is, a value of it the address of a temporary; arm works on its double with VFP, x86_64 on its long double with the x87
       binary128's arithmetic (long double; float128 on x86_64) calls soft-fp's functions, as gcc calls libgcc's: __addtf3 ... __getf2, __negtf2, __floatditf ... __trunctfdf2; the program has them (glibc's soft-fp)
       x86_64's long double from a float128 is soft-fp's __trunctfxf2, a float128 from a long double exact (ttpc's own)
@@ -213,7 +219,8 @@ ff, the language ttpc compiles
             24
       align / n, first under a field's name and before its type, places the field at a multiple of n, its record as aligned at least (C's aligned attribute)
       align / n right after struct or union aligns the record itself, its size a multiple of n; align only raises an alignment, as C's does
-      packed, first under a field's name and before its type, aligns the field to 1 (C's packed attribute on a field: no padding before it); packed right after struct or union, every field of it, so the record aligned to 1 (C's packed record); an align with it raises the alignment still
+      packed, first under a field's name and before its type, aligns the field to 1 (C's packed attribute on a field: no padding before it); packed right after struct or union, every field of it, so the record aligned to 1 (C's packed record);
+        an align with it raises the alignment still
       example
         mcontext:
           struct
@@ -285,8 +292,11 @@ ff, the language ttpc compiles
     declarations
       name:, a type run, then its items; the type is required, nothing is derived from the value
       a local in a function, a global at the top of the page
-      a global's items are worked out while compiling: a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a sizeof or an alignof, a : of one expression
-      with the target's sizes: sizeof and alignof of a long, a pointer or a long double are the program's (4, 4 and 8 on arm), though compile time runs on the host; the arithmetic is the host's, a long 64 bits
+      a global's items are worked out while compiling:
+        a number or constant, - and one, name / & address (of a global or a function), a text (cast / char / * pointer and a leaf, or the leaf alone for an address), a cast and its value, a sizeof or an alignof, a : of one expression
+        not a call of a function of the program (the user's rule: never of one defined after it; today of none): g: / long / : / f / 4 stops ttpc, naming g and f
+      with the target's sizes: sizeof and alignof of a long, a pointer or a long double are the program's (4, 4 and 8 on arm), though compile time runs on the host;
+        the arithmetic is the host's but a long's, the target's (4 bytes and 32 bits on arm): sizeof (long long) is 8 on every target
       no items: zero
       one item on a scalar or an address: its value, converted to the type
       several items only on an array (one element each, the rest zero, more than n is an error) or a struct (one field each, in order)
@@ -315,9 +325,14 @@ ff, the language ttpc compiles
       cleanup / f, first under a local's name (after its align) and before its type, calls f with the local's address at every exit of the local's block, newest first (C's cleanup attribute)
       a block's exits: its end, a return (after its value is computed), a break or continue out of it, a goto to a label outside it; glibc's _IO_acquire_lock unlocks a FILE so
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
+      weak / name, then & address (or as a value), and weak / (f / args), a call, is a weak reference: it pulls nothing in, as ld with an archive member (the user's rule, 2026-11-18)
+      its address is the definition's if something else in the program reaches it, else 0 (its value read there, a call through it); csema writes it for every reference C declares weak, also on the page that defines the name
+      with / names, first under a definition's name (before align, thread local, weak), places those names wherever the definition is placed, as ld's object member brings all its symbols
+      csema writes it only where a unit defines what is otherwise only weakly referenced: each definition of a unit whose asm defines glibc's _NL_CURRENT_DEFINE flags (_nl_current_LC_CTYPE_used) has them under with
       base pcs, first under a function's name and before its type, gives it arm's base procedure call standard (C's pcs ("aapcs")): its floats and doubles in core registers and on the stack, as a variadic function's
       a base pcs function's calls (through a pointer of its type too), prologue and return are so; on the other targets the word changes nothing
       constructor, first under a function's name and before its type, makes the start code run it before main (C's __attribute__ ((constructor)))
+      _end, the linker's end of the bss (ld's default script), is the end of the program's memory (mem_end, ttpc's frame): _end / & address, as glibc's minimal malloc takes it
       ttpc lays a constructor's address out between __init_array_start and __init_array_end, which glibc's start walks, as ld does; each one of the program and of its library is compiled
       constructor / 101 gives it a priority, lower first, those without one last
       destructor, the same way, runs it at exit (C's __attribute__ ((destructor))): between __fini_array_start and __fini_array_end, walked from the end
@@ -354,6 +369,8 @@ ff, the language ttpc compiles
           4
     text
       a leaf under char / * pointer (a declaration's item, or the value after a cast to it) is text, whatever it reads as (a number, a name): its bytes and a NUL are put in the program, the value is their address; (cast / char / * pointer), then 3, is "3"
+      a leaf item of a char array is its text, whatever it names (a global, a function, a local): a number is a char's value; in a local, its bytes from the element where it stands, then its NUL where there is room
+      in a local's item under char / * pointer (or i8 / * pointer), a leaf that names a local is that local: an array's address (C's decay), a pointer's value; every other leaf is text
       a text holds at most 255 bytes, a node's text: text leaves in a row are one text, as C's "ab" "cd"
       an array char n takes text leaves in a row for its items, as C's char s[16] = "hi", the rest 0 (in a global)
       char with text is an error (a local was silently a char / * pointer, a global a char array)
@@ -409,6 +426,7 @@ ff, the language ttpc compiles
               ap
               long
       a struct name as a value, its items the siblings after it, one for each of its places, is a temporary of that type (a compound literal, C's (point){1, 2} is point, 1, 2): its named fields, an anonymous member's in place, padding none; zeros written out
+      a complex type as a value is one too, its two places its real and its imaginary part (complex double, 3, 4)
       a union name as a value, then a field's name, then its item, is one of a union: (union val){ .str = "x" } is val, str, x
       an array node with its count as a value, its count's items after it, is a temporary array, its value its address (C's (char *[]){ "sh", 0 } is (array / char / * pointer / 2), sh, 0)
       a place that is a struct, a union or an array takes its own type and its items in turn, as nested braces, or an expression of its type, a copy of it; another item stops
@@ -420,7 +438,8 @@ ff, the language ttpc compiles
             1
             2
       a : holding a typed literal, then & address, is the address of a temporary holding it (C's &(long){30} is (: / L / 30) / & address); a : holding a compound literal, then & address, that temporary's address
-      a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy (one item; a : holding a compound literal of its type too, in a local, a local's field, a global or a global's field, there only of a struct of scalar fields), an argument is the callee's own copy, a result is copied into space the caller keeps for it
+      a struct goes by value: = copies it, a declaration with a struct of its type starts as a copy (one item;
+        a : holding a compound literal of its type too, in a local, a local's field, a global or a global's field, there only of a struct of scalar fields), an argument is the callee's own copy, a result is copied into space the caller keeps for it
       example
         b:
           point
@@ -478,6 +497,7 @@ ff, the language ttpc compiles
       do while condition body: the body first, then the condition, as C's do body while (condition)
       switch value body: to the case with that value, else the default, else past the body; case value body..., default body..., anywhere in the switch, fall through to the next one; break leaves the switch
       case lo ... hi body...: GNU C's case range, for the values from lo to hi
+      a declaration in a case's or default's body is the switch body's, as in C: later cases see it (jumped past, its initializer has not run)
       example
         switch
           c
@@ -505,6 +525,7 @@ ff, the language ttpc compiles
           return
             r
       name / & address of a label is its address, an address (GNU C's &&name); goto / p / * pointer jumps to the label p holds (goto *p), in the same function
+      name / & address of a name that is no local, no definition and no label of the function stops the compile: unknown name (a goto to a label the function lacks too)
       example
         p:
           void
@@ -547,6 +568,8 @@ ff, the language ttpc compiles
       a function's body, an if, else or while body and a lambda are blocks; a declaration is seen from below it to the end of its block, inner blocks too
       used above its declaration is an error, used after its block an unknown name
       a local hides a global, a parameter or a struct type of the same name (in every block: its leaf is the local, not a compound literal), an inner block's local hides the outer one; declared twice in one block, the later one counts
+      where a type is wanted a name is the type even with a local of that name: a declaration's type, an array's element, * pointer's base, a cast, a parameter's or a member's type, sizeof or alignof of a type form
+      elsewhere the local comes first: a value, its members (pt x), an argument, a leaf under sizeof or alignof, a leaf with items (C's struct pt pt; g (pt); sizeof (struct pt) is sizeof / array pt 1)
       a function does not see the locals of its caller
       example
         x:
@@ -580,6 +603,7 @@ ff, the language ttpc compiles
       calling a variable indexes or selects: xs i an element, p x a field (also through an address), r b x both in a row
       a path from a value that is not a variable: a . leaf among a node's children, the node before it (cut there) the value, the path after it; C's ((point *) p)->y is : / (cast / point / * pointer) / p / . / y, (*p).len is : / p / * pointer / . / len
       a : that holds one expression, a unit with a prefix or a postfix (cast / long, x; p / * pointer), is that expression, as C's parentheses: no scope of its own; so is one as the operand of a cast or of * pointer
+      a : that holds a declaration is a statement expression (GNU C's ({ ... })), never braces; its value, one of its locals of a type in memory, is copied out before its room goes
       the address of a function is a function pointer, called where it stands, its result of the type its definition says: C's ((void) x, &f) (a, b) is : / (: / (cast / void) / x / f / & address) / . / a / b
       x / & address is C's &x, p / * pointer C's *p, read, or written on the left of =
     registers
@@ -601,8 +625,37 @@ ff, the language ttpc compiles
             a0
             a0
           ret
+    asm frames
+      cfi words, GNU's .cfi_* directives (the directive's name spaced, after cfi), stand between an asm function's instructions where gcc has them; they emit no bytes
+      cfi def cfa / r / n, cfi def cfa offset / n, cfi def cfa register / r, cfi offset / r / n, cfi rel offset / r / n, cfi adjust cfa offset / n, cfi restore / r
+      cfi remember state, cfi restore state, cfi register / r / r2, cfi undefined / r, cfi same value / r, cfi escape / byte ..., cfi signal frame
+      a register is the target's name of it (ra, fs0; rbp, rip; x29, sp, d8, vg) or its DWARF number; an offset is from the CFA, in bytes
+      a procedure is an asm function, or an entry block in it that starts with a cfi word (after asm and its comment): there is no startproc or endproc
+      where the program has frames (-g, or libgcc's unwinder), ttpc writes an FDE of each procedure's rows, from its label to the next procedure or its function's end
+      cfi def cfa offset / 0 (x86_64: / 8) says the CIE's rules again: s2ff puts it first in a procedure that gcc's FDE gives no row there and that is an entry block, or that has none at all
+      s2ff writes the cfi words from glibc's .S on riscv64 and x86_64, from its object's frames (objdump --dwarf=frames) on aarch64; .cfi_personality and .cfi_lsda have no word yet
+      on arm the unwinder reads EHABI's tables: ehabi save / r4 / lr (GNU's .save), ehabi pad / 8 (.pad), ehabi cantunwind (.cantunwind), where the procedure starts; no fnstart or fnend
+      ttpc makes its .ARM.exidx entry of them as GNU as does: its unwinding instructions inline (3 at most) or in an .ARM.extab entry of personality 1; ehabi pad / 0 an entry with none
+      s2ff writes the ehabi words from the object's entries (readelf -u); cfi words record nothing on arm (gcc puts them in .debug_frame there)
+      example (riscv64)
+        framed:
+          asm
+          addi
+            -16
+            sp
+            sp
+          cfi def cfa offset
+            16
+          sd
+            8
+            ra
+            sp
+          cfi offset
+            ra
+            -8
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
+      nor like an instruction of the target (its instruction groups' forms on the shared page): C's names that are one csema writes name', and s2ff the asm's (setns', brk')
       the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, vector, struct, enum, function, sizeof, alignof, union
       and: ..., va_start, va_arg, va_end, va_copy, thread local, constructor, destructor, alias, ifunc, asm, compile time, emit, fail, number, target
   compile time

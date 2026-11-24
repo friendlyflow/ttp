@@ -65,8 +65,17 @@ pck_asmpart = $(I)/$(1).s $(I)/$(1)$(SSRC) $(I)/$(1).dump $(I)/$(1).bin $(I)/$(1
 # (the parts' .dump made by a make of its own, as asm-check's: the list is
 # all of glibc's asm on aarch64, x86_64 and arm, known only after the
 # Makefile, and too long for one command)
-pckey-asm-check:
+pck_asm = $(pck_common)$(call pck_f,$(foreach a,$(ASMCHECK),$(call pck_asmpart,$(a))) $(S2FFDEPS) $(SHARED) $(TTPC) $(FFTEXTT) relmask.pl)$(call pck_t,$(PCK_ASMVARS))$(call pck_r,asm s2ff)$(call pck_x,$(XPRE)objdump $(XPRE)objcopy $(CPRUN) $(filter qemu-%,$(TTPC_RUN)))$(call pck_o,$(ASMCHECK:%=$(I)/%.asmok))
+pckey-asm-check pckey-asmcfi-check:
 	@:$(if $(PCOUT),,$(error pckey: PCOUT, the file of the spec, is not set))$(file >$(PCOUT).made,$(foreach a,$(ASMCHECK),$(I)/$(a).dump$(nl)))
 	@xargs -r -a $(PCOUT).made $(MAKE) --no-print-directory
-	@:$(call pck_out,$(pck_common)$(call pck_f,$(foreach a,$(ASMCHECK),$(call pck_asmpart,$(a))) $(S2FFDEPS) $(SHARED) $(TTPC) $(FFTEXTT) relmask.pl)$(call pck_t,$(PCK_ASMVARS))$(call pck_r,asm s2ff)$(call pck_x,$(XPRE)objdump $(XPRE)objcopy $(CPRUN) $(filter qemu-%,$(TTPC_RUN)))$(call pck_o,$(ASMCHECK:%=$(I)/%.asmok)))
-.PHONY: pckey-asm-check
+	@:$(call pck_out,$(pck_asm)$(if $(filter pckey-asmcfi-check,$@),$(pck_cfi)))
+# asmcfi-check (aarch64's, x86_64's and arm's asm step): asm-check's inputs
+# and outputs, and each part of ASMCFICHECK built again by ttpc with -g
+# (from the .asm.ff and .facts asm-check made of the inputs above; ttpc's
+# frames, asmcfi.pl, are ttpc's bytes) against the frames of the .ref.o:
+# cficheck.pl and readelf. Its .cfiok, after the .asmok (so that each is
+# newer than its .asmok), kept and written again on a hit. ASMCFIKNOWN and
+# the rules are in the region asm.
+pck_cfi = $(call pck_f,cficheck.pl)$(call pck_t,ASMCFICHECK)$(call pck_x,$(XPRE)readelf)$(call pck_o,$(ASMCFICHECK:%=$(I)/%.cfiok))
+.PHONY: pckey-asm-check pckey-asmcfi-check

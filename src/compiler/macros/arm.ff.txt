@@ -298,6 +298,7 @@ elf:
       64
   comment
     frame: lays out a program whose page does not (no origin, no elf_header): its children go where program stands.
+    _end is the linker's end of the bss (ld's default script), mem_end: glibc's minimal malloc (ld.so's, dl-minimal-malloc.c) starts there.
   frame:
     origin
       elf_base
@@ -317,6 +318,7 @@ elf:
     file_end:
     bss
     mem_end:
+    _end:
 c:
   comment
     The C layer of ttpc, for arm in A32: the primitives it emits, in its own terms. V is the value (r0), L the left operand (r12), X a scale or count (lr), FP the frame (r11), SP the stack (sp), LR the return address (lr).
@@ -1422,7 +1424,8 @@ c:
       lr
   comment
     C's floating point: a float is its bits in V (L for the left operand), worked on in s14 (L) and s15 (V). A double is 8 bytes, more than a word: in memory, V (and L) its address, worked on in d6 and d7.
-    A comparison is vcmp, vmrs and a conditional mov, false when either is a NaN but for !=: mi for <, ls for <=. A result in memory goes to X + the frame pointer (X: the offset of a temporary), V its address.
+    A comparison is vcmp (== and !=, quiet) or vcmpe (< <= > >=, which C makes signaling: invalid on a quiet NaN),
+    vmrs and a conditional mov, false when either is a NaN but for !=: mi for <, ls for <=. A result in memory goes to X + the frame pointer (X: the offset of a temporary), V its address.
   cc_fadd_s:
     vmov.sr
       r12
@@ -1526,7 +1529,7 @@ c:
     vmov.sr
       r0
       s15
-    vcmp.f32
+    vcmpe.f32
       s15
       s14
     vmrs.nzcv
@@ -1546,7 +1549,7 @@ c:
     vmov.sr
       r0
       s15
-    vcmp.f32
+    vcmpe.f32
       s15
       s14
     vmrs.nzcv
@@ -1566,7 +1569,7 @@ c:
     vmov.sr
       r0
       s15
-    vcmp.f32
+    vcmpe.f32
       s15
       s14
     vmrs.nzcv
@@ -1586,7 +1589,7 @@ c:
     vmov.sr
       r0
       s15
-    vcmp.f32
+    vcmpe.f32
       s15
       s14
     vmrs.nzcv
@@ -2004,7 +2007,7 @@ c:
       s15
     pop
       0x4000
-    vcmp.f64
+    vcmpe.f64
       d7
       d6
     vmrs.nzcv
@@ -2054,7 +2057,7 @@ c:
       s15
     pop
       0x4000
-    vcmp.f64
+    vcmpe.f64
       d7
       d6
     vmrs.nzcv
@@ -2104,7 +2107,7 @@ c:
       s15
     pop
       0x4000
-    vcmp.f64
+    vcmpe.f64
       d7
       d6
     vmrs.nzcv
@@ -2154,7 +2157,7 @@ c:
       s15
     pop
       0x4000
-    vcmp.f64
+    vcmpe.f64
       d7
       d6
     vmrs.nzcv

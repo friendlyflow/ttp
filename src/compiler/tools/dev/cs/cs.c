@@ -52,7 +52,7 @@ struct cs_spec {
   struct cs_ty *t; int sc; int istypedef; int inl; int noret; long long algn; int mode; int modebits;
   long long vec; int packed; int transparent; int thr; int defined_rec; int autotype;
   /* (T3c) the attributes the C layer takes */
-  long long alnmax; int hasaln; int weak, ctor, err, pcs; long long ctorprio;
+  long long alnmax; int hasaln; int weak, ctor, err, pcs, used; long long ctorprio;
   char *aliasee, *ifunc, *section, *cleanup, *asmlabel;
 };
 

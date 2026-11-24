@@ -254,6 +254,72 @@ static struct vec *secs_order;
 struct sympos { long addr; struct str *name; };
 static void arm_fail (struct str *msg) { struct str *x = s_of ("s2ff-arm: "); s_app (x, where); s_cat (x, ": "); s_app (x, msg); s_cat (x, "\n"); pdie (x); }
 static long hexl (struct str *s) { long v = 0, i; for (i = 0; i < s->n; i++) v = v * 16 + hexv (s->p[i]); return v; }
+/* readelf -u's entries (after the code in the dump) as ehabi words at
+   their addresses of .text (gen/s2ff-arm.pl's %ehabi), each address's
+   (its decimal) vec emptied as they are placed */
+static struct hash *aehabi;
+struct aent { long addr; int cant; unsigned char b[256]; long nb; };
+static void aehabi_of (struct aent *e)
+{
+  long kind[256], val[256], wk[256], wv[256], nops = 0, nw = 0, i = 0, k;
+  struct vec *n = v_new (), *l;
+  while (i < e->nb) {
+    long x = e->b[i++];
+    if (x < 0x40) { kind[nops] = 0; val[nops++] = (x << 2) + 4; }
+    else if (x < 0x80) { kind[nops] = 0; val[nops++] = -(((x & 0x3f) << 2) + 4); }
+    else if (x < 0x90) {
+      long y, mm;
+      if (i >= e->nb) arm_fail (s_of ("an EHABI pop with no second byte"));
+      y = e->b[i++];
+      mm = (((x & 15) << 8) | y) << 4;
+      if (!mm) arm_fail (s_of ("EHABI's refuse to unwind"));
+      kind[nops] = 1; val[nops++] = mm;
+    }
+    else if (x >= 0xa0 && x < 0xb0) {
+      long mm = 0;
+      for (k = 0; k <= (x & 7); k++) mm |= 1L << (4 + k);
+      if (x & 8) mm |= 1L << 14;
+      kind[nops] = 1; val[nops++] = mm;
+    }
+    else if (x == 0xb1) {
+      long y;
+      if (i >= e->nb) arm_fail (s_of ("an EHABI pop with no second byte"));
+      y = e->b[i++];
+      if (!(y && y < 16)) { struct str *z = s_of ("an EHABI pop of "); s_app (z, s_num (y)); arm_fail (z); }
+      kind[nops] = 1; val[nops++] = y;
+    }
+    else if (x == 0xb2) {
+      long v = 0, sh = 0;
+      for (;;) {
+        long y;
+        if (i >= e->nb) arm_fail (s_of ("an EHABI uleb128 cut short"));
+        y = e->b[i++];
+        v |= (y & 0x7f) << sh;
+        sh += 7;
+        if (!(y & 0x80)) break;
+      }
+      kind[nops] = 0; val[nops++] = 0x204 + (v << 2);
+    }
+    else { struct str *z = s_of ("an EHABI instruction 0x"); s_app (z, s_hex ((unsigned long) x, 2, 0)); s_cat (z, ", which no ehabi word says"); arm_fail (z); }
+  }
+  for (i = nops - 1; i >= 0; i--) {
+    long kk = kind[i], v = val[i];
+    if (nw && wk[nw - 1] == kk && (kk == 0 || (v < 16 && wv[nw - 1] >= 16 && !(wv[nw - 1] & 15)))) { wv[nw - 1] += v; continue; }
+    wk[nw] = kk; wv[nw++] = v;
+  }
+  for (i = 0; i < nw; i++) {
+    struct nd *w;
+    if (wk[i] == 0) { v_push (n, nd1 (s_of ("ehabi pad"), LN (wv[i]))); continue; }
+    w = ndc ("ehabi save");
+    for (k = 0; k < 16; k++) if (wv[i] >> k & 1) nd_add (w, nd_new (rname (k)));
+    v_push (n, w);
+  }
+  if (e->cant) { n = v_new (); v_push (n, ndc ("ehabi cantunwind")); }
+  if (!n->n) v_push (n, nd1 (s_of ("ehabi pad"), ndc ("0")));
+  l = h_pv (aehabi, s_num (e->addr));
+  if (!l) { l = v_new (); h_setp (aehabi, s_num (e->addr), l); }
+  for (i = 0; i < n->n; i++) v_push (l, n->v[i]);
+}
 static void arm_readdump (struct str *dump, int then)
 {
   struct hash *base = h_new ();
@@ -261,7 +327,9 @@ static void arm_readdump (struct str *dump, int then)
   struct aline *last = 0;
   struct lines *ls;
   long i, j;
-  int insyms = 0;
+  int insyms = 0, unwind = 0;
+  struct aent *ent = 0;
+  struct vec *ents = v_new ();
   if (then) {
     for (i = 0; i < secs_order->n; i++) {
       struct str *s = secs_order->v[i];
@@ -281,6 +349,37 @@ static void arm_readdump (struct str *dump, int then)
   ls = split_lines (t);
   for (i = 0; i < ls->n; i++) {
     struct str *l = chomp (ls->l[i]);
+    if (s_is (l, "There are no unwind sections in this file.")) { unwind = 1; continue; }
+    if (m (l, "^Unwind section '(\\S+)' at offset 0x[0-9a-f]+ contains \\d+ entr(y|ies):$")) {
+      struct str *sn = g (1);
+      if (!s_is (sn, ".ARM.exidx")) { struct str *x = s_of ("unwinding entries of "); s_app (x, sn); s_cat (x, ", not .text's"); arm_fail (x); }
+      unwind = 2;
+      continue;
+    }
+    if (unwind) {
+      if (then) continue;
+      if (m (l, "^0x([0-9a-f]+)(?: <[^>]*>)?: (\\S+)")) {
+        struct str *a = g (1), *w = g (2);
+        ent = alloc (sizeof (struct aent));
+        ent->addr = hexl (a);
+        ent->cant = s_is (w, "0x1");
+        v_push (ents, ent);
+        continue;
+      }
+      if (m (l, "^\\s+Compact model index: [01]$") || l->n == 0 || m (l, "^\\s+\\[cantunwind\\]$")) continue;
+      if (ent && m (l, "^\\s+((?:0x[0-9a-f]{2} ?)+)\\s+\\S")) {
+        struct str *bs = g (1);
+        long q = 0;
+        while (q < bs->n) {
+          long a = q;
+          while (q < bs->n && bs->p[q] != ' ') q++;
+          if (q - a == 4 && !(bs->p[a + 2] == 'b' && bs->p[a + 3] == '0') && ent->nb < 256) ent->b[ent->nb++] = (unsigned char) hexl (s_sub (bs, a + 2, q));
+          while (q < bs->n && bs->p[q] == ' ') q++;
+        }
+        continue;
+      }
+      { struct str *x = s_of ("readelf -u: "); s_app (x, l); arm_fail (x); }
+    }
     if (m (l, "^SYMBOL TABLE:")) { insyms = 1; continue; }
     if (insyms) {
       if (m (l, "^([0-9a-f]{8}) (.{7}) (\\S+)\\t([0-9a-f]+) (.*)$")) {
@@ -336,6 +435,8 @@ static void arm_readdump (struct str *dump, int then)
     }
   }
   perrno = 0;
+  if (!unwind && !then) arm_fail (s_of ("the dump has no unwinding entries (readelf -u after its code): make it again"));
+  for (i = 0; i < ents->n; i++) aehabi_of (ents->v[i]);
 }
 
 /* ---- the source */
@@ -349,7 +450,7 @@ static struct str *aother;
 static struct nd *gotoff (struct str *t)
 {
   struct str *x = s_dup (abase), *y = s_dup (abase);
-  h_setp (agot, t, nd1 (s_of ("word"), nd_new (t)));
+  h_setp (agot, t, nd1 (s_of ("word"), nd_new (resname (t))));
   s_cat (x, " got"); s_cat (y, " got "); s_app (y, t);
   return nd_add (nd2 (s_of ("sub"), nd_new (x), nd_new (y)), ndc ("a0"));
 }
@@ -366,7 +467,7 @@ static void ablk_close (void)
   long i;
   if (!blk) return;
   if (blk->nodes->n) {
-    struct str *nm = s_dup (blk->has_name ? blk->name : s_of ("")), *cm = s_of ("glibc-2.44 ");
+    struct str *nm = s_dup (blk->has_name ? resname (blk->name) : s_of ("")), *cm = s_of ("glibc-2.44 ");
     struct nd *x;
     s_cat (nm, ":");
     s_app (cm, blk->file ? blk->file : src_s);
@@ -547,7 +648,7 @@ static struct nd *asymbol (struct str *t)
   if (h_pv (dlab_b, t)) {
     struct str *b = h_pv (dlab_b, t);
     long o = h_iv (dlab_o, t);
-    return o ? nd_add (nd2 (s_of ("addi"), LN (o), nd_new (b)), ndc ("a0")) : nd_new (b);
+    return o ? nd_add (nd2 (s_of ("addi"), LN (o), nd_new (resname (b))), ndc ("a0")) : nd_new (resname (b));
   }
   if (m (t, "^\\.L")) {
     struct str *n = ctl_names (t), *sc;
@@ -556,7 +657,8 @@ static struct nd *asymbol (struct str *t)
     if (!h_pv (asecs, sc)) { struct str *x = s_of ("the local symbol "); s_app (x, t); s_cat (x, " is in "); s_app (x, sc); s_cat (x, ", not yet"); arm_fail (x); }
     return nd_new (alname (h_iv (asym, n)));
   }
-  return nd_new (t);
+  /* (a symbol: as csema names it, name' where it reserves the name) */
+  return nd_new (resname (t));
 }
 static struct nd *aplus (long a, struct nd *n) { return a ? nd_add (nd2 (s_of ("addi"), LN (a), n), ndc ("a0")) : n; }
 static struct nd *pcsub (struct nd *n) { return nd_add (nd2 (s_of ("sub"), ndc ("pc"), n), ndc ("a0")); }
@@ -574,7 +676,7 @@ static struct nd *data_reloc (struct areloc *r, long v)
   if (s_is (ty, "R_ARM_TLS_IE32")) {
     struct str *k = s_dup (t), *w = s_dup (gb);
     s_cat (k, " tp");
-    h_setp (agot, k, nd1 (s_of ("word"), nd1 (s_of ("tprel"), nd_new (t))));
+    h_setp (agot, k, nd1 (s_of ("word"), nd1 (s_of ("tprel"), nd_new (resname (t)))));
     s_cat (w, " "); s_app (w, t); s_cat (w, " tp");
     return nd1 (s_of ("word"), aplus (a, pcsub (nd_new (w))));
   }
@@ -625,7 +727,7 @@ static void arm_main (struct vec *files)
     long k = 0, q = 0;
     while (k < 15) { long a = q; char *w; while (c[q] && c[q] != ' ') q++; w = alloc (q - a + 1); mcopy ((unsigned char *) w, (unsigned char *) c + a, q - a); armcc[k++] = w; if (c[q]) q++; }
   }
-  asym = h_new (); asymsec = h_new (); secsyms = h_new (); secend = h_new (); asecs = h_new (); aundef = h_new (); secs_order = v_new ();
+  asym = h_new (); asymsec = h_new (); secsyms = h_new (); secend = h_new (); asecs = h_new (); aundef = h_new (); secs_order = v_new (); aehabi = h_new ();
   aaliases = v_new (); adata = v_new (); dlab_b = h_new (); dlab_o = h_new (); agot = h_new (); aweakref = h_new (); srcalias = h_new ();
   arm_readdump (dump_s, 0);
   if (then_v->n) {
@@ -656,6 +758,11 @@ static void arm_main (struct vec *files)
     }
     l0 = ((struct aline *) lines->v[0])->addr;
     if (!h_pv (anames, s_num (l0))) { struct vec *nv = v_new (); struct str *x = s_dup (abase); s_cat (x, " "); s_app (x, s); v_push (nv, x); h_setp (anames, s_num (l0), nv); }
+    /* (an unwinding entry where no symbol is: an entry block of its own) */
+    if (s_is (s, ".text")) for (i = 0; i < aehabi->keys->n; i++) {
+      struct hent *e = aehabi->keys->v[i];
+      if (!h_pv (anames, e->k)) { struct vec *nv = v_new (); struct str *x = s_dup (abase); s_cat (x, " "); s_app (x, s); s_cat (x, " "); s_app (x, s_hex ((unsigned long) dec (e->k), 0, 0)); v_push (nv, x); h_setp (anames, e->k, nv); }
+    }
     outa = v_new (); outn = v_new ();
     next = l0;
     for (i = 0; i <= lines->n; i++) {
@@ -677,6 +784,14 @@ static void arm_main (struct vec *files)
         next += w;
       }
       if (!li) break;
+      /* (the ehabi words of the entry that starts here, before it) */
+      if (s_is (s, ".text")) {
+        struct vec *w = h_pv (aehabi, s_num (li->addr));
+        if (w && w->n) {
+          for (k = 0; k < w->n; k++) { long *ap = alloc (sizeof (long)); *ap = li->addr; v_push (outa, ap); v_push (outn, w->v[k]); }
+          w->n = 0;
+        }
+      }
       next = li->addr + (m (li->hex, "^(\\w{4}) (\\w{4})$") ? 4 : li->hex->n / 2);
       rel = li->relocs->n ? li->relocs->v[0] : 0;
       if (m (li->op, "^\\.(word|short|byte)$")) {
@@ -745,24 +860,28 @@ static void arm_main (struct vec *files)
     first = ((struct vec *) h_pv (anames, s_num (l0)))->v[0];
     cm = s_of ("glibc-2.44 "); s_app (cm, afile ? afile : src_s); s_cat (cm, " ("); s_app (cm, s); s_cat (cm, ")");
     {
-      struct str *x = s_dup (first);
+      struct str *x = s_dup (resname (first));
       s_cat (x, ":");
       fnx = nd2 (x, ndc ("asm"), nd1 (s_of ("comment"), nd_new (cm)));
     }
     into = fnx;
+    {
+    long lastat = l0;
     for (i = 0; i < outa->n; i++) {
       long at = *(long *) outa->v[i];
       struct vec *nv = h_pv (anames, s_num (at));
-      if (at != l0 && (nv || h_has (tgtset, s_num (at)))) {
+      if (at != lastat && (nv || h_has (tgtset, s_num (at)))) {
         struct str *lb = s_dup (alname (at));
         long k;
-        if (nv) for (k = 1; k < nv->n; k++) { struct str *x = s_dup (nv->v[k]); s_cat (x, ":"); nd_add (fnx, nd1 (x, ndc ("asm"))); }
+        if (nv) for (k = 1; k < nv->n; k++) { struct str *x = s_dup (resname (nv->v[k])); s_cat (x, ":"); nd_add (fnx, nd1 (x, ndc ("asm"))); }
         s_cat (lb, ":");
         into = nd_new (lb);
         if (nv) nd_add (into, ndc ("asm"));
         nd_add (fnx, into);
       }
+      lastat = at;
       nd_add (into, outn->v[i]);
+    }
     }
     {
       struct vec *nv = h_pv (anames, s_num (l0));
@@ -775,6 +894,11 @@ static void arm_main (struct vec *files)
     }
     v_push (fns, fnx);
   }
+  {
+    struct hent *lo = 0;
+    for (i = 0; i < aehabi->keys->n; i++) { struct hent *e = aehabi->keys->v[i]; if (((struct vec *) e->pv)->n && (!lo || dec (e->k) < dec (lo->k))) lo = e; }
+    if (lo) { struct str *x = s_of ("an unwinding entry at 0x"); s_app (x, s_hex ((unsigned long) dec (lo->k), 0, 0)); s_cat (x, ", where .text has no instruction"); arm_fail (x); }
+  }
   if (o_size) { o_s (s_num (abytes)); o_str ("\n"); o_flush (); cp_exit (0); }
   { struct str *x = s_of ("size "); s_app (x, s_num (abytes)); s_cat (x, "\n"); facts_write (x); }
   if (agot->n) {
@@ -785,13 +909,13 @@ static void arm_main (struct vec *files)
     for (i = 0; i < k->n; i++) {
       struct str *n = k->v[i], *y = s_dup (abase);
       s_cat (y, " got "); s_app (y, n); s_cat (y, ":");
-      if (h_iv (aweakref, n) && h_iv (aundef, n)) v_push (adata, nd_add (nd_add (nd_add (nd1 (y, ndc ("void")), nd_new (w_ptr ())), nd_new (n)), nd_new (w_addr ())));
+      if (h_iv (aweakref, n) && h_iv (aundef, n)) v_push (adata, nd_add (nd_add (nd_add (nd1 (y, ndc ("void")), nd_new (w_ptr ())), nd_new (resname (n))), nd_new (w_addr ())));
       else v_push (adata, nd2 (y, ndc ("asm"), h_pv (agot, n)));
     }
   }
   {
     struct vec *k = h_sorted (aweakref);
-    for (i = 0; i < k->n; i++) if (h_iv (aundef, k->v[i])) { struct str *x = s_dup (k->v[i]); s_cat (x, ":"); v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void"))); }
+    for (i = 0; i < k->n; i++) if (h_iv (aundef, k->v[i])) { struct str *x = s_dup (resname (k->v[i])); s_cat (x, ":"); v_push (fns, nd_add (nd2 (x, ndc ("weak"), ndc ("function")), ndc ("void"))); }
   }
   {
     struct hash *seen = h_new (), *entry = h_new ();

@@ -78,6 +78,9 @@ use warnings;
 no warnings "portable";    # (64-bit hex numbers: a 64-bit Perl)
 use FindBin;
 use FF qw(node);
+use S2ffRes;
+# a name as csema writes it (S2ffRes.pm: name' where it reserves the name)
+sub rn { S2ffRes::name('x86_64', $_[0]) }
 
 my $where = '';
 sub fail { die "s2ff: $where: @_\n" }
@@ -304,11 +307,45 @@ sub num {
 }
 
 my %numeric;    # how many times each numeric label has come so far
+# a CFI directive as its cfi word: registers by name (no %) or DWARF number,
+# numbers worked out; startproc, endproc and label none; personality and
+# lsda (morestack.S's __morestack) none yet: its LSDA is left out too
+my %cfiregs = (def_cfa => [1, 0], def_cfa_register => [1], offset => [1, 0], rel_offset => [1, 0], restore => [1],
+    register => [1, 1], undefined => [1], same_value => [1], def_cfa_offset => [0], adjust_cfa_offset => [0],
+    remember_state => [], restore_state => [], signal_frame => []);
+my @pcfi;       # cfi words held for the procedure's first label or instruction
+my $cfiproc;    # since .cfi_startproc, no label or instruction yet
+# A procedure that starts at an entry block with no word of its own there,
+# or one with no word at all (gcc's FDE of the CIE's rules alone), gets one
+# where it starts (its first label or instruction) that says them again,
+# cfi def cfa offset / 8, as s2ff.pl's: ttpc's procedure is an asm
+# function, or an entry block in it that starts with a cfi word. Whether
+# it starts an entry is known at the end (merge_runons makes a function
+# an entry of the one before): each procedure's first node, its words.
+my $proc;       # since .cfi_startproc: {into, at} where it starts, n its words
+my @procs;      # {first, n} of each
+sub cfi_flush {
+    if ($cfiproc && $proc && !$proc->{into}) { $proc->{into} = into(); $proc->{at} = scalar @{ into() } }
+    $cfiproc = 0; push @{ into() }, splice @pcfi if @pcfi;
+}
+sub cfi {
+    my ($d, @o) = @_;
+    return if $d =~ /^(startproc|endproc|label|personality|lsda)$/;
+    my $w = 'cfi ' . ($d =~ tr/_/ /r);
+    my $n = sub { my $v = num($_[0]); defined $v or fail "not a number: $_[0]"; node($v) };
+    return node($w, map { $n->($_) } @o) if $d eq 'escape';
+    my $k = $cfiregs{$d} or fail "a CFI directive with no cfi word: .cfi_$d";
+    @o == @$k or fail ".cfi_$d takes " . @$k . " operands: @o";
+    node($w, map { $k->[$_] ? node($o[$_] =~ s/^%//r) : $n->($o[$_]) } 0 .. $#o);
+}
+
 sub label {
     my ($o) = @_;
     $o =~ s/\@(PLT|plt)$//;
     $o =~ s/\x01/ /g;
     return ".L$1 " . (($numeric{$1} // 0) + ($2 eq 'f' ? 1 : 0)) if $o =~ /^(\d+)([fb])$/;
+    # (a symbol: as csema names it, name' where it reserves the name)
+    return rn($o) if $o ne '' && $o !~ /^\./;
     $o;
 }
 # an operand as the value (for the bytes) and the leaf (for the ff) of a
@@ -506,6 +543,7 @@ my (@made, $n, $pos, @fns, $fn, $block, $other, @pending, %datadef, $ends, %got,
 # the end (after crtn's part of it, --then); the weak names' GOT words, C
 # globals
 my (%MADE, %CODE, $code, %zeroed, %weak, @carried, %weakgot);
+my (%globl, %emitted);   # the names .globl makes global; the read-only data carry_rodata put in a function
 # the size and first alignment of the last run's .text (s2ff --facts)
 our %facts;
 my (%rodata, $roblob, %ro, @carry, %roset);    # read-only data: a label's bytes, the labels a function names
@@ -532,7 +570,7 @@ sub finish {
     return unless $fn && (%tls || %got);
     push @carried, [$fn, [node('align', node(8)),
         (map { node(".Ltls $_:", node('dword', node('tprel', node($_)))) } sort keys %tls),
-        (map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got)]];
+        (map { node(".Lgot $_:", node('dword', node(rn($_)))) } sort keys %got)]];
     %tls = %got = ();
 }
 # into the code section sec: where the walk was in it, or its start
@@ -636,6 +674,7 @@ sub read_src {
 # and .fini: the end of crti's _init and _fini, as the linker puts them
 # after crti's)
 sub run {
+    @pcfi = (); $cfiproc = 0; undef $proc; @procs = ();
     my ($mode, $src, $dump, %opt) = @_;
     load();
     $where = $src;
@@ -643,7 +682,7 @@ sub run {
     %CODE = ();
     undef $code;
     ($n, $pos, $ends, $maxalign, $fn, $block, $other, $align) = (0, 0, 1);
-    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset, %weak, @carried, %weakgot, @runs, %runof, %runidx, %into) = ();
+    (@fns, @pending, %datadef, %numeric, %got, %tls, %macro, @sections, @prefix, %rodata, %ro, @carry, %roset, %weak, @carried, %weakgot, @runs, %runof, %runidx, %into, %globl, %emitted) = ();
     undef $roalign;
     %zeroed = map { $_ => 1 } @{ $opt{zero} // [] };
     undef $roblob;
@@ -671,13 +710,13 @@ sub run {
     # unless something defines it), its GOT word a C global
     my %defined = map { $_->{content} =~ s/:$//r => 1 } @fns;
     for my $w (sort keys %weak) {
-        next if $defined{$w};
+        next if $defined{ rn($w) };
         # (morestack.S's DW.ref.__gcc_personality_v0: the word of its
         # personality, in a section left out (below), which nothing here names)
         next if $w =~ /^DW\.ref\./;
-        push @fns, node("$w:", node('weak'), node('function'), node('void'));
+        push @fns, node(rn($w) . ":", node('weak'), node('function'), node('void'));
     }
-    push @fns, node(".Lgot $_:", node('void'), node('* pointer'), node($_), node('& address')) for sort keys %weakgot;
+    push @fns, node(".Lgot $_:", node('void'), node('* pointer'), node(rn($_)), node('& address')) for sort keys %weakgot;
     fail "a prefix with no instruction after it: @prefix" if @prefix;
     # the first function starts where GNU's section does, at its alignment
     my ($first) = grep { @{ $_->{children} } && $_->{children}[0]{content} eq 'asm' } @fns;
@@ -695,6 +734,21 @@ sub run {
     # merge_runons made it an entry of too)
     for my $c (@carried) { my $f = $c->[0]; $f = $into{$f} while $into{$f}; push @{ $f->{children} }, @{ $c->[1] } }
     carry_rodata();
+    data_globals();
+    # (a procedure with no word, or one that starts an entry block with none
+    # there: cfi def cfa offset / 8 first where it starts; the last first)
+    {
+        my %top = map { $_ => 1 } @fns;
+        my %parent;
+        my $walk; $walk = sub { for my $k (@{ $_[0]{children} }) { $parent{$k} = $_[0]; $walk->($k) } };
+        $walk->($_) for @fns;
+        for my $p (reverse @procs) {
+            my $par = $parent{ $p->{first} } or next;
+            next if $top{$par} ? $p->{n} : $p->{first}{content} =~ /^cfi /;
+            my ($i) = grep { $par->{children}[$_] == $p->{first} } 0 .. $#{ $par->{children} };
+            splice @{ $par->{children} }, $i, 0, node('cfi def cfa offset', node(8));
+        }
+    }
     # (a node of more than 255 children, a table of libmvec's read-only
     # data or a long block: its children in numbered layers, 0: 1: ...; a
     # function past 255 stops, its entries would be in a layer)
@@ -737,10 +791,34 @@ sub carry_rodata {
             for my $j ($first{$k} .. $#$r) {
                 my ($names, $bytes, $a) = @{ $r->[$j] };
                 push @{ $f->{children} }, node('align', node($a)) if $j > $first{$k} && ($a // 1) > 1;
-                push @{ $f->{children} }, (map { node("$_:") } @$names[0 .. $#$names - 1]), node("$names->[-1]:", @$bytes);
+                # (a global label of the data, an entry: asm its first
+                # child, as a function's, so that ttpc takes it as one, seen
+                # from other units: libmvec's tables their functions name;
+                # also in layer 0 of a big one)
+                $emitted{$_} = 1 for @$names;
+                push @{ $f->{children} }, (map { node(rn($_) . ":", $globl{$_} ? node('asm') : ()) } @$names[0 .. $#$names - 1]), node(rn($names->[-1]) . ":", $globl{ $names->[-1] } ? node('asm') : (), @$bytes);
             }
         }
-        push @{ $f->{children} }, map { (node('align', node(16)), node("$_:", @{ $rodata{$_} })) } grep { !defined $runof{$_} } @l;
+        $emitted{$_} = 1 for grep { !defined $runof{$_} } @l;
+        push @{ $f->{children} }, map { (node('align', node(16)), node(rn($_) . ":", $globl{$_} ? node('asm') : (), @{ $rodata{$_} })) } grep { !defined $runof{$_} } @l;
+    }
+}
+# Read-only data no function of the file names, a table of its own under a
+# global name (libmvec's svml_*_data.S, which hold only .rodata): an asm
+# definition of its data, asm first, at its alignment, its bytes as GNU's
+# directives (dword ...), as a function carries its tables, in layers past a
+# node's 255 (asm first in layer 0); the entry's other names aliases of it.
+# A data label of an asm unit is an entry, seen from other units, only so:
+# other units' asm names it (.Lgot / dword / name).
+sub data_globals {
+    for my $r (@runs) {
+        for my $e (@$r) {
+            my ($names, $bytes, $a) = @$e;
+            next if grep { $emitted{$_} } @$names;
+            my ($name) = grep { !/^\.L/ } @$names or next;
+            push @fns, node(rn($name) . ":", FF::layers(node('asm'), ($a // 1) > 1 ? node('align', node($a)) : (), @$bytes));
+            push @fns, map { node(rn($_) . ":", node('alias'), node(rn($name))) } grep { $_ ne $name && !/^\.L/ } @$names;
+        }
     }
 }
 
@@ -889,7 +967,8 @@ sub rodata_set {
 # it, as c2ff names it in C (c2ff.pl's ffname)
 my %kw = map { $_ => 1 } qw(syscall if else while for return break continue comment switch case default goto
     array struct union enum function sizeof alignof alias ifunc asm items cast weak section constructor destructor);
-sub kwname { $kw{ $_[0] } ? "$_[0]'" : $_[0] }
+# (a label's name: csema's name' where it reserves the name, rn, which holds %kw's words too)
+sub kwname { $kw{ $_[0] } ? "$_[0]'" : rn($_[0]) }
 my $skipnote;
 sub walk_stmt {
     my ($st, $file, $line) = @_;
@@ -899,6 +978,7 @@ sub walk_stmt {
     if ($st =~ /^\.pushsection\s+"?\.note\.gnu\.property"?/) { $skipnote = 1; return }
     if ($skipnote) { $skipnote = 0 if $st eq '.popsection'; return }
     # sections: code (.text, .text.x) or another
+    if ($st =~ /^\.(?:globl|global)\s+(.+)$/) { $globl{$_} = 1 for split /\s*,\s*/, $1 }
     $weak{$1} = 1 if $st =~ /^\.weak\s+([.\w]+)$/;
     if ($st =~ /^\.(text|data|bss)$/) { push @sections, [$other, $code]; section(".$1"); return }
     if ($st =~ /^\.section\s+"?([^",\s]+)"?/) { push @sections, [$other, $code]; section($1); return }
@@ -930,7 +1010,7 @@ sub walk_stmt {
         # (a label and its bytes on one line: libm's one: .double 1.0)
         if ($st =~ /^([.\w]+):\s*(\S.*)$/) { push @pending, $1; undef $roblob; return walk_stmt($2, $file, $line) }
         if ($st =~ /^([.\w]+):$/) { push @pending, $1; undef $roblob; return }
-        if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)) if $datadef{$2}; return }
+        if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @fns, node(rn($1) . ":", node('alias'), node(rn($2))) if $datadef{$2}; return }
         # read-only data (gcc's constants, a string): its label's bytes, as
         # data each function that names it carries (its labels are its own)
         if ($other =~ /^\.?rodata/) {
@@ -993,7 +1073,7 @@ sub walk_stmt {
             # start.S's __data_start, which no C declares, is not)
             if (!%zeroed || $zeroed{$first}) {
                 $datadef{$_} = 1 for @pending;
-                push @fns, map { node("$_:", node('alias'), node($first)) } @more;
+                push @fns, map { node(rn($_) . ":", node('alias'), node(rn($first))) } @more;
             }
             warn "s2ff: $where: $first is zero, c2ff --zero $first makes it\n";
             @pending = ();
@@ -1014,6 +1094,7 @@ sub walk_stmt {
             $block = node("$name:", node('asm'), node('comment', node("glibc-2.44 $file:$line")));
             push @{ $fn->{children} }, $block;
             undef $align;
+            cfi_flush();
         } else {
             finish();
             $fn = node("$name:", node('asm'), (defined $align ? node('align', node($align)) : ()), node('comment', node("glibc-2.44 $file:$line")));
@@ -1021,11 +1102,12 @@ sub walk_stmt {
             undef $block;
             undef $align;
             $ends = 0;
+            cfi_flush();
         }
     }
     return if $st eq '';
     # X = Y, .set X, Y: another name for Y
-    if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) { push @fns, node("$1:", node('alias'), node($2)); return }
+    if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/ || $st =~ /^\.set\s+([.\w]+)\s*,\s*([.\w]+)$/) { push @fns, node(rn($1) . ":", node('alias'), node(rn($2))); return }
     my ($op, $rest) = $st =~ /^(\S+)\s*(.*)$/;
     if ($op =~ /^\./) {
         if ($op =~ /^\.(p2align|align|balign)$/) {
@@ -1036,11 +1118,30 @@ sub walk_stmt {
             $align = $a;     # (before a function's label: its alignment)
             return;
         }
+        # GNU's CFI as the ff's cfi words (ttpc's asmcfi.pl), as s2ff.pl's cfi
+        if ($op =~ /^\.cfi_(\w+)$/) {
+            my $d = $1;
+            my $w = cfi($d, split_ops($rest));
+            # (after .cfi_startproc, before the procedure's first
+            # instruction or label: its own, held until then, as libgcc's
+            # resms64*.h put them before the label)
+            if ($d eq 'startproc') { $cfiproc = 1; $proc = { n => 0 } }
+            if ($d eq 'endproc') {
+                push @procs, { first => $proc->{into}[ $proc->{at} ], n => $proc->{n} } if $proc && $proc->{into} && $proc->{at} < @{ $proc->{into} };
+                undef $proc;
+            }
+            if ($w) {
+                $proc->{n}++ if $proc;
+                if ($cfiproc || !$fn) { push @pcfi, $w } else { push @{ into() }, $w }
+            }
+            return;
+        }
         return if $op =~ /^\.(globl|global|weak|hidden|protected|type|size|cfi_\w+|loc|file|ident|code64|att_syntax)$/;
         fail "a directive with no ff form: $st";
     }
     undef $align;
     fail "an instruction outside a function: $st" unless $fn;
+    cfi_flush() if $cfiproc || @pcfi;
     $op = lc $op;
     # a prefix: a call of its own, its byte the first of GNU's next instruction
     while ($PREFIX{$op}) {

@@ -84,3 +84,5 @@ Disassembly of section .text:
   e0:	4770      	bx	lr
   e2:	f04f 0000 	mov.w	r0, #0
   e6:	4770      	bx	lr
+
+There are no unwind sections in this file.

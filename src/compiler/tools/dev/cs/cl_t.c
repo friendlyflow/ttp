@@ -570,6 +570,7 @@ static void cl_asm_absdefs (char *s)
       while (s[p] == ' ' || s[p] == '\t') p++;
       if (ok && p == e) cl_put (&C->absdef, nm, cl_nl (v, cl_l ()));
       if (ok && p == e) cl_put (&C->absdef, cl_cat (nm, " unit"), (void *) C->cu);
+      if (ok && p == e && C->cu) cl_push (&C->cu->absnames, cl_n (nm));
     }
     at = e;
     if (s[at] == '\\') at++;
@@ -624,7 +625,25 @@ static int cl_same_def (struct cs_rec *a, struct cs_rec *b)
   if (a == b) return 1;
   return cl_same_text (a->dtext, a->dlen, b->dtext, b->dlen);
 }
-/* the text of a function's or a variable's definition: from its specifiers to its last token (def_text, clang's range) */
+/* the end of the token at offset e (1 on): a word or number (its exponent's sign too), a text or character, or one character */
+static long cl_tok_end (long e)
+{
+  unsigned char *p = T->src + e - 1;
+  long i = 0;
+  if (*p == '"' || *p == '\'') {
+    unsigned char q = *p;
+    i = 1;
+    while (p[i] && p[i] != q) { if (p[i] == '\\' && p[i + 1]) i++; i++; }
+    return e + i + (p[i] ? 1 : 0);
+  }
+  if (!cl_alpha (*p) && !cl_digit (*p) && *p != '.') return e + 1;
+  while (cl_alpha (p[i]) || cl_digit (p[i]) || p[i] == '.'
+         || ((p[i] == '+' || p[i] == '-') && i && (p[i - 1] == 'e' || p[i - 1] == 'E' || p[i - 1] == 'p' || p[i - 1] == 'P') && (cl_digit (*p) || *p == '.'))) i++;
+  return e + i;
+}
+/* the text of a function's or a variable's definition: from its specifiers to its last token (def_text, clang's range),
+   a variable's with that token: clang's range ends where it begins, and two units' static const double big, 0x1.8p45
+   and 0x1.8p36, were one (arm's cos, sin: c2ff.pl shares them still, gen/c2ffknown.pl) */
 static void cl_def_text (struct cs_top *t)
 {
   struct cs_decl *d = t->d;
@@ -632,6 +651,7 @@ static void cl_def_text (struct cs_top *t)
   if (!d || d->dtext) return;
   if (t->specs) b = c_off_of (t->specs);
   if (t->src) e = c_off_of (t->src);
+  if (e && t->k == TOP_VAR) e = cl_tok_end (e);
   if (b && e && e >= b) { d->dtext = T->src + b - 1; d->dlen = e - b; }
   else { d->dtext = (unsigned char *) ""; d->dlen = 0; }
 }
@@ -902,6 +922,7 @@ static void cl_pass_one (struct cs_top *t)
           char *nm = cl_copy ((unsigned char *) s + i, j - i);
           struct cs_decl *now = cl_get (&C->lastdecl, nm);
           cl_set (&C->pragma_weak, nm);
+          if (C->cu && !cl_val (&C->cu->wcand, nm)) { cl_set (&C->cu->wcand, nm); cl_push (&C->cu->wcl, cl_n (nm)); }
           if (now) cl_put_new (&C->weak, nm, now);
         }
       }
@@ -936,6 +957,9 @@ static void cl_pass_one (struct cs_top *t)
   if (t->k == TOP_FN && C->program && d->sp && d->sp->asmlabel && !cl_eq (d->sp->asmlabel, name) && !cl_starts (d->sp->asmlabel, "__GI_")) cl_put (&C->own, name, d->sp->asmlabel);
   if (d->sc == SC_REGISTER && d->sp && d->sp->asmlabel) { cl_put (&C->regvar, name, d->sp->asmlabel); return; }
   if ((d->k == DK_VAR || d->k == DK_FUNC) && ((d->sp && (d->sp->weak || d->sp->err)) || cl_val (&C->pragma_weak, name) || cl_val (&C->forceweak, name))) cl_put_new (&C->weak, name, d);
+  /* (a weak reference: a name the unit declares weak and does not define, cl_wref) */
+  if ((d->k == DK_VAR || d->k == DK_FUNC) && C->cu && ((d->sp && d->sp->weak) || cl_val (&C->pragma_weak, name)) && !cl_val (&C->cu->wcand, name)) { cl_set (&C->cu->wcand, name); cl_push (&C->cu->wcl, cl_n (name)); }
+  if (C->cu && ((d->k == DK_FUNC && d->body) || (d->k == DK_VAR && d->sc != SC_EXTERN) || (d->sp && (d->sp->aliasee || d->sp->ifunc)))) cl_set (&C->cu->wdef, name);
   if (t->k == TOP_TYPEDEF) { cl_pass_typedef (d, name); return; }
   if (t->k == TOP_FN) {
     if (d->sp && d->sp->aliasee) { cl_put (&C->alias, name, d->sp->aliasee); cl_put (&C->aliasunit, name, C->cu); return; }
@@ -965,6 +989,7 @@ static void cl_pass_one (struct cs_top *t)
   }
   if (d->sc != SC_EXTERN || cl_val (&C->zero, name)) {
     char *k = cl_own_name (&C->var, name, d);
+    if (d->sp && d->sp->used && C->cu) cl_push (&C->cu->used, cl_n (k));
     if (!cl_has (&C->var, k) && d->sp && d->sp->section && cl_section_name_ok (d->sp->section)) {
       /* (a global of a named section: reached with the section's bounds) */
       struct cl_list *l = cl_get (&C->section, d->sp->section);
@@ -972,6 +997,19 @@ static void cl_pass_one (struct cs_top *t)
       cl_push (l, cl_n (k));
     }
     cl_put_new (&C->var, k, d);
+  }
+}
+/* the unit's weak references (a name it declares weak and does not define)
+   into the names some unit references weakly: a unit that defines one has
+   it under with in every definition (cl_unit_with), as ld's member brings it */
+static void cl_unit_weak (void)
+{
+  long i = 0;
+  if (!C->cu) return;
+  while (i < C->cu->wcl.n) {
+    char *nm = (char *) C->cu->wcl.v[i]->text;
+    if (!cl_val (&C->cu->wdef, nm) && !cl_val (&C->wrset, nm)) { cl_set (&C->wrset, nm); cl_push (&C->wrl, cl_n (nm)); }
+    i++;
   }
 }
 static void cl_pass (void)
@@ -1027,4 +1065,5 @@ static void cl_pass (void)
   t = T->ext1;
   while (t) { cl_pass_one (t); t = t->nxt; }
   cl_own_by_names ();
+  cl_unit_weak ();
 }

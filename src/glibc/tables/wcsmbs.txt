@@ -1,0 +1,263 @@
+# glibc's wcsmbs tests: each built by csema -l + ttpc against all of glibc in ff, and by gcc against libc.a, run alike (qemu; x86_64 natively) and compared: equal, differ, not yet.
+# The tests2 lane, HEAD bed2c24 (ports 9379f75 merged) for the build, 2026-11-22; src/glibc make tests-ref AREA=wcsmbs. The reasons last.
+
+tests-ref wcsmbs (riscv64): 62 tests, 60 equal, 2 differ, 0 not yet
+  test-c8rtomb               equal: exit 1 (FAIL), on rv64 and rv64,v=false
+  test-char-types            equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-mbrtoc8               equal: exit 1 (FAIL), on rv64 and rv64,v=false
+  test-wcpcpy                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcpncpy               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcscat                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcschr                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcschrnul             equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcscmp                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcscpy                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcscspn               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsdup                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcslen                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsncat               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsncmp               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsncmp-nonarray      differ: ttpc's on rv64: exit 124, gcc's 0; ttpc's on rv64,v=false: exit 124, gcc's 0
+  test-wcsncpy               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsnlen               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsnlen-nonarray      equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcspbrk               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsrchr               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsspn                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wcsstr                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wmemchr               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wmemcmp               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-wmemset               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-btowc                  equal: exit 1 (FAIL), on rv64 and rv64,v=false
+  tst-c16-surrogate          equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-c16c32-1               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-c32-state              equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-const                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-fgetwc-after-eof       equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-mbrtowc                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-mbrtowc2               differ: ttpc's on rv64: other output; ttpc's on rv64,v=false: other output
+  tst-mbsrtowcs              equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-mbstowcs               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wchar-h                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcpncpy                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcrtomb                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcslcat                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcslcat2               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcslcpy                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcslcpy2               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcsmbs-clone-overflow  equal: exit 1 (FAIL), on rv64 and rv64,v=false
+  tst-wcsnlen                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstod-nan-locale      equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstod-nan-sign        equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstod-round           equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstof                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstol-binary-c11      equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstol-binary-c23      equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstol-binary-gnu11    equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstol-binary-gnu23    equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wcstol-locale          equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wprintf-binary         equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wprintf-intn           equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wscanf-binary-c11      equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wscanf-binary-c23      equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wscanf-binary-gnu11    equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wscanf-binary-gnu89    equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wscanf-intn            equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-wscanf-to_inpunct      equal: exit 0 (PASS), on rv64 and rv64,v=false
+
+tests-ref wcsmbs (x86_64): 63 tests, 63 equal, 0 differ, 0 not yet
+  test-c8rtomb               equal: exit 1 (FAIL)
+  test-char-types            equal: exit 0 (PASS)
+  test-mbrtoc8               equal: exit 1 (FAIL)
+  test-wcpcpy                equal: exit 0 (PASS)
+  test-wcpncpy               equal: exit 0 (PASS)
+  test-wcscat                equal: exit 0 (PASS)
+  test-wcschr                equal: exit 0 (PASS)
+  test-wcschrnul             equal: exit 0 (PASS)
+  test-wcscmp                equal: exit 0 (PASS)
+  test-wcscpy                equal: exit 0 (PASS)
+  test-wcscspn               equal: exit 0 (PASS)
+  test-wcsdup                equal: exit 0 (PASS)
+  test-wcslen                equal: exit 0 (PASS)
+  test-wcsncat               equal: exit 0 (PASS)
+  test-wcsncmp               equal: exit 0 (PASS)
+  test-wcsncmp-nonarray      equal: exit 0 (PASS)
+  test-wcsncpy               equal: exit 0 (PASS)
+  test-wcsnlen               equal: exit 0 (PASS)
+  test-wcsnlen-nonarray      equal: exit 0 (PASS)
+  test-wcspbrk               equal: exit 0 (PASS)
+  test-wcsrchr               equal: exit 0 (PASS)
+  test-wcsspn                equal: exit 0 (PASS)
+  test-wcsstr                equal: exit 0 (PASS)
+  test-wmemchr               equal: exit 0 (PASS)
+  test-wmemcmp               equal: exit 0 (PASS)
+  test-wmemset               equal: exit 0 (PASS)
+  tst-btowc                  equal: exit 1 (FAIL)
+  tst-c16-surrogate          equal: exit 0 (PASS)
+  tst-c16c32-1               equal: exit 0 (PASS)
+  tst-c32-state              equal: exit 0 (PASS)
+  tst-const                  equal: exit 0 (PASS)
+  tst-fgetwc-after-eof       equal: exit 0 (PASS)
+  tst-mbrtowc                equal: exit 0 (PASS)
+  tst-mbrtowc2               equal: exit 1 (FAIL)
+  tst-mbsrtowcs              equal: exit 0 (PASS)
+  tst-mbstowcs               equal: exit 0 (PASS)
+  tst-rsi-wcslen             equal: exit 0 (PASS)
+  tst-wchar-h                equal: exit 0 (PASS)
+  tst-wcpncpy                equal: exit 0 (PASS)
+  tst-wcrtomb                equal: exit 0 (PASS)
+  tst-wcslcat                equal: exit 0 (PASS)
+  tst-wcslcat2               equal: exit 0 (PASS)
+  tst-wcslcpy                equal: exit 0 (PASS)
+  tst-wcslcpy2               equal: exit 0 (PASS)
+  tst-wcsmbs-clone-overflow  equal: exit 1 (FAIL)
+  tst-wcsnlen                equal: exit 0 (PASS)
+  tst-wcstod-nan-locale      equal: exit 0 (PASS)
+  tst-wcstod-nan-sign        equal: exit 0 (PASS)
+  tst-wcstod-round           equal: exit 0 (PASS)
+  tst-wcstof                 equal: exit 0 (PASS)
+  tst-wcstol-binary-c11      equal: exit 0 (PASS)
+  tst-wcstol-binary-c23      equal: exit 0 (PASS)
+  tst-wcstol-binary-gnu11    equal: exit 0 (PASS)
+  tst-wcstol-binary-gnu23    equal: exit 0 (PASS)
+  tst-wcstol-locale          equal: exit 0 (PASS)
+  tst-wprintf-binary         equal: exit 0 (PASS)
+  tst-wprintf-intn           equal: exit 0 (PASS)
+  tst-wscanf-binary-c11      equal: exit 0 (PASS)
+  tst-wscanf-binary-c23      equal: exit 0 (PASS)
+  tst-wscanf-binary-gnu11    equal: exit 0 (PASS)
+  tst-wscanf-binary-gnu89    equal: exit 0 (PASS)
+  tst-wscanf-intn            equal: exit 0 (PASS)
+  tst-wscanf-to_inpunct      equal: exit 0 (PASS)
+
+tests-ref wcsmbs (aarch64): 62 tests, 61 equal, 1 differ, 0 not yet
+  test-c8rtomb               equal: exit 1 (FAIL), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-char-types            equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-mbrtoc8               equal: exit 1 (FAIL), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcpcpy                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcpncpy               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcscat                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcschr                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcschrnul             equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcscmp                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcscpy                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcscspn               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsdup                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcslen                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsncat               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsncmp               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsncmp-nonarray      differ: ttpc's on max: exit 124, gcc's 0; ttpc's on max,sve=off: exit 124, gcc's 0; ttpc's on cortex-a57: exit 124, gcc's 0; ttpc's on a64fx: exit 124, gcc's 0; ttpc's on neoverse-v1: exit 124, gcc's 0
+  test-wcsncpy               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsnlen               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsnlen-nonarray      equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcspbrk               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsrchr               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsspn                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wcsstr                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wmemchr               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wmemcmp               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  test-wmemset               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-btowc                  equal: exit 1 (FAIL), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-c16-surrogate          equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-c16c32-1               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-c32-state              equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-const                  equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-fgetwc-after-eof       equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-mbrtowc                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-mbrtowc2               equal: exit 1 (FAIL), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-mbsrtowcs              equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-mbstowcs               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wchar-h                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcpncpy                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcrtomb                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcslcat                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcslcat2               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcslcpy                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcslcpy2               equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcsmbs-clone-overflow  equal: exit 1 (FAIL), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcsnlen                equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstod-nan-locale      equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstod-nan-sign        equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstod-round           equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstof                 equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstol-binary-c11      equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstol-binary-c23      equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstol-binary-gnu11    equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstol-binary-gnu23    equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wcstol-locale          equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wprintf-binary         equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wprintf-intn           equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wscanf-binary-c11      equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wscanf-binary-c23      equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wscanf-binary-gnu11    equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wscanf-binary-gnu89    equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wscanf-intn            equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+  tst-wscanf-to_inpunct      equal: exit 0 (PASS), on max and max,sve=off and cortex-a57 and a64fx and neoverse-v1
+
+tests-ref wcsmbs (arm): 62 tests, 60 equal, 2 differ, 0 not yet
+  test-c8rtomb               equal: exit 1 (FAIL), on max and cortex-a15
+  test-char-types            equal: exit 0 (PASS), on max and cortex-a15
+  test-mbrtoc8               equal: exit 1 (FAIL), on max and cortex-a15
+  test-wcpcpy                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcpncpy               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcscat                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcschr                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcschrnul             equal: exit 0 (PASS), on max and cortex-a15
+  test-wcscmp                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcscpy                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcscspn               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsdup                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcslen                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsncat               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsncmp               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsncmp-nonarray      differ: ttpc's on max: exit 124, gcc's 0; ttpc's on cortex-a15: exit 124, gcc's 0
+  test-wcsncpy               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsnlen               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsnlen-nonarray      equal: exit 0 (PASS), on max and cortex-a15
+  test-wcspbrk               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsrchr               equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsspn                equal: exit 0 (PASS), on max and cortex-a15
+  test-wcsstr                equal: exit 0 (PASS), on max and cortex-a15
+  test-wmemchr               equal: exit 0 (PASS), on max and cortex-a15
+  test-wmemcmp               equal: exit 0 (PASS), on max and cortex-a15
+  test-wmemset               equal: exit 0 (PASS), on max and cortex-a15
+  tst-btowc                  equal: exit 1 (FAIL), on max and cortex-a15
+  tst-c16-surrogate          equal: exit 0 (PASS), on max and cortex-a15
+  tst-c16c32-1               equal: exit 0 (PASS), on max and cortex-a15
+  tst-c32-state              equal: exit 0 (PASS), on max and cortex-a15
+  tst-const                  equal: exit 0 (PASS), on max and cortex-a15
+  tst-fgetwc-after-eof       equal: exit 0 (PASS), on max and cortex-a15
+  tst-mbrtowc                equal: exit 0 (PASS), on max and cortex-a15
+  tst-mbrtowc2               differ: ttpc's on max: other output; ttpc's on cortex-a15: other output
+  tst-mbsrtowcs              equal: exit 0 (PASS), on max and cortex-a15
+  tst-mbstowcs               equal: exit 0 (PASS), on max and cortex-a15
+  tst-wchar-h                equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcpncpy                equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcrtomb                equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcslcat                equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcslcat2               equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcslcpy                equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcslcpy2               equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcsmbs-clone-overflow  equal: exit 1 (FAIL), on max and cortex-a15
+  tst-wcsnlen                equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstod-nan-locale      equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstod-nan-sign        equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstod-round           equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstof                 equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstol-binary-c11      equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstol-binary-c23      equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstol-binary-gnu11    equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstol-binary-gnu23    equal: exit 0 (PASS), on max and cortex-a15
+  tst-wcstol-locale          equal: exit 0 (PASS), on max and cortex-a15
+  tst-wprintf-binary         equal: exit 0 (PASS), on max and cortex-a15
+  tst-wprintf-intn           equal: exit 0 (PASS), on max and cortex-a15
+  tst-wscanf-binary-c11      equal: exit 0 (PASS), on max and cortex-a15
+  tst-wscanf-binary-c23      equal: exit 0 (PASS), on max and cortex-a15
+  tst-wscanf-binary-gnu11    equal: exit 0 (PASS), on max and cortex-a15
+  tst-wscanf-binary-gnu89    equal: exit 0 (PASS), on max and cortex-a15
+  tst-wscanf-intn            equal: exit 0 (PASS), on max and cortex-a15
+  tst-wscanf-to_inpunct      equal: exit 0 (PASS), on max and cortex-a15
+
+# reasons of what is not equal
+#   test-wcsncmp-nonarray: differ: timeout: ttpc's program ~9x slower than gcc's -O2 one (x86_64 natively 309 s against 34 s, both pass); under qemu past the 600 s limit
+#   tst-mbrtowc2: differ: the test's own: the EUC/BIG5 cases fail in a static program (no gconv modules), then print wch, never set: stack garbage in gcc's, 0 in ttpc's; the UTF-8 cases are equal

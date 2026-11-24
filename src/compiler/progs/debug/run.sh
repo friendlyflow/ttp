@@ -12,7 +12,8 @@
 #   nohook deep deep vdeep deep deep _start;
 # - libgcc's unwinder: progs/debug/unwind.c, by gcc against glibc's libc.a
 #   (GLIBC_REF, src/glibc's reference build), walks gcc deep deep vdeep
-#   deep deep gcc;
+#   deep deep gcc; and through an asm function with cfi words (ehabi words
+#   on arm), progs/debug/asmcfi-<target>.ff's mid: gcc inner mid deep gcc;
 # - the line table (.debug_line, gen/patches/dwarfline.pl): gdb's break
 #   deep and break progs/cdebug.ff.txt:53 stop at the lines of the tree's
 #   text (fftext.pl txt) that start deep's first statement and the return
@@ -84,6 +85,14 @@ test -f "$obj/libc.a" || fail "no glibc reference build in $obj (make -C src/gli
     -Wl,--start-group "$obj/libc.a" -lgcc -lgcc_eh -Wl,--end-group "$("$cc" -print-file-name=crtend.o)" "$obj/csu/crtn.o"
 timeout 20 $q "$o/unwind" "$o/cdebug.g" | paste -sd' ' > "$o/unwind.out"
 test "$(cat "$o/unwind.out")" = "gcc deep deep vdeep deep deep gcc deep 3: 10" || fail "libgcc's walk: $(cat "$o/unwind.out")"
+# an asm function's frames (gen/patches/asmcfi.pl): progs/debug/asmcfi-<target>.ff's
+# mid, between C frames, has cfi words (arm: ehabi words); libgcc's walk
+# goes through it (without them it stops there); alone it exits with 4
+(cd "$c" && timeout 120 $TTPC -g --target $t shared.ff progs/debug/asmcfi-$t.ff "$o/asmcfi.g" > "$o/asmcfi.g.lst")
+s=0; timeout 20 $q "$o/asmcfi.g" || s=$?
+test $s = 4 || fail "asmcfi: exit $s, not 4"
+timeout 20 $q "$o/unwind" "$o/asmcfi.g" | paste -sd' ' > "$o/asmcfi.out"
+test "$(cat "$o/asmcfi.out")" = "gcc inner mid deep gcc deep 3: 4" || fail "libgcc's walk through an asm function: $(cat "$o/asmcfi.out")"
 # the line table: gdb's breakpoints by function and by line, list, addr2line
 for s in .debug_abbrev .debug_info .debug_line; do grep -q " $s " "$o/cdebug.sections" || fail "cdebug: no $s"; done
 mkdir -p "$o/progs"

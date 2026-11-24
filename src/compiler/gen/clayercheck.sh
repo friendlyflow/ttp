@@ -45,10 +45,12 @@ if test "${1:-}" = --one; then
         fi
     done
     if $run $cs -l -t "$tg" -s "$gsrc" -g "${LIBGCC_SRC:-}" -S "$shared" -n "$I/$u.i" "$in" $roots > "$d/$b.ff.txt" 2> "$d/$b.err"; then
-        if cmp -s "$d/$b.ff.txt" "$d/$b.ref"; then
+        # (csema's text read as c2ff.pl's where it departs on purpose: c2ffknown.pl's rules)
+        perl "$G/c2ffknown.pl" --target "$tg" "$d/$b.ff.txt" > "$d/$b.known"
+        if cmp -s "$d/$b.known" "$d/$b.ref"; then
             echo "OK $u"
-            rm -f "$d/$b.ff.txt" "$d/$b.ref" "$d/$b.err" "$d/$b.referr" "$d/$b.clang.i"
-        else echo "DIFF $u: $(diff "$d/$b.ff.txt" "$d/$b.ref" | grep -c '^[<>]') lines"; fi
+            rm -f "$d/$b.ff.txt" "$d/$b.known" "$d/$b.ref" "$d/$b.err" "$d/$b.referr" "$d/$b.clang.i"
+        else echo "DIFF $u: $(diff "$d/$b.known" "$d/$b.ref" | grep -c '^[<>]') lines"; fi
     else echo "STOP $u: $(tail -n 1 "$d/$b.err" | head -c 200)"; fi
     exit 0
 fi

@@ -49,12 +49,28 @@
 #                   --zero's global, its other labels aliases; an init
 #                   array is left out; any other bytes stop the translation
 #
+#   frames          the dump also has the object's frames (objdump
+#                   --dwarf=frames, after its code): each FDE's rows are
+#                   the cfi words of ttpc's asmcfi.pl, each at the
+#                   instruction where it starts, as DWARF has them (cfi
+#                   offset / x19 / -16, cfi def cfa offset / 16: GNU's
+#                   rel offset and adjust cfa offset are those there). ttpc's
+#                   procedure is an asm function, or an entry block in it
+#                   that starts with a cfi word: an FDE with no rows (the
+#                   CIE's rules alone, a leaf's), or one that starts an
+#                   entry block with no row there, has cfi def cfa offset
+#                   / 0 first where it starts, which says the CIE's rules
+#                   again
+#
 # A host tool (core Perl only), not part of ttpc.
 use strict;
 use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use FF qw(node write_txt);
+use S2ffRes;
+# a name as csema writes it (S2ffRes.pm: name' where it reserves the name)
+sub rn { S2ffRes::name('aarch64', $_[0]) }
 
 my $page = 'glibc asm';
 my @files;
@@ -185,13 +201,61 @@ sub decode {
 # .fini), in the dump's order, and (of the file itself) its symbols.
 my (%sym, %sect, %type, %bind);
 my %code = map { $_ => 1 } qw(.text .init .fini);
+# the frames: the cfi words at each address of .text where rows start,
+# each with its FDE ({b, first: the first node there, n its words, s 1
+# with one there})
+my (%cfiat, @fdes, %fdeat);
+sub cfireg { my ($r) = @_; $r =~ /^r\d+ \(([\w.]+)\)$/ or fail "a frame's register $r"; $1 }
+sub frameword {
+    my ($at, $op, $a) = @_;
+    my @w;
+    if ($op eq 'DW_CFA_def_cfa' && $a =~ /^(r\d+ \([\w.]+\)) ofs (-?\d+)$/) { @w = ('cfi def cfa', cfireg($1), $2) }
+    elsif ($op =~ /^DW_CFA_def_cfa_offset(_sf)?$/ && $a =~ /^(-?\d+)$/) { @w = ('cfi def cfa offset', $1) }
+    elsif ($op eq 'DW_CFA_def_cfa_register') { @w = ('cfi def cfa register', cfireg($a)) }
+    elsif ($op =~ /^DW_CFA_offset(_extended(_sf)?)?$/ && $a =~ /^(r\d+ \([\w.]+\)) at cfa([+-]\d+)$/) { @w = ('cfi offset', cfireg($1), $2 + 0) }
+    elsif ($op =~ /^DW_CFA_restore(_extended)?$/) { @w = ('cfi restore', cfireg($a)) }
+    elsif ($op eq 'DW_CFA_remember_state' && $a eq '') { @w = ('cfi remember state') }
+    elsif ($op eq 'DW_CFA_restore_state' && $a eq '') { @w = ('cfi restore state') }
+    elsif ($op eq 'DW_CFA_register' && $a =~ /^(r\d+ \([\w.]+\)) in (r\d+ \([\w.]+\))$/) { @w = ('cfi register', cfireg($1), cfireg($2)) }
+    elsif ($op eq 'DW_CFA_undefined') { @w = ('cfi undefined', cfireg($a)) }
+    elsif ($op eq 'DW_CFA_same_value') { @w = ('cfi same value', cfireg($a)) }
+    else { fail "a frame's $op $a, which no cfi word says" }
+    my ($w, @o) = @w;
+    push @{ $cfiat{$at} }, [$fdes[-1], node($w, map { node($_) } @o)];
+}
 sub readdump {
     my ($file, $symbols) = @_;
     my @made;
     open my $d, '<', $file or die "s2ff: cannot open $file: $!\n";
     my $insec = '';
+    # (the frames after the code, objdump's second header: its CIE GNU's,
+    # each FDE's rows; an FDE's start and the rows' places in .text)
+    my ($heads, $incie, $fde, $loc) = (0, 0);
     while (<$d>) {
         chomp;
+        if (/^\S.*:\s+file format /) { $heads++; next }
+        if ($heads > 1) {
+            next unless $symbols;
+            if (/^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+ CIE$/) { undef $fde; $incie = 1; next }
+            if (/^[0-9a-f]+ [0-9a-f]+ [0-9a-f]+ FDE cie=[0-9a-f]+ pc=([0-9a-f]+)\.\.([0-9a-f]+)$/) {
+                $incie = 0; $fde = { b => hex $1, n => 0 }; $loc = hex $1;
+                push @fdes, $fde; push @{ $fdeat{ hex $1 } }, $fde;
+                next;
+            }
+            if (/^\s+DW_CFA_advance_loc\d?: \d+ to ([0-9a-f]+)$/) { $loc = hex $1; next }
+            next if /^\s+DW_CFA_nop$/;
+            if (/^\s+(DW_CFA_\w+):?\s*(.*?)\s*$/) {
+                if ($incie) { "$1 $2" eq 'DW_CFA_def_cfa r31 (sp) ofs 0' or fail "a CIE that says $1 $2, not GNU's"; next }
+                fail "$1 outside an FDE" unless $fde;
+                frameword($loc, $1, $2);
+                next;
+            }
+            if ($incie && /^\s+(Augmentation|Code alignment factor|Data alignment factor|Return address column):\s+(.*?)\s*$/) {
+                my %gnu = ('Augmentation' => '"zR"', 'Code alignment factor' => 4, 'Data alignment factor' => -8, 'Return address column' => 30);
+                $2 eq $gnu{$1} or fail "a CIE whose $1 is $2, not GNU's";
+            }
+            next;
+        }
         # the symbol table: value, flags, section, size, name
         if ($symbols && /^([0-9a-f]{16}) (.{7}) (\S+)\t[0-9a-f]+ (.+)$/) {
             my ($v, $flags, $sec, $name) = (hex $1, $2, $3, $4);
@@ -225,6 +289,7 @@ sub readdump {
         }
     }
     close $d;
+    fail "the dump has no frames (objdump --dwarf=frames after its code): make it again" if $symbols && $heads < 2;
     @made;
 }
 my @all = readdump($dump, 1);
@@ -271,7 +336,7 @@ my (%line, %alias, @fns, @data, %rodata, %weakref);
             if (defined $other) {
                 next if $st =~ /^\.(globl|global|weak|type|size|hidden|align|p2align|balign)\b/;
                 if ($st =~ /^([.\w]+):$/) { push @pending, $1; @blob = (); next }
-                if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @data, node("$1:", node('alias'), node($2)) if $datadef{$2}; next }
+                if ($st =~ /^([.\w]+)\s*=\s*([.\w]+)$/) { push @data, node(rn($1) . ":", node('alias'), node(rn($2))) if $datadef{$2}; next }
                 next if $other =~ /^\.(pre)?init_array$|^\.fini_array$/ && $st =~ /^\.(dc\.a|xword|quad)\s+[.\w]+$/;
                 # read-only text (__arm_za_disable's message): its label's
                 # bytes, which the function that names it carries
@@ -307,7 +372,7 @@ my (%line, %alias, @fns, @data, %rodata, %weakref);
                     # too: start.S's __data_start, which no C declares, is not)
                     if (!%zeroed || $zeroed{$first}) {
                         $datadef{$_} = 1 for @pending;
-                        push @data, map { node("$_:", node('alias'), node($first)) } @more;
+                        push @data, map { node(rn($_) . ":", node('alias'), node(rn($first))) } @more;
                     }
                     warn "s2ff: $where: $first is zero, c2ff --zero $first makes it\n";
                     @pending = ();
@@ -329,7 +394,8 @@ my (%line, %alias, @fns, @data, %rodata, %weakref);
 }
 
 # ---- the functions -----------------------------------------------------------
-sub ffname { my ($n) = @_; $n =~ s/^\.L(\d+)__(\d+)$/.L$1 $2/; $n }
+# (a symbol: as csema names it, name' where it reserves the name)
+sub ffname { my ($n) = @_; return ".L$1 $2" if $n =~ /^\.L(\d+)__(\d+)$/; $n ne '' && $n !~ /^\./ ? rn($n) : $n }
 my %at;         # "section address" -> its labels
 for my $sec (keys %code) { for my $a (keys %{ $sym{$sec} || {} }) { $at{"$sec $a"} = [grep { !exists $alias{$_} } @{ $sym{$sec}{$a} }] } }
 my %labelat;    # an address a branch may name
@@ -345,8 +411,8 @@ sub finish {
     # is a C global: void / * pointer / name / & address)
     my @weak = grep { $weakref{$_} && ($sect{$_} // '') eq '*UND*' } keys %got;
     delete @got{@weak};
-    push @weakgot, map { node(".Lgot $_:", node('void'), node('* pointer'), node($_), node('& address')) } sort @weak;
-    push @{ $fn->{children} }, node('align', node(8)), map { node(".Lgot $_:", node('dword', node($_))) } sort keys %got if %got;
+    push @weakgot, map { node(".Lgot $_:", node('void'), node('* pointer'), node(ffname($_)), node('& address')) } sort @weak;
+    push @{ $fn->{children} }, node('align', node(8)), map { node(".Lgot $_:", node('dword', node(ffname($_)))) } sort keys %got if %got;
     # (text ends where it ends: what follows the function starts on 8 again)
     push @{ $fn->{children} }, (map { node(ffname($_) . ':', @{ $rodata{$_} }) } sort keys %ro), node('align', node(8)) if %ro;
     %got = %ro = ();
@@ -380,18 +446,37 @@ for my $m (@made) {
             $block = node(ffname($name) . ':');
             push @{ $fn->{children} }, $block;
         } elsif ($fn && !$ends) {
-            $block = node("$name:", node('asm'), $c);
+            $block = node(ffname($name) . ":", node('asm'), $c);
             push @{ $fn->{children} }, $block;
         } else {
             finish();
-            $fn = node("$name:", node('asm'), $c);
+            $fn = node(ffname($name) . ":", node('asm'), $c);
             $fnof{$name} = $fn;
             push @fns, $fn;
             undef $block;
         }
     }
     fail "an instruction outside a function at $m->{addr}" unless $fn;
+    # (the cfi words of the rows that start at it, before it; the first
+    # node there of each FDE that starts there)
+    if ($m->{sec} eq '.text') {
+        my $c = ($block // $fn)->{children};
+        my $at = @$c;
+        cfiput($c, delete $cfiat{ $m->{addr} }, $m->{addr}) if $cfiat{ $m->{addr} };
+        emit($m);
+        $_->{first} //= $c->[$at] for @{ $fdeat{ $m->{addr} } || [] };
+        next;
+    }
     emit($m);
+}
+sub cfiput { my ($c, $l, $a) = @_; for (@$l) { my ($f, $w) = @$_; push @$c, $w; $f->{n}++; $f->{s} = 1 if $a == $f->{b} } }
+# (rows where .text's instructions end: after the last)
+{
+    my @t = grep { $_->{sec} eq '.text' } @made;
+    my $end = @t ? $t[-1]{addr} + 4 : 0;
+    cfiput(($block // $fn)->{children}, delete $cfiat{$end}, $end) if $fn && $cfiat{$end};
+    fail "a frame's row at $_, where .text has no instruction" for sort { $a <=> $b } keys %cfiat;
+    $_->{first} or fail "an FDE at $_->{b}, where .text has no instruction" for @fdes;
 }
 finish();
 # crtn's .init and .fini (--then crtn.Ls crtn.dump): the end of crti's
@@ -431,8 +516,8 @@ sub emit {
             # (a branch to a weak name nothing defines, crti's b __gmon_start__
             # after its cbz: to a trap the function carries, .Lweak name)
             if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/ && $weakref{$rs} && ($sect{$rs} // '') eq '*UND*') { $weakb{$rs} = 1; push @ops, node('rel', leaf(".Lweak $rs")); next }
-            if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/) { push @ops, node('rel', leaf($rs)); next }
-            if ($rt && $rt eq 'R_AARCH64_ADR_PREL_PG_HI21') { push @ops, node('pagerel', leaf($rs)); next }
+            if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/) { push @ops, node('rel', leaf(ffname($rs))); next }
+            if ($rt && $rt eq 'R_AARCH64_ADR_PREL_PG_HI21') { push @ops, node('pagerel', leaf(ffname($rs))); next }
             if ($rt && $rt eq 'R_AARCH64_ADR_GOT_PAGE') { $got{$rs} = 1; push @ops, node('pagerel', leaf(".Lgot $rs")); next }
             fail "a relocation $rt in $m->{op}" if $rt;
             my $to = $def->{name} eq 'adrp' ? ($m->{addr} & ~4095) + $val : $m->{addr} + $val;
@@ -440,7 +525,7 @@ sub emit {
             push @ops, node($def->{name} eq 'adrp' ? 'pagerel' : 'rel', leaf(ffname($l)));
             next;
         }
-        if ($p eq 'uimm' && $rt && $rt =~ /^R_AARCH64_(ADD_ABS_LO12_NC|LDST(8|16|32|64|128)_ABS_LO12_NC)$/) { push @ops, node('lo12', leaf($rs)); next }
+        if ($p eq 'uimm' && $rt && $rt =~ /^R_AARCH64_(ADD_ABS_LO12_NC|LDST(8|16|32|64|128)_ABS_LO12_NC)$/) { push @ops, node('lo12', leaf(ffname($rs))); next }
         if ($p eq 'uimm' && $rt && $rt eq 'R_AARCH64_LD64_GOT_LO12_NC') { $got{$rs} = 1; push @ops, node('lo12', leaf(".Lgot $rs")); next }
         if ($p eq 'cond') { push @ops, leaf($cond[$val]); next }
         push @ops, leaf($val);
@@ -450,11 +535,11 @@ sub emit {
     $ends = $def->{name} =~ /^(b|br|ret|retr)$/ ? 1 : 0;
 }
 # aliases: X = Y, of a function here
-push @fns, map { node("$_:", node('alias'), node($alias{$_})) } sort grep { exists $sect{$_} || 1 } keys %alias;
+push @fns, map { node(rn($_) . ":", node('alias'), node(rn($alias{$_}))) } sort grep { exists $sect{$_} || 1 } keys %alias;
 push @fns, @data;
 # a weak name the file declares and does not define (crti's __gmon_start__):
 # a function that may stay undefined, at 0
-push @fns, map { node("$_:", node('weak'), node('function'), node('void')) } sort grep { ($sect{$_} // '') eq '*UND*' } keys %weakref;
+push @fns, map { node(ffname($_) . ":", node('weak'), node('function'), node('void')) } sort grep { ($sect{$_} // '') eq '*UND*' } keys %weakref;
 push @fns, @weakgot;
 # A function that jumps to a block label of a function after it (setjmp.S:
 # setjmp's b 1f, to a label in __sigsetjmp): the functions from it to that
@@ -478,6 +563,20 @@ push @fns, @weakgot;
             push @{ $fns[$i]{children} }, node($g->{content}, $asm, @own), @later;
         }
         $i--;
+    }
+}
+# (an FDE with no rows, or one that starts an entry block with no row
+# there: cfi def cfa offset / 0 first where it starts; the last first)
+{
+    my %top = map { $_ => 1 } @fns;
+    my %parent;
+    my $walk; $walk = sub { for my $k (@{ $_[0]{children} }) { $parent{$k} = $_[0]; $walk->($k) } };
+    $walk->($_) for @fns;
+    for my $f (reverse @fdes) {
+        my $p = $parent{ $f->{first} };
+        next if $top{$p} ? $f->{n} : $f->{s};
+        my ($i) = grep { $p->{children}[$_] == $f->{first} } 0 .. $#{ $p->{children} };
+        splice @{ $p->{children} }, $i, 0, node('cfi def cfa offset', node(0));
     }
 }
 print $items ? write_txt(@fns) : write_txt(node("$page:", @fns));

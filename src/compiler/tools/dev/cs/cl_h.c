@@ -103,6 +103,8 @@ static char *cl_spdx_one (char *h)
     if (!v) v = "2";
     lic = cl_cat3 ("GPL-", v, cs_pick (later, ".0-or-later", ".0-only"));
   } else if (cl_ihas (t, "Developed at SunPro") && cl_ihas (t, "freely granted, provided that this notice is preserved")) lic = "SunPro";
+  /* (the FSF All Permissive License: wcsmbs's tst-fgetwc-after-eof.c) */
+  else if (cl_ihas (t, "Copying and distribution of this file, with or without modification, are permitted in any medium without royalty provided the copyright notice and this notice are preserved")) lic = "FSFAP";
   else if (cl_ihas (t, "Permission to use, copy, modify, and distribute this software for any purpose with or without fee is hereby granted") || cl_ihas (t, "Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted")) lic = "ISC";
   else if (cl_ihas (t, "Permission is hereby granted, free of charge, to any person obtaining a copy")) lic = "MIT";
   else if (cl_ihas (t, "Redistribution and use in source and binary forms")) {
