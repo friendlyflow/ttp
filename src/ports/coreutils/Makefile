@@ -43,8 +43,9 @@ PKG_CONFIGURE := --disable-nls --without-selinux --disable-acl --disable-xattr -
 PKG_CHECKFLAGS := SUBDIRS=.
 PKG_CHECKSECS := 14400
 PKG_CSHEAP := 64
-# (ttpc: up to 4 hours for the one binary, port.mk's PKG_TTPCSECS)
-PKG_TTPCSECS := 14400
+# (ttpc: up to 8 hours for the one binary, port.mk's PKG_TTPCSECS: over 4 h under
+# load on x86_64, 2026-11-23, find_label's walk over the page's groups)
+PKG_TTPCSECS := 28800
 # (factor's longlong.h without its inline asm: its C, which csema translates;
 # the asm of each target is what ttpc's C layer has no form for yet)
 PKG_DEFINES := -DNO_ASM
