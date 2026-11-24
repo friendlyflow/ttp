@@ -1,0 +1,25 @@
+# glibc's ctype tests: each built by csema -l + ttpc against all of glibc in ff, and by gcc against libc.a, run alike (qemu; x86_64 natively) and compared: equal, differ, not yet.
+# The tests2 lane, HEAD bed2c24 (ports 9379f75 merged) for the build, 2026-11-22; src/glibc make tests-ref AREA=ctype. The reasons last.
+
+tests-ref ctype (riscv64): 3 tests, 3 equal, 0 differ, 0 not yet
+  test_ctype                   equal: exit 0 (PASS)
+  tst-ctype-tls-dlmopen        equal: exit 1 (FAIL)
+  tst-ctype-tls-dlopen-static  equal: exit 1 (FAIL)
+
+tests-ref ctype (x86_64): 3 tests, 3 equal, 0 differ, 0 not yet
+  test_ctype                   equal: exit 0 (PASS)
+  tst-ctype-tls-dlmopen        equal: exit 1 (FAIL)
+  tst-ctype-tls-dlopen-static  equal: exit 1 (FAIL)
+
+tests-ref ctype (aarch64): 3 tests, 3 equal, 0 differ, 0 not yet
+  test_ctype                   equal: exit 0 (PASS)
+  tst-ctype-tls-dlmopen        equal: exit 1 (FAIL)
+  tst-ctype-tls-dlopen-static  equal: exit 1 (FAIL)
+
+tests-ref ctype (arm): 3 tests, 3 equal, 0 differ, 0 not yet
+  test_ctype                   equal: exit 0 (PASS)
+  tst-ctype-tls-dlmopen        equal: exit 1 (FAIL)
+  tst-ctype-tls-dlopen-static  equal: exit 1 (FAIL)
+
+# reasons of what is not equal
+#   (none)
