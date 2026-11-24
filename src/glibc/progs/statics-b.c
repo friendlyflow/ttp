@@ -8,6 +8,19 @@
 
 static int counter;
 static const int table[3] = { 10, 20, 30 };
+static int scale (int);
+
+int
+scale (int x)
+{
+  return x * 100;
+}
+
+int
+scale_b (int x)
+{
+  return scale (x);
+}
 
 int
 bump_b (void)

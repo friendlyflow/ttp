@@ -961,6 +961,10 @@ static struct cs_decl *cs_declare_fn (unsigned char *name, long nlen, struct cs_
   d->name = name;
   d->nlen = nlen;
   d->sc = sc;
+  /* (C11 6.2.2: a function declared with no storage class, or extern, after a static declaration of it
+     has its internal linkage: glibc's as_logd of e_lgamma_r.c and of e_gamma_r.c, each static by its
+     prototype, defined as double as_logd (...); taken for one external, lgamma called tgamma's) */
+  if (old && old->k == DK_FUNC && old->sc == SC_STATIC && (sc == SC_NONE || sc == SC_EXTERN)) d->sc = SC_STATIC;
   if (spc->noret) t = cs_noreturn_of (t);
   if (old && old->k == DK_FUNC) {
     struct cs_ty *oc = cs_canon (old->t), *nc = cs_canon (t);

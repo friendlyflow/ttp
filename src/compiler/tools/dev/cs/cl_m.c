@@ -468,7 +468,10 @@ static void cl_read_shared (void)
   long n;
   unsigned char *p;
   struct node *root;
-  static char *w[] = { "char", "short", "int", "long", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "i128", "u128", "float16", "bfloat16", "short fract", "fract", "long fract", "short accum", "accum", "long accum", "unsigned short fract", "unsigned fract", "unsigned long fract", "unsigned short accum", "unsigned accum", "unsigned long accum", "sat short fract", "sat fract", "sat long fract", "sat short accum", "sat accum", "sat long accum", "sat unsigned short fract", "sat unsigned fract", "sat unsigned long fract", "sat unsigned short accum", "sat unsigned accum", "sat unsigned long accum", "void", "type", "va_list", "float", "double", "long double", "float128", 0 };
+  static char *w[] = { "char", "short", "int", "long", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "i128", "u128", "float16", "bfloat16", "short fract", "fract", "long fract", "short accum", "accum", "long accum", "unsigned short fract", "unsigned fract", "unsigned long fract", "unsigned short accum", "unsigned accum", "unsigned long accum", "sat short fract", "sat fract", "sat long fract", "sat short accum", "sat accum", "sat long accum", "sat unsigned short fract", "sat unsigned fract", "sat unsigned long fract", "sat unsigned short accum", "sat unsigned accum", "sat unsigned long accum", "void", "type", "va_list", "float", "double", "long double", "float128",
+    /* (and the complex types: address / complex float, a pointer to one, was void * pointer then complex float:
+       test-tgmath2's __typeof__ (rettype) *ptype) */
+    "complex float", "complex double", "complex long double", "complex float128", "complex float16", 0 };
   long i = 0;
   while (w[i]) { cl_make (&C->word, w[i])->num = 1; i++; }
   p = cp_file (C->shared, &n);
@@ -481,59 +484,53 @@ static struct node *cl_kid_named (struct node *n, char *s)
   while (i < n->count) { if (same (n->kids[i]->text, n->kids[i]->len, s)) return n->kids[i]; i++; }
   return 0;
 }
-/* --target: the names of the registers group of its section in shared.ff; on x86_64 its instructions' names too */
+/* --target (and riscv64's): the names of the registers group of its section in shared.ff (riscv64's its own,
+   cl_reserve) and the instruction forms of its instruction groups there (each group's name: children), on
+   x86_64 x86_64gnu.ff's forms too: a C name that is one is name' (the user's choice, 2026-11-20: every
+   target's, as arm's and x86_64's were; s2ff's asm names the same, from these very groups: s2ff.c's
+   s2ff_insgroups and gen/S2ffRes.pm, which list them as here) */
+static char *cl_insgroups_rv[] = { "integer:", "system:", "atomic:", "float:", "vector:", "compressed:", 0 };
+static char *cl_insgroups_x86[] = { "alu1:", "alu2:", "move:", "unary:", "shift1:", "shift2:", "bit:", "branch:", "set:", "cmov:", "stack:", "atomic:", "system:", "sse:", 0 };
+static char *cl_insgroups_a64[] = { "integer:", "branch:", "system:", "memory:", "atomic:", "float:", "vector:", "sve:", "sme:", 0 };
+static char *cl_insgroups_arm[] = { "data:", "data2:", "shifts:", "multiply:", "bits:", "memory:", "atomic:", "branch:", "system:", "vfp:", "a32x:", 0 };
 static void cl_reserve_target (void)
 {
-  long n, i = 0;
+  long n, i = 0, q = 0;
   unsigned char *p = cp_file (C->shared, &n);
   struct node *root = cp_read_ff (p, n), *sh = cl_kid_named (root, "shared:"), *sec, *regs;
-  char *t = cs_pick (C->target == 1, "x86_64:", cs_pick (C->target == 2, "aarch64:", "arm:"));
+  char *t = cs_pick (C->target == 1, "x86_64:", cs_pick (C->target == 2, "aarch64:", cs_pick (C->target == 3, "arm:", "riscv64:")));
+  char **g = C->target == 1 ? cl_insgroups_x86 : C->target == 2 ? cl_insgroups_a64 : C->target == 3 ? cl_insgroups_arm : cl_insgroups_rv;
   if (!sh) cl_fail ("no shared: in", C->shared);
   sec = cl_kid_named (sh, t);
   if (!sec) cl_fail ("no section of", t);
-  regs = cl_kid_named (sec, "registers:");
-  if (!regs) cl_fail ("no registers in", t);
-  while (i < regs->count) {
-    char *c = cl_copy (regs->kids[i]->text, regs->kids[i]->len);
-    long m, e = 0;
-    char **v;
-    if (cl_ends (c, ":")) c = cl_no_colon (c);
-    v = cl_split_ws (c, &m);
-    while (e < m) { cl_set (&C->reserved, v[e]); e++; }
-    i++;
-  }
-  if (C->target == 3) {
-    static char *g[] = { "data:", "data2:", "shifts:", "multiply:", "bits:", "memory:", "atomic:", "branch:", "system:", "vfp:", "a32x:", 0 };
-    long q = 0;
-    while (q < sec->count) {
-      long w = 0;
-      struct node *x = sec->kids[q];
-      int yes = 0;
-      while (g[w]) { if (same (x->text, x->len, g[w])) yes = 1; w++; }
-      if (yes) {
-        long u = 0;
-        while (u < x->count) { char *s = cl_copy (x->kids[u]->text, x->kids[u]->len); cl_reserve_form (s); u++; }
-      }
-      q++;
+  if (C->target) {
+    regs = cl_kid_named (sec, "registers:");
+    if (!regs) cl_fail ("no registers in", t);
+    while (i < regs->count) {
+      char *c = cl_copy (regs->kids[i]->text, regs->kids[i]->len);
+      long m, e = 0;
+      char **v;
+      if (cl_ends (c, ":")) c = cl_no_colon (c);
+      v = cl_split_ws (c, &m);
+      while (e < m) { cl_set (&C->reserved, v[e]); e++; }
+      i++;
     }
   }
+  while (q < sec->count) {
+    long w = 0;
+    struct node *x = sec->kids[q];
+    int yes = 0;
+    while (g[w]) { if (same (x->text, x->len, g[w])) yes = 1; w++; }
+    if (yes) {
+      long u = 0;
+      while (u < x->count) { char *s = cl_copy (x->kids[u]->text, x->kids[u]->len); cl_reserve_form (s); u++; }
+    }
+    q++;
+  }
   if (C->target == 1) {
-    static char *g[] = { "alu1:", "alu2:", "move:", "unary:", "shift1:", "shift2:", "bit:", "branch:", "set:", "cmov:", "stack:", "atomic:", "system:", "sse:", 0 };
-    long q = 0;
     struct cs_buf b;
     char *gnu;
     long at;
-    while (q < sec->count) {
-      long w = 0;
-      struct node *x = sec->kids[q];
-      int yes = 0;
-      while (g[w]) { if (same (x->text, x->len, g[w])) yes = 1; w++; }
-      if (yes) {
-        long u = 0;
-        while (u < x->count) { char *s = cl_copy (x->kids[u]->text, x->kids[u]->len); cl_reserve_form (s); u++; }
-      }
-      q++;
-    }
     /* x86_64gnu.ff, next to shared.ff */
     cs_b_init (&b);
     at = cstrlen (C->shared);
@@ -554,7 +551,7 @@ static void cl_begin (void)
   C->target = T->target;
   cl_reserve ();
   C->nfieldrec = 0 - 1;
-  if (C->target) cl_reserve_target ();
+  cl_reserve_target ();
   if (C->indexf) cl_read_index ();
   /* (-J file: the tree's statics, a line each) */
   if (C->staticsf) {
@@ -706,7 +703,14 @@ void cl_finish (void)
       cl_write_txt (cl_n1 ("include", cl_n (C->program)), 0);
       while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; }
       q = 0;
-      while (q < nout) { cl_write_txt (all->v[nt + q], 0); q++; }
+      /* (past the 255 items a node holds, the license, include, types and _start counted, its definitions in
+         layers 0: 1: ...: wcsmbs's tst-wcstod-round, 279 wide texts) */
+      if (2 + nt + nout + (C->start ? 1 : 0) > 255) {
+        struct cl_list *outs = cl_slice (all, nt, nt + nout), *y = cl_l ();
+        if (nout > 255) cl_layers (outs, y); else cl_push (y, cl_layer_node (0, outs));
+        while (q < y->n) { cl_write_txt (y->v[q], 0); q++; }
+      } else
+        while (q < nout) { cl_write_txt (all->v[nt + q], 0); q++; }
       cl_write_start ();
       out_flush ();
       return;

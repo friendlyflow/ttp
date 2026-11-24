@@ -1,0 +1,6 @@
+exit 0
+ok a global complex double
+ok a global complex float
+ok a local
+ok a result
+ok an argument

@@ -561,9 +561,19 @@ sub operand {
     }
     if ($w eq ':') {
         my @e = elements(@k);
+        # (a complex type and its two parts after it, real then imaginary, is
+        # that complex number, language.ff.txt's: C's __builtin_complex, which
+        # csema reads it from; csema's complex arithmetic ends a : so)
+        my @lit;
+        if (@e >= 3 && @{ $e[-3] } == 1 && leaf($e[-3][0]) && c($e[-3][0]) =~ /^complex (.+)$/ && $scalar{ c($e[-3][0]) } && !local_type(c($e[-3][0]))) { @lit = splice @e, -3 }
         # (its value is its last item's: a : there is one too, not a block)
         my @st = map { @$_ == 1 && c($_->[0]) eq ':' && !leaf($_->[0]) ? ['expr', operand($_->[0])] : stmt_of($_) } @e[0 .. $#e - 1];
         push @st, @{ $e[-1] } == 1 && c($e[-1][0]) eq ':' && !leaf($e[-1][0]) ? ['expr', operand($e[-1][0])] : stmt_of($e[-1]) if @e;
+        if (@lit) {
+            my $ct = c($lit[0][0]);
+            my $et = [scalar => $ct =~ s/^complex //r];
+            push @st, ['expr', '__builtin_complex(' . join(', ', map { '((' . ctype($et) . ')(' . expr_item($_) . '))' } @lit[1, 2]) . ')', [scalar => $ct]];
+        }
         return ("($st[0][1])", $st[0][2]) if @st == 1 && $st[0][0] eq 'expr';
         if (!grep { $_->[0] ne 'expr' } @st) { return ('(' . join(', ', map { $_->[1] } @st) . ')', $st[-1][2]) }
         my $last = $st[-1][0] eq 'expr' ? $st[-1][2] : undef;
