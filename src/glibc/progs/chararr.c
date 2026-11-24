@@ -14,7 +14,9 @@
 
 enum { SEP = ':' };
 char eolbyte = '\n';
-static unsigned char hi = 200;
+/* (hiv, not hi: fault 22, a program global named like an asm condition, aarch64's
+   hi, stopped ttpc there; see ttpcbugs3's test) */
+static unsigned char hiv = 200;
 
 static int
 sum (signed char p, bool b)
@@ -22,7 +24,7 @@ sum (signed char p, bool b)
   signed char l = -3;
   char eolbytes[3] = { 0, eolbyte, 0 };
   signed char s[4] = { p, l, -1, SEP };
-  unsigned char u[2] = { hi, (unsigned char) p };
+  unsigned char u[2] = { hiv, (unsigned char) p };
   bool bs[2] = { b, true };
   char e[2] = { SEP, eolbyte };
   return eolbytes[0] * 1000 + eolbytes[1] + s[0] + s[1] + s[2] + s[3] + u[0] + u[1] + bs[0] + bs[1] + e[0] + e[1];
