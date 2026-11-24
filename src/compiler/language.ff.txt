@@ -280,6 +280,7 @@ ff, the language ttpc compiles
       a value is as wide as its type: an int or an unsigned int wraps at 32 bits; what is stored, the value of = += -= ++ --, and a conversion are cut to their type
       = and a local's value (a declaration's, an item of a local struct or array) convert to the left side's type as a cast does, an integer from a floating value toward zero (the user's choice A)
       the compound ones (-= += *= /= ...) work in the usual arithmetic conversion's type and convert the result back the same way: C's long long y; y -= 0.5 is y = (long long) (y - 0.5)
+      a global's constant value of the other kind converts at compile time the same way: i64 / 0x1.8p+1 is 3, double / 7 is 7.0 (an integer to nearest, ties to even)
       a number is an int if it fits one, else a long; one in hex is the first that fits of int, unsigned int, long, unsigned long
       example
         u:
