@@ -609,9 +609,16 @@ static struct cs_ex *cs_call (struct node *n)
         }
         q++;
       }
-      /* (six functions, the real ones and the complex ones, cos's and ccos's: a complex argument takes a
-         complex one, C's rule; csema's cl_tgmath picks the same) */
-      if (cxa && nf >= 6) e->t = cs_unqual (cs_canon (args[3 + r]->t)->to);
+      /* (the real functions, then the complex ones, cos's and ccos's: a complex argument takes a complex one,
+         C's rule, the first that takes a complex parameter, then as many on as the real one: tgmath.h names
+         six, or sixteen with the _FloatN ones (test-tgmath's ccos); csema's cl_tgmath picks the same) */
+      long cx0 = -1, k;
+      for (k = 0; k < nf && cx0 < 0; k++) {
+        struct cs_ty *ft = cs_canon (args[k]->t);
+        long p;
+        for (p = 0; p < ft->np; p++) if (cs_canon (ft->ps[p])->k == TY_COMPLEX) cx0 = k;
+      }
+      if (cxa && cx0 >= 0 && cx0 + r < nf) e->t = cs_unqual (cs_canon (args[cx0 + r]->t)->to);
       else if (r == 0) e->t = cs_unqual (t0->to);
       else if (r == 1) e->t = cs_unqual (t1->to);
       else e->t = cs_unqual (t2->to);
