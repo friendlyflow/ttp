@@ -103,7 +103,7 @@ tests-ref math (riscv64): 212 tests, 201 equal, 4 differ, 7 not yet
   test-double-jn                    equal: exit 0 (PASS)
   test-double-ldouble-add           equal: exit 0 (PASS)
   test-double-ldouble-div           equal: exit 0 (PASS)
-  test-double-ldouble-fma           not yet: ttpc: ttpc: compile time calls what has no code yet: __divtf3
+  test-double-ldouble-fma           not yet: binary128 arithmetic at compile time (the target's soft-fp can't run on the host)
   test-double-ldouble-mul           equal: exit 0 (PASS)
   test-double-ldouble-sqrt          equal: exit 0 (PASS)
   test-double-ldouble-sub           equal: exit 0 (PASS)
@@ -215,7 +215,7 @@ tests-ref math (riscv64): 212 tests, 201 equal, 4 differ, 7 not yet
   tst-CMPLX2                        equal: exit 0 (PASS)
   tst-definitions                   equal: exit 0 (PASS)
 
-tests-ref math (x86_64): 224 tests, 213 equal, 1 differ, 10 not yet
+tests-ref math (x86_64): 224 tests, 214 equal, 1 differ, 9 not yet
   test-canonical-ldbl-96            equal: exit 0 (PASS)
   test-ceil-except-2                equal: exit 0 (PASS)
   test-double-acos                  equal: exit 0 (PASS)
@@ -318,7 +318,7 @@ tests-ref math (x86_64): 224 tests, 213 equal, 1 differ, 10 not yet
   test-double-jn                    equal: exit 0 (PASS)
   test-double-ldouble-add           equal: exit 0 (PASS)
   test-double-ldouble-div           equal: exit 0 (PASS)
-  test-double-ldouble-fma           not yet: ttpc: ttpc: compile time calls what has no code yet: __divtf3
+  test-double-ldouble-fma           not yet: binary128 arithmetic at compile time (the target's soft-fp can't run on the host)
   test-double-ldouble-mul           equal: exit 0 (PASS)
   test-double-ldouble-sqrt          equal: exit 0 (PASS)
   test-double-ldouble-sub           equal: exit 0 (PASS)
@@ -433,7 +433,7 @@ tests-ref math (x86_64): 224 tests, 213 equal, 1 differ, 10 not yet
   test-tgmath                       equal: exit 0 (PASS) (round 7, 2026-11-24)
   test-tgmath-int                   equal: exit 0 (PASS)
   test-tgmath-ret                   equal: exit 0 (PASS)
-  test-tgmath2                      not yet: ttpc: compile time calls what has no code yet: __trunctfxf2 (round 7)
+  test-tgmath2                      equal: exit 0 (PASS) (tests3, 2026-11-24)
   test-totalorderl-ldbl-96          equal: exit 0 (PASS)
   test-trunc-except-2               equal: exit 0 (PASS)
   tst-CMPLX                         equal: exit 0 (PASS)
@@ -543,7 +543,7 @@ tests-ref math (aarch64): 214 tests, 201 equal, 4 differ, 9 not yet
   test-double-jn                    equal: exit 0 (PASS)
   test-double-ldouble-add           equal: exit 0 (PASS)
   test-double-ldouble-div           equal: exit 0 (PASS)
-  test-double-ldouble-fma           not yet: ttpc: ttpc: compile time calls what has no code yet: __divtf3
+  test-double-ldouble-fma           not yet: binary128 arithmetic at compile time (the target's soft-fp can't run on the host)
   test-double-ldouble-mul           equal: exit 0 (PASS)
   test-double-ldouble-sqrt          equal: exit 0 (PASS)
   test-double-ldouble-sub           equal: exit 0 (PASS)
@@ -657,7 +657,7 @@ tests-ref math (aarch64): 214 tests, 201 equal, 4 differ, 9 not yet
   tst-CMPLX2                        equal: exit 0 (PASS)
   tst-definitions                   equal: exit 0 (PASS)
 
-tests-ref math (arm): 214 tests, 204 equal, 1 differ, 9 not yet
+tests-ref math (arm): 214 tests, 205 equal, 1 differ, 8 not yet
   test-ceil-except-2                equal: exit 77 (UNSUPPORTED)
   test-double-acos                  equal: exit 0 (PASS)
   test-double-acosh                 equal: exit 0 (PASS)
@@ -759,7 +759,7 @@ tests-ref math (arm): 214 tests, 204 equal, 1 differ, 9 not yet
   test-double-jn                    equal: exit 0 (PASS)
   test-double-ldouble-add           equal: exit 0 (PASS)
   test-double-ldouble-div           equal: exit 0 (PASS)
-  test-double-ldouble-fma           not yet: ttpc: ttpc: no definition of the runtime function __extenddftf2
+  test-double-ldouble-fma           equal: exit 0 (PASS) (tests3, 2026-11-24)
   test-double-ldouble-mul           equal: exit 0 (PASS)
   test-double-ldouble-sqrt          equal: exit 0 (PASS)
   test-double-ldouble-sub           equal: exit 0 (PASS)
@@ -876,8 +876,8 @@ tests-ref math (arm): 214 tests, 204 equal, 1 differ, 9 not yet
 # reasons of what is not equal
 #   test-double-compat_*, test-matherr: not yet: gcc's side: its static link fails (compat symbols and _LIB_VERSION, which libm.a has not); nothing of ttpc's
 #   test-matherr-2: not yet: its .i: mki finds no command for its csu object (a shared-only test)
-#   test-double-ldouble-fma (and x86_64's test-tgmath2): not yet: ttpc's compile time: a global's item converts at compile time with a soft-float routine the JIT has no code for yet (__divtf3, x86_64's __trunctfxf2: libgcc's, in the program's libgcc in ff); arm's __extenddftf2 is none of arm's libgcc (no binary128 there, nor in gcc's), so ttpc took arm's long double (a double) as binary128 at compile time: ttpc's (ttpcbugs2)
-#   test-tgmath, test-tgmath2: equal on 4 targets since round 7 (2026-11-24): csema took __builtin_tgmath's complex function at 3 + r of six, where tgmath.h names sixteen (the _FloatN ones): now the first with a complex parameter, + r; and a unit's own fabs, copysign (the tests define them, glibc builds them -fno-builtin) are its own, not gcc's builtins; x86_64's test-tgmath2: not yet, compile time calls __trunctfxf2 (as ldouble-fma below)
+#   test-double-ldouble-fma (riscv64, x86_64, aarch64): not yet: binary128 arithmetic at compile time: a global's item divides two binary128 literals (__divtf3), and the target's soft-fp in libgcc in ff can't run on the host (riscv64's reads frm by asm, aarch64's fpcr by a builtin); ttpc fault 24, parked. arm's ldouble-fma and x86_64's test-tgmath2 equal since tests3's fault 25 (2026-11-24): an L literal in a global's item is the target's long double, and cast / long double of one is the literal
+#   test-tgmath, test-tgmath2: equal on 4 targets since round 7 (2026-11-24): csema took __builtin_tgmath's complex function at 3 + r of six, where tgmath.h names sixteen (the _FloatN ones): now the first with a complex parameter, + r; and a unit's own fabs, copysign (the tests define them, glibc builds them -fno-builtin) are its own, not gcc's builtins; x86_64's test-tgmath2 since tests3's fault 25
 #   test-double-y0, y1, exp10m1, ctan: differ: only the maximum ulp the test reports: gcc contracts a*b+c into an fma (its default -ffp-contract=fast), ttpc rounds twice; both pass
 #   test-double-iseqsig (x86_64, aarch64, arm): equal since round 7 (2026-11-24): C's < <= > >= as signaling comparisons, ttpcbugs2's fault 16 (ports 4aea422)
 #   test-double-compoundn (arm): differ: exit 1: ttpc fault 23 (ttpcbugs2): an integer op= a double (s_compoundn_template.c's y -= ypart) is not converted back to the integer: 0 on the 64-bit targets (their compoundn passes as y - ypart is 0 there), wrong for large values on arm
