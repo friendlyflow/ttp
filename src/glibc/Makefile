@@ -819,6 +819,14 @@ $(I)/%.json: $(I)/%.i clang-prelude.h
 	$(if $(CLANGFIX),$(CLANGFIX) $< $(call vecfix,$*) > $(I)/$*.clang.i)
 	$(RUN) -t 300 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json \
 	    -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(call vecflag,$*) -std=gnu11 -fgnu89-inline -w $(if $(CLANGFIX),$(I)/$*.clang.i,$<) > $@
+# A unit's cache for the round trips (roundtrip.pl --unit-cache): what of its
+# AST the normal forms read and each of them, made once per BUILD; the
+# milestones' round trips (--cached) read it, not the unit's JSON, a seventh
+# of it, which each milestone of the ten read and normalized again. Its
+# inputs: the unit's .json and .i (x86_64's syscalls are read in it),
+# roundtrip.pl, FFold.pm and GTARGET.
+$(I)/%.rtn: $(I)/%.json $(I)/%.i roundtrip.pl ../compiler/gen/FFold.pm
+	$(RUN) -n -t 300 perl roundtrip.pl --target $(GTARGET) --unit-cache $@ $<
 
 # A milestone's ff: c2ff's from its objects' ASTs, from its roots (and what
 # its asm parts name from elsewhere: setjmp's tail __sigjmp_save), then
@@ -1105,10 +1113,11 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $< > $@
 	$(if $(filter arm,$(GTARGET)),sed -i 's/"__Sync_/"__sync_/g' $@)
 
+# (each unit through its cache, $(I)/<unit>.rtn, beside its .json)
 define roundtrip
-$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json) | $$(HEADERST)
+$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.rtn) | $$(HEADERST)
 	$$(file >$$(FF)/$(1).jsons,$$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json$$(nl)))
-	$$(RUN) -t 900 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json @$$(FF)/$(1).jsons
+	$$(RUN) -t 900 perl roundtrip.pl --target $$(GTARGET) --cached $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json @$$(FF)/$(1).jsons
 	$$(RUN) -n -t 300 $$(HEADERS) $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
@@ -1656,7 +1665,7 @@ c2ff-progs: $(CHECK_MS:%=c2ff-prog-%) $(C2FF_OWN:%=c2ff-prog-%) $(patsubst %,c2f
 c2ff-crosscheck: c2ff-pages c2ff-progs clayer-check units-crosscheck
 	@echo "c2ff-crosscheck ($(GTARGET)): c2ff.pl and csema -l give the same pages: $(words $(CHECK_MS)) milestones, their programs and units"
 .PHONY: c2ff-passes c2ff-pages c2ff-progs c2ff-crosscheck
-units-ready: $(call csdeps,$(CHECK_OBJS)) $(CHECK_OBJS:%=$(I)/%.json) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter csu/crti,$(CHECK_ASMS)),$(I)/csu/crtn.dump)
+units-ready: $(call csdeps,$(CHECK_OBJS)) $(CHECK_OBJS:%=$(I)/%.json) $(CHECK_OBJS:%=$(I)/%.rtn) $(CHECK_ASMS:%=$(I)/%.dump) $(if $(filter csu/crti,$(CHECK_ASMS)),$(I)/csu/crtn.dump)
 	$(if $(filter riscv64 aarch64,$(GTARGET)),@$(MAKE) --no-print-directory asm-check)
 all-checks:
 	@$(MAKE) --no-print-directory units-ready
