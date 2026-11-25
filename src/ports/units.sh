@@ -25,6 +25,8 @@ rel () { case $1 in /*) p=$1 ;; *) p=$cwd/$1 ;; esac; p=$(realpath -m "$p"); ech
 for o in $objs; do r=$(rel "$o"); echo "-O ${r%.o}"; done
 for a in $arcs; do
     d=$(dirname "$(rel "$a")")
+    # (libtool's archive, .libs/liblzma.a: its members are of the folder above)
+    case $d in */.libs) d=${d%/.libs} ;; .libs) d=. ;; esac
     case $a in /*) p=$a ;; *) p=$cwd/$a ;; esac
     # (a member by its name alone: its object in the archive's folder or one below, lib/malloc/...)
     for m in $(ar t "$p"); do

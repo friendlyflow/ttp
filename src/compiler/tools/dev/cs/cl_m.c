@@ -575,6 +575,10 @@ static void cl_run (void)
   cl_enter (u);
   cl_pass ();
 }
+/* (the root of a program is laid out where shared.ff's frame has program: ttpc's frame node holds the
+   root's children and the frame's others, at most 255; riscv64's frame has 11 more, the others' 10:
+   tar's x86_64 root of 246, "too much for frame") */
+#define CL_FRAME_ROOM 11
 /* (-T) a program's own _start: exit (main ()) */
 static void cl_write_start (void)
 {
@@ -705,7 +709,7 @@ void cl_finish (void)
       q = 0;
       /* (past the 255 items a node holds, the license, include, types and _start counted, its definitions in
          layers 0: 1: ...: wcsmbs's tst-wcstod-round, 279 wide texts) */
-      if (2 + nt + nout + (C->start ? 1 : 0) > 255) {
+      if (2 + nt + nout + (C->start ? 1 : 0) > 255 - CL_FRAME_ROOM) {
         struct cl_list *outs = cl_slice (all, nt, nt + nout), *y = cl_l ();
         if (nout > 255) cl_layers (outs, y); else cl_push (y, cl_layer_node (0, outs));
         while (q < y->n) { cl_write_txt (y->v[q], 0); q++; }
@@ -750,7 +754,7 @@ void cl_finish (void)
       }
       /* (a program's types at its top, as a program's of one file: ttpc sees no enum constant of a group's type on the program page) */
       /* (more types than the root holds with the groups beside them, gawk's: in layers of 255, 0: 1:, which every scope sees through) */
-      if (C->program && ty->n <= 255 - ng - 8) { long q = 0; while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; } }
+      if (C->program && ty->n <= 255 - ng - 3 - CL_FRAME_ROOM) { long q = 0; while (q < ty->n) { cl_write_txt (ty->v[q], 0); q++; } }
       else if (C->program) {
         long q = 0, k = 0;
         while (q < ty->n) {

@@ -28,8 +28,13 @@ PKG_PROGRAMS := src/xz/xz src/xzdec/xzdec src/xzdec/lzmadec src/lzmainfo/lzmainf
     $(XZ_TESTS:%=tests/%)
 PKG_CONFIGURE := --disable-shared --disable-nls --disable-doc \
     --disable-clmul-crc --disable-arm64-crc32
+# (libtool links a program with LDFLAGS' -static as dynamic still, only
+# its own libraries static: xzdec found no /lib/ld-linux-riscv64-lp64d.so.1;
+# -all-static is libtool's word for gcc's -static, at make's time, not
+# configure's, whose gcc knows no such flag)
+PKG_BUILDFLAGS = LDFLAGS='$(PKG_LDFLAGS) -all-static'
 # the tests of liblzma, made after the build (make check would make them)
-PKG_REFMORE := -C tests create_compress_files $(XZ_TESTS)
+PKG_REFMORE = -C tests create_compress_files $(XZ_TESTS) $(PKG_BUILDFLAGS)
 # the test suite: xz's own (tests/, automake's)
 PKG_CHECKTARGET := -C tests check
 PKG_ROUNDTRIP := $(CURDIR)/roundtrip.sh

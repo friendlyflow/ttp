@@ -1398,6 +1398,27 @@
       /
       m
   comment
+    __builtin_mul_overflow of an unsigned int (arm's size_t) by an i64 into an i64 (tar's move_archive, ckd_mul of a record size and an off_t): a held exactly by an i64, the i64 i64 i64 product.
+  __builtin_mul_overflow u32 i64 i64:
+    int
+    a:
+      u32
+    b:
+      i64
+    r:
+      i64
+      * pointer
+    w:
+      i64
+      cast
+        i64
+      a
+    return
+      __builtin_mul_overflow i64 i64 i64
+        w
+        b
+        r
+  comment
     gcc's __builtin_sqrt and __builtin_sqrtf on arm: vsqrt.f64 and vsqrt.f32, the root rounded once, as gcc makes them (glibc's e_sqrt.c, e_sqrtf.c);
     __builtin_fma and __builtin_fmaf: x * y + z rounded once, VFPv4's vfma.f64 and vfma.f32, as gcc makes them in glibc's units that use them (s_fma-vpfv4.c, s_fmaf-vpfv4.c, built for neon-vfpv4, which arm's fma ifunc picks where the CPU has VFPv4).
     Each a C function that gives the addresses of its operands and of its result (r0 ...) to an asm function of its own, as aarch64's.
@@ -1563,3 +1584,262 @@
         & address
     return
       r
+  comment
+    gnulib's ckd_add, ckd_sub and ckd_mul of arm's long, an int (builtins.ff.txt's are of an 8-byte long, in an i128, which arm has not: armbuiltins.pl leaves those out for these):
+    the exact result of two 32-bit operands in an i64, *r that as r's type holds it, and whether that is not the exact result (diffutils' __builtin_add_overflow long int int).
+  __builtin_add_overflow long int int:
+    int
+    a:
+      long
+    b:
+      int
+    r:
+      int
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      +
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        int
+      s
+  __builtin_add_overflow int long int:
+    int
+    a:
+      int
+    b:
+      long
+    r:
+      int
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      +
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        int
+      s
+  __builtin_add_overflow int long long:
+    int
+    a:
+      int
+    b:
+      long
+    r:
+      long
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      +
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        long
+      s
+  __builtin_sub_overflow long int int:
+    int
+    a:
+      long
+    b:
+      int
+    r:
+      int
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      -
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        int
+      s
+  __builtin_sub_overflow long long int:
+    int
+    a:
+      long
+    b:
+      long
+    r:
+      int
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      -
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      int
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        int
+      s
+  __builtin_mul_overflow long long long:
+    int
+    a:
+      long
+    b:
+      long
+    r:
+      long
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      *
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        long
+      s
+  __builtin_mul_overflow long int long:
+    int
+    a:
+      long
+    b:
+      int
+    r:
+      long
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      *
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        long
+      s
+  __builtin_mul_overflow int int long:
+    int
+    a:
+      int
+    b:
+      int
+    r:
+      long
+      * pointer
+    s:
+      i64
+      cast
+        i64
+      a
+      *
+      cast
+        i64
+      b
+    r
+    * pointer
+    =
+    cast
+      long
+    s
+    return
+      s
+      !=
+      cast
+        i64
+      cast
+        long
+      s
