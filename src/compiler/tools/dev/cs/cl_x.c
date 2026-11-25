@@ -2182,8 +2182,9 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
       return;
     }
     /* (a block's extern the unit declares weak and does not define is a weak reference too: uselocale's _nl_current_LC_COLLATE_used;
-       not an array, apply_irel's __rela_iplt_start and __rela_iplt_end, which ttpc places itself by their plain names) */
-    if (d->k == DK_VAR && d->sc == SC_EXTERN && cs_kind (d->t) != TY_ARRAY && cl_wref (nm)) { cl_push (o, cl_n1 ("weak", cl_n (cl_ffname (nm)))); return; }
+       also an array, apply_irel's __rela_iplt_start and __rela_iplt_end: ttpc's weak / name of an array is its address, where
+       ttpc places it, else 0, fault 28) */
+    if (d->k == DK_VAR && d->sc == SC_EXTERN && cl_wref (nm)) { cl_push (o, cl_n1 ("weak", cl_n (cl_ffname (nm)))); return; }
     cl_push (o, cl_n (cl_ffname (nm)));
     return;
   }
