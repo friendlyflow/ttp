@@ -1,5 +1,17 @@
 {
   "nodes": {
+    "diffutils-src": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-1AvfzZsjgYIKnq4XXulvdX0WG1SXXrMXBtWlyG2PodQ=",
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/diffutils/diffutils-3.12.tar.xz"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/diffutils/diffutils-3.12.tar.xz"
+      }
+    },
     "glibc-src": {
       "flake": false,
       "locked": {
@@ -11,6 +23,30 @@
       "original": {
         "type": "tarball",
         "url": "https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz"
+      }
+    },
+    "gzip-src": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-WGLEZ97Kmls9atYafHfhhzB120C4sOezxNJOYa5j5TY=",
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.xz"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.xz"
+      }
+    },
+    "make-src": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-ecs7dO1DPOPUOHRxWx3PAtqjGArzsfLxiaXqLkITxrE=",
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
       }
     },
     "nixpkgs": {
@@ -47,9 +83,38 @@
     },
     "root": {
       "inputs": {
+        "diffutils-src": "diffutils-src",
         "glibc-src": "glibc-src",
+        "gzip-src": "gzip-src",
+        "make-src": "make-src",
         "nixpkgs": "nixpkgs",
-        "raddebugger": "raddebugger"
+        "raddebugger": "raddebugger",
+        "tar-src": "tar-src",
+        "xz-src": "xz-src"
+      }
+    },
+    "tar-src": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-tVx7f1u7AvDkGEubyHDw5bfjLjj7f1js4j4mksClnoI=",
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz"
+      }
+    },
+    "xz-src": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-ONEmjV6uzJCO8UTWyEtgHclZL8SusQshAACWIzexNUA=",
+        "type": "file",
+        "url": "https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.xz"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.xz"
       }
     }
   },

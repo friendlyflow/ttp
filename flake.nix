@@ -14,9 +14,33 @@
       url = "https://ftp.gnu.org/gnu/glibc/glibc-2.44.tar.xz";
       flake = false;
     };
+    # src/ports (wave C1b): each package's upstream tarball at a fixed
+    # version, pinned by its narHash in flake.lock (not nixpkgs' .src, which
+    # moves with a nixpkgs update), kept as the file (file+: port.mk
+    # unpacks it)
+    diffutils-src = {
+      url = "file+https://ftp.gnu.org/gnu/diffutils/diffutils-3.12.tar.xz";
+      flake = false;
+    };
+    gzip-src = {
+      url = "file+https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.xz";
+      flake = false;
+    };
+    tar-src = {
+      url = "file+https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz";
+      flake = false;
+    };
+    xz-src = {
+      url = "file+https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.xz";
+      flake = false;
+    };
+    make-src = {
+      url = "file+https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, raddebugger, glibc-src }:
+  outputs = { self, nixpkgs, raddebugger, glibc-src, diffutils-src, gzip-src, tar-src, xz-src, make-src }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -152,6 +176,11 @@
           GAWK_SRC = "${pkgs.gawk.src}";
           FINDUTILS_SRC = "${pkgs.findutils.src}";
           COREUTILS_SRC = "${pkgs.coreutils.src}";
+          DIFFUTILS_SRC = "${diffutils-src}";
+          GZIP_SRC = "${gzip-src}";
+          TAR_SRC = "${tar-src}";
+          XZ_SRC = "${xz-src}";
+          MAKE_SRC = "${make-src}";
           # the locales a package's tests ask for, made by a localedef of
           # glibc 2.44 (the reference's version; its own localedef is a
           # dynamic program of that build's, not runnable here)

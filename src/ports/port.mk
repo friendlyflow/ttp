@@ -114,7 +114,7 @@ NATIVE := $(filter $(shell uname -m),$(GTARGET))
 GLIBCMAKE = $(MAKE) --no-print-directory -C $(TOP)/src/glibc BUILD=$(GB) $(if $(filter-out riscv64,$(GTARGET)),GTARGET=$(GTARGET))
 
 .DELETE_ON_ERROR:
-.PHONY: sysroot ref units ff check predef predef-check licenses FORCE
+.PHONY: sysroot ref units ff check roundtrip predef predef-check licenses FORCE
 
 # ---- the sysroot: glibc installed as a program's build sees it
 # (PERL: config.make's is the store path of the reference build's day, which
@@ -148,7 +148,11 @@ sysroot-scripts:
 # localedef of glibc 2.44 (LOCALEDEF, nix develop's) into GBUILD/locales,
 # one set for every target (glibc's locale files differ by endianness
 # alone: all four are little-endian); the checks run with LOCPATH there, as
-# a static program finds no /usr/lib/locale of its glibc on this machine
+# a static program finds no /usr/lib/locale of its glibc on this machine;
+# and with a PATH whose first folder (PB/locale-bin) has only `locale`, the
+# same glibc's as LOCALEDEF (nix develop's PATH finds riscv64's cross glibc's
+# first, which cannot run here: diffutils' tests asked `locale charmap` and
+# skipped, no UTF-8 locale)
 LOCALEDEF ?= $(error LOCALEDEF is not set: run this in `nix develop`)
 LOCALES := $(GBUILD)/locales
 $(LOCALES)/.made-$(PKG): $(SYSROOT)/.installed
@@ -161,6 +165,10 @@ $(LOCALES)/.made-$(PKG): $(SYSROOT)/.installed
 	touch $@
 
 # ---- the reference build, gcc's, and ffcc's record of it
+# (PKG_REFMORE: make's arguments for programs more than make's default
+# builds, made after it: xz's tests of liblzma, which make check would
+# build, so that they are in ffcc's record and in PKG_PROGRAMS)
+PKG_REFMORE ?=
 ref: $(REFDIR)/$(PKG_FIRST)
 $(SRCDIR)/configure: $(PKG_SRC)
 	rm -rf $(SRCDIR); mkdir -p $(SRCDIR)
@@ -174,6 +182,7 @@ $(REFDIR)/config.status: $(SRCDIR)/configure $(SYSROOT)/.installed $(FFCC)
 $(REFDIR)/$(PKG_FIRST): $(REFDIR)/config.status
 	rm -rf $(REC); mkdir -p $(REC)
 	cd $(REFDIR) && FFCC_REC=$(REC) $(RUN) -t 3600 $(SUBMAKE) -j$(JOBS) $(PKG_BUILDFLAGS) > build.log 2>&1 || { tail -30 build.log; exit 1; }
+	$(if $(PKG_REFMORE),cd $(REFDIR) && FFCC_REC=$(REC) $(RUN) -t 3600 $(SUBMAKE) -j$(JOBS) $(PKG_REFMORE) >> build.log 2>&1 || { tail -30 build.log; exit 1; })
 	for p in $(PKG_PROGRAMS); do \
 	    test -e $(REC)/l/$$p.cmd || { echo "port.mk: ffcc has no record of $$p's link"; exit 1; }; \
 	    cp -p $(REFDIR)/$$p $(REFDIR)/$$p.gcc; \
@@ -202,6 +211,9 @@ CSFLAGS = -t $(GTARGET) -s $(SRCDIR) -S $(TOP)/src/compiler/shared.ff
 # (PKG_DEFINES: the package's own -D for both builds, gcc's and ttpc's, as
 # configure takes them in CPPFLAGS: coreutils' -DNO_ASM, longlong.h's C)
 PKG_DEFINES ?=
+# (PKG_COPYING: the license file of a source file with no header of its
+# own, for csema -N: COPYING, xz's COPYING.0BSD)
+PKG_COPYING ?= COPYING
 # (PKG_CSHEAP: GB of address space for csema's heap, in a file, -M, as all
 # of glibc's in src/glibc: coreutils' 500 units need more than 9 GB)
 PKG_CSHEAP ?=
@@ -219,7 +231,7 @@ $(PFF)/%.ff: $(PFF)/units.same $(PFF)/%.units $(GBF)/ff/glibc/index.ff $(CSEMA) 
 	ln -sfn $(GBF)/ff/glibc $(PFF)/glibc
 	cp $(CURDIR)/license.ff.txt $(PFF)/$*.ff.txt
 	sed 's|^\(-O \)\?\(.*\)$$|\1$(PFF)/i/\2.i=\2.i|' $(PFF)/$*.units | tr ' ' '\n' > $(PFF)/$*.csunits
-	$(RUN) -v $(if $(PKG_CSHEAP),70000000,9000000) -t 3600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) $(if $(PKG_CSHEAP),-M $(PFF)/$*.heap $(PKG_CSHEAP)) -p $* -N $(PKG)-$(PKG_VERSION) $(PKG_LICENSE) COPYING -B $(REFDIR) \
+	$(RUN) -v $(if $(PKG_CSHEAP),70000000,9000000) -t 3600 $(CPRUN) $(CSEMA) -l $(CSFLAGS) $(if $(PKG_CSHEAP),-M $(PFF)/$*.heap $(PKG_CSHEAP)) -p $* -N $(PKG)-$(PKG_VERSION) $(PKG_LICENSE) $(PKG_COPYING) -B $(REFDIR) \
 	    -P glibc -I $(GBF)/ff/glibc/index.ff -J $(GBF)/ff/glibc.statics @$(PFF)/$*.csunits -- main >> $(PFF)/$*.ff.txt 2> $(PFF)/$*.csema.err \
 	    || { tail -5 $(PFF)/$*.csema.err; exit 1; }
 	perl $(TOP)/src/compiler/gen/fftext.pl ff $(PFF)/$*.ff.txt > $@
@@ -264,7 +276,8 @@ $(PB)/check-%.done: $(REFDIR)/$(PKG_FIRST) $(if $(PKG_LOCALES),$(LOCALES)/.made-
 	rm -rf $(PB)/check-$*; mkdir -p $(PB)/check-$*
 	cd $(REFDIR) && $(RUN) -t 1800 $(SUBMAKE) -j$(JOBS) $(PKG_BUILDFLAGS) $(PKG_CHECKPROGS) > $(PB)/check-$*/build.log 2>&1
 	$(call QWRAP,wrap)
-	-cd $(REFDIR) && ulimit -f $(PKG_CHECKFSIZE) && LOCPATH=$(LOCALES) $(RUN) -t $(PKG_CHECKSECS) $(PKG_CHECKRUN) > $(PB)/check-$*/make.log 2>&1
+	mkdir -p $(PB)/locale-bin && ln -sfn $(dir $(LOCALEDEF))locale $(PB)/locale-bin/locale
+	-cd $(REFDIR) && ulimit -f $(PKG_CHECKFSIZE) && PATH=$(PB)/locale-bin:$$PATH LOCPATH=$(LOCALES) $(RUN) -t $(PKG_CHECKSECS) $(PKG_CHECKRUN) > $(PB)/check-$*/make.log 2>&1
 	$(call QWRAP,unwrap)
 	for p in $(PKG_PROGRAMS); do cp $(REFDIR)/$$p.gcc $(REFDIR)/$$p && touch $(REFDIR)/$$p; done
 	cd $(REFDIR) && find . \( $(PKG_CHECKFILES) \) -newer $(PB)/check-$*/build.log | tar -cf - -T - | tar -xf - -C $(PB)/check-$*
@@ -273,6 +286,22 @@ $(PB)/check-ff.done: $(NAMES:%=$(PFF)/%) $(PB)/check-gcc.done
 $(PB)/check.table: $(PB)/check-gcc.done $(PB)/check-ff.done ../checktable.sh $(PKG_RESULTS)
 	sh ../checktable.sh $(PB)/check-gcc $(PB)/check-ff $(PKG_RESULTS) > $@
 	head -1 $@
+
+# ---- the round trip (PKG_ROUNDTRIP: a script of the package's, sh SCRIPT
+# GCC FF "QEMU" WORK SRC, a compressor's or an archiver's): what gcc's
+# program makes the program of ttpc's reads, and the other way round, and
+# both make the same bytes; its "NAME RESULT" lines (PASS, or FAIL:what)
+# into PB/roundtrip.table by ../rttable.sh, in checktable.sh's form; part
+# of check
+PKG_ROUNDTRIP ?=
+roundtrip: $(if $(PKG_ROUNDTRIP),$(PB)/roundtrip.table)
+$(PB)/roundtrip.table: $(PFF)/$(notdir $(PKG_FIRST)) $(REFDIR)/$(PKG_FIRST) $(PKG_ROUNDTRIP) ../rttable.sh
+	rm -rf $(PB)/roundtrip; mkdir -p $(PB)/roundtrip
+	ulimit -f $(PKG_CHECKFSIZE) && $(RUN) -t 3600 sh $(PKG_ROUNDTRIP) $(REFDIR)/$(PKG_FIRST).gcc $(PFF)/$(notdir $(PKG_FIRST)) "$(QEMU)" $(PB)/roundtrip $(SRCDIR) > $(PB)/roundtrip.results 2> $(PB)/roundtrip.err \
+	    || { tail -5 $(PB)/roundtrip.err; exit 1; }
+	sh ../rttable.sh $(PB)/roundtrip.results > $@
+	head -1 $@
+check: $(if $(PKG_ROUNDTRIP),$(PB)/roundtrip.table)
 
 # ---- cpp's predefined macros for this package's commands (src/glibc/predef.pl)
 predef: $(PFF)/units

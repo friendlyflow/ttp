@@ -1,0 +1,5 @@
+license
+  0BSD AND GPL-3.0-only
+  xz-5.8.4 in ff: XZ Utils' own C (xz, xzdec, lzmadec, lzmainfo, liblzma and its tests), translated by ttp (csema -l). It is 0BSD, XZ Utils' COPYING.0BSD (COPYING tells which files are under which license).
+  Each page holds the license header of each source file it is made of, as the file has it.
+  What ttp writes for it is GPL-3.0-only, Copyright (C) 2026 Nico Verrijdt: see ttp's LICENSE.

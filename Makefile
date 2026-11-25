@@ -36,8 +36,10 @@
 #                   gcc's build, cpp's .i against gcc's, csema -l and ttpc
 #                   against all of glibc in ff, sed's test suite with both
 #                   programs (PORT_TARGETS; an hour a target the first time)
-#   make ports-grep, ports-bc, ports-gawk, ports-findutils, ports-coreutils
-#                   the same for each of those (src/ports/<name>)
+#   make ports-grep, ports-bc, ports-gawk, ports-findutils, ports-coreutils,
+#   ports-diffutils, ports-gzip, ports-tar, ports-xz, ports-make
+#                   the same for each of those (src/ports/<name>; gzip, tar
+#                   and xz also their round trip, <name>-<target>.roundtrip)
 #   make clean      remove ./build
 
 BUILD := $(CURDIR)/build
@@ -90,7 +92,7 @@ bootstrap:
 # a gc root, ~/.cache/ttp/gcroots/<name>, which `make gcroots` points at
 # what the flake names now.
 GCROOTS := $(HOME)/.cache/ttp/gcroots
-GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS LIBGCC_HEADERS_aarch64 LIBGCC_HEADERS_x86_64 LIBGCC_HEADERS_arm SED_SRC GREP_SRC BC_SRC GAWK_SRC FINDUTILS_SRC COREUTILS_SRC
+GCROOT_VARS := GLIBC_SRC GLIBC_CC GLIBC_CC_aarch64 GLIBC_CC_x86_64 GLIBC_HEADERS GLIBC_HEADERS_aarch64 GLIBC_HEADERS_x86_64 GLIBC_CC_arm GLIBC_HEADERS_arm C2FF_CLANG LIBGCC_HEADERS LIBGCC_HEADERS_aarch64 LIBGCC_HEADERS_x86_64 LIBGCC_HEADERS_arm SED_SRC GREP_SRC BC_SRC GAWK_SRC FINDUTILS_SRC COREUTILS_SRC DIFFUTILS_SRC GZIP_SRC TAR_SRC XZ_SRC MAKE_SRC
 gcroots:
 	@mkdir -p $(GCROOTS)
 	@for v in $(GCROOT_VARS); do \
@@ -393,7 +395,7 @@ datacheck:
 # the table of each in CHECKLOG/<name>-<target>.table, which fails where a
 # test's result differs between gcc's program and ttpc's. PORT_FLAGS goes
 # to each port's make (GLIBC_FROM=..., see src/ports/port.mk).
-PORTS := sed grep bc gawk findutils coreutils
+PORTS := sed grep bc gawk findutils coreutils diffutils gzip tar xz make
 PORT_TARGETS ?= x86_64 riscv64 aarch64 arm
 PORT_FLAGS ?=
 .PHONY: $(PORTS:%=ports-%)
@@ -402,6 +404,8 @@ $(PORTS:%=ports-%): ports-%:
 	    if $(MAKE) --no-print-directory -C src/ports/$* GTARGET=$$t $(PORT_FLAGS) ref units ff licenses check > $(CHECKLOG)/$*-$$t.log 2>&1; \
 	    then cp $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/ports/$*/$$t/check.table $(CHECKLOG)/$*-$$t.table; echo "$* $$t: $$(head -1 $(CHECKLOG)/$*-$$t.table)"; \
 	        grep -q "differ 0, missing 0" $(CHECKLOG)/$*-$$t.table || ok=; \
+	        r=$(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/ports/$*/$$t/roundtrip.table; if test -e $$r; then \
+	            cp $$r $(CHECKLOG)/$*-$$t.roundtrip; echo "$* $$t: $$(head -1 $$r)"; grep -q "differ 0, missing 0" $$r || ok=; fi; \
 	    else echo "FAIL $* $$t, log $(CHECKLOG)/$*-$$t.log"; ok=; fi; \
 	done; test -n "$$ok"
 clean:
