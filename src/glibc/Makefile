@@ -193,6 +193,13 @@ FFSPLIT_PL := perl ../compiler/gen/ffsplit.pl
 HEADERST := $(CPTOOLS)/headers
 HEADERS = $(CPRUN) $(abspath $(HEADERST))
 HEADERS_PL := perl ../compiler/gen/headers.pl
+# gen/ff2c.pl in ff (../compiler/tools/ff2c.ff, made as csema; its shared
+# page --shared, the Perl's beside it): a round trip's C from a tree;
+# ff2c-crosscheck compares it with the Perl, its twin. 2.2 s and 400 MB
+# where the Perl took 5-10 s and 250 MB (stdio's tree): no slot
+FF2CT := $(CPTOOLS)/ff2c
+FF2C = $(CPRUN) $(abspath $(FF2CT)) --shared $(abspath ../compiler/shared.ff)
+FF2C_PL := perl ../compiler/gen/ff2c.pl
 CSFLAGS = -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff
 CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
@@ -1078,11 +1085,11 @@ check-O: $(CHECKO_MS:%=%-check-O)
 .PHONY: check-O
 
 # The round trip, the other proof of "exact": the C functions of a milestone,
-# written back as C from its ff (ff2c.pl, which reads ff as ttpc does), have
-# the AST of glibc's own, each against its .i's (roundtrip.pl). The
+# written back as C from its ff (FF2C, ff2c.pl in ff, which reads ff as ttpc
+# does), have the AST of glibc's own, each against its .i's (roundtrip.pl). The
 # addresses of asm functions, which have no C type in ff, are let through.
-$(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff ../compiler/gen/ff2c.pl ../compiler/gen/Words.pm
-	$(RUN) -t 300 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
+$(FF)/%.rt.c $(FF)/%.rt.names &: $(FF)/%.ff | $(FF2CT)
+	$(RUN) -n -t 300 $(FF2C) --target $(GTARGET) $(FF)/$*.ff.txt $(FF)/$*.rt.c $(FF)/$*.rt.names
 
 # (x86_64's with SSE4.2: the builtins of gcc's intrinsics that strcspn-sse4's C calls)
 RTFLAGS_x86_64 := -msse4.2
@@ -1277,6 +1284,31 @@ headers-crosscheck: | $(HEADERST)
 	test $$n -gt 0 || { echo "headers-crosscheck: no round trip in $(FF)"; exit 1; }; \
 	echo "headers-crosscheck: headers as headers.pl on the $$n round trips of $(FF)"
 .PHONY: headers-crosscheck
+# ff2c-crosscheck: ff2c in ff (FF2C) against gen/ff2c.pl, which it replaces
+# here: the tree of every round trip of this BUILD (each X.rt.names in FF:
+# X-unit.ff.txt of a program's, else X.ff.txt; units' page), and of each
+# but units' a --split (as rtall.sh runs it), into F2X: out.c (the files of
+# the split and their list), names.txt, messages and exit status byte for
+# byte. Run it before ports goes into main, with the other cross-checks.
+F2X := $(BUILD)/ff2c-crosscheck
+F2XCMP = s=0; $(RUN) -n -t 600 $(FF2C_PL) $(1) > $$d/p.out 2> $$d/p.err || s=$$?; echo "exit $$s" >> $$d/p.err; \
+	s=0; $(RUN) -n -t 600 $(FF2C) $(2) > $$d/f.out 2> $$d/f.err || s=$$?; echo "exit $$s" >> $$d/f.err
+F2XNEW = rm -rf $(F2X)/p $(F2X)/f; mkdir -p $(F2X)/p $(F2X)/f
+ff2c-crosscheck: | $(FF2CT)
+	@set -e; $(F2XNEW); d=$(F2X); n=0; \
+	for x in $$(ls $(FF)/*.rt.names $(FF)/units/back.names 2> /dev/null | sort); do \
+	    case $$x in */units/back.names) t=$(FF)/units/page.ff.txt ;; *) b=$${x%.rt.names}; t=$$b.ff.txt; test ! -e $$b-unit.ff.txt || t=$$b-unit.ff.txt ;; esac; \
+	    test -e $$t || continue; \
+	    $(call F2XCMP,--target $(GTARGET) $$t $$d/p/out.c $$d/p/names,--target $(GTARGET) $$t $$d/f/out.c $$d/f/names); \
+	    diff -r $$d/p $$d/f > /dev/null && cmp -s $$d/p.err $$d/f.err || { echo "ff2c-crosscheck: ff2c $$t is not ff2c.pl's ($$d)"; exit 1; }; \
+	    case $$x in */units/*) ;; *) $(F2XNEW); \
+	    $(call F2XCMP,--target $(GTARGET) --split $$d/p/c $$t $$d/p/chunks $$d/p/names,--target $(GTARGET) --split $$d/f/c $$t $$d/f/chunks $$d/f/names); \
+	    sed -i 's|/f/c/|/p/c/|' $$d/f/chunks; \
+	    diff -r $$d/p $$d/f > /dev/null && cmp -s $$d/p.err $$d/f.err || { echo "ff2c-crosscheck: ff2c --split $$t is not ff2c.pl's ($$d)"; exit 1; } ;; esac; \
+	    $(F2XNEW); n=$$((n + 1)); done; \
+	test $$n -gt 0 || { echo "ff2c-crosscheck: no round trip in $(FF)"; exit 1; }; \
+	echo "ff2c-crosscheck: ff2c as ff2c.pl on the trees of the $$n round trips of $(FF), and on each split by unit"
+.PHONY: ff2c-crosscheck
 
 # ---- the C parser in ff (T3a) -----------------------------------------------
 # ../compiler/tools/cparse and cprint (their library tools/c.ff), checked by
@@ -1519,14 +1551,14 @@ c2ff-glibc: all-passes $(FF)/glibc.ff
 # progs/units-a.c and -b.c, which define one name otherwise (each file's head):
 # through csema -l, and round-tripped (units-crosscheck: c2ff.pl's the same).
 UNITS2 := units-a units-c units-b
-units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen/ff2c.pl $(CSEMA) clang-prelude.h | $(FFSPLITT)
+units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl $(CSEMA) clang-prelude.h | $(FFSPLITT) $(FF2CT)
 	@mkdir -p $(FF)/units
 	@for u in $(UNITS2); do \
 	    $(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) $(abspath progs)/$$u.c -o $(FF)/units/$$u.i && \
 	    $(RUN) -t 120 $(CLANG_AST) $(FF)/units/$$u.i > $(FF)/units/$$u.json || exit 1; \
 	done
 	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -K $(FF)/units/statics $(UNITS2:%=$(FF)/units/%.i) -- ua ub uc > $(FF)/units/page.ff.txt
-	@$(RUN) -t 60 perl ../compiler/gen/ff2c.pl --target $(GTARGET) $(FF)/units/page.ff.txt $(FF)/units/back.c $(FF)/units/back.names
+	@$(RUN) -n -t 60 $(FF2C) --target $(GTARGET) $(FF)/units/page.ff.txt $(FF)/units/back.c $(FF)/units/back.names
 	@$(RUN) -t 60 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/units/back.c > $(FF)/units/back.json
 	@$(RUN) -t 60 perl roundtrip.pl --target $(GTARGET) $(FF)/units/back.names $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)
@@ -1578,9 +1610,9 @@ $(eval $(call check,globsize))
 GENERIC_FNS := main levels second add2 via_comma two_paths vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
-$(1)-roundtrip: $$(FF)/$(1)-prog.ff $$(FF)/$(1)-prog.json roundtrip.pl ../compiler/gen/ff2c.pl | $$(HEADERST)
+$(1)-roundtrip: $$(FF)/$(1)-prog.ff $$(FF)/$(1)-prog.json roundtrip.pl | $$(HEADERST) $$(FF2CT)
 	$$(RUN) -v 9000000 -t 120 $$(CPRUN) $$(CSEMA) -l $$(CSFLAGS) -n $$(FF)/$(1)-prog.i $$(FF)/$(1)-prog.i $(2) > $$(FF)/$(1)-unit.ff.txt
-	$$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $$(GTARGET) $$(FF)/$(1)-unit.ff.txt $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
+	$$(RUN) -n -t 120 $$(FF2C) --target $$(GTARGET) $$(FF)/$(1)-unit.ff.txt $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 	$$(RUN) -t 120 $$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$$(CTARGET) $$(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $$(FF)/$(1).rt.c > $$(FF)/$(1).rt.json
 	$$(RUN) -t 300 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(FF)/$(1)-prog.json

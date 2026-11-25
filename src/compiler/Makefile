@@ -937,6 +937,13 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # output, messages and status; tools-check runs both on a glibc source of
 # its own (headers as it has them, ones it has not, a stub's, a missing
 # one), src/glibc's headers-crosscheck on every round trip of a BUILD.
+# gen/ff2c.pl in ff (T6): tools/ff2c.ff and its _start, ff2c-start.ff (its
+# dev C tools/dev/f2c, on s2ff's lib.c and header.c; the tree fftree.ff's,
+# its C words of before words.ff's, as the Perl's FF.pm and Words.pm), the
+# same files, messages and status; tools-check runs both on progs/ff2c's
+# trees (csema's of src/glibc's units, generic and textcount programs: whole,
+# split, by pages; arm's), src/glibc's ff2c-crosscheck on the tree of every
+# round trip of a BUILD.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -945,7 +952,7 @@ TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.f
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
 CSLIB := tools/csem.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki s2ff ffsplit headers
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki s2ff ffsplit headers ff2c
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -1015,6 +1022,11 @@ $(TL)/$(1)/s2ff: tools/s2ff.ff tools/s2ff-start.ff $(TOOLLIB) $(CLIB) $(SHARED) 
 $(TL)/$(1)/headers: tools/headers.ff tools/headers-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/headers.ff tools/headers-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/ff2c: tools/ff2c.ff tools/ff2c-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/ff2c.ff tools/ff2c-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
@@ -1175,6 +1187,15 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	    cmp -s $$$$d/pl.out $$$$d/ff.out && cmp -s $$$$d/pl.err $$$$d/ff.err || { echo "tools-check-$(1): headers $$$$*"; exit 1; }; }; \
 	for c in good bad1 bad2 bad3 bad4 bad5 bad6 none; do same $$$$i/$$$$c.c $$$$i/names.txt; done; same $$$$i/good.c $$$$i/none.txt
 	@echo "tools-check-$(1): headers agrees with headers.pl (output, messages, status) on headers as glibc has them, ones it has not, a stub's, a missing one and files that are not there"
+	@set -e; d=$(abspath $(TL))/$(1).f2c; p=$(abspath progs/ff2c); rm -rf $$$$d; mkdir -p $$$$d; printf 'a:\n    x\n' > $$$$d/bad.ff.txt; \
+	same() { for w in pl ff; do rm -rf $$$$d/$$$$w; mkdir $$$$d/$$$$w; \
+	    if test $$$$w = pl; then c="perl $(abspath gen/ff2c.pl)"; else c="$(RUN_$(1)) $(abspath $(TL))/$(1)/ff2c --shared $(abspath $(SHARED))"; fi; \
+	    s=0; (cd $$$$d/$$$$w && $$$$c "$$$$@" > out 2> err) || s=$$$$?; echo $$$$s > $$$$d/$$$$w/status; done; \
+	    diff -r $$$$d/pl $$$$d/ff > /dev/null || { echo "tools-check-$(1): ff2c $$$$*"; exit 1; }; }; \
+	for t in units generic textcount; do same --target riscv64 $$$$p/$$$$t.ff.txt o.c n.txt; done; \
+	same --target arm $$$$p/textcount-arm.ff.txt o.c n.txt; same --target riscv64 --split c $$$$p/generic.ff.txt list n.txt; \
+	same --target riscv64 --pages 'glibc units,glibc x' $$$$p/units.ff.txt o.c n.txt; same $$$$d/bad.ff.txt o.c n.txt; same $$$$d/none.ff.txt o.c n.txt
+	@echo "tools-check-$(1): ff2c agrees with ff2c.pl (files, messages, status) on progs/ff2c's trees (csema's of src/glibc's units, generic and textcount), split and by pages, and on trees it cannot read"
 endef
 # mki on a glibc build's log of each kind of command (C, .os, a .S, a
 # syscall stub from (echo ...) | gcc, an -aux.S of -S, misc's dummy.o, an
