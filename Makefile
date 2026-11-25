@@ -26,7 +26,8 @@
 #   make ports-check  every check of the ports branch, the independent ones
 #                   at once: PASS or FAIL and the time of each
 #   make crosschecks  after a ports-check, before ports goes into main: the
-#                     Perl that s2ff, mki and cpp in ff replaced, against them
+#                     Perl that s2ff, mki, cpp, fftext, ffsplit and headers in ff
+#                     replaced, against them
 #   make c2ff-crosscheck  after a ports-check, before ports goes into main:
 #                   the frozen gen/c2ff.pl and csema -l, the translator, give
 #                   the same pages on each target's milestones
@@ -206,10 +207,10 @@ pc-compiler-check: pc-bootstrap pc-tools
 # the translator, csema -l (src/compiler/tools, this machine's build): every
 # page of glibc and libgcc is its, so it is made first, alone (compiler-check
 # makes it too, later); and the C preprocessor in ff, cpp, for the cpp steps,
-# mki, s2ff, fftext and licenses for src/glibc
+# mki, s2ff, fftext, licenses, ffsplit and headers for src/glibc
 PC_HOST := $(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 pc-tools: pc-bootstrap
-	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki $(BUILD)/compiler/tools/$(PC_HOST)/s2ff $(BUILD)/compiler/tools/$(PC_HOST)/fftext $(BUILD)/compiler/tools/$(PC_HOST)/licenses)
+	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki $(BUILD)/compiler/tools/$(PC_HOST)/s2ff $(BUILD)/compiler/tools/$(PC_HOST)/fftext $(BUILD)/compiler/tools/$(PC_HOST)/licenses $(BUILD)/compiler/tools/$(PC_HOST)/ffsplit $(BUILD)/compiler/tools/$(PC_HOST)/headers)
 	@grep -q '^PASS' $(CHECKLOG)/tools.result
 # the BUILDs, where they are not there yet
 pc-gbuild:
@@ -345,14 +346,14 @@ c2ff-crosscheck:
 .PHONY: c2ff-crosscheck
 
 # The cross-checks of the Perl the tools in ff replaced (src/glibc's
-# s2ff-, mki-, cpp-, cpp-tests- and fftext-crosscheck) on the BUILDs of the
+# s2ff-, mki-, cpp-, cpp-tests-, fftext-, ffsplit- and headers-crosscheck) on the BUILDs of the
 # last ports-check, each target in turn, as c2ff-crosscheck: before ports
 # goes into main (cpp-tests-crosscheck needs their tests builds, GBUILD/tests
 # and GBUILD/<target>/tests: make tests-ref AREA=x, or obj a link to another
 # tests build's). Their output in CHECKLOG/<check>-<target>.log.
 # (csema-crosscheck: gcc's build of csema's dev C against the ttpc-built one on
 # all of glibc's page, byte for byte: some 25 minutes a target)
-XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck cpp-tests-crosscheck fftext-crosscheck csema-crosscheck
+XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck cpp-tests-crosscheck fftext-crosscheck ffsplit-crosscheck headers-crosscheck csema-crosscheck
 crosschecks:
 	@mkdir -p $(CHECKLOG); ok=1; for c in $(XCHECKS); do for t in riscv64 aarch64 x86_64 arm; do \
 	    if $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$$(test $$t = riscv64 || echo /$$t) GTARGET=$$t $$c > $(CHECKLOG)/$$c-$$t.log 2>&1; \

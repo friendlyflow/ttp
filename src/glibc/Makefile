@@ -179,6 +179,20 @@ MKID = $(if $(wildcard $(MKIT)),$(MKI) --dry,$(error $(MKIT) is not made: make -
 FFTEXTT := $(CPTOOLS)/fftext
 FFTEXT = $(CPRUN) $(abspath $(FFTEXTT))
 LICENSEST := $(CPTOOLS)/licenses
+# gen/ffsplit.pl in ff (../compiler/tools/ffsplit.ff, made as csema): a
+# milestone's tree as a folder a program includes lazily; ffsplit-crosscheck
+# compares it with the Perl, which stays its twin. Two seconds and 40 MB
+# where the Perl took a minute and 1 GB (stdio's tree), so it takes no slot
+FFSPLITT := $(CPTOOLS)/ffsplit
+FFSPLIT = $(CPRUN) $(abspath $(FFSPLITT))
+FFSPLIT_PL := perl ../compiler/gen/ffsplit.pl
+# gen/headers.pl in ff (../compiler/tools/headers.ff, made as csema): a
+# round trip's license headers against glibc's source; headers-crosscheck
+# compares it with the Perl, its twin. As fast as the Perl (0.7 s a
+# milestone), 50 MB: no slot either
+HEADERST := $(CPTOOLS)/headers
+HEADERS = $(CPRUN) $(abspath $(HEADERST))
+HEADERS_PL := perl ../compiler/gen/headers.pl
 CSFLAGS = -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff
 CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
@@ -986,12 +1000,12 @@ $(FF)/%.ref $(FF)/%.map &: progs/%.c $(OBJ)/libc.a
 $(FF)/%.objs.mk: $(FF)/%.map linkobjs.pl allobjs.pl | $(MKIT)
 	MKI="$(MKI)" perl linkobjs.pl $* $(FF)/$*.map $(OBJ) $(GLIBC_SRC) > $@
 
-# A milestone as a folder that a program includes lazily (ffsplit.pl): a file
-# per page and index.ff, the file of each name; ttpc reads only the files
-# of what the program reaches.
-$(FF)/%/index.ff: $(FF)/%.ff ../compiler/gen/ffsplit.pl
+# A milestone as a folder that a program includes lazily (FFSPLIT, ffsplit.pl
+# in ff): a file per page and index.ff, the file of each name; ttpc reads
+# only the files of what the program reaches.
+$(FF)/%/index.ff: $(FF)/%.ff | $(FFSPLITT)
 	rm -rf $(FF)/$*
-	$(RUN) -t 120 perl ../compiler/gen/ffsplit.pl $(FF)/$*.ff.txt $(FF)/$*
+	$(RUN) -n -t 120 $(FFSPLIT) $(FF)/$*.ff.txt $(FF)/$*
 
 # A program: its .i (gcc -E), csema -l of it from main (-P: a program's
 # names, -T: its own _start, -I: its tree's index); clang's AST of it only
@@ -1085,10 +1099,10 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 	$(if $(filter arm,$(GTARGET)),sed -i 's/"__Sync_/"__sync_/g' $@)
 
 define roundtrip
-$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json)
+$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.json) | $$(HEADERST)
 	$$(file >$$(FF)/$(1).jsons,$$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json$$(nl)))
 	$$(RUN) -t 900 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json @$$(FF)/$(1).jsons
-	$$(RUN) -t 300 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
+	$$(RUN) -n -t 300 $$(HEADERS) $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
 $(foreach m,$(MILESTONES),$(eval $(call roundtrip,$(m))))
@@ -1227,6 +1241,42 @@ fftext-crosscheck: | $(FFTEXTT) $(LICENSEST)
 	if test -e $(FF)/libgcc/index.ff; then $(call FFXLIC,--pages $(FF)/libgcc.ff $(FF)/libgcc/*.ff); fi; \
 	echo "fftext-crosscheck: licenses as licenses.pl in $$n calls"
 .PHONY: fftext-crosscheck
+# ffsplit-crosscheck: ffsplit in ff (FFSPLIT) against gen/ffsplit.pl, which
+# it replaces here: every tree of this BUILD that the build split into a
+# folder (each X.ff.txt in FF with X/index.ff beside it: the milestones, all
+# of glibc, libgcc; and units' page), both into folders of FSX: every file,
+# the messages and the exit status byte for byte. The Perl takes a minute
+# and 1 GB on a milestone, so each of its runs takes a slot. Run it before
+# ports goes into main, with the other cross-checks.
+FSX := $(BUILD)/ffsplit-crosscheck
+ffsplit-crosscheck: | $(FFSPLITT)
+	@set -e; rm -rf $(FSX); mkdir -p $(FSX); d=$(FSX); n=0; k=0; \
+	for f in $$(ls $(FF)/*.ff.txt $(FF)/units/page.ff.txt 2> /dev/null | sort); do m=$${f%.ff.txt}; test "$$f" != $(FF)/units/page.ff.txt || m=$(FF)/units/tree; \
+	    test -e $$m/index.ff || continue; rm -rf $(FSX)/p $(FSX)/f; \
+	    s=0; $(RUN) -t 600 $(FFSPLIT_PL) $$f $$d/p > $$d/p.out 2> $$d/p.err || s=$$?; echo "exit $$s" >> $$d/p.err; \
+	    s=0; $(RUN) -n -t 120 $(FFSPLIT) $$f $$d/f > $$d/f.out 2> $$d/f.err || s=$$?; echo "exit $$s" >> $$d/f.err; \
+	    sed -i '/^slot\.sh: /d' $$d/p.err $$d/f.err; \
+	    diff -r $$d/p $$d/f > /dev/null && cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.err $$d/f.err || { echo "ffsplit-crosscheck: ffsplit $$f is not ffsplit.pl's ($$d)"; exit 1; }; \
+	    n=$$((n + 1)); k=$$((k + $$(ls $$d/f | wc -l))); done; \
+	test $$n -gt 0 || { echo "ffsplit-crosscheck: no tree split into a folder in $(FF)"; exit 1; }; \
+	rm -rf $(FSX)/p $(FSX)/f; echo "ffsplit-crosscheck: ffsplit as ffsplit.pl on the $$n trees of $(FF) split into folders ($$k files)"
+.PHONY: ffsplit-crosscheck
+# headers-crosscheck: headers in ff (HEADERS) against gen/headers.pl, which
+# it replaces here: every round trip of this BUILD (each X.rt.c in FF with
+# its X.rt.names: the milestones' and the programs'), output, messages and
+# exit status byte for byte. Run it before ports goes into main, with the
+# other cross-checks.
+HDX := $(BUILD)/headers-crosscheck
+headers-crosscheck: | $(HEADERST)
+	@set -e; mkdir -p $(HDX); d=$(HDX); n=0; \
+	for c in $$(ls $(FF)/*.rt.c 2> /dev/null | sort); do x=$${c%.c}.names; test -e $$x || continue; \
+	    s=0; $(RUN) -n -t 300 $(HEADERS_PL) $$c $$x > $$d/p.out 2> $$d/p.err || s=$$?; echo "exit $$s" >> $$d/p.err; \
+	    s=0; $(RUN) -n -t 300 $(HEADERS) $$c $$x > $$d/f.out 2> $$d/f.err || s=$$?; echo "exit $$s" >> $$d/f.err; \
+	    cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.err $$d/f.err || { echo "headers-crosscheck: headers $$c is not headers.pl's ($$d)"; exit 1; }; \
+	    n=$$((n + 1)); done; \
+	test $$n -gt 0 || { echo "headers-crosscheck: no round trip in $(FF)"; exit 1; }; \
+	echo "headers-crosscheck: headers as headers.pl on the $$n round trips of $(FF)"
+.PHONY: headers-crosscheck
 
 # ---- the C parser in ff (T3a) -----------------------------------------------
 # ../compiler/tools/cparse and cprint (their library tools/c.ff), checked by
@@ -1469,7 +1519,7 @@ c2ff-glibc: all-passes $(FF)/glibc.ff
 # progs/units-a.c and -b.c, which define one name otherwise (each file's head):
 # through csema -l, and round-tripped (units-crosscheck: c2ff.pl's the same).
 UNITS2 := units-a units-c units-b
-units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen/ff2c.pl $(CSEMA) clang-prelude.h
+units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen/ff2c.pl $(CSEMA) clang-prelude.h | $(FFSPLITT)
 	@mkdir -p $(FF)/units
 	@for u in $(UNITS2); do \
 	    $(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) $(abspath progs)/$$u.c -o $(FF)/units/$$u.i && \
@@ -1482,7 +1532,7 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl ../compiler/gen
 	@$(RUN) -t 60 perl roundtrip.pl --target $(GTARGET) $(FF)/units/back.names $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)
 	@grep -q 'blist u header' $(FF)/units/page.ff.txt && grep -q 'clist u header' $(FF)/units/page.ff.txt && grep -q '^ *holder .*units-b' $(FF)/units/page.ff.txt && grep -q '^ *both .*units-a:' $(FF)/units/page.ff.txt && grep -q '^ *both:' $(FF)/units/page.ff.txt
 	@# (a program's external definition of a name that is a static in its tree: a name of its own)
-	@rm -rf $(FF)/units/tree; perl ../compiler/gen/ffsplit.pl $(FF)/units/page.ff.txt $(FF)/units/tree > /dev/null
+	@rm -rf $(FF)/units/tree; $(FFSPLIT) $(FF)/units/page.ff.txt $(FF)/units/tree > /dev/null
 	@$(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) $(abspath progs)/units-p.c -o $(FF)/units/units-p.i
 	@$(RUN) -t 120 $(CLANG_AST) $(FF)/units/units-p.i > $(FF)/units/units-p.json
 	@$(CPRUN) $(CPTOOLS)/csema -l -t $(GTARGET) -s "$(GLIBC_SRC)" -S ../compiler/shared.ff -P units -T -I $(FF)/units/tree/index.ff -J $(FF)/units/statics $(FF)/units/units-p.i main > $(FF)/units/prog.ff.txt
@@ -1528,13 +1578,13 @@ $(eval $(call check,globsize))
 GENERIC_FNS := main levels second add2 via_comma two_paths vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
-$(1)-roundtrip: $$(FF)/$(1)-prog.ff $$(FF)/$(1)-prog.json roundtrip.pl ../compiler/gen/ff2c.pl
+$(1)-roundtrip: $$(FF)/$(1)-prog.ff $$(FF)/$(1)-prog.json roundtrip.pl ../compiler/gen/ff2c.pl | $$(HEADERST)
 	$$(RUN) -v 9000000 -t 120 $$(CPRUN) $$(CSEMA) -l $$(CSFLAGS) -n $$(FF)/$(1)-prog.i $$(FF)/$(1)-prog.i $(2) > $$(FF)/$(1)-unit.ff.txt
 	$$(RUN) -t 120 perl ../compiler/gen/ff2c.pl --target $$(GTARGET) $$(FF)/$(1)-unit.ff.txt $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 	$$(RUN) -t 120 $$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$$(CTARGET) $$(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $$(FF)/$(1).rt.c > $$(FF)/$(1).rt.json
 	$$(RUN) -t 300 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(FF)/$(1)-prog.json
-	$$(RUN) -t 120 perl ../compiler/gen/headers.pl $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
+	$$(RUN) -n -t 120 $$(HEADERS) $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
 PROGRT_generic := $(GENERIC_FNS)
