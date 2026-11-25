@@ -45,6 +45,11 @@ while test $# -gt 0; do
     esac
 done
 test $# -gt 0 || { echo "usage: slot.sh [-n] [-v KB] [-t SECONDS] CMD ARG..." >&2; exit 2; }
+# -n with no -v is capped at TTP_NMAX (4000000 KB): such a command runs in no
+# slot and no scope, so nothing else holds it. On 2026-11-25 a slot.sh -n
+# with no -v (a new ff2c) grew to 23 GB, the kernel killed it, and systemd
+# then stopped the whole terminal unit: every agent and every run with it.
+test -n "$noslot" && test -z "$mem" && mem=${TTP_NMAX:-4000000}
 
 # A timed command runs in a session of its own (setsid); when it ends, at its
 # timeout or not, what is left of that session is killed. A process group is
