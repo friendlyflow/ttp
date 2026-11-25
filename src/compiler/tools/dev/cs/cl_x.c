@@ -598,9 +598,22 @@ static void cl_string_bytes (unsigned char *p, long n, struct cl_list *o)
       C->ntext = C->ntext + 1;
       nm = cl_cat ("text ", cl_num (C->ntext));
       cl_put (&C->text_item, key, nm);
+      /* (over 255 bytes its items are text leaves where it has no NUL, is UTF-8 and no piece reads as a word, as an array char's in a global, the rest 0;
+         else its bytes: stdio-common's bug28 has a 557110-byte format, 2185 groups of bytes, past a node's 255) */
+      pc = 0;
+      if (!hasnul && n > 255) pc = cl_pieces (p, n, 1);
       i = 0;
-      while (i < n) { cl_push (c, cl_num_node (p[i])); i++; }
-      cl_push (c, cl_n ("0"));
+      while (pc && i < pc->n) {
+        char *w = (char *) pc->v[i]->text;
+        if (cl_isop (w) || cl_eq (w, "?") || cl_eq (w, ":") || cl_eq (w, ".") || cl_eq (w, "...") || cl_val (&C->reserved, w)) pc = 0;
+        i++;
+      }
+      if (pc) cl_append (c, pc);
+      else {
+        i = 0;
+        while (i < n) { cl_push (c, cl_num_node (p[i])); i++; }
+        cl_push (c, cl_n ("0"));
+      }
       cl_push (x, cl_n ("array"));
       cl_push (x, cl_n ("char"));
       cl_push (x, cl_num_node (n + 1));
