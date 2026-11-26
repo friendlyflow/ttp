@@ -1,0 +1,133 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+comment
+  ff2c's own runtime (its dev source declares it), beside tools/c.ff's cp_* on tools/rt.ff: s2ff's raw syscalls for its lib.c, each result the kernel's, a negative errno when it fails; and the tree, fftree.ff's reader and words.ff's words of before
+s2_open:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      0
+      0
+s2_exists:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  comment
+    an O_PATH descriptor of path (0x200000 on the four targets), as -e and Cwd::abs_path see it: the file there, links followed
+  return
+    syscall
+      SYS_openat
+      here
+      path
+      2097152
+      0
+s2_read:
+  long
+  fd:
+    long
+  buf:
+    u8
+    * pointer
+  n:
+    long
+  return
+    syscall
+      SYS_read
+      fd
+      buf
+      n
+s2_close:
+  long
+  fd:
+    long
+  return
+    syscall
+      SYS_close
+      fd
+f2_mkdir:
+  long
+  path:
+    char
+    * pointer
+  here:
+    long
+    0
+    -
+    100
+  return
+    syscall
+      SYS_mkdirat
+      here
+      path
+      511
+f2_read_txt:
+  node
+  * pointer
+  p:
+    u8
+    * pointer
+  n:
+    long
+  name:
+    char
+    * pointer
+  comment
+    the tree of the text p, n (FF.pm's read_txt, its messages): its top nodes under the root
+  return
+    read txt
+      p
+      n
+      name
+f2_read_ff:
+  node
+  * pointer
+  p:
+    u8
+    * pointer
+  n:
+    long
+  return
+    read ff
+      p
+      n
+f2_oldwords:
+  node
+  * pointer
+  root:
+    node
+    * pointer
+  shared:
+    node
+    * pointer
+  l32:
+    long
+  comment
+    the tree in the C words of before (words.ff, as Words.pm's oldwords), the shared page's types known first; on arm (l32) the C made a UL before a number a U already, Words.pm's long32
+  t:
+    w types
+    * pointer
+    w new types
+  w types of
+    t
+    shared
+  return
+    old words
+      t
+      root

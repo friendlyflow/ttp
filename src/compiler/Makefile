@@ -930,6 +930,23 @@ bootstraps: $(if $(CAN_RISCV),bootstrap) $(RUNNABLE:%=bootstrap-%) $(RUNNABLE:%=
 # gen/s2ff.pl in ff (T4b): tools/s2ff.ff and its _start, s2ff-start.ff (as
 # mki's), the same output, messages and status; src/glibc's s2ff-crosscheck
 # runs both on every asm object of glibc and libgcc.
+# gen/ffsplit.pl in ff (T6): tools/ffsplit.ff, a library tree as a folder a
+# program includes lazily, the same files, messages and status; tools-check
+# runs both on a tree of every case (layers both ways, pages of one name,
+# an enum's and an asm function's names, a name of two files) and on trees
+# that stop it, src/glibc's ffsplit-crosscheck on every milestone's tree.
+# gen/headers.pl in ff (T6): tools/headers.ff and its _start, headers-start.ff
+# (as s2ff's, its dev C tools/dev/hd on s2ff's lib.c and header.c), the same
+# output, messages and status; tools-check runs both on a glibc source of
+# its own (headers as it has them, ones it has not, a stub's, a missing
+# one), src/glibc's headers-crosscheck on every round trip of a BUILD.
+# gen/ff2c.pl in ff (T6): tools/ff2c.ff and its _start, ff2c-start.ff (its
+# dev C tools/dev/f2c, on s2ff's lib.c and header.c; the tree fftree.ff's,
+# its C words of before words.ff's, as the Perl's FF.pm and Words.pm), the
+# same files, messages and status; tools-check runs both on progs/ff2c's
+# trees (csema's of src/glibc's units, generic and textcount programs: whole,
+# split, by pages; arm's), src/glibc's ff2c-crosscheck on the tree of every
+# round trip of a BUILD.
 # TOOLFLAGS: stage2 builds them with -O (the user's choice, 2026-10-24);
 # ttpc3's from tools/old/ stay without (the frozen ttpc3 has no -O), and so
 # do stage1 and stage2.
@@ -938,7 +955,7 @@ TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.f
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
 CSLIB := tools/csem.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki s2ff
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki s2ff ffsplit headers ff2c roundtrip
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -1006,6 +1023,21 @@ $(TL)/$(1)/mki: tools/mki.ff tools/mki-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(B
 $(TL)/$(1)/s2ff: tools/s2ff.ff tools/s2ff-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/s2ff.ff tools/s2ff-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/headers: tools/headers.ff tools/headers-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/headers.ff tools/headers-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/ff2c: tools/ff2c.ff tools/ff2c-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/ff2c.ff tools/ff2c-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/roundtrip: tools/roundtrip.ff tools/roundtrip-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/roundtrip.ff tools/roundtrip-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
@@ -1137,6 +1169,44 @@ tools-check-$(1): $(TOOLS:%=$(TL)/$(1)/%) $(SHAV)/want $(CPREF)/result $(CSREF)/
 	        -o $(TL)/$(1).s2ff/$$$$t -s $$$$ss -z "__rseq_size __rseq_offset" -l "$$$$(test $$$$t = arm && echo memcpy)" \
 	        $$$$(ls progs/s2ff/$$$$t/*.dump | sed 's/\.dump$$$$//') > $(TL)/$(1).s2ff.$$$$t.log || { cat $(TL)/$(1).s2ff.$$$$t.log; exit 1; }; done
 	@echo "tools-check-$(1): s2ff says what gen/s2ff.pl, s2ff-aarch64.pl and s2ff-arm.pl say of progs/s2ff's asm (each target's, every way the build runs them, and runs that stop)"
+	@set -e; d=$(abspath $(TL))/$(1).fs; rm -rf $$$$d; mkdir -p $$$$d/in; \
+	{ printf 'license\n  MIT\n  a notice\ncomment\n  first\nt a:\n  f:\n    long\n  e:\n    enum\n    x:\n    items\n      y:\n      0:\n  0:\n    g:\n      long\n    0:\n      g2:\n        long\n'; \
+	  printf 'comment\n  before a 2\ncomment\n  and more\nt a 2:\n  h:\n    long\n  f:\n    int\nt b 3:\n  s:\n    asm\n    s:\n    .L1:\n    t2:\n    t3\nt c/d e:\n  f:\n    long\n'; \
+	  seq -f '  k%g:' 300; printf 'x:\n  q:\n    long\nt:\n  r:\n    long\nlicense\n  GPL-3.0-only\n'; } > $$$$d/in/lib.ff.txt; \
+	printf 't a:\n  f:\n    long\ncomment\n  x\n' > $$$$d/in/late.ff.txt; printf 'foo\n' > $$$$d/in/notpage.ff.txt; printf 't a b:\n  x:\nt a/b:\n  y:\n' > $$$$d/in/two.ff.txt; \
+	printf 't x:\n  a:\nt index:\n  b:\n' > $$$$d/in/index.ff.txt; printf 't index:\n  b:\n' > $$$$d/in/index1.ff.txt; printf 'a:\n    x\n' > $$$$d/in/bad.ff.txt; \
+	printf 'x 2:\n  a:\nx:\n  b:\nx 2:\n  c:\n' > $$$$d/in/num.ff.txt; printf 'comment\n  c\nlicense\n  MIT\n' > $$$$d/in/nopage.ff.txt; \
+	same() { for w in pl ff; do rm -rf $$$$d/$$$$w; mkdir $$$$d/$$$$w; \
+	    if test $$$$w = pl; then c="perl $(abspath gen/ffsplit.pl)"; else c="$(RUN_$(1)) $(abspath $(TL))/$(1)/ffsplit"; fi; \
+	    s=0; (cd $$$$d/$$$$w && $$$$c "$$$$@" > out 2> err) || s=$$$$?; echo $$$$s > $$$$d/$$$$w/status; done; \
+	    diff -r $$$$d/pl $$$$d/ff > /dev/null || { echo "tools-check-$(1): ffsplit $$$$*"; exit 1; }; }; \
+	for t in lib late notpage two index index1 bad num nopage none; do same $$$$d/in/$$$$t.ff.txt o; done; \
+	same $$$$d/in/lib.ff.txt .; same $$$$d/in/lib.ff.txt $$$$d/in/lib.ff.txt/sub
+	@echo "tools-check-$(1): ffsplit agrees with ffsplit.pl (files, messages, status) on a tree of every case, on trees that stop it and on folders it cannot make"
+	@set -e; d=$(abspath $(TL))/$(1).hd; rm -rf $$$$d; mkdir -p $$$$d/in/src $$$$d/in/obj; i=$$$$d/in; \
+	printf '/* Copyright (C) 2026 Free Software Foundation, Inc.\n   This file is part of the GNU C Library; you can redistribute it\n   under the terms of the GNU Lesser General Public License.  */\nint x;\n' > $$$$i/src/x.c; \
+	printf 'int y;\n' > $$$$i/src/y.c; printf '/* z: Copyright (C) 2026 Someone.  */\nint z;\n' > $$$$i/src/z.c; \
+	printf '# 0 "../x.c"\n# 1 "%s/src/dir//"\n# 1 "../x.c"\n# 1 "../x.h" 1\nint x;\n' $$$$i > $$$$i/obj/x.i; printf '# 0 "../y.c"\n# 1 "%s/src/dir//"\nint y;\n' $$$$i > $$$$i/obj/y.i; \
+	printf 'body\tf\tf\t%s/obj/x.i\nbody\tg\tg\t%s/obj/y.i\nglobal\tq\nbody\th\th\n' $$$$i $$$$i > $$$$i/names.txt; \
+	{ printf '/* ff2c: the header of x.c */\n'; head -3 $$$$i/src/x.c; printf '/* ff2c: the header of y.c */\n/* no header of its own; glibc-2.44 COPYING.LIB  */\n/* ff2c: the end of the headers */\nint f;\n'; } > $$$$i/good.c; \
+	sed 's/Inc\./Inc/' $$$$i/good.c > $$$$i/bad1.c; { head -4 $$$$i/good.c; echo '/* ff2c: the end of the headers */'; } > $$$$i/bad2.c; sed 's|of y.c \*/|of z.c */|' $$$$i/good.c > $$$$i/bad3.c; \
+	printf '/* ff2c: the header of <stdin> */\n/* generated from syscalls.list; glibc-2.44 COPYING.LIB  */\n/* ff2c: the header of x.c */\n/* generated from syscalls.list; glibc-2.44 COPYING.LIB  */\n' > $$$$i/bad4.c; \
+	printf '/* ff2c: the header of w.c */\nx\n' > $$$$i/bad5.c; printf '/* ff2c: the header of z.c */\n/* z: Copyright (C) 2026 Someone.  */\n/* ff2c: the header of y.c */\n' > $$$$i/bad6.c; \
+	same() { for w in pl ff; do \
+	    if test $$$$w = pl; then c="perl $(abspath gen/headers.pl)"; else c="$(RUN_$(1)) $(abspath $(TL))/$(1)/headers"; fi; \
+	    s=0; env -u LIBGCC_SRC GLIBC_SRC=$$$$i/src $$$$c "$$$$@" > $$$$d/$$$$w.out 2> $$$$d/$$$$w.err || s=$$$$?; echo "exit $$$$s" >> $$$$d/$$$$w.err; done; \
+	    cmp -s $$$$d/pl.out $$$$d/ff.out && cmp -s $$$$d/pl.err $$$$d/ff.err || { echo "tools-check-$(1): headers $$$$*"; exit 1; }; }; \
+	for c in good bad1 bad2 bad3 bad4 bad5 bad6 none; do same $$$$i/$$$$c.c $$$$i/names.txt; done; same $$$$i/good.c $$$$i/none.txt
+	@echo "tools-check-$(1): headers agrees with headers.pl (output, messages, status) on headers as glibc has them, ones it has not, a stub's, a missing one and files that are not there"
+	@set -e; d=$(abspath $(TL))/$(1).f2c; p=$(abspath progs/ff2c); rm -rf $$$$d; mkdir -p $$$$d; printf 'a:\n    x\n' > $$$$d/bad.ff.txt; \
+	same() { for w in pl ff; do rm -rf $$$$d/$$$$w; mkdir $$$$d/$$$$w; \
+	    if test $$$$w = pl; then c="perl $(abspath gen/ff2c.pl)"; else c="$(RUN_$(1)) $(abspath $(TL))/$(1)/ff2c --shared $(abspath $(SHARED))"; fi; \
+	    s=0; (cd $$$$d/$$$$w && $$$$c "$$$$@" > out 2> err) || s=$$$$?; echo $$$$s > $$$$d/$$$$w/status; done; \
+	    diff -r $$$$d/pl $$$$d/ff > /dev/null || { echo "tools-check-$(1): ff2c $$$$*"; exit 1; }; }; \
+	for t in units generic textcount; do same --target riscv64 $$$$p/$$$$t.ff.txt o.c n.txt; done; \
+	same --target arm $$$$p/textcount-arm.ff.txt o.c n.txt; same --target riscv64 --split c $$$$p/generic.ff.txt list n.txt; \
+	same --target riscv64 --pages 'glibc units,glibc x' $$$$p/units.ff.txt o.c n.txt; same $$$$d/bad.ff.txt o.c n.txt; same $$$$d/none.ff.txt o.c n.txt
+	@echo "tools-check-$(1): ff2c agrees with ff2c.pl (files, messages, status) on progs/ff2c's trees (csema's of src/glibc's units, generic and textcount), split and by pages, and on trees it cannot read"
 endef
 # mki on a glibc build's log of each kind of command (C, .os, a .S, a
 # syscall stub from (echo ...) | gcc, an -aux.S of -S, misc's dummy.o, an

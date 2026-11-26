@@ -31,10 +31,10 @@ define pck_nl
 
 endef
 PCK_GEN := fftext.pl unlicense.pl trim.pl frozen.pl mkhost.pl mkwhole.pl mkff.pl decls.pl licenses.pl insize.pl ffmerge.sh \
-	cparsecheck.sh csemacheck.sh clangsema.pl csemacmp.pl s2ff.pl s2ff-aarch64.pl s2ff-arm.pl $(notdir $(wildcard gen/*.pm))
+	cparsecheck.sh csemacheck.sh clangsema.pl csemacmp.pl s2ff.pl s2ff-aarch64.pl s2ff-arm.pl ffsplit.pl headers.pl ff2c.pl $(notdir $(wildcard gen/*.pm))
 PCK_FILES := $(TREES) $(LICENSED) LICENSES shared.ff.txt $(X86GNU) $(PCK_GEN:%=gen/%) ../glibc/mki.pl ../glibc/s2ffcheck.sh \
 	../glibc/predef-riscv64.txt ../glibc/builtins.ff.txt ../glibc/atomics.ff.txt ../glibc/clang-prelude.h ../libgcc/mki.pl
-PCK_DIRS := boot isa macros progs/pp progs/mki progs/s2ff progs/abi ../glibc/progs
+PCK_DIRS := boot isa macros progs/pp progs/mki progs/s2ff progs/ff2c progs/abi ../glibc/progs
 PCK_VARS := TOOLS TOOLT CPCC C2FF_CLANG CSCLANG PPKEY PPTEST PPTF MKITEST MKILTEST SHAVFILES TTPC_FF TTPC2_SRC TTPC3_SRC HOSTS \
 	TREES LICENSED X86GNU CPUNITS
 pck_out = $(if $(PCOUT),$(file >$(PCOUT),$(1)),$(error pckey: PCOUT, the file of the spec, is not set))

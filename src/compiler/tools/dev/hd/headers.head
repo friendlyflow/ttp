@@ -1,0 +1,4 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+headers out.c names.txt: the round trip of the license headers, each file's header as ff2c writes it back the header of that file in glibc's source (GLIBC_SRC, LIBGCC_SRC), byte for byte, and every unit of a function written with its file's header;
+gen/headers.pl in ff, the same output, messages and status (make headers-crosscheck compares them; dev source: tools/dev/hd, on tools/dev/s2ff's lib.c and header.c)
