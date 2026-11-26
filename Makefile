@@ -210,7 +210,7 @@ pc-compiler-check: pc-bootstrap pc-tools
 # mki, s2ff, fftext, licenses, ffsplit, headers and ff2c for src/glibc
 PC_HOST := $(if $(filter x86_64,$(shell uname -m)),x86_64,riscv64)
 pc-tools: pc-bootstrap
-	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki $(BUILD)/compiler/tools/$(PC_HOST)/s2ff $(BUILD)/compiler/tools/$(PC_HOST)/fftext $(BUILD)/compiler/tools/$(PC_HOST)/licenses $(BUILD)/compiler/tools/$(PC_HOST)/ffsplit $(BUILD)/compiler/tools/$(PC_HOST)/headers $(BUILD)/compiler/tools/$(PC_HOST)/ff2c)
+	$(call pc_step,tools,$(PC_SLOT) $(MAKE) -C src/compiler BUILD=$(BUILD)/compiler $(BUILD)/compiler/tools/$(PC_HOST)/csema $(BUILD)/compiler/tools/$(PC_HOST)/cpp $(BUILD)/compiler/tools/$(PC_HOST)/mki $(BUILD)/compiler/tools/$(PC_HOST)/s2ff $(BUILD)/compiler/tools/$(PC_HOST)/fftext $(BUILD)/compiler/tools/$(PC_HOST)/licenses $(BUILD)/compiler/tools/$(PC_HOST)/ffsplit $(BUILD)/compiler/tools/$(PC_HOST)/headers $(BUILD)/compiler/tools/$(PC_HOST)/ff2c $(BUILD)/compiler/tools/$(PC_HOST)/roundtrip)
 	@grep -q '^PASS' $(CHECKLOG)/tools.result
 # the BUILDs, where they are not there yet
 pc-gbuild:
@@ -353,7 +353,7 @@ c2ff-crosscheck:
 # tests build's). Their output in CHECKLOG/<check>-<target>.log.
 # (csema-crosscheck: gcc's build of csema's dev C against the ttpc-built one on
 # all of glibc's page, byte for byte: some 25 minutes a target)
-XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck cpp-tests-crosscheck fftext-crosscheck ffsplit-crosscheck headers-crosscheck ff2c-crosscheck csema-crosscheck
+XCHECKS ?= s2ff-crosscheck mki-crosscheck cpp-crosscheck cpp-tests-crosscheck fftext-crosscheck ffsplit-crosscheck headers-crosscheck ff2c-crosscheck roundtrip-crosscheck csema-crosscheck
 crosschecks:
 	@mkdir -p $(CHECKLOG); ok=1; for c in $(XCHECKS); do for t in riscv64 aarch64 x86_64 arm; do \
 	    if $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$$(test $$t = riscv64 || echo /$$t) GTARGET=$$t $$c > $(CHECKLOG)/$$c-$$t.log 2>&1; \

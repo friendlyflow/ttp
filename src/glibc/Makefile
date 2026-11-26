@@ -200,6 +200,11 @@ HEADERS_PL := perl ../compiler/gen/headers.pl
 FF2CT := $(CPTOOLS)/ff2c
 FF2C = $(CPRUN) $(abspath $(FF2CT)) --shared $(abspath ../compiler/shared.ff)
 FF2C_PL := perl ../compiler/gen/ff2c.pl
+# roundtrip.pl in ff (../compiler/tools/roundtrip.ff, made as csema), made a
+# part at a time: roundtrip-crosscheck holds each part against the Perl's
+# (roundtrip.pl --parts) on every unit cache of the BUILD
+ROUNDTRIPT := $(CPTOOLS)/roundtrip
+ROUNDTRIP = $(CPRUN) $(abspath $(ROUNDTRIPT))
 CSFLAGS = -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff
 CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
@@ -1318,6 +1323,22 @@ ff2c-crosscheck: | $(FF2CT)
 	test $$n -gt 0 || { echo "ff2c-crosscheck: no round trip in $(FF)"; exit 1; }; \
 	echo "ff2c-crosscheck: ff2c as ff2c.pl on the trees of the $$n round trips of $(FF), and on each split by unit"
 .PHONY: ff2c-crosscheck
+# roundtrip-crosscheck: roundtrip in ff (ROUNDTRIP), made a part at a time,
+# against roundtrip.pl: on every unit cache of this BUILD ($(I)/<unit>.rtn)
+# --parts of both (each type's class, each floating constant FFold folds,
+# each literal's number), output and exit status byte for byte. Run it
+# before ports goes into main, with the other cross-checks.
+RTX := $(BUILD)/roundtrip-crosscheck
+roundtrip-crosscheck: | $(ROUNDTRIPT)
+	@set -e; mkdir -p $(RTX); d=$(RTX); n=0; \
+	for c in $$(find $(I)/ -name '*.rtn' | sort); do \
+	    s=0; $(RUN) -n -t 300 perl roundtrip.pl --target $(GTARGET) --parts $$c > $$d/p.out 2>&1 || s=$$?; echo "exit $$s" >> $$d/p.out; \
+	    s=0; $(RUN) -n -t 300 $(ROUNDTRIP) --target $(GTARGET) --parts $$c > $$d/f.out 2>&1 || s=$$?; echo "exit $$s" >> $$d/f.out; \
+	    cmp -s $$d/p.out $$d/f.out || { echo "roundtrip-crosscheck: roundtrip --parts $$c is not roundtrip.pl's ($$d)"; exit 1; }; \
+	    n=$$((n + 1)); done; \
+	test $$n -gt 0 || { echo "roundtrip-crosscheck: no unit cache in $(I)"; exit 1; }; \
+	echo "roundtrip-crosscheck: roundtrip's parts (types, floating constants, numbers) as roundtrip.pl's on the $$n unit caches of $(I)"
+.PHONY: roundtrip-crosscheck
 
 # ---- the C parser in ff (T3a) -----------------------------------------------
 # ../compiler/tools/cparse and cprint (their library tools/c.ff), checked by

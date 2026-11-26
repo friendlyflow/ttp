@@ -1,0 +1,4 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+roundtrip [--target t] --parts unit.rtn: a unit's cache's parts as roundtrip.pl --parts prints them, each type's class, each floating constant folded, each literal's number;
+src/glibc/roundtrip.pl in ff, made a part at a time (the same output: make roundtrip-crosscheck compares them; dev source: tools/dev/rtr, on tools/dev/s2ff's lib.c)

@@ -54,11 +54,15 @@ my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JS
 our $target = '';
 if (@ARGV >= 2 && $ARGV[0] eq '--target') { (undef, $target) = splice @ARGV, 0, 2 }
 FFold::x87() if $target eq 'x86_64';
-my ($norm_back, $norm_unit, $join, $unit_cache, $cached, $cachedir);
+my ($norm_back, $norm_unit, $join, $unit_cache, $cached, $cachedir, $parts);
 if (@ARGV >= 2 && $ARGV[0] eq '--norm-back') { (undef, $norm_back) = splice @ARGV, 0, 2 }
 elsif (@ARGV >= 2 && $ARGV[0] eq '--norm-unit') { (undef, $norm_unit) = splice @ARGV, 0, 2 }
 elsif (@ARGV && $ARGV[0] eq '--join') { shift @ARGV; $join = 1 }
 elsif (@ARGV >= 2 && $ARGV[0] eq '--unit-cache') { (undef, $unit_cache) = splice @ARGV, 0, 2; unshift @ARGV, '/dev/null' }
+# (--parts unit.rtn: what roundtrip in ff is held against part by part, for a
+# unit's cache: each type's class (tstr), each floating constant as FFold
+# folds it, each literal's normal form of a number (flt, ldround))
+elsif (@ARGV >= 2 && $ARGV[0] eq '--parts') { (undef, $parts) = splice @ARGV, 0, 2; unshift @ARGV, '/dev/null', '/dev/null' }
 # (--cached: each unit's cache (--unit-cache) where it is made, beside its
 # .json, or in DIR with --cached-in DIR (DIR, then the .json's path))
 if (@ARGV && $ARGV[0] eq '--cached') { shift @ARGV; $cached = 1 }
@@ -1433,6 +1437,35 @@ sub unit_compare {
 if (defined $norm_back) {
     back_norms(load($backjson));
     nstore({ back => \%back, backg => \%backg }, $norm_back);
+    exit 0;
+}
+if (defined $parts) {
+    my $c = load($parts);
+    my $t = $c->{tables};
+    local %enumval = %{ $t->{enumval} }; local %tdef = %{ $t->{tdef} }; local %typeof = %{ $t->{typeof} }; local %declty = %{ $t->{declty} };
+    local $side = 'glibc';
+    local %constint = map {
+        my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($_);
+        $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr)$/;
+        $e && $e->{kind} eq 'IntegerLiteral' ? ($_->{name} => $e->{value}) : ()
+    } grep { $_->{kind} eq 'VarDecl' && ($_->{type}{qualType} // '') =~ /^const (?:(?:unsigned |signed )?(?:char|short|int|long|long long)(?: int)?|unsigned)$/ && ($_->{init} // '') eq 'c' } @{ $c->{keep} };
+    my (%ty, @lines);
+    my @q = @{ $c->{keep} };
+    while (my $n = shift @q) {
+        if (my $y = $n->{type}) { $ty{$_} = 1 for grep { defined } $y->{qualType}, $y->{desugaredQualType} }
+        my $k = $n->{kind} // '';
+        if ($k eq 'FloatingLiteral') {
+            push @lines, "flt $n->{value}\t" . flt($n->{value});
+            push @lines, "ldround $n->{value}\t" . join(' ', map { FFold::ldround($n->{value}, @$_) // 'undef' } [64, -16445, 16383], [113, -16494, 16383]) if ($n->{value} // '') =~ /^[0-9.eE+-]+$/;
+        }
+        if ($k ne 'FunctionDecl' && FFold::fty(FFold::ftype($n))) {
+            my $v = FFold::fold($n);
+            push @lines, "fold $n->{id}\t" . (defined $v ? fconst($v, FFold::ftype($n)) : 'undef');
+        }
+        push @q, kids($n);
+    }
+    print "tstr $_\t", tstr($_), "\n" for sort keys %ty;
+    print "$_\n" for @lines;
     exit 0;
 }
 if (defined $unit_cache) {

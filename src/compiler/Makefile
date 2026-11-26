@@ -952,7 +952,7 @@ TOOLLIB := tools/rt.ff tools/sha256.ff tools/fftree.ff tools/words.ff tools/mk.f
 MKFFLIB := tools/isa.ff isa/riscv64.ff isa/x86_64.ff isa/aarch64.ff isa/arm.ff
 CLIB := tools/c.ff
 CSLIB := tools/csem.ff
-TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki s2ff ffsplit headers ff2c
+TOOLS := fftext sha256sum unlicense trim frozen mkhost mkwhole mkff decls licenses insize ffmerge cparse cprint csema cpp mki s2ff ffsplit headers ff2c roundtrip
 TL := $(BUILD)/tools
 RUN_riscv64 := $(QEMU)
 TOOLT := $(or $(filter x86_64 riscv64,$(ARCH)),$(if $(filter aarch64 arm64,$(ARCH)),aarch64),$(if $(filter armv7l armv8l,$(ARCH)),arm),riscv64)
@@ -1027,6 +1027,11 @@ $(TL)/$(1)/headers: tools/headers.ff tools/headers-start.ff $(TOOLLIB) $(CLIB) $
 $(TL)/$(1)/ff2c: tools/ff2c.ff tools/ff2c-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
 	@mkdir -p $$(dir $$@)
 	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/ff2c.ff tools/ff2c-start.ff $$@ > $$@.lst
+	chmod +x $$@
+
+$(TL)/$(1)/roundtrip: tools/roundtrip.ff tools/roundtrip-start.ff $(TOOLLIB) $(CLIB) $(SHARED) $(BOOT)/stage2
+	@mkdir -p $$(dir $$@)
+	$(QEMU) $(BOOT)/stage2 $(J) --target $(1) $(TOOLFLAGS) $(SHARED) $(TOOLLIB) $(CLIB) tools/roundtrip.ff tools/roundtrip-start.ff $$@ > $$@.lst
 	chmod +x $$@
 
 $(TL)/$(1)/csema: tools/csema-$(1).ff tools/csema.ff $(TOOLLIB) $(CLIB) $(CSLIB) $(SHARED) $(BOOT)/stage2
