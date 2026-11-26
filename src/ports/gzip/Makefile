@@ -18,7 +18,12 @@ PKG_PROGRAM := gzip
 # (no CRC by pclmul: gnulib's crc-x86_64-pclmul.c is SIMD intrinsics with a
 # target attribute and __builtin_cpu_supports, which the C in ff has no
 # form for; gnulib's tables instead, as xz's generic CRC)
-PKG_CONFIGURE := --disable-nls gl_cv_crc_pclmul=no
+# (printf: off the machine's own target configure guesses no C23 sizes nor
+# %b and replaces printf by gnulib's (rpl_printf, defined under an asm name
+# csema does not follow there: ttpc "unknown function: rpl_printf" on
+# riscv64); glibc 2.44's has them, as x86_64's configure found)
+PKG_CONFIGURE := --disable-nls gl_cv_crc_pclmul=no \
+    gl_cv_func_printf_sizes_c23=yes gl_cv_func_printf_directive_b=yes gl_cv_func_printf_directive_uppercase_b=yes
 # the test suite: gzip's own (tests/); the top's check-local (zdiff of
 # gzip.doc, gzip -c | gzip -d of its sources at 4 levels) as one test more
 # (results.sh: its exit status)
