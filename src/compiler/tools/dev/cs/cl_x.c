@@ -520,6 +520,9 @@ static struct cl_list *cl_pieces (unsigned char *p, long n, int array)
     if (!cl_utf8_ok (p + i, m)) return 0;
     s = cl_copy (p + i, m);
     if (array && cl_reads_number (s)) return 0;
+    /* (a piece ending in a colon is read as a definition, name:, not as text: coreutils expand.c's
+       shortopts "it:0::1::...9::", an empty array, expand -i an invalid option) */
+    if (m && s[m - 1] == ':') return 0;
     cl_push (l, cl_n (s));
     i += m;
   }
