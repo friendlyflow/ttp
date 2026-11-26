@@ -664,6 +664,7 @@ ff, the language ttpc compiles
     reserved
       no variable, function or struct is named like a keyword, a type name (type), an operator or a register of the target
       nor like an instruction of the target (its instruction groups' forms on the shared page): C's names that are one csema writes name', and s2ff the asm's (setns', brk')
+      nor like a word ttpc takes by its name alone: license (a comment), frame, program, origin, elf_header, ascii, align, reserve, bss, bits, rel, with, packed, cleanup, alloca: C's csema writes name' (gzip's license ())
       the keywords: if, else, else if, while, for, do while, switch, case, default, goto, return, break, continue, comment, & address, * pointer, syscall, array, vector, struct, enum, function, sizeof, alignof, union
       and: ..., va_start, va_arg, va_end, va_copy, thread local, constructor, destructor, alias, ifunc, asm, compile time, emit, fail, number, target
   compile time

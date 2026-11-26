@@ -2228,6 +2228,12 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           and setns, the program's add, ret, b, str ...): csema writes
 #           them name', and s2ff the asm's definitions of them so too
 #
+#   ffwords C names that are words ttpc takes by their name alone
+#           (license, a comment to ttpc: gzip's license (); frame, program,
+#           origin, elf_header, ascii, align, reserve, bss, bits, rel, with,
+#           packed, cleanup, alloca): functions of one unit, called from
+#           another, globals of a third: csema writes them name'
+#
 #   agginit a struct's, union's or complex local's value written as a lone :
 #           or several items, (x), ?:, ({ ... }), (a, b): assigned after its
 #           declaration (glibc's math_check_force_underflow_complex)
@@ -2236,12 +2242,13 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
 #           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check chararr-check ifuncjmp-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr ifuncjmp gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf cxops fltinc insnames agginit weakref
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check cxops-check fltinc-check insnames-check ffwords-check agginit-check weakref-check chararr-check ifuncjmp-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr ifuncjmp gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf cxops fltinc insnames ffwords agginit weakref
 ALLPROG_agginit := agginit
 ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
 ALLPROG_cxops := cxops
 ALLPROG_insnames := insnames
+ALLPROG_ffwords := ffwords-a ffwords-b ffwords-c
 ALLPROG_ptrsum := ptrsum
 ALLPROG_fltinc := fltinc
 ALLPROG_weakref := weakref

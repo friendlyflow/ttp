@@ -10,7 +10,11 @@ static char *cl_reserved_words[] = {
   "array", "struct", "union", "enum", "function", "sizeof", "alignof", "compile", "emit", "fail", "number",
   "target", "include", "workspace", "switch", "case", "default", "goto", "char", "short", "int", "long", "void",
   "type", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "float16", "bfloat16", "fract", "accum", "va_list", "va_start", "va_arg", "va_end", "va_copy",
-  "alias", "ifunc", "asm", "items", "cast", "weak", "va_arg_pack", "va_arg_pack_len", "real", "imag", "generic", "section", "constructor", "destructor", "fs", "vector", "line", "byte", "half", "word", "dword", 0
+  "alias", "ifunc", "asm", "items", "cast", "weak", "va_arg_pack", "va_arg_pack_len", "real", "imag", "generic", "section", "constructor", "destructor", "fs", "vector", "line", "byte", "half", "word", "dword",
+  /* (the words ttpc takes by their name alone, the shared page's and its own: license a comment to it, as comment (gzip's
+     license (), whose call a bare leaf license dropped), the layout's frame, program, origin and elf_header, the data's
+     ascii, align, reserve, bss, bits and rel, and with, packed, cleanup and alloca: as an instruction word, 2026-11-26) */
+  "license", "frame", "program", "origin", "elf_header", "ascii", "align", "reserve", "bss", "bits", "rel", "with", "packed", "cleanup", "alloca", 0
 };
 static char *cl_reg_words[] = { "zero", "ra", "sp", "gp", "tp", "fp", "pc", 0 };
 static char *cl_reg_pre[] = { "x", "a", "s", "t", "f", "fa", "fs", "ft", "v", 0 };
