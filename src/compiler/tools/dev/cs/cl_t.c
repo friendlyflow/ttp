@@ -685,11 +685,14 @@ static void cl_def_text (struct cs_top *t)
   else { d->dtext = (unsigned char *) ""; d->dlen = 0; }
 }
 static char *cl_td_key (struct cs_ty *t);
-/* whether a definition's text names, in this unit, what it does not in unit v: a record either has of its own, or a typedef (names_otherwise) */
+/* whether a definition's text names, in this unit, what it does not in unit v: a record either has of its own, or a typedef (names_otherwise),
+   or a name one of them has as its own (a static named with its unit: coreutils' test.c and lbracket.c, which includes it, each
+   with its static argv, test.c's named argv UNIT; their three_arguments, one text, was shared, lbracket's, which reads lbracket's
+   argv: ttpc's test read 0, SIGSEGV) */
 static int cl_names_otherwise (unsigned char *p, long n, struct cl_unit *v)
 {
   long i = 0;
-  if (!C->ownrec.count && !C->owntd.count && !v->ownrec.count && !v->owntd.count) return 0;
+  if (!C->ownrec.count && !C->owntd.count && !v->ownrec.count && !v->owntd.count && !C->own.count && !v->own.count) return 0;
   while (i < n) {
     long b = i;
     char *w;
@@ -715,6 +718,10 @@ static int cl_names_otherwise (unsigned char *p, long n, struct cl_unit *v)
     {
       struct cs_ty *a = cl_get (&C->owntd, w), *c = cl_get (&v->owntd, w);
       if ((a || c) && !(a && c && cl_eq (cl_td_key (a), cl_td_key (c)))) return 1;
+    }
+    {
+      char *a = cl_get (&C->own, w), *c = cl_get (&v->own, w);
+      if ((a || c) && !cl_eq (a ? a : "", c ? c : "")) return 1;
     }
   }
   return 0;
