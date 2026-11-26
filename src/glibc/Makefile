@@ -730,6 +730,8 @@ S2FFDEPS := $(S2FFT) ../compiler/shared.ff $(S2FFTAB_$(GTARGET))
 # (the asm's branches to an ifunc through a stub, builtins-arm.ff.txt's __ff_plt_<name>:
 # memmove.S's bls memcpy, as ld's stub in gcc's; every forward memmove hung)
 PLT_arm := memcpy
+# (aarch64: rawmemchr.S's b __strlen, the ifunc of multiarch's strlen; test-rawmemchr's SIGILL in the slot's bytes)
+PLT_aarch64 := __strlen
 # the file s2ff reads: riscv64 the .s itself, aarch64 the .Ls (not .L.s:
 # that would be an .s of an object x.L, which mki.pl would be asked for)
 SSRC_riscv64 := .s

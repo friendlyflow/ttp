@@ -589,6 +589,8 @@ static struct str *symof (struct a64m *mm)
   }
   return ffname (x);
 }
+/* the ifuncs whose branches go through a stub (--plt; arm.c's too) */
+static struct hash *aplt;
 static int is_rel26 (struct str *rt) { return rt && m (rt, "^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$"); }
 static void a64_emit (struct a64m *mm)
 {
@@ -625,6 +627,9 @@ static void a64_emit (struct a64m *mm)
       long to;
       struct str *l;
       if (is_rel26 (rt) && h_iv (weakref, rs) && und (rs)) { struct str *x = s_of (".Lweak "); s_app (x, rs); h_set (weakb, rs, 1); nd_add (ins, nd1 (s_of ("rel"), nd_new (x))); continue; }
+      /* (a branch to an ifunc, --plt: through builtins-aarch64.ff.txt's stub __ff_plt_<name>, as ld's in gcc's static program:
+         rawmemchr.S's b __strlen) */
+      if (is_rel26 (rt) && h_iv (aplt, rs)) { struct str *x = s_of ("__ff_plt_"); s_app (x, rs); nd_add (ins, nd1 (s_of ("rel"), nd_new (x))); continue; }
       if (is_rel26 (rt)) { nd_add (ins, nd1 (s_of ("rel"), nd_new (ffname (rs)))); continue; }
       if (rt && s_is (rt, "R_AARCH64_ADR_PREL_PG_HI21")) { nd_add (ins, nd1 (s_of ("pagerel"), nd_new (ffname (rs)))); continue; }
       if (rt && s_is (rt, "R_AARCH64_ADR_GOT_PAGE")) { struct str *x = s_of (".Lgot "); s_app (x, rs); h_set (a_got, rs, 1); nd_add (ins, nd1 (s_of ("pagerel"), nd_new (x))); continue; }
