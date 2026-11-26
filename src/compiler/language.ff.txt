@@ -579,6 +579,8 @@ ff, the language ttpc compiles
       where a type is wanted a name is the type even with a local of that name: a declaration's type, an array's element, * pointer's base, a cast, a parameter's or a member's type, sizeof or alignof of a type form
       elsewhere the local comes first: a value, its members (pt x), an argument, a leaf under sizeof or alignof, a leaf with items (C's struct pt pt; g (pt); sizeof (struct pt) is sizeof / array pt 1)
       a function does not see the locals of its caller
+      nor do its locals hide a type from another function's definition: its result, its parameters (struct passwd *passwd; passwd = getpwnam (name))
+      in a value position (a case, an expression, an argument) an enum constant, a global or a local wins over a type of its name; a type position takes the type
       example
         x:
           long
