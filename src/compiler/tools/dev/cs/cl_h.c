@@ -147,9 +147,11 @@ static char *cl_spdx (char *h)
       id = cl_spdx_one (blk);
       /* (a note on a license named before it: gawk's random.c, on BSD's advertising clause, rescinded) */
       if (!id && nids && cl_ihas (blk, "advertising clause")) continue;
-      /* (a note that sends to the license named before it: gzip's gzip.c, of code put in the public domain,
-         "See the license_msg below and the file COPYING for the software license") */
-      if (!id && nids && cl_ihas (blk, "the file COPYING for the software license")) continue;
+      /* (a note after the license named before it, on where its code came from, which that license covers
+         now: gzip's, of code put in the public domain (gzip.c: "See the license_msg below and the file
+         COPYING for the software license"), inflate.c's "Not copyrighted 1992 by Mark Adler" and "You can
+         do whatever you like with this source file"; the note stays in the file's header) */
+      if (!id && nids && (cl_ihas (blk, "public domain") || cl_ihas (blk, "Not copyrighted") || cl_ihas (blk, "You can do whatever you like with this source file"))) continue;
       if (!id) return 0;
       while (k < nids) { if (cl_eq (ids[k], id)) dup = 1; k++; }
       if (!dup && nids < 16) { ids[nids] = id; nids++; }

@@ -32,7 +32,11 @@ PKG_CONFIGURE := --disable-shared --disable-nls --disable-doc \
 # its own libraries static: xzdec found no /lib/ld-linux-riscv64-lp64d.so.1;
 # -all-static is libtool's word for gcc's -static, at make's time, not
 # configure's, whose gcc knows no such flag)
-PKG_BUILDFLAGS = LDFLAGS='$(PKG_LDFLAGS) -all-static'
+# (PTHREAD_CFLAGS empty: no -pthread on the compiles, which cpp (ff) and
+# predef.pl know not; it only defines _REENTRANT, which xz reads not and
+# glibc's features.h only where _POSIX_C_SOURCE is below 199506, not under
+# xz's _GNU_SOURCE; glibc's threads are in libc.a, -lpthread PTHREAD_LIBS)
+PKG_BUILDFLAGS = LDFLAGS='$(PKG_LDFLAGS) -all-static' PTHREAD_CFLAGS=
 # the tests of liblzma, made after the build (make check would make them)
 PKG_REFMORE = -C tests create_compress_files $(XZ_TESTS) $(PKG_BUILDFLAGS)
 # the test suite: xz's own (tests/, automake's)
