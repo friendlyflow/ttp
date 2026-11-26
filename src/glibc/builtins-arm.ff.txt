@@ -436,6 +436,48 @@
         w
         !=
         t
+  comment
+    __builtin_sub_overflow of two long longs into an int (coreutils' idle_string): as into a long, arm's long an int.
+  __builtin_sub_overflow i64 i64 int:
+    int
+    a:
+      i64
+    b:
+      i64
+    r:
+      int
+      * pointer
+    t:
+      i64
+      0
+    v:
+      int
+      __builtin_sub_overflow i64 i64 i64
+        a
+        b
+        t
+        & address
+    n:
+      int
+      cast
+        int
+      t
+    w:
+      i64
+      cast
+        i64
+      n
+    r
+    * pointer
+    =
+    n
+    return
+      v
+      |
+      :
+        w
+        !=
+        t
   __builtin_sub_overflow u32 u32 u32:
     int
     a:
