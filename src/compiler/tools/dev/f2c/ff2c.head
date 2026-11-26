@@ -1,0 +1,5 @@
+# Copyright (C) 2026 Nico Verrijdt. This file is part of ttp. It is free
+# software under the GNU General Public License, version 3; no warranty.
+ff2c [--shared FILE] [--pages page,...] [--target t] tree.ff.txt out.c names.txt: the definitions of a tree written back as one C translation unit, read the way ttpc reads them, for clang's AST of it against the C they were made of;
+ff2c [--shared FILE] [--target t] --split DIR tree.ff.txt list.txt names.txt: a C file per unit of glibc;
+gen/ff2c.pl in ff, the same files, messages and status (make ff2c-crosscheck compares them; dev source: tools/dev/f2c, on tools/dev/s2ff's lib.c and header.c)

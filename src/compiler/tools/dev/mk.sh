@@ -7,15 +7,18 @@
 # from: c/ tools/c.ff, cparse.ff, cprint.ff; cs/ tools/csem.ff, csema.ff,
 # csema-<target>.ff (cs/ takes c/c.h); pp/ tools/cpp.ff and cpp-start.ff, the C preprocessor
 # (on tools/rt.ff and c.ff's runtime); mki/ tools/mki.ff and mki-start.ff, src/glibc's and
-# src/libgcc's mki.pl in ff (the same); s2ff/ tools/s2ff.ff and s2ff-start.ff, gen/s2ff.pl in ff (the same). Through clang + gen/c2ff.pl --page,
+# src/libgcc's mki.pl in ff (the same); s2ff/ tools/s2ff.ff and s2ff-start.ff, gen/s2ff.pl in ff (the same); hd/ tools/headers.ff and headers-start.ff,
+# gen/headers.pl in ff (the same; hd/ takes s2ff/lib.c and header.c); f2c/ tools/ff2c.ff and ff2c-start.ff, gen/ff2c.pl in ff (the
+# same; f2c/ takes them too); rtr/ tools/roundtrip.ff and roundtrip-start.ff, src/glibc/roundtrip.pl in ff (made a part
+# at a time; rtr/ takes s2ff/lib.c). Through clang + gen/c2ff.pl --page,
 # then each folder's mkpages.py, fftext and addlicense, all in build/dev.
 #
-#   sh src/compiler/tools/dev/mk.sh [-i] [-n] [c] [cs] [pp] [mki] [s2ff]
+#   sh src/compiler/tools/dev/mk.sh [-i] [-n] [c] [cs] [pp] [mki] [s2ff] [hd] [f2c] [rtr]
 #
 # Without -i: compares what it made with tools/, exit 1 if any differs (make
 # tools-dev-check; a change of gen/c2ff.pl can show here too). -i: installs it
 # in tools/, by a rename. -n: also a gcc build of each for fast work,
-# build/dev/c/cparse, build/dev/cs/csema, build/dev/pp/cpp, build/dev/mki/mki, build/dev/s2ff/s2ff. The folder here is only read; every
+# build/dev/c/cparse, build/dev/cs/csema, build/dev/pp/cpp, build/dev/mki/mki, build/dev/s2ff/s2ff, build/dev/hd/headers, build/dev/f2c/ff2c (its words of before Words.pm's, through perl). The folder here is only read; every
 # output goes to build/dev. It stops on a source that is empty or under half
 # its committed size: an accident, get it back with git checkout.
 # Needs nix develop's clang (it enters nix develop if C2FF_CLANG is not set).
@@ -38,7 +41,7 @@ OUT=$R/build/dev
 case "$OUT/" in "$D"/*) echo "mk.sh: its output $OUT is in its source" >&2; exit 2 ;; esac
 
 # ---- sources as they should be
-for f in "$D"/c/* "$D"/cs/* "$D"/pp/* "$D"/mki/* "$D"/s2ff/*; do
+for f in "$D"/c/* "$D"/cs/* "$D"/pp/* "$D"/mki/* "$D"/s2ff/* "$D"/hd/* "$D"/f2c/* "$D"/rtr/*; do
     test -s "$f" || { echo "mk.sh: $f is empty: git checkout it" >&2; exit 2; }
     was=$(git -C "$D" cat-file -s "HEAD:./${f#"$D"/}" 2> /dev/null || echo 0)
     now=$(wc -c < "$f")
@@ -78,7 +81,7 @@ pages() { # the pages made, each made ff with its license: installed or compared
 }
 
 bad=0
-for w in ${*:-c cs pp mki s2ff}; do
+for w in ${*:-c cs pp mki s2ff hd f2c rtr}; do
     case $w in
     c)
         fresh c
@@ -127,7 +130,37 @@ for w in ${*:-c cs pp mki s2ff}; do
         pages s2ff s2ff-start || bad=1
         if test -n "$native"; then gcc -O1 -w -o s2ff shim.c s2ff.c; fi
         ;;
-    *) echo "usage: mk.sh [-i] [-n] [c] [cs] [pp] [mki] [s2ff]" >&2; exit 2 ;;
+    hd)
+        fresh hd
+        cp "$D/s2ff/lib.c" "$D/s2ff/header.c" "$OUT/hd"/
+        cd "$OUT/hd"
+        units headers
+        perl "$C/gen/c2ff.pl" --page headers --target riscv64 headers.json=headers.i -- headers_main > all.ff.txt 2> c2ff.err
+        python3 mkpages.py
+        pages headers headers-start || bad=1
+        if test -n "$native"; then gcc -O1 -w -o headers shim.c headers.c; fi
+        ;;
+    f2c)
+        fresh f2c
+        cp "$D/s2ff/lib.c" "$D/s2ff/header.c" "$OUT/f2c"/
+        cd "$OUT/f2c"
+        units ff2c
+        perl "$C/gen/c2ff.pl" --page ff2c --target riscv64 ff2c.json=ff2c.i -- ff2c_main > all.ff.txt 2> c2ff.err
+        python3 mkpages.py
+        pages ff2c ff2c-start || bad=1
+        if test -n "$native"; then gcc -O1 -w -o ff2c shim.c ff2c.c; fi
+        ;;
+    rtr)
+        fresh rtr
+        cp "$D/s2ff/lib.c" "$OUT/rtr"/
+        cd "$OUT/rtr"
+        units roundtrip
+        perl "$C/gen/c2ff.pl" --page roundtrip --target riscv64 roundtrip.json=roundtrip.i -- roundtrip_main > all.ff.txt 2> c2ff.err
+        python3 mkpages.py
+        pages roundtrip roundtrip-start || bad=1
+        if test -n "$native"; then gcc -O1 -w -o roundtrip shim.c roundtrip.c; fi
+        ;;
+    *) echo "usage: mk.sh [-i] [-n] [c] [cs] [pp] [mki] [s2ff] [hd] [f2c] [rtr]" >&2; exit 2 ;;
     esac
 done
 exit $bad

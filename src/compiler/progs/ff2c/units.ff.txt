@@ -1,0 +1,493 @@
+license
+  GPL-3.0-only
+  Copyright (C) 2026 Nico Verrijdt
+  This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+  It comes with no warranty. See the file LICENSE for the full text.
+glibc types:
+  clist u header:
+    struct
+    used:
+      u64
+    array':
+      char
+      * pointer
+  clist u abstract:
+    struct
+    used:
+      u64
+    array':
+      void
+      * pointer
+  blist u header:
+    struct
+    used:
+      u64
+    array':
+      big
+      * pointer
+  clist u:
+    union
+    abstract:
+      clist u abstract
+    header:
+      clist u header
+  blist u:
+    union
+    abstract:
+      clist u abstract
+    header:
+      blist u header
+  struct at skeleton.h:32:
+    struct
+    one:
+      array
+        char
+        4
+  canon anon:
+    struct
+    two:
+      array
+        char
+        4
+  canon:
+    union
+    :
+      canon anon
+    s:
+      array
+        char
+        1
+  banon:
+    union
+    :
+      struct at skeleton.h:32
+    s:
+      array
+        char
+        1
+  item units/units-b:
+    struct
+    pad:
+      long
+    next:
+      item units/units-b
+      * pointer
+    result:
+      int
+      * pointer
+    x:
+      int
+  item:
+    struct
+    x:
+      int
+    next:
+      item
+      * pointer
+  holder units/units-b:
+    struct
+    n:
+      int
+    list:
+      array
+        item units/units-b
+        2
+  holder:
+    struct
+    n:
+      int
+    list:
+      array
+        item
+        2
+  clist:
+    struct
+    u:
+      clist u
+    tag:
+      int
+  blist:
+    struct
+    u:
+      blist u
+    tag:
+      int
+  big:
+    struct
+    a:
+      long
+    b:
+      long
+    c:
+      long
+glibc units:
+  comment
+    glibc-2.44 /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-a.c
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it
+    and/or modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
+  comment
+    glibc-2.44 /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-b.c
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it
+    and/or modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
+  comment
+    glibc-2.44 /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-c.c
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it
+    and/or modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
+  ua:
+    big
+    * pointer
+    l:
+      blist
+      * pointer
+    h:
+      holder
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-a.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-a.c
+      45
+    line
+      47
+    blist_put
+      l
+      blist_at
+        l
+        0
+      * pointer
+    line
+      48
+    h
+      list
+      1
+      x
+    =
+    twice
+      h
+        list
+        0
+      & address
+    +
+    a_store
+      0
+    +
+    both units/units-a
+      h
+        list
+        0
+      & address
+    line
+      49
+    h
+      n
+    =
+    cast
+      int
+    banon_at
+    line
+      50
+    return
+      blist_at
+        l
+        1
+  blist_put:
+    void
+    l:
+      blist
+      * pointer
+    e:
+      big
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-a.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/skeleton.h
+      26
+    line
+      28
+    l
+      u
+      header
+      array'
+      :
+        l
+          u
+          header
+          used
+        ++
+    =
+    e
+  blist_at:
+    big
+    * pointer
+    l:
+      blist
+      * pointer
+    i:
+      u64
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-a.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/skeleton.h
+      20
+    line
+      22
+    return
+      l
+        u
+        header
+        array'
+      +
+      i
+  twice:
+    int
+    p:
+      item
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-a.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-a.c
+      39
+    line
+      41
+    return
+      p
+        x
+      *
+      2
+  a_store:
+    alias
+    store
+  both units/units-a:
+    int
+    p:
+      item
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-a.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-a.c
+      30
+    line
+      32
+    return
+      p
+        x
+  banon_at:
+    long
+    cast
+      long
+    :
+      cast
+        banon
+        * pointer
+      0
+      .
+      one
+    & address
+  store:
+    array
+      char
+      8
+  ub:
+    char
+    * pointer
+    l:
+      clist
+      * pointer
+    h:
+      holder units/units-b
+      * pointer
+    result:
+      int
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-b.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-b.c
+      37
+    line
+      39
+    clist_put
+      l
+      clist_at
+        l
+        0
+      * pointer
+    line
+      40
+    h
+      list
+      1
+      result
+    =
+    result
+    line
+      41
+    h
+      n
+    =
+    both
+      1
+      2
+    line
+      42
+    h
+      list
+      1
+      x
+    =
+    twice units/units-b
+      h
+        list
+        0
+      & address
+    +
+    cast
+      int
+    b_store
+      1
+    line
+      43
+    h
+      n
+    =
+    cast
+      int
+    canon_at
+    line
+      44
+    return
+      clist_at
+        l
+        1
+  clist_put:
+    void
+    l:
+      clist
+      * pointer
+    e:
+      char
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-b.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/skeleton.h
+      26
+    line
+      28
+    l
+      u
+      header
+      array'
+      l
+        u
+        header
+        used
+      ++
+    =
+    e
+  clist_at:
+    char
+    * pointer
+    l:
+      clist
+      * pointer
+    i:
+      u64
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-b.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/skeleton.h
+      20
+    line
+      22
+    return
+      l
+        u
+        header
+        array'
+      +
+      i
+  both:
+    int
+    a:
+      int
+    b:
+      int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-b.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-b.c
+      22
+    line
+      24
+    return
+      a
+      +
+      b
+  twice units/units-b:
+    int
+    p:
+      item units/units-b
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-b.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-b.c
+      31
+    line
+      33
+    return
+      p
+        x
+      *
+      2
+  b_store:
+    alias
+    store units/units-b
+  canon_at:
+    long
+    cast
+      long
+    :
+      cast
+        canon
+        * pointer
+      0
+      .
+      two
+    & address
+  store units/units-b:
+    array
+      long
+      4
+  uc:
+    int
+    p:
+      item
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/units/units-c.i
+    line
+      /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/units-c.c
+      20
+    line
+      22
+    return
+      both units/units-a
+        p

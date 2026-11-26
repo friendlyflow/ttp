@@ -1,0 +1,1832 @@
+license
+  GPL-3.0-only
+  Copyright (C) 2026 Nico Verrijdt
+  This file is part of ttp. It is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+  It comes with no warranty. See the file LICENSE for the full text.
+glibc types:
+  wrap:
+    struct
+    pad:
+      long
+    ctl:
+      ctl struct
+      * pointer
+    ent:
+      int
+  struct at generic.c:166:
+    struct
+    d:
+      double
+    f:
+      float
+    l:
+      long double
+  item:
+    struct
+    v:
+      int
+    next:
+      item
+      * pointer
+  ctl struct:
+    struct
+    pad:
+      long
+    cmp:
+      fn1
+      * pointer
+    v:
+      int
+  leaf enum:
+    enum
+    LEAF_NO:
+    LEAF_YES:
+      7
+  later:
+    enum
+    LATER_A:
+      -2
+    LATER_B:
+    LATER_C:
+  action enum:
+    enum
+    ACT_NONE:
+    ACT_A:
+      35
+    ACT_B:
+  fn1:
+    function
+    int
+    p1:
+      int
+    p2:
+      int
+glibc ff:
+  comment
+    glibc-2.44 /home/nico/.cache/ttp/wt/ttpcbugs2/src/glibc/progs/generic.c
+  license
+    GPL-3.0-only
+    Copyright (C) 2026 Nico Verrijdt
+    This file is part of ttp. It is free software: you can redistribute it
+    and/or modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, version 3 of the License.
+    It comes with no warranty. See the file LICENSE for the full text.
+  main:
+    int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      268
+    line
+      270
+    f:
+      int
+      0
+    line
+      271
+    it:
+      array
+        item
+        3
+      :
+        1
+        0
+      :
+        2
+        0
+      :
+        0
+        0
+    line
+      272
+    r:
+      long
+    line
+      273
+    ri:
+      int
+    line
+      275
+    f
+    +=
+    levels
+      it
+    !=
+    3
+    line
+      276
+    f
+    +=
+    second
+      it
+      1
+    !=
+    2
+    line
+      277
+    f
+    +=
+    via_comma
+      40
+    !=
+    42
+    line
+      278
+    :
+      line
+        279
+      c:
+        ctl struct
+        0
+        add2
+        & address
+        100
+      line
+        280
+      w:
+        wrap
+        0
+        c
+        & address
+        0
+      line
+        281
+      f
+      +=
+      two_paths
+        w
+          ent
+        & address
+      !=
+      142
+    line
+      283
+    f
+    +=
+    vla_size
+      7
+    !=
+    27
+    line
+      284
+    f
+    +=
+    label_attr
+      3
+    !=
+    3
+    ||
+    label_attr
+      0
+    !=
+    5
+    line
+      285
+    f
+    +=
+    arrlit
+    !=
+    8
+    line
+      286
+    f
+    +=
+    arrlit_op
+      0
+    !=
+    34
+    line
+      287
+    f
+    +=
+    const_counts
+    !=
+    3
+    +
+    4
+    *
+    :
+      0
+      +
+      10
+      +
+      20
+    +
+    3
+    *
+    :
+      0
+      +
+      1
+      +
+      2
+      +
+      3
+    line
+      288
+    f
+    +=
+    tag_names
+      0
+    !=
+    0
+    ||
+    tag_names
+      1
+    !=
+    36
+    +
+    7
+    line
+      289
+    f
+    +=
+    LATER_A
+    !=
+    -
+    2
+    ||
+    LATER_C
+    !=
+    0
+    ||
+    later_p
+    !=
+    0
+    line
+      290
+    f
+    +=
+    many_sum
+    !=
+    8
+    *
+    36
+    line
+      291
+    f
+    +=
+    specials_bad
+    line
+      292
+    f
+    +=
+    ldfold_bad
+    line
+      293
+    f
+    +=
+    ret_addr_bad
+    +
+    frame_bad
+    line
+      294
+    f
+    +=
+    dmin
+    !=
+    0x1p-1022
+    ||
+    fthird
+    !=
+    0x1.555556p-2f
+    ||
+    dsub
+    !=
+    0x0.0000000000001p-1022
+    line
+      295
+    :
+      line
+        296
+      b:
+        array
+          u8
+          2
+        30
+        7
+      bp:
+        u8
+        * pointer
+        :
+          b
+      line
+        297
+      f
+      +=
+      text_ptr
+        bp
+        & address
+      !=
+      42
+    line
+      300
+    f
+    +=
+    __builtin_ffs
+      8
+    !=
+    4
+    ||
+    __builtin_ffs
+      0
+    !=
+    0
+    line
+      301
+    f
+    +=
+    __builtin_ffsl
+      L
+      1
+      <<
+      40
+    !=
+    41
+    ||
+    __builtin_ffsll
+      :
+        -
+        L
+        9223372036854775807
+        -
+        1
+    !=
+    64
+    line
+      303
+    f
+    +=
+    __builtin_sub_overflow long long long
+      L
+      5
+      L
+      7
+      r
+      & address
+    ||
+    r
+    !=
+    -
+    2
+    line
+      304
+    f
+    +=
+    !
+    __builtin_sub_overflow long long long
+      :
+        -
+        L
+        9223372036854775807
+        -
+        1
+      L
+      1
+      r
+      & address
+    ||
+    r
+    !=
+    L
+    9223372036854775807
+    line
+      305
+    f
+    +=
+    __builtin_sub_overflow int long int
+      0
+      L
+      5
+      ri
+      & address
+    ||
+    ri
+    !=
+    -
+    5
+    line
+      306
+    f
+    +=
+    !
+    __builtin_sub_overflow int long int
+      0
+      L
+      3000000000
+      ri
+      & address
+    line
+      307
+    f
+    +=
+    __builtin_sub_overflow long int long
+      L
+      10
+      3
+      r
+      & address
+    ||
+    r
+    !=
+    7
+    line
+      308
+    f
+    +=
+    __builtin_add_overflow long int long
+      L
+      5
+      7
+      r
+      & address
+    ||
+    r
+    !=
+    12
+    line
+      309
+    f
+    +=
+    !
+    __builtin_add_overflow long long long
+      L
+      9223372036854775807
+      L
+      1
+      r
+      & address
+    ||
+    r
+    !=
+    :
+      -
+      L
+      9223372036854775807
+      -
+      1
+    line
+      310
+    f
+    +=
+    __builtin_add_overflow long long long
+      L
+      9223372036854775807
+      :
+        -
+        L
+        1
+      r
+      & address
+    ||
+    r
+    !=
+    L
+    9223372036854775807
+    -
+    1
+    line
+      311
+    return
+      f
+  levels:
+    int
+    p:
+      item
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      17
+    line
+      19
+    n:
+      int
+      0
+    line
+      20
+    while
+      p
+        v
+      line
+        21
+      n
+      +=
+      :
+        p
+        ++
+        .
+        v
+    line
+      22
+    return
+      n
+  second:
+    int
+    a:
+      item
+      * pointer
+    i:
+      long
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      27
+    line
+      29
+    return
+      :
+        a
+        +
+        i
+        .
+        v
+  via_comma:
+    int
+    x:
+      int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      41
+    line
+      43
+    return
+      :
+        cast
+          void
+        x
+        add2
+        & address
+        .
+        x
+        2
+  add2:
+    int
+    a:
+      int
+    b:
+      int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      33
+    line
+      35
+    return
+      a
+      +
+      b
+  two_paths:
+    int
+    ent:
+      int
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      53
+    line
+      55
+    return
+      :
+        cast
+          wrap
+          * pointer
+        :
+          cast
+            char
+            * pointer
+          :
+            ent
+          -
+          cast
+            u64
+          :
+            cast
+              wrap
+              * pointer
+            0
+            .
+            ent
+          & address
+        .
+        ctl
+        .
+        cmp
+        40
+        2
+      +
+      :
+        cast
+          wrap
+          * pointer
+        :
+          cast
+            char
+            * pointer
+          :
+            ent
+          -
+          cast
+            u64
+          :
+            cast
+              wrap
+              * pointer
+            0
+            .
+            ent
+          & address
+        .
+        ctl
+        .
+        v
+  vla_size:
+    u64
+    len:
+      u64
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      60
+    line
+      62
+    buf:
+      array
+        char
+        :
+          len
+          +
+          20
+    line
+      63
+    buf
+      0
+    =
+    0
+    line
+      64
+    return
+      sizeof
+        buf
+      +
+      buf
+        0
+  label_attr:
+    int
+    x:
+      int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      69
+    line
+      71
+    if
+      x
+      line
+        72
+      goto
+        out
+    line
+      73
+    x
+    =
+    5
+    line
+      74
+    out:
+      return
+        x
+  text 1:
+    array
+      char
+      3
+    115
+    104
+    0
+  arrlit:
+    long
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      90
+    line
+      92
+    return
+      count
+        array
+          char
+          * pointer
+          3
+        cast
+          char
+          * pointer
+        :
+          text 1
+            0
+          & address
+        cast
+          char
+          * pointer
+        :
+          cast
+            char
+            * pointer
+          -c
+        cast
+          char
+          * pointer
+        :
+          0
+      +
+      :
+        :
+          array
+            u64
+            3
+          4
+          5
+          6
+        +
+        2
+      * pointer
+  arrlit_op:
+    long
+    p:
+      int
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      99
+    line
+      101
+    return
+      :
+        :
+          array
+            int
+            2
+          3
+          4
+        +
+        1
+      * pointer
+      +
+      :
+        :
+          array
+            int
+            1
+          5
+        !=
+        p
+      *
+      10
+      +
+      :
+        p
+        !=
+        :
+          array
+            int
+            1
+          5
+      *
+      20
+  const_counts:
+    long
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      110
+    line
+      112
+    m:
+      array
+        array
+          long
+          4
+        3
+    line
+      113
+    s:
+      long
+      0
+    line
+      114
+    for
+      i:
+        int
+        0
+      i
+      <
+      rows
+      i
+      ++
+      line
+        115
+      for
+        j:
+          int
+          0
+        j
+        <
+        cols
+        j
+        ++
+        line
+          116
+        m
+          i
+          j
+        =
+        i
+        *
+        10
+        +
+        j
+    line
+      117
+    for
+      i:
+        int
+        0
+      i
+      <
+      rows
+      i
+      ++
+      line
+        118
+      for
+        j:
+          int
+          0
+        j
+        <
+        cols
+        j
+        ++
+        line
+          119
+        s
+        +=
+        m
+          i
+          j
+    line
+      120
+    return
+      s
+      +
+      sizeof
+        m
+      /
+      sizeof
+        array
+          long
+          4
+  tag_names:
+    int
+    x:
+      int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      133
+    line
+      135
+    action:
+      action enum
+      ACT_NONE
+    line
+      136
+    if
+      x
+      line
+        137
+      action
+      =
+      ACT_B
+    line
+      138
+    return
+      action
+      +
+      leaf
+        x
+  later_p:
+    later
+    * pointer
+  many_sum:
+    long
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      155
+    line
+      157
+    a:
+      array
+        long
+        64
+    s:
+      long
+      0
+    line
+      158
+    many
+      a
+    line
+      159
+    for
+      i:
+        int
+        0
+      i
+      <
+      64
+      i
+      ++
+      line
+        160
+      s
+      +=
+      a
+        i
+    line
+      161
+    return
+      s
+  specials_bad:
+    int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      172
+    line
+      174
+    return
+      :
+        __builtin_isinf_sign double
+          specials
+            0
+            d
+        !=
+        1
+      +
+      :
+        __builtin_isinf_sign float
+          specials
+            0
+            f
+        !=
+        1
+      +
+      :
+        __builtin_isinf_sign long double
+          specials
+            0
+            l
+        !=
+        1
+      +
+      :
+        __builtin_isinf_sign double
+          specials
+            1
+            d
+        !=
+        -
+        1
+      +
+      !
+      __builtin_isnan float
+        specials
+          1
+          f
+      +
+      !
+      __builtin_isnan long double
+        specials
+          1
+          l
+      +
+      !
+      __builtin_isnan double
+        specials
+          2
+          d
+      +
+      :
+        __builtin_isinf_sign float
+          specials
+            2
+            f
+        !=
+        -
+        1
+      +
+      :
+        __builtin_isinf_sign long double
+          specials
+            2
+            l
+        !=
+        -
+        1
+  ldfold_bad:
+    int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      210
+    line
+      212
+    if
+      sizeof
+        long double
+      !=
+      16
+      line
+        213
+      return
+        0
+    line
+      222
+    return
+      :
+        ldhi
+          ldnan
+          & address
+        !=
+        ULL
+        18446603336221196288
+      +
+      :
+        ldhi
+          ldinf
+          & address
+        !=
+        ULL
+        9223090561878065152
+      +
+      :
+        ldhi
+          ldsum
+          & address
+        !=
+        ULL
+        4611404543450677248
+      +
+      :
+        ldlo
+          ldsum
+          & address
+        !=
+        1
+      +
+      :
+        ldhi
+          ldmz
+          & address
+        !=
+        ULL
+        9223372036854775808
+      +
+      :
+        ldhi
+          ldpz
+          & address
+        !=
+        0
+      +
+      :
+        dfold
+        !=
+        cast
+          double
+        0
+  ret_addr_bad:
+    int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      250
+    line
+      252
+    r:
+      char
+      * pointer
+      :
+        back_to
+    line
+      253
+    return
+      :
+        !
+        :
+          r
+          >
+          cast
+            char
+            * pointer
+          :
+            ret_addr_bad
+            & address
+          &&
+          r
+          <
+          cast
+            char
+            * pointer
+          :
+            ret_addr_bad
+            & address
+          +
+          4096
+  frame_bad:
+    int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      257
+    line
+      259
+    x:
+      int
+      1
+    line
+      260
+    fr:
+      char
+      * pointer
+      __builtin_frame_address
+        0
+    line
+      261
+    return
+      :
+        !
+        :
+          cast
+            char
+            * pointer
+          :
+            x
+            & address
+          <
+          fr
+          +
+          64
+          &&
+          cast
+            char
+            * pointer
+          :
+            x
+            & address
+          >
+          fr
+          -
+          4096
+        +
+        :
+          x
+          !=
+          1
+  dmin:
+    double
+    :
+      0x1p-1022
+  fthird:
+    float
+    0x1.555556p-2f
+  dsub:
+    double
+    0x1p-1074
+  text_ptr:
+    int
+    pp:
+      u8
+      * pointer
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      230
+    line
+      232
+    p:
+      u8
+      * pointer
+      :
+        pp
+        * pointer
+    line
+      233
+    q:
+      char
+      * pointer
+      cast
+        char
+        * pointer
+      :
+        pp
+        * pointer
+    line
+      234
+    c:
+      u8
+      5
+    line
+      235
+    r:
+      u8
+      * pointer
+      :
+        c
+        & address
+    line
+      236
+    return
+      p
+        0
+      +
+      q
+        1
+      +
+      r
+      * pointer
+  count:
+    long
+    v:
+      char
+      * pointer
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      79
+    line
+      81
+    n:
+      long
+      0
+    line
+      82
+    while
+      v
+        n
+      line
+        83
+      n
+      ++
+    line
+      84
+    return
+      n
+  rows:
+    int
+    3
+  cols:
+    int
+    4
+  leaf:
+    leaf enum
+    x:
+      int
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      128
+    line
+      130
+    return
+      x
+      ?
+      LEAF_YES
+      :
+      LEAF_NO
+  many:
+    void
+    p:
+      long
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    0:
+      line
+        progs/generic.c
+        149
+      line
+        152
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+      * pointer
+      =
+      8
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+      * pointer
+      =
+      8
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+      * pointer
+      =
+      8
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+      * pointer
+      =
+      8
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+      * pointer
+      =
+      8
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+      * pointer
+      =
+      8
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+      * pointer
+      =
+      8
+      :
+        p
+        ++
+      * pointer
+      =
+      1
+      :
+        p
+        ++
+      * pointer
+      =
+      2
+      :
+        p
+        ++
+      * pointer
+      =
+      3
+      :
+        p
+        ++
+      * pointer
+      =
+      4
+      :
+        p
+        ++
+      * pointer
+      =
+      5
+      :
+        p
+        ++
+      * pointer
+      =
+      6
+      :
+        p
+        ++
+      * pointer
+      =
+      7
+      :
+        p
+        ++
+    1:
+      * pointer
+      =
+      8
+  specials:
+    array
+      struct at generic.c:166
+      3
+    :
+      0x1p+1024
+      0x1p+128f
+      0x1p+16384L
+    :
+      :
+        -
+        0x1p+1024
+      0x1.8p+128f
+      0x1.8p+16384L
+    :
+      0x1.8p+1024
+      :
+        -
+        0x1p+128f
+      :
+        -
+        0x1p+16384L
+  ldhi:
+    u64
+    x:
+      long double
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      200
+    line
+      202
+    return
+      :
+        :
+          cast
+            u64
+            * pointer
+          x
+        +
+        1
+      * pointer
+  ldnan:
+    long double
+    :
+      -
+      0x1.8p+16384L
+  ldinf:
+    long double
+    0x1p+16384L
+  ldsum:
+    long double
+    0x1.0000000000000000000000000001p+0L
+  ldlo:
+    u64
+    x:
+      long double
+      * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      205
+    line
+      207
+    return
+      :
+        :
+          cast
+            u64
+            * pointer
+          x
+        +
+        0
+      * pointer
+  ldmz:
+    long double
+    :
+      -
+      0x0p+0L
+  ldpz:
+    long double
+    0x0p+0L
+  dfold:
+    double
+    0x0p+0
+  back_to:
+    void
+    * pointer
+    comment
+      glibc-2.44 /home/nico/.cache/ttp/build/ttpcbugs2/glibc/ff/generic-prog.i
+    line
+      progs/generic.c
+      244
+    line
+      246
+    return
+      __builtin_return_address
+        0

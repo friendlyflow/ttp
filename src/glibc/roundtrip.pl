@@ -47,20 +47,32 @@ use feature 'current_sub';
 use FindBin;
 use lib "$FindBin::Bin/../compiler/gen";
 use FFold;
-use Storable qw(nstore retrieve);
+use Storable qw(nstore retrieve dclone);
 use Digest::MD5 qw(md5_hex);
 my $json = eval { require JSON::XS; JSON::XS->new } || do { require JSON::PP; JSON::PP->new };
 
 our $target = '';
 if (@ARGV >= 2 && $ARGV[0] eq '--target') { (undef, $target) = splice @ARGV, 0, 2 }
 FFold::x87() if $target eq 'x86_64';
-my ($norm_back, $norm_unit, $join);
+my ($norm_back, $norm_unit, $join, $unit_cache, $cached, $cachedir, $parts);
 if (@ARGV >= 2 && $ARGV[0] eq '--norm-back') { (undef, $norm_back) = splice @ARGV, 0, 2 }
 elsif (@ARGV >= 2 && $ARGV[0] eq '--norm-unit') { (undef, $norm_unit) = splice @ARGV, 0, 2 }
 elsif (@ARGV && $ARGV[0] eq '--join') { shift @ARGV; $join = 1 }
+elsif (@ARGV >= 2 && $ARGV[0] eq '--unit-cache') { (undef, $unit_cache) = splice @ARGV, 0, 2; unshift @ARGV, '/dev/null' }
+# (--parts unit.rtn: what roundtrip in ff is held against part by part, for a
+# unit's cache: each type's class (tstr), each floating constant as FFold
+# folds it, each literal's normal form of a number (flt, ldround))
+elsif (@ARGV >= 2 && $ARGV[0] eq '--parts') { (undef, $parts) = splice @ARGV, 0, 2; unshift @ARGV, '/dev/null', '/dev/null' }
+# (--cached: each unit's cache (--unit-cache) where it is made, beside its
+# .json, or in DIR with --cached-in DIR (DIR, then the .json's path))
+if (@ARGV && $ARGV[0] eq '--cached') { shift @ARGV; $cached = 1 }
+elsif (@ARGV >= 2 && $ARGV[0] eq '--cached-in') { (undef, $cachedir) = splice @ARGV, 0, 2; $cached = 1 }
 @ARGV = map { /^@(.+)$/ ? do { open my $h, "<", $1 or die "roundtrip: cannot open $1: $!\n"; map { chomp; s{^\s+}{}; length ? $_ : () } <$h> } : $_ } @ARGV;
 my ($namesfile, $backjson, @unitjson) = @ARGV;
-die "usage: roundtrip.pl [--target t] names.txt back.json [unit.json ...]\n" unless defined $backjson;
+# (ROUNDTRIP_NORMS=file: glibc's normal form of each function and global compared, there)
+my $normsout;
+if ($ENV{ROUNDTRIP_NORMS}) { open $normsout, '>', $ENV{ROUNDTRIP_NORMS} or die "roundtrip: $ENV{ROUNDTRIP_NORMS}: $!\n" }
+die "usage: roundtrip.pl [--target t] [--cached] names.txt back.json [unit.json ...]\n" unless defined $backjson;
 
 my (@bodies, %orig, %asmfn, %noproto, @globals);
 open my $h, '<', $namesfile or die "roundtrip: $namesfile: $!\n";
@@ -578,7 +590,13 @@ sub str {
 }
 sub is_atomiccall { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') =~ /^__atomic_\w+_\d+$/ }
 sub is_mempcpy { my ($n) = @_; my $s = unparen($n); ($s->{kind} // '') eq 'CallExpr' && ((strip((kids($s))[0]) // {})->{referencedDecl}{name} // '') eq '__builtin_mempcpy' }
-sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $f = strip((kids($s))[0]) // {}; $f = fnaddr($f) // $f; my $d = $f->{referencedDecl} or return 0; $asmfn{ name_of($d) } }
+# (what a normal form asks of names.txt, glibc's side: whether a name is an asm
+# function, a weak one without parameters; each answer kept in %asked, so
+# that a unit's cache tells where its normal forms hold)
+our %asked;
+sub asmfn { my ($x) = @_; my $v = $asmfn{$x} ? 1 : 0; $asked{"a $x"} = $v; $v }
+sub noproto { my ($x) = @_; my $v = $noproto{$x} ? 1 : 0; $asked{"n $x"} = $v; $v }
+sub is_asmfncall { my ($n) = @_; my $s = unparen($n); return 0 unless ($s->{kind} // '') eq 'CallExpr'; my $f = strip((kids($s))[0]) // {}; $f = fnaddr($f) // $f; my $d = $f->{referencedDecl} or return 0; asmfn(name_of($d)) }
 # &f of a function f: its reference (a cast of it stripped before)
 sub fnaddr {
     my ($c) = @_;
@@ -660,29 +678,29 @@ sub call {
                 $n2 = (kids($n2))[0] if $n2->{kind} eq 'ImplicitCastExpr' && ($n2->{castKind} // '') eq 'IntegralCast';
                 my $mc = $asmalias{memcpy} // 'memcpy';
                 # (memcpy an asm function, aarch64's: no conversions around it)
-                return "(cast BitCast ptr(void) (+ (call $mc" . join('', map { my $a = $_; $a = (kids($a))[0] while ($a->{kind} // '') =~ /CastExpr$/ && ($a->{castKind} // '') =~ /^(BitCast|NoOp)$/; ' ' . E($a) } @args) . ') ' . E($n2) . '))' if $asmfn{$mc};
+                return "(cast BitCast ptr(void) (+ (call $mc" . join('', map { my $a = $_; $a = (kids($a))[0] while ($a->{kind} // '') =~ /CastExpr$/ && ($a->{castKind} // '') =~ /^(BitCast|NoOp)$/; ' ' . E($a) } @args) . ') ' . E($n2) . '))' if asmfn($mc);
                 return "(cast BitCast ptr(void) (+ (cast BitCast ptr(u8) (call $mc" . join('', map { ' ' . E($_) } @args) . ')) ' . E($n2) . '))';
             }
             return '(int ' . ((strip($args[0])->{kind} // '') =~ /^(IntegerLiteral|CharacterLiteral)$/ ? 1 : 0) . ' i32)' if $name eq '__builtin_constant_p';
         }
         @args = ($args[0]) if $name eq '__builtin_va_start';
         # an asm function has no C type in ff: C's conversions of its arguments are not there
-        @args = map { unimplicit($_) } @args if $asmfn{$name};
+        @args = map { unimplicit($_) } @args if asmfn($name);
         # (a weak function's, declared without parameters on ff's side: C's
         # conversions of its arguments are not there, but a bool's, which
         # c2ff writes (x != 0))
-        @args = map { unpromote($_) } @args if $noproto{$name};
+        @args = map { unpromote($_) } @args if noproto($name);
         # (and ff's x != 0 for it, which a parameter's bool made (tobool x))
         @args = map { my $b = unparen($_); ($b->{kind} // '') eq 'BinaryOperator' && $b->{opcode} eq '!=' && is_zero((kids($b))[1])
-            ? { kind => 'ImplicitCastExpr', castKind => 'IntegralToBoolean', type => $b->{type}, inner => [(kids($b))[0]] } : $_ } @args if $noproto{$name} && $side eq 'ff';
+            ? { kind => 'ImplicitCastExpr', castKind => 'IntegralToBoolean', type => $b->{type}, inner => [(kids($b))[0]] } : $_ } @args if $side eq 'ff' && noproto($name);
         # (nor its pointer arguments' conversions to void *, either side)
-        @args = map { my $a = $_; $a = (kids($a))[0] while ($a->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($a->{castKind} // '') =~ /^(BitCast|NoOp)$/; $a } @args if $asmfn{$name};
+        @args = map { my $a = $_; $a = (kids($a))[0] while ($a->{kind} // '') =~ /^(ImplicitCastExpr|CStyleCastExpr)$/ && ($a->{castKind} // '') =~ /^(BitCast|NoOp)$/; $a } @args if asmfn($name);
         return '(asm)' if $name =~ /^_+asm_/;
         return '(syscall ' . join(' ', map { E(strip($_)) } @args) . ')' if $name eq '__ff_syscall';
         if ($side eq 'ff' && $name =~ /^__atomic_(\w+)_\d+$/ && $atomicop{$1}) { return "(atomic $1 " . join(' ', map { E(strip($_)) } @args) . ')' }
         # (and of a __builtin_mempcpy, whose sum ends in a conversion to
         # void *: memset's argument in _dl_allocate_tls_init)
-        return "(call $name" . join('', map { my $e = E($_); $e =~ s/^\(cast BitCast ptr\(void\) (.*)\)$/$1/s if $side eq 'glibc' && is_mempcpy($_); ' ' . $e } @args) . ')' if $asmfn{$name};
+        return "(call $name" . join('', map { my $e = E($_); $e =~ s/^\(cast BitCast ptr\(void\) (.*)\)$/$1/s if $side eq 'glibc' && is_mempcpy($_); ' ' . $e } @args) . ')' if asmfn($name);
         return "(call $name" . join('', map { ' ' . E($_) } @args) . ')';
     }
     '(call* ' . E($c) . join('', map { ' ' . E($_) } @args) . ')';
@@ -1249,21 +1267,76 @@ for my $g (grep { $_->[3] eq 'global' } @globals) {
 my %seen;
 my %gextern;
 my %gasm;
-# one unit's normal forms: its functions wanted (by their C name here), its
-# globals wanted, what it only declares
-sub unit_norms {
+# A unit's cache (--unit-cache OUT unit.json, a make rule's): what of its AST
+# a normal form reads (its functions with a body, its globals, its asm, and
+# the tables made of the whole: typedefs, typeof types, the declarations'
+# types, enum values, gcc's error functions), and the normal form of each of
+# its functions, globals and functions' statics with what it asked of
+# names.txt (%asked) when names.txt said nothing (all no). A round trip
+# (--cached) reads it in place of the unit's JSON, a fraction of it, and
+# takes a normal form where names.txt now answers as it did, else makes it
+# again from the AST kept: the same normal forms, from a name's answers
+# alone (the functions of a unit in the 10 milestones: 1 in 7 of the
+# milestones' normal forms). Its stamp is roundtrip.pl's, FFold.pm's and the
+# target: a cache of other code is none.
+my $cache_stamp = do {
+    my $d = Digest::MD5->new;
+    for my $f ("$FindBin::Bin/$FindBin::Script", "$FindBin::Bin/../compiler/gen/FFold.pm") { open my $h, '<:raw', $f or die "roundtrip: $f: $!\n"; $d->addfile($h) }
+    $d->add("target $target");
+    $d->hexdigest;
+};
+sub unit_tables {
+    my ($ast) = @_;
+    { enumval => { enumvals($ast) }, tdef => { typedefs($ast) }, typeof => { typeofs($ast) },
+      declty => { map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast) },
+      errordecl => { errordecls($ast) } };
+}
+sub has_body { my ($d) = @_; $d->{kind} eq 'FunctionDecl' && grep { $_->{kind} eq 'CompoundStmt' } kids($d) }
+# the normal form of key (f id, g id, s id) from the cache, where names.txt
+# answers as it did; else none, and the unit is read from its JSON as before
+# ($umiss): a normal form made of a pristine AST, as the cache's are, may not
+# be one made of what other normal forms made before touched (autovivified)
+our ($ucache, $umiss);
+sub cnorm {
+    my ($key, $make) = @_;
+    return $make->() unless $ucache;
+    my $e = $ucache->{norm}{$key};
+    if ($e && !grep { ($_ =~ /^a (.*)$/ ? ($asmfn{$1} ? 1 : 0) : ($noproto{ substr($_, 2) } ? 1 : 0)) != $e->{asked}{$_} } keys %{ $e->{asked} }) {
+        die $e->{err} if defined $e->{err};
+        return $e->{norm};
+    }
+    $umiss = 1;
+    '';
+}
+sub unit_cache {
     my ($ast, $j) = @_;
+    my $t = unit_tables($ast);
+    my @keep = grep { has_body($_) || $_->{kind} =~ /^(VarDecl|FileScopeAsmDecl)$/ } kids($ast);
+    my $pristine = dclone(\@keep);
+    my %norm;
+    # (each of a copy of its node, as it is in the JSON: a normal form touches the AST)
+    my $one = sub { my ($k, $d, $f) = @_; local %asked; my $n = eval { $f->(dclone($d)) }; $norm{$k} = defined $n ? { norm => $n, asked => {%asked} } : { err => $@, asked => {%asked} } };
+    unit_norms({ kind => 'TranslationUnitDecl', inner => \@keep }, $j, { tables => $t }, $one);
+    { stamp => $cache_stamp, j => $j, keep => $pristine, tables => $t, norm => \%norm };
+}
+# one unit's normal forms: its functions wanted (by their C name here), its
+# globals wanted, what it only declares; from a unit's cache, its tables and
+# normal forms ($c); for a unit's cache, every one ($all, which makes each)
+sub unit_norms {
+    my ($ast, $j, $c, $all) = @_;
     my %want;
     my (%gf, %ge, %gs);
-    local %enumval = enumvals($ast);
+    my $t = $c ? $c->{tables} : undef;
+    local $ucache = $all ? undef : $c;
+    local %enumval = $t ? %{ $t->{enumval} } : enumvals($ast);
     local $side = 'glibc';
     local $unit_i = $j =~ s/\.json$/.i/r;
     local %regvar;
     local %asmalias = map { ((kids($_))[0]{value} // '') =~ /^"\s*([.\w]+)\s*=\s*([.\w]+)\s*"$/ ? ($1 => $2) : () } grep { $_->{kind} eq 'FileScopeAsmDecl' } kids($ast);
-    local %tdef = typedefs($ast);
-    local %typeof = typeofs($ast);
-    local %declty = map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
-    local %errordecl = errordecls($ast);
+    local %tdef = $t ? %{ $t->{tdef} } : typedefs($ast);
+    local %typeof = $t ? %{ $t->{typeof} } : typeofs($ast);
+    local %declty = $t ? %{ $t->{declty} } : map { ($_->{name} => $_->{type}{qualType}) } grep { $_->{kind} =~ /^(FunctionDecl|VarDecl)$/ && defined $_->{name} && $_->{type} } kids($ast);
+    local %errordecl = $t ? %{ $t->{errordecl} } : errordecls($ast);
     local %constint = map {
         my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($_);
         $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr)$/;
@@ -1295,6 +1368,23 @@ sub unit_norms {
                 inner => [{ kind => 'IntegerLiteral', value => $v{$n}, type => { qualType => 'int' } }] }] });
         }
     }
+    if ($all) {
+        # (the cache: each function's, global's and function's static's normal form)
+        for my $d (kids($ast)) {
+            if (has_body($d)) {
+                $all->("f $d->{id}", $d, sub { fnorm($_[0]) });
+                local %staticid = static_ids($d);
+                local %constid = const_ids($d);
+                my @q = kids($d);
+                while (my $n = shift @q) {
+                    $all->("s $n->{id}", $n, sub { gnorm($_[0]) }) if ($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static';
+                    push @q, kids($n);
+                }
+            }
+            $all->("g $d->{id}", $d, sub { gnorm($_[0]) }) if $d->{kind} eq 'VarDecl' && defined $d->{name} && ($d->{storageClass} // '') ne 'extern';
+        }
+        return;
+    }
     # its globals: a definition (an extern declaration is none), the first unit's
     for my $d (kids($ast)) {
         next unless $d->{kind} eq 'VarDecl' && defined $d->{name} && $gwant{ $d->{name} };
@@ -1303,7 +1393,7 @@ sub unit_norms {
         for my $g (@{ $gwant{ $d->{name} } }) {
             next if $g->[2] =~ /^in / || $gfound{ $g->[0] } || $gf{ $g->[0] };
             next if $g->[2] =~ /^unit (.+)$/ && $j !~ /\/\Q$1\E\.json$/;
-            $gf{ $g->[0] } = gnorm($d);
+            $gf{ $g->[0] } = cnorm("g $d->{id}", sub { gnorm($d) });
         }
     }
     # and its functions' statics
@@ -1316,7 +1406,7 @@ sub unit_norms {
             if (($n->{kind} // '') eq 'VarDecl' && ($n->{storageClass} // '') eq 'static' && $gwant{ $n->{name} // '' }) {
                 # (name#k, a later one of its name in the function)
                 my $o = name_of($n);
-                for my $g (@{ $gwant{ $n->{name} } }) { $gf{ $g->[0] } //= gnorm($n) if $g->[2] eq "in $d->{name}" && $g->[1] eq $o && !$gfound{ $g->[0] } }
+                for my $g (@{ $gwant{ $n->{name} } }) { $gf{ $g->[0] } //= cnorm("s $n->{id}", sub { gnorm($n) }) if $g->[2] eq "in $d->{name}" && $g->[1] eq $o && !$gfound{ $g->[0] } }
             }
             push @q, kids($n);
         }
@@ -1324,7 +1414,7 @@ sub unit_norms {
     for my $b (@{ $byunit{$j} // [] }) {
         my ($cid, $o) = @$b;
         my $d = $def{$o} or next;
-        $want{$cid} = fnorm($d);
+        $want{$cid} = cnorm("f $d->{id}", sub { fnorm($d) });
     }
     { j => $j, want => \%want, gf => \%gf, ge => \%ge, gs => \%gs };
 }
@@ -1338,6 +1428,7 @@ sub unit_compare {
     for my $b (@{ $byunit{$j} // [] }) {
         my ($cid, $o) = @$b;
         my $want = $u->{want}{$cid} // do { push @diff, [$cid, "no function $o in $j"]; next };
+        print $normsout "f $cid\t$want\n" if $normsout;
         my $got = $back{$cid} // do { push @diff, [$cid, 'not in the C written back']; next };
         if ($want eq $got) { $same++; next }
         push @diff, [$cid, where($want, $got)];
@@ -1347,6 +1438,57 @@ if (defined $norm_back) {
     back_norms(load($backjson));
     nstore({ back => \%back, backg => \%backg }, $norm_back);
     exit 0;
+}
+if (defined $parts) {
+    my $c = load($parts);
+    my $t = $c->{tables};
+    local %enumval = %{ $t->{enumval} }; local %tdef = %{ $t->{tdef} }; local %typeof = %{ $t->{typeof} }; local %declty = %{ $t->{declty} };
+    local $side = 'glibc';
+    local %constint = map {
+        my ($e) = grep { $_->{kind} !~ /Attr$/ } kids($_);
+        $e = (kids($e))[0] while $e && $e->{kind} =~ /^(ImplicitCastExpr|ParenExpr|ConstantExpr)$/;
+        $e && $e->{kind} eq 'IntegerLiteral' ? ($_->{name} => $e->{value}) : ()
+    } grep { $_->{kind} eq 'VarDecl' && ($_->{type}{qualType} // '') =~ /^const (?:(?:unsigned |signed )?(?:char|short|int|long|long long)(?: int)?|unsigned)$/ && ($_->{init} // '') eq 'c' } @{ $c->{keep} };
+    my (%ty, @lines);
+    my @q = @{ $c->{keep} };
+    while (my $n = shift @q) {
+        if (my $y = $n->{type}) { $ty{$_} = 1 for grep { defined } $y->{qualType}, $y->{desugaredQualType} }
+        my $k = $n->{kind} // '';
+        if ($k eq 'FloatingLiteral') {
+            push @lines, "flt $n->{value}\t" . flt($n->{value});
+            push @lines, "ldround $n->{value}\t" . join(' ', map { FFold::ldround($n->{value}, @$_) // 'undef' } [64, -16445, 16383], [113, -16494, 16383]) if ($n->{value} // '') =~ /^[0-9.eE+-]+$/;
+        }
+        if ($k ne 'FunctionDecl' && FFold::fty(FFold::ftype($n))) {
+            my $v = FFold::fold($n);
+            push @lines, "fold $n->{id}\t" . (defined $v ? fconst($v, FFold::ftype($n)) : 'undef');
+        }
+        push @q, kids($n);
+    }
+    print "tstr $_\t", tstr($_), "\n" for sort keys %ty;
+    print "$_\n" for @lines;
+    exit 0;
+}
+if (defined $unit_cache) {
+    my $c = unit_cache(load($backjson), $backjson);
+    # (JSON, as clang's: roundtrip in ff reads it too)
+    open my $o, '>:raw', "$unit_cache.$$.tmp" or die "roundtrip: $unit_cache: $!\n";
+    print $o $json->encode($c);
+    close $o or die "roundtrip: $unit_cache: $!\n";
+    rename "$unit_cache.$$.tmp", $unit_cache or die "roundtrip: $unit_cache: $!\n";
+    exit 0;
+}
+# a unit's AST, and its cache where it has one made of this code and after its JSON
+sub cache_of { my ($j) = @_; defined $cachedir ? "$cachedir$j" =~ s/\.json$/.rtn/r : $j =~ s/\.json$/.rtn/r }
+sub load_unit {
+    my ($j) = @_;
+    if ($cached) {
+        my $f = cache_of($j);
+        if (-e $f && (!-e $j || -M $f <= -M $j)) {
+            my $c = load($f);
+            return ({ kind => 'TranslationUnitDecl', inner => $c->{keep} }, $c) if $c->{stamp} eq $cache_stamp;
+        }
+    }
+    (load($j), undef);
 }
 if (defined $norm_unit) {
     my ($j, $file) = ($backjson, $unitjson[0] // $backjson);
@@ -1364,7 +1506,13 @@ if ($join) {
 }
 else {
     back_norms(load($backjson));
-    for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) { unit_compare(unit_norms(load($j), $j)) }
+    for my $j (grep { !$seen{$_}++ } @unitjson, sort keys %byunit) {
+        my ($ua, $uc) = load_unit($j);
+        local $umiss;
+        my $u = unit_norms($ua, $j, $uc);
+        $u = unit_norms(load($j), $j) if $umiss;
+        unit_compare($u);
+    }
 }
 # where two normal forms part
 sub where {
@@ -1380,6 +1528,7 @@ for my $g (@globals) {
     my ($cid, $o, $hint, $k) = @$g;
     if ($k eq 'gfailed') { push @gdiff, [$cid, 'ff2c could not write it back']; next }
     my $want = $gfound{$cid} // $gasm{$o} // $gextern{$o} // do { push @gdiff, [$cid, "no definition of $o in glibc's units ($hint)"]; next };
+    print $normsout "g $cid\t$want\n" if $normsout;
     my $got = $backg{$cid} // do { push @gdiff, [$cid, 'not in the C written back']; next };
     print "glibc: $want\nff:    $got\n" if ($ENV{ROUNDTRIP_SHOW} // '') eq $cid;
     if ($want eq $got) { $gsame++; next }
