@@ -26,17 +26,18 @@ XZ_TESTS := test_check test_hardware test_stream_buffer_decode test_stream_buffe
     test_vli test_microlzma
 PKG_PROGRAMS := src/xz/xz src/xzdec/xzdec src/xzdec/lzmadec src/lzmainfo/lzmainfo \
     $(XZ_TESTS:%=tests/%)
+# (PTHREAD_CFLAGS empty, PTHREAD_LIBS -lpthread, which AX_PTHREAD takes as
+# they are: no -pthread in AM_CFLAGS, which cpp (ff) and predef.pl know
+# not; it only defines _REENTRANT, which xz reads not and glibc's
+# features.h only below _POSIX_C_SOURCE 199506, not under xz's _GNU_SOURCE;
+# glibc's threads are in libc.a)
 PKG_CONFIGURE := --disable-shared --disable-nls --disable-doc \
-    --disable-clmul-crc --disable-arm64-crc32
+    --disable-clmul-crc --disable-arm64-crc32 PTHREAD_CFLAGS= PTHREAD_LIBS=-lpthread
 # (libtool links a program with LDFLAGS' -static as dynamic still, only
 # its own libraries static: xzdec found no /lib/ld-linux-riscv64-lp64d.so.1;
 # -all-static is libtool's word for gcc's -static, at make's time, not
 # configure's, whose gcc knows no such flag)
-# (PTHREAD_CFLAGS empty: no -pthread on the compiles, which cpp (ff) and
-# predef.pl know not; it only defines _REENTRANT, which xz reads not and
-# glibc's features.h only where _POSIX_C_SOURCE is below 199506, not under
-# xz's _GNU_SOURCE; glibc's threads are in libc.a, -lpthread PTHREAD_LIBS)
-PKG_BUILDFLAGS = LDFLAGS='$(PKG_LDFLAGS) -all-static' PTHREAD_CFLAGS=
+PKG_BUILDFLAGS = LDFLAGS='$(PKG_LDFLAGS) -all-static'
 # the tests of liblzma, made after the build (make check would make them)
 PKG_REFMORE = -C tests create_compress_files $(XZ_TESTS) $(PKG_BUILDFLAGS)
 # the test suite: xz's own (tests/, automake's)
