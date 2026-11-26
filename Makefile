@@ -148,6 +148,18 @@ patch:
 #            sources).
 #   PC_STEPS some of the steps only (with what they need first), e.g.
 #            make ports-check PC_STEPS="compiler-check floats-roundtrip"
+#   PC_NOCACHE=1  every step runs, none taken from the cache (below)
+# The cache of results (src/compiler/gen/pccache.sh, PCCACHE): a step of
+# PC_CACHED whose inputs are byte for byte those of one that passed (in any
+# worktree) is not run again: "PASS <step> cached (<key>)". Its key is
+# sha256 over exactly its inputs, which src/glibc/pccache.mk lists for each
+# (src/compiler/pccache.mk for compiler-check's tools-check-<t>, cached
+# inside that step); only a PASS is kept, and no build output. The round
+# trips (ff2c.pl, clang, roundtrip.pl on a page and its units' .i: never
+# ttpc) and asm-check (s2ff and ttpc on the asm parts; riscv64's and
+# aarch64's before units-<target>, whose units-ready and milestone checks
+# need its .asmok, which a hit writes again). make pc-keys: each cached
+# step's key now, HIT or MISS, nothing run but what its inputs are made of.
 CHECKLOG ?= $(HOME)/.cache/ttp/check/$(notdir $(CURDIR))
 PCJOBS ?= 3
 GBUILD ?= $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/glibc
@@ -166,8 +178,8 @@ PC_GLIBC = $(MAKE) --no-print-directory -C src/glibc BUILD=$(GBUILD)$(if $(1),/$
 PC_A64 := $(shell sed -n 's/^LINKED_aarch64 := //p' src/glibc/Makefile)
 PC_X64 := $(shell sed -n 's/^LINKED_x86_64 := //p' src/glibc/Makefile)
 PC_ARM := $(shell sed -n 's/^LINKED_arm := //p' src/glibc/Makefile)
-PC_STEPS := bootstrap tools compiler-check units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 \
-	units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) asm-aarch64 generic-aarch64 libgcc-aarch64 csema-aarch64 \
+PC_STEPS := bootstrap tools compiler-check asm-riscv64 units-riscv64 $(foreach m,$(PC_MS),$(m)-check $(m)-roundtrip) generic-riscv64 libgcc-riscv64 cparse-riscv64 csema-riscv64 \
+	asm-aarch64 units-aarch64 $(foreach m,$(PC_A64),$(m)-aarch64 $(m)-roundtrip-aarch64) generic-aarch64 libgcc-aarch64 csema-aarch64 \
 	units-x86_64 $(foreach m,$(PC_X64),$(m)-x86_64 $(m)-roundtrip-x86_64) generic-x86_64 asm-x86_64 libgcc-x86_64 csema-x86_64 \
 	units-arm $(foreach m,$(PC_ARM),$(m)-arm $(m)-roundtrip-arm) asm-arm libgcc-arm csema-arm \
 	check-O-riscv64 check-O-aarch64 check-O-x86_64 check-O-arm \
@@ -177,6 +189,15 @@ PC_STEPS := bootstrap tools compiler-check units-riscv64 $(foreach m,$(PC_MS),$(
 pc_step = @s=$$(date +%s); if TTP_SLOTLOG=$(CHECKLOG)/$(1).slots $(2) > $(CHECKLOG)/$(1).log 2>&1; then r=PASS; else r=FAIL; fi; \
 	w=$$(awk '{ w += $$1 } END { print w + 0 }' $(CHECKLOG)/$(1).slots 2> /dev/null || echo 0); \
 	echo "$$r $(1) $$(( $$(date +%s) - s )) s ($$w s in slot queues)$$(test $$r = PASS || echo " log $(CHECKLOG)/$(1).log")" | tee $(CHECKLOG)/$(1).result
+# The steps taken from the cache when they can be, and the cache
+PC_CACHED := $(PC_MS:%=%-roundtrip) $(PC_A64:%=%-roundtrip-aarch64) $(PC_X64:%=%-roundtrip-x86_64) $(PC_ARM:%=%-roundtrip-arm) \
+	asm-riscv64 asm-aarch64 asm-x86_64 asm-arm
+PCCACHE ?= $(HOME)/.cache/ttp/check-cache
+# $(call pc_cstep,name,target,goal): pc_step of src/glibc's goal on target
+# (riscv64 if none) through the cache, its key from src/glibc's pckey-goal;
+# pc_kstep only its key (make pc-keys)
+pc_cstep = @sh src/compiler/gen/pccache.sh $(1) $(CHECKLOG) '$(call PC_GLIBC,$(2)) pckey-$(3)' $(call PC_GLIBC,$(2)) $(3)
+pc_kstep = @sh src/compiler/gen/pccache.sh -n $(1) $(CHECKLOG)-keys '$(call PC_GLIBC,$(2)) pckey-$(3)' true
 
 # One ports-check at a time on this machine (lanes share the 3 slots: three
 # checks at once took 2 hours each instead of 15 minutes); the time it prints
@@ -193,7 +214,7 @@ PC_BASE = test -n "$(PC_ANYBASE)" || { git fetch -q origin ports 2> /dev/null; \
 ports-check:
 	@rm -rf $(CHECKLOG) && mkdir -p $(CHECKLOG)
 	@flock -n $(PCLOCK) true || echo "ports-check: another ports-check runs (lock $(PCLOCK)), waiting for it"
-	@s=$$(date +%s); flock $(PCLOCK) sh -c '$(PC_BASE) && TTP_PCSLOT=1 exec $(MAKE) --no-print-directory -j$(PCJOBS) $(PC_STEPS:%=pc-%)' || test $$? -ne 3 || exit 1; \
+	@s=$$(date +%s); flock $(PCLOCK) sh -c '$(PC_BASE) && TTP_PCSLOT=1 $(if $(PC_NOCACHE),,TTP_PCCACHE=$(PCCACHE)) exec $(MAKE) --no-print-directory -j$(PCJOBS) $(PC_STEPS:%=pc-%)' || test $$? -ne 3 || exit 1; \
 	echo "ports-check: $$(( $$(date +%s) - s )) s, logs in $(CHECKLOG)"; \
 	ok=1; for t in $(PC_STEPS); do cat $(CHECKLOG)/$$t.result 2> /dev/null || echo "SKIP $$t"; grep -qs '^PASS' $(CHECKLOG)/$$t.result || ok=; done; \
 	test -n "$$ok"
@@ -220,13 +241,17 @@ pc-gbuild:
 	    mkdir -p $$d && ln -sfn $$(readlink -f $$s/obj) $$d/obj || exit 1; \
 	    echo "ports-check: $$d, obj from $$s"; \
 	done
-pc-units-riscv64: pc-bootstrap pc-tools pc-gbuild
+pc-asm-riscv64: pc-bootstrap pc-tools pc-gbuild
+	$(call pc_cstep,asm-riscv64,,asm-check)
+pc-units-riscv64: pc-bootstrap pc-tools pc-gbuild pc-asm-riscv64
 	$(call pc_step,units-riscv64,$(call PC_GLIBC) units-ready)
 define pc_milestone
 pc-$(1)-check: pc-units-riscv64
 	$$(call pc_step,$(1)-check,$$(call PC_GLIBC) $(1)-check)
 pc-$(1)-roundtrip: pc-$(1)-check
-	$$(call pc_step,$(1)-roundtrip,$$(call PC_GLIBC) $(1)-roundtrip)
+	$$(call pc_cstep,$(1)-roundtrip,,$(1)-roundtrip)
+pck-$(1)-roundtrip:
+	$$(call pc_kstep,$(1)-roundtrip,,$(1)-roundtrip)
 endef
 $(foreach m,$(PC_MS),$(eval $(call pc_milestone,$(m))))
 pc-generic-riscv64: pc-units-riscv64
@@ -251,19 +276,21 @@ pc-csema-x86_64: pc-compiler-check $(PC_X64:%=pc-%-x86_64)
 	$(call pc_step,csema-x86_64,$(call PC_GLIBC,x86_64) csema-check)
 pc-csema-arm: pc-compiler-check $(PC_ARM:%=pc-%-arm)
 	$(call pc_step,csema-arm,$(call PC_GLIBC,arm) csema-check)
-pc-units-aarch64: pc-bootstrap pc-tools pc-gbuild
+pc-asm-aarch64: pc-bootstrap pc-tools pc-gbuild
+	$(call pc_cstep,asm-aarch64,aarch64,asmcfi-check)
+pc-units-aarch64: pc-bootstrap pc-tools pc-gbuild pc-asm-aarch64
 	$(call pc_step,units-aarch64,$(call PC_GLIBC,aarch64) units-ready)
 define pc_a64
 pc-$(1)-aarch64: pc-units-aarch64
 	$$(call pc_step,$(1)-aarch64,$$(call PC_GLIBC,aarch64) $(1)-check)
 pc-$(1)-roundtrip-aarch64: pc-$(1)-aarch64
-	$$(call pc_step,$(1)-roundtrip-aarch64,$$(call PC_GLIBC,aarch64) $(1)-roundtrip)
+	$$(call pc_cstep,$(1)-roundtrip-aarch64,aarch64,$(1)-roundtrip)
+pck-$(1)-roundtrip-aarch64:
+	$$(call pc_kstep,$(1)-roundtrip-aarch64,aarch64,$(1)-roundtrip)
 endef
 $(foreach m,$(PC_A64),$(eval $(call pc_a64,$(m))))
 pc-libgcc-aarch64: pc-units-aarch64
 	$(call pc_step,libgcc-aarch64,$(call PC_GLIBC,aarch64) libgcc-licenses libgcc-asmcfi-check)
-pc-asm-aarch64: pc-units-aarch64
-	$(call pc_step,asm-aarch64,$(call PC_GLIBC,aarch64) asmcfi-check)
 pc-generic-aarch64: pc-units-aarch64
 	$(call pc_step,generic-aarch64,$(call PC_GLIBC,aarch64) generic-check generic-roundtrip)
 pc-units-x86_64: pc-bootstrap pc-tools pc-gbuild
@@ -272,13 +299,15 @@ define pc_x64
 pc-$(1)-x86_64: pc-units-x86_64
 	$$(call pc_step,$(1)-x86_64,$$(call PC_GLIBC,x86_64) $(1)-check)
 pc-$(1)-roundtrip-x86_64: pc-$(1)-x86_64
-	$$(call pc_step,$(1)-roundtrip-x86_64,$$(call PC_GLIBC,x86_64) $(1)-roundtrip)
+	$$(call pc_cstep,$(1)-roundtrip-x86_64,x86_64,$(1)-roundtrip)
+pck-$(1)-roundtrip-x86_64:
+	$$(call pc_kstep,$(1)-roundtrip-x86_64,x86_64,$(1)-roundtrip)
 endef
 $(foreach m,$(PC_X64),$(eval $(call pc_x64,$(m))))
 pc-generic-x86_64: pc-units-x86_64
 	$(call pc_step,generic-x86_64,$(call PC_GLIBC,x86_64) generic-check generic-roundtrip)
 pc-asm-x86_64: pc-bootstrap pc-tools pc-gbuild
-	$(call pc_step,asm-x86_64,$(call PC_GLIBC,x86_64) asmcfi-check)
+	$(call pc_cstep,asm-x86_64,x86_64,asmcfi-check)
 pc-libgcc-x86_64: pc-units-x86_64
 	$(call pc_step,libgcc-x86_64,$(call PC_GLIBC,x86_64) libgcc-licenses libgcc-asmcfi-check)
 # arm: its milestones of LINKED_arm, as x86_64's, and its asm check (no
@@ -289,13 +318,15 @@ define pc_arm
 pc-$(1)-arm: pc-units-arm
 	$$(call pc_step,$(1)-arm,$$(call PC_GLIBC,arm) $(1)-check)
 pc-$(1)-roundtrip-arm: pc-$(1)-arm
-	$$(call pc_step,$(1)-roundtrip-arm,$$(call PC_GLIBC,arm) $(1)-roundtrip)
+	$$(call pc_cstep,$(1)-roundtrip-arm,arm,$(1)-roundtrip)
+pck-$(1)-roundtrip-arm:
+	$$(call pc_kstep,$(1)-roundtrip-arm,arm,$(1)-roundtrip)
 endef
 $(foreach m,$(PC_ARM),$(eval $(call pc_arm,$(m))))
 pc-libgcc-arm: pc-units-arm
 	$(call pc_step,libgcc-arm,$(call PC_GLIBC,arm) libgcc-licenses libgcc-asmcfi-check)
 pc-asm-arm: pc-bootstrap pc-tools pc-gbuild
-	$(call pc_step,asm-arm,$(call PC_GLIBC,arm) asmcfi-check)
+	$(call pc_cstep,asm-arm,arm,asmcfi-check)
 # -O (ttpc's peephole): each target's milestones built with -O, after
 # their checks (src/glibc's check-O)
 pc-check-O-riscv64: $(PC_MS:%=pc-%-check)
@@ -333,6 +364,19 @@ pc-cpp-$(1): pc-units-$(1)
 endef
 $(foreach t,riscv64 aarch64 x86_64 arm,$(eval $(call pc_cpp,$(t))))
 .PHONY: $(PC_STEPS:%=pc-%) pc-gbuild
+# (the asm steps' keys)
+$(foreach t,riscv64 aarch64 x86_64 arm,$(eval pck-asm-$(t): ; $$(call pc_kstep,asm-$(t),$(filter-out riscv64,$(t)),$(if $(filter riscv64,$(t)),asm-check,asmcfi-check))))
+# Each cached step's key, HIT or MISS: what its inputs are made of is made
+# (a page, a part's .dump), nothing else runs: each command of src/glibc
+# in a slot of its own, as in ports-check (not all in one: csema -l's cap is
+# above a slot's 8 GB). Then compiler-check's tools-check-<t>
+# (src/compiler's pc-keys, which builds the tools: in a slot, as
+# compiler-check). Run it after make bootstrap and the tools step.
+pc-keys:
+	@mkdir -p $(CHECKLOG)-keys
+	@$(MAKE) --no-print-directory -k $(PC_CACHED:%=pck-%)
+	@$(PC_SLOT_CC) $(MAKE) -C src/compiler --no-print-directory BUILD=$(BUILD)/compiler PCKEYDIR=$(CHECKLOG)-keys pc-keys
+.PHONY: pc-keys $(PC_CACHED:%=pck-%)
 
 # The cross-check of the frozen c2ff.pl (src/glibc's c2ff-crosscheck) on the
 # BUILDs of the last ports-check, each target in turn: run it before ports
