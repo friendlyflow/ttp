@@ -1395,6 +1395,9 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     return;
   }
   if (c->d->k == DK_FUNC) { name = cl_own (name); cl_want (name); }
+  /* (a call through a global pointer, with arguments: its own name, wanted, as its value's E_REF; string's
+     tester calls memset through static __typeof (memset) *volatile memset_indirect, which was left out) */
+  else if (na && c->d->k == DK_VAR && !c->d->local && !c->d->global && !cl_has (&C->regvar, name)) { name = cl_own (name); cl_want (name); }
   else if (!na) {
     struct cl_list *v = cl_ex (c);
     nd_add (v->v[0], cl_n ("."));
