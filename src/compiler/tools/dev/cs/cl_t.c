@@ -177,7 +177,10 @@ static void cl_index_enum (struct cs_rec *d)
     i++;
   }
   if (tag) ;
-  else if (i < d->nenums && !d->tag && !d->td && C->cu) {
+  /* (a typedef's anonymous enum too: liblzma's stream_encoder_mt.c and stream_decoder_mt.c each have
+     typedef enum { THR_IDLE, ... THR_EXIT } worker_state, of other values; coreutils' gnulib regex's
+     re_token_type against glibc's) */
+  else if (i < d->nenums && !d->tag && C->cu) {
     long j = 0;
     err_str ("csema: an enum constant of another value than another unit's, named with its unit: ");
     err_str (cl_dn (d->enums[i]));

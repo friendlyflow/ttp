@@ -1215,6 +1215,13 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     cl_push (o, h);
     return;
   }
+  /* (__builtin_assume_aligned (p, align [, misalign]): p, as a void * (liblzma's aligned_read32ne) */
+  if (cl_eq (name, "__builtin_assume_aligned")) {
+    struct cl_list *v = cl_l ();
+    cl_itemx (cl_k (n, 1), v);
+    cl_push (o, cl_cast_node (cl_ct (n->t), v));
+    return;
+  }
   if (cl_eq (name, "__builtin_expect")) {
     struct cl_list *v = cl_l ();
     cl_itemx (cl_k (n, 1), v);
