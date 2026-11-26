@@ -426,7 +426,7 @@ CSKIP_x86_64 := cldlit cldneg chexinf ccomplex
 # C tests of one target only, beside the portable ones
 CONLY_aarch64 := ctlsa64 ci128 cf16 cvapackstkd
 CONLY_x86_64 := ci128 cf16 ctlsx64 cfsx64 cvecx64 cldlitx87 cldnegx87 chexinfx87 ccomplexx87 cvapackstkd
-CONLY_arm := ctlsarm cwgate cctldarm
+CONLY_arm := ctlsarm cwgate cctldarm cthumbitem
 
 # clazy includes the folder progs/clazylib (its index.ff and a file per
 # page), which it reads lazily: never.ff, which it must not read, is no tree.
