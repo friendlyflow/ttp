@@ -1128,7 +1128,15 @@ static int cl_own_proto_differs (struct cs_decl *d, char *name, long nargs)
   struct cs_decl *x = d;
   int own = 0;
   long np;
+  /* (the tree's name: syscall' for syscall, a word of ttpc's) */
+  name = cl_ffname (name);
   if (!C->treedefs.count || !cl_val (&C->treedefs, name) || cl_has (&C->fn, name)) return 0;
+  /* (a variadic declaration of a tree's function of fixed parameters: glibc's syscall (long, ...), riscv64's
+     syscall.c of 7 longs, which xz's sandbox calls with 3 to 5: as the unit declared it, through a pointer) */
+  {
+    struct cs_ty *f = cs_canon (d->t);
+    if (f->k == TY_FUNC && f->var) { np = cl_tree_nparams (name); if (np >= 0 && np != nargs) return 1; }
+  }
   while (x) {
     if (!x->hasbody && !x->local) {
       char *f;
