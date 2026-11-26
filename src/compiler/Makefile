@@ -943,6 +943,8 @@ TOOLTARGETS := $(if $(CAN_RISCV),riscv64) $(RUNNABLE)
 SHAV := $(TL)/vectors
 SHAVFILES := abc empty m448 m896 million $(foreach n,0 1 55 56 63 64 65 119 120 127 128 1000 65536 65537,r$(n))
 
+# (#pccache< cpref to #pccache> cpref: in the key of tools-check-<t>, pccache.mk)
+#pccache< cpref
 # The C parser's inputs in tools-check: the C of src/glibc/progs and
 # progs/abi, preprocessed by the host's gcc (CPCC); this machine's build of
 # the tools (CT) makes the trees and the C that each target's must be.
@@ -970,6 +972,7 @@ CSCLANG = $(C2FF_CLANG) -x c -include ../glibc/clang-prelude.h -Xclang -ast-dump
 $(CSREF)/result: $(CPUNITS) $(CPLIST) $(TL)/$(TOOLT)/csema gen/csemacheck.sh gen/clangsema.pl gen/csemacmp.pl
 	@test -n "$(C2FF_CLANG)" || { echo "csema's check needs clang: run it in nix develop"; exit 1; }
 	KEEP=1 CLANG="$(CSCLANG)" sh gen/csemacheck.sh -r "$(RUN_$(TOOLT))" $(TL)/$(TOOLT)/csema $(CSREF) $(CPUNITS) || { rm -f $@; exit 1; }
+#pccache> cpref
 
 define tooltarget
 $(TL)/$(1)/%: tools/%.ff $(TOOLLIB) $(SHARED) $(BOOT)/stage2
@@ -1159,7 +1162,8 @@ $(SHAV)/want:
 	mv $(SHAV)/want.tmp $@
 
 tools: $(TOOLS:%=$(TL)/$(TOOLT)/%)
-tools-check: $(TOOLTARGETS:%=tools-check-%) tools-dev-check tools-dev-valgrind
+# (where ports-check's cache is, TTP_PCCACHE, each through it: pccache.mk)
+tools-check: $(TOOLTARGETS:%=$(if $(TTP_PCCACHE),pc-)tools-check-%) tools-dev-check tools-dev-valgrind
 # tools/c.ff, cparse.ff, cprint.ff, csem.ff, csema*.ff against their dev C
 # (tools/dev): made again in build/dev by clang and gen/c2ff.pl they must be
 # the committed ones; sh tools/dev/mk.sh -i if they should be what it makes.
@@ -1341,3 +1345,6 @@ clean:
 	rm -rf $(BUILD)
 
 .PHONY: all test roundtrip decls check rvv simd run bootstrap ctest ctime cws targets seeds hex bootstraps refresh refresh-check patch clean licenses abi debug tools tools-check copies copies-check $(foreach t,riscv64 $(HOSTS),tools-check-$(t))
+
+# compiler-check's tools-check-<t> through ports-check's cache of results
+include pccache.mk
