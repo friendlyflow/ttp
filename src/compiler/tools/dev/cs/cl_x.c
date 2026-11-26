@@ -2799,6 +2799,97 @@ static void cl_effect (struct cs_ex *n, struct cl_list *o)
   cl_itemx (n, o);
 }
 static void cl_labelled (struct cs_st *n, struct cl_list *o);
+/* (a switch whose cases stand inside its other statements, Duff's device: liblzma's lzma_decode,
+   switch (coder->sequence) while (true) { ... case SEQ_IS_MATCH: ... }: a switch of gotos, each case
+   to a label where the case stands, the default (or past the switch) its own; the statements as they
+   are, each case a label, a break of the switch itself (not of a loop or a switch inside it) a goto
+   past it) */
+static struct cl_map *cl_duff_lab;
+static char *cl_duff_end;
+static int cl_duff_depth;
+static long cl_duff_count;
+static void cl_duff_find (struct cs_st *s, struct cl_list *cases)
+{
+  long i = 0;
+  if (!s) return;
+  if (s->k == S_SWITCH) return;
+  if (s->k == S_CASE || s->k == S_DEFAULT) { cl_push (cases, (struct node *) s); cl_duff_find (s->a, cases); return; }
+  if (s->k == S_BLOCK) { while (i < s->nk) { cl_duff_find (s->kid[i], cases); i++; } return; }
+  if (s->k == S_IF) { cl_duff_find (s->a, cases); cl_duff_find (s->b, cases); return; }
+  if (s->k == S_WHILE || s->k == S_DO || s->k == S_LABEL) { cl_duff_find (s->a, cases); return; }
+  if (s->k == S_FOR) { cl_duff_find (s->b, cases); return; }
+}
+static char *cl_st_key (struct cs_st *s) { return cl_num ((long) s); }
+/* whether a switch's body is not C's plain one: a case inside another statement, or a statement
+   before the first case that is more than a declaration without a value */
+static int cl_duff_is (struct cs_st *b)
+{
+  struct cl_list *cases = cl_l ();
+  struct cl_map top;
+  long i = 0, count = 1, seen = 0;
+  struct cs_st **v = &b;
+  top.tab = 0; top.count = 0;
+  if (b->k == S_BLOCK) { v = b->kid; count = b->nk; }
+  while (i < count) {
+    struct cs_st *s = v[i];
+    if (s->k == S_CASE || s->k == S_DEFAULT) {
+      seen = 1;
+      while (s && (s->k == S_CASE || s->k == S_DEFAULT)) { cl_set (&top, cl_st_key (s)); s = s->a; }
+    } else if (!seen) {
+      struct cs_dl *d = s->dl;
+      if (s->k != S_DECL) return 1;
+      while (d) { if (d->d && d->d->init) return 1; d = d->nxt; }
+    }
+    i++;
+  }
+  cl_duff_find (b, cases);
+  i = 0;
+  while (i < cases->n) { if (!cl_val (&top, cl_st_key ((struct cs_st *) cases->v[i]))) return 1; i++; }
+  return 0;
+}
+static void cl_duff (struct cs_st *n, struct cl_list *o)
+{
+  struct cl_list *x = cl_l (), *cases = cl_l ();
+  struct cl_map *lab = alloc (sizeof (struct cl_map)), *plab = cl_duff_lab;
+  char *pend = cl_duff_end, *end, *base;
+  int pdepth = cl_duff_depth, hasdef = 0;
+  long i = 0;
+  lab->tab = 0; lab->count = 0;
+  cl_duff_count++;
+  base = cl_cat ("switch ", cl_num (cl_duff_count));
+  end = cl_label_name ((unsigned char *) cl_cat (base, " end"), cstrlen (base) + 4);
+  cl_duff_find (n->a, cases);
+  cl_itemx (cl_p (n->e), x);
+  while (i < cases->n) {
+    struct cs_st *c = (struct cs_st *) cases->v[i];
+    char *nm = cl_cat3 (base, " case ", cl_num (i));
+    char *l = cl_label_name ((unsigned char *) nm, cstrlen (nm));
+    struct node *h;
+    cl_put (lab, cl_st_key (c), l);
+    if (c->k != S_CASE) { h = cl_n ("default"); hasdef = 1; }
+    else {
+      struct cl_list *y = cl_l ();
+      cl_itemx (cl_p (c->e), y);
+      if (c->e2) { cl_push (y, cl_n ("...")); cl_itemx (cl_p (c->e2), y); }
+      h = cl_nl ("case", y);
+    }
+    nd_add (h, cl_n1 ("goto", cl_n (l)));
+    cl_push (x, h);
+    i++;
+  }
+  if (!hasdef) { struct node *h = cl_n ("default"); nd_add (h, cl_n1 ("goto", cl_n (end))); cl_push (x, h); }
+  cl_push (o, cl_nl ("switch", x));
+  cl_duff_lab = lab;
+  cl_duff_end = end;
+  cl_duff_depth = 0;
+  /* (a block of statements in a group of its own, its declarations its own) */
+  if (n->a->k == S_BLOCK) { struct cl_list *y = cl_l (); cl_body (n->a, y); cl_push (o, cl_nl (":", y)); }
+  else cl_lstmt (n->a, o);
+  cl_duff_lab = plab;
+  cl_duff_end = pend;
+  cl_duff_depth = pdepth;
+  cl_push (o, cl_n (cl_cat (end, ":")));
+}
 static void cl_cases (struct cs_st *b, struct cl_list *o)
 {
   struct cl_list *ou = cl_l ();
@@ -2942,7 +3033,16 @@ static void cl_clause_expr (struct cs_ex *e, int eff, struct cl_list *o)
   e = cl_p (e);
   if (eff) cl_effect (e, o); else cl_testx (e, o);
 }
+static void cl_stmt1 (struct cs_st *n, struct cl_list *o);
+/* (a loop's or a switch's statements: a break there is its own, not a Duff switch's around it) */
 static void cl_stmt (struct cs_st *n, struct cl_list *o)
+{
+  int loop = n->k == S_WHILE || n->k == S_DO || n->k == S_FOR || n->k == S_SWITCH;
+  if (loop) cl_duff_depth++;
+  cl_stmt1 (n, o);
+  if (loop) cl_duff_depth--;
+}
+static void cl_stmt1 (struct cs_st *n, struct cl_list *o)
 {
   switch (n->k) {
   case S_BLOCK: {
@@ -3004,12 +3104,23 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
   }
   case S_SWITCH: {
     struct cl_list *x = cl_l ();
+    if (cl_duff_is (n->a)) { cl_duff (n, o); return; }
     cl_itemx (cl_p (n->e), x);
     cl_cases (n->a, x);
     cl_push (o, cl_nl ("switch", x));
     return;
   }
-  case S_CASE: case S_DEFAULT: cl_labelled (n, o); return;
+  case S_CASE: case S_DEFAULT: {
+    char *l = cl_duff_lab ? cl_get (cl_duff_lab, cl_st_key (n)) : 0;
+    if (l) {
+      struct cl_list *x = cl_l ();
+      if (n->a) cl_stmt (n->a, x);
+      cl_push (o, cl_nl (cl_cat (l, ":"), x));
+      return;
+    }
+    cl_labelled (n, o);
+    return;
+  }
   case S_LABEL: {
     char *l = cl_cat (cl_label_of (n->name, n->nlen, n->lk), ":");
     if (n->a && n->a->k == S_DECL) { cl_push (o, cl_n (l)); cl_stmt (n->a, o); return; }
@@ -3030,7 +3141,10 @@ static void cl_stmt (struct cs_st *n, struct cl_list *o)
   }
   case S_GOTO: cl_push (o, cl_n1 ("goto", cl_n (cl_label_of (n->name, n->nlen, n->lk)))); return;
   case S_IGOTO: cl_push (o, cl_n1 ("goto", cl_nl ("content", cl_ex (cl_p (n->e))))); return;
-  case S_BREAK: cl_push (o, cl_n ("break")); return;
+  case S_BREAK:
+    if (cl_duff_end && !cl_duff_depth) { cl_push (o, cl_n1 ("goto", cl_n (cl_duff_end))); return; }
+    cl_push (o, cl_n ("break"));
+    return;
   case S_CONTINUE: cl_push (o, cl_n ("continue")); return;
   case S_NULL: return;
   case S_EXPR: cl_effect (cl_p (n->e), o); return;
