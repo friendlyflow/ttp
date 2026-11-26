@@ -10,6 +10,10 @@
 # natively; both runs of a check are wrapped the same; called by a symlink,
 # the program the link leads to: coreutils' one program); unwrap puts them
 # back. The scripts are newer than the objects: make takes them as made.
+# Each script names its program by the path it has here, which a symlink
+# to it leads to too: it runs no readlink of its own (coreutils' tests put
+# src/ first in PATH, whose readlink is coreutils' and wrapped: on riscv64
+# each wrapper's readlink ran another wrapper, 2130 of them, out of memory).
 set -eu
 what=$1 dir=$2 qemu=$3
 case $what in
@@ -17,7 +21,9 @@ wrap)
     find "$dir" -type f -perm -u+x ! -name '*.qbin' ! -name '*.so*' | while IFS= read -r f; do
         test "$(head -c 4 "$f" | od -An -tx1 | tr -d ' ')" = 7f454c46 || continue
         mv "$f" "$f.qbin"
-        printf '#!/bin/sh\nexec %s -0 "${0##*/}" "$(readlink -f "$0").qbin" "$@"\n' "$qemu" > "$f"
+        a=$(readlink -f "$f.qbin")
+        case $a in *\'*) echo "qwrap.sh: a path with a quote: $a" >&2; exit 1 ;; esac
+        printf '#!/bin/sh\nexec %s -0 "${0##*/}" '"'"'%s'"'"' "$@"\n' "$qemu" "$a" > "$f"
         chmod +x "$f"
     done ;;
 unwrap)

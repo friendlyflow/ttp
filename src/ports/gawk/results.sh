@@ -7,7 +7,9 @@
 # or "NAME FAIL", for ../checktable.sh: each test's rule says its name on a
 # line of its own, and a test that failed leaves _NAME (its output) behind.
 set -u
-names=$(sed -n '/^======== Starting basic tests/,$p' "$1/make.log" | grep -E '^[A-Za-z0-9_+-]+$' | sort -u)
+# (not past the diffs of the failed tests at the end, "============== _NAME
+# =====" each, whose lines may look like a name: clos1way2's "-test")
+names=$(sed -n '/^======== Starting basic tests/,$p' "$1/make.log" | sed '/^=============* _/,$d' | grep -E '^[A-Za-z0-9_+-]+$' | sort -u)
 for n in $names; do
     if test -e "$1/test/_$n"; then echo "$n FAIL"; else echo "$n PASS"; fi
 done
