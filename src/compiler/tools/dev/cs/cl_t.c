@@ -781,6 +781,10 @@ static char *cl_own_name (struct cl_map *map, char *name, struct cs_decl *d)
   char *k;
   /* (a static, or a name of the tree's that is a static there or a type there: bc's flex yyalloc, glibc's union yyalloc) */
   if (C->treedefs.count && (d->sc == SC_STATIC || cl_val (&C->treestatic, cl_ffname (name)) || cl_tree_type (cl_ffname (name))) && cl_val (&C->treedefs, cl_ffname (name))) {
+    /* (an external another unit has defined already under its name: the same one, the first's, as the linker takes
+       the first archive member's: coreutils' expand-common.c in expand's and unexpand's archives, int exit_status,
+       expand's main read unexpand's) */
+    if (d->sc != SC_STATIC) { char *e = cl_get (&C->extown, name); if (e) { cl_put (&C->own, name, e); return e; } }
     k = cl_cat3 (name, " ", cl_unit_name ());
     cl_put (&C->own, name, k);
     if (d->sc != SC_STATIC) cl_put (&C->extown, name, k);

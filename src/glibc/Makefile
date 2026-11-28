@@ -2374,6 +2374,10 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           the same constants, of other values (liblzma's stream coders):
 #           each unit's own, its constants named with it
 #
+#   extmember an external of one name in two archive members of one text
+#           (coreutils' expand-common.c twice: exit_status, a name glibc's tree
+#           has too): the first member's, as the linker takes it
+#
 #   agginit a struct's, union's or complex local's value written as a lone :
 #           or several items, (x), ?:, ({ ... }), (a, b): assigned after its
 #           declaration (glibc's math_check_force_underflow_complex)
@@ -2386,8 +2390,8 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           __asm__ ("rpl_printf")), the label on its header's declaration:
 #           the other unit calls it by the label, which csema follows to it
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check cxops-check fltinc-check insnames-check ffwords-check duff-check textcolon-check varfixed-check innerenum-check agginit-check weakref-check chararr-check ifuncjmp-check asmlabel-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr ifuncjmp gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf cxops fltinc insnames ffwords duff textcolon varfixed innerenum agginit weakref asmlabel
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check cxops-check fltinc-check insnames-check ffwords-check duff-check textcolon-check varfixed-check innerenum-check extmember-check agginit-check weakref-check chararr-check ifuncjmp-check asmlabel-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr ifuncjmp gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf cxops fltinc insnames ffwords duff textcolon varfixed innerenum extmember agginit weakref asmlabel
 ALLPROG_asmlabel := asmlabel-a asmlabel-b
 ALLPROG_agginit := agginit
 ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
@@ -2398,6 +2402,8 @@ ALLPROG_duff := duff
 ALLPROG_textcolon := textcolon
 ALLPROG_varfixed := varfixed
 ALLPROG_innerenum := innerenum-a innerenum-b
+ALLPROG_extmember := extmember
+ALLPROGAR_extmember := extmember-b extmember-c
 ALLPROG_ptrsum := ptrsum
 ALLPROG_fltinc := fltinc
 ALLPROG_weakref := weakref
@@ -2434,18 +2440,22 @@ LOCALEDEF ?= $(error LOCALEDEF is not set: run this in `nix develop`)
 $(BUILD)/locales/C.utf8/LC_CTYPE:
 	mkdir -p $(BUILD)/locales
 	I18NPATH=$(GLIBC_SRC)/localedata $(LOCALEDEF) -c --no-archive -i C -f UTF-8 $(BUILD)/locales/C.utf8 || test -e $@
+# (ALLPROGAR_<name>: units more, each an archive's member, in that order, as a
+# program's archives: csema takes them as far as the roots reach, gcc's link
+# the first that defines a name)
 define allprog
-$$(FF)/$(1)-all.ff: $$(ALLPROG_$(1):%=$$(FF)/%-prog.i) $$(FF)/glibc/index.ff $$(CSEMA) $$(CSVIEW) | $$(FFTEXTT)
+$$(FF)/$(1)-all.ff: $$(ALLPROG_$(1):%=$$(FF)/%-prog.i) $$(ALLPROGAR_$(1):%=$$(FF)/%-prog.i) $$(FF)/glibc/index.ff $$(CSEMA) $$(CSVIEW) | $$(FFTEXTT)
 	$$(RUN) -v 9000000 -t 300 $$(CPRUN) $$(CSEMA) -l $$(CSFLAGS) -P glibc -I $$(FF)/glibc/index.ff -J $$(FF)/glibc.statics $$(if $$(GLIBC_START),,-T) \
-	    $$(foreach u,$$(ALLPROG_$(1)),-O $$(FF)/$$(u)-prog.i) -- main > $$(FF)/$(1)-all.ff.txt
+	    $$(foreach u,$$(ALLPROG_$(1)),-O $$(FF)/$$(u)-prog.i) $$(foreach u,$$(ALLPROGAR_$(1)),$$(FF)/$$(u)-prog.i) -- main > $$(FF)/$(1)-all.ff.txt
 	$$(FFTEXT) ff $$(FF)/$(1)-all.ff.txt > $$@
 $$(FF)/$(1)-all: $$(FF)/$(1)-all.ff $$(FF)/glibc/index.ff $$(TTPC) $$(SHARED)
 	$$(RUN) -t 900 $$(TTPC_RUN) $$(TTPCFLAGS_tests) $$(SHARED) $$< $$@ > $$@.lst
-$$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(OBJ)/libc.a
+$$(FF)/$(1)-all.ref: $$(ALLPROG_$(1):%=progs/%.c) $$(ALLPROGAR_$(1):%=progs/%.c) $$(OBJ)/libc.a
 	mkdir -p $$(FF)
-	for u in $$(ALLPROG_$(1)); do $$(RUN) -t 120 $$(GLIBC_CC) -O2 -fno-builtin $$(PROGFLAGS) -c progs/$$$$u.c -o $$(FF)/$$$$u.ref.o || exit 1; done
+	for u in $$(ALLPROG_$(1)) $$(ALLPROGAR_$(1)); do $$(RUN) -t 120 $$(GLIBC_CC) -O2 -fno-builtin $$(PROGFLAGS) -c progs/$$$$u.c -o $$(FF)/$$$$u.ref.o || exit 1; done
+	for u in $$(ALLPROGAR_$(1)); do $$(XPRE)ar rc $$(FF)/$$$$u.ref.a $$(FF)/$$$$u.ref.o || exit 1; done
 	$$(RUN) -t 120 $$(GLIBC_CC) -static -nostdlib -o $$@ $$(OBJ)/csu/crt1.o $$(OBJ)/csu/crti.o $$(CRTBEGIN) \
-	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) -Wl,--start-group $$(OBJ)/libc.a $$(ALLPROGLIBS_$(1)) -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
+	    $$(ALLPROG_$(1):%=$$(FF)/%.ref.o) $$(ALLPROGAR_$(1):%=$$(FF)/%.ref.a) -Wl,--start-group $$(OBJ)/libc.a $$(ALLPROGLIBS_$(1)) -lgcc -lgcc_eh -Wl,--end-group $$(CRTEND) $$(OBJ)/csu/crtn.o
 $(1)-check: $$(FF)/$(1)-all.ref $$(FF)/$(1)-all $$(call expect,$(1)) $$(ALLPROGDEPS_$(1))
 	@want=$$$$(head -n 1 $$(call expect,$(1)) | cut -d" " -f2); tail -n +2 $$(call expect,$(1)) > $$(FF)/$(1)-all.want; \
 	for b in $(1)-all.ref $(1)-all; do \
