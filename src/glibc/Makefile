@@ -2279,8 +2279,13 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           __asm__ ("rpl_printf")), the label on its header's declaration:
 #           the other unit calls it by the label, which csema follows to it
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check
-ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel
+#   structval a struct by value between the program and glibc (div, ldiv,
+#           lldiv, imaxdiv, inet_ntoa): the program's record from glibc's
+#           headers is the tree's own type; one of its own under a name of
+#           the tree stays prog (stdlib's testdiv)
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check structval-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel structval
 ALLPROG_asmlabel := asmlabel-a asmlabel-b
 ALLPROG_agginit := agginit
 ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
@@ -2288,6 +2293,7 @@ ALLPROG_cxops := cxops
 ALLPROG_insnames := insnames
 ALLPROG_fltinc := fltinc
 ALLPROG_weakref := weakref
+ALLPROG_structval := structval
 ALLPROG_x87math := x87math
 ALLPROGLIBS_x87math = $(OBJ)/math/libm.a
 ALLPROG_sincosf := sincosf
