@@ -2282,8 +2282,13 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           glibc's string tests have): its IRELATIVE relocation, on arm
 #           an Elf32_Rel with the resolver in the word
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check ifuncglob-check
-ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel ifuncglob
+#   regnames globals named as some target's registers (gp, sp, tp, ra, fp,
+#           lr, pc, zero, x5, r12): function pointers called by their names,
+#           which csema reached only as values (fault 37), and plain ints
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check ifuncglob-check regnames-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel ifuncglob regnames
+ALLPROG_regnames := regnames
 ALLPROG_ifuncglob := ifuncglob
 ALLPROG_asmlabel := asmlabel-a asmlabel-b
 ALLPROG_agginit := agginit
