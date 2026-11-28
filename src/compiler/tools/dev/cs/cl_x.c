@@ -1150,6 +1150,130 @@ static int cl_own_proto_differs (struct cs_decl *d, char *name, long nargs)
   np = cl_tree_nparams (name);
   return np >= 0 && np != nargs;
 }
+/* the definition of a function of the tree (--index), past its aliases (imaxdiv of ldiv), its children flat; 0 if none */
+static struct cl_list *cl_tree_def (char *name)
+{
+  int hop = 0;
+  while (hop < 8) {
+    char *f = cl_get (&C->treefile, name);
+    struct cl_map *pg;
+    struct node *d;
+    struct cl_list *k;
+    if (!f) return 0;
+    /* (the page, read by cl_tree_nparams, which caches it) */
+    if (!cl_get (&C->treepage, f)) (void) cl_tree_nparams (name);
+    pg = cl_get (&C->treepage, f);
+    if (!pg) return 0;
+    d = cl_get (pg, name);
+    if (!d) return 0;
+    k = cl_l ();
+    cl_flat_layers (d, k);
+    if (k->n == 2 && cl_is (k->v[0], "alias")) { name = cl_txt (k->v[1]); hop++; continue; }
+    return k;
+  }
+  return 0;
+}
+/* a record's name without prog and its kind word: what the tree would call the same C record */
+static char *cl_rc_base (char *nm)
+{
+  long k = cstrlen (nm), j;
+  if (k > 5 && cl_ends (nm, " prog")) { nm = cl_copy ((unsigned char *) nm, k - 5); k = k - 5; }
+  j = k;
+  while (j > 0 && nm[j - 1] != ' ') j--;
+  if (j > 0 && (cl_eq (nm + j, "struct") || cl_eq (nm + j, "union"))) nm = cl_copy ((unsigned char *) nm, j - 1);
+  return nm;
+}
+/* (b), the master's (2026-11-28): a value of a record passed between the program and a function of its tree where
+   the program's C declaration gives another record than the tree's definition (glibc's imaxdiv, an alias of ldiv,
+   returns ldiv_t into the program's imaxdiv_t): copied through a temporary of the other's type, a statement
+   expression : / t1: / from / value / t2: / to / (: / (cast / to / * pointer) / t1 / & address) / * pointer / t2
+   (in the words of now).
+   Only where both are records of the same layout (cl_tree_types compares them at the end; another layout stops
+   csema); what the tree calls the same record (div_t, div_t struct prog) cl_tree_types renames instead */
+static long cl_rc_count;
+static struct node *cl_rc_copy (struct cl_list *v, struct cl_list *from, struct cl_list *to)
+{
+  struct cl_list *g = cl_l (), *x = cl_l (), *y = cl_l (), *c = cl_l (), *z = cl_l ();
+  char *a, *b;
+  cl_rc_count = cl_rc_count + 1;
+  a = cl_cat ("__rc_", cl_num (2 * cl_rc_count));
+  b = cl_cat ("__rc_", cl_num (2 * cl_rc_count + 1));
+  cl_append (x, from);
+  cl_append (x, v);
+  cl_push (g, cl_nl (cl_cat (a, ":"), x));
+  /* (in the words of before, as all of csema's output until cl_newwords: content / (cast / address to) / address a) */
+  cl_push (c, cl_n ("address"));
+  cl_append (c, to);
+  cl_push (z, cl_n1 ("address", cl_n (a)));
+  cl_append (y, to);
+  cl_push (y, cl_n1 ("content", cl_cast_node (c, z)));
+  cl_push (g, cl_nl (cl_cat (b, ":"), y));
+  cl_push (g, cl_n (b));
+  cl_push (&C->rcpairs, cl_n (cl_join (from)));
+  cl_push (&C->rcpairs, cl_n (cl_join (to)));
+  return cl_nl (":", g);
+}
+/* the tree's record a type run of its definition names by value (a leaf of a record of types.ff), else 0 */
+static char *cl_rc_tree_rec (struct node *t, struct node *next)
+{
+  char *nm;
+  if (!t || t->count) return 0;
+  nm = cl_txt (t);
+  if (!cl_get (&C->treerecn, nm)) return 0;
+  /* (a pointer to it, the tree's words of now: the word built, as a literal of them would stop c2ff's newwords) */
+  if (next && cl_is (next, cl_cat ("* ", "pointer"))) return 0;
+  return nm;
+}
+/* the program's record type of a value (a struct or union by value), else 0 */
+static struct cl_list *cl_rc_prog_rec (struct cs_ty *t)
+{
+  int k;
+  if (!t) return 0;
+  k = cs_kind (t);
+  if (k != TY_STRUCT && k != TY_UNION) return 0;
+  return cl_ct (t);
+}
+/* a call of a function of the tree, its arguments and value copied where (b) needs it */
+static struct node *cl_rc_call (char *sn, char *name, struct cs_ex *n)
+{
+  struct cl_list *def, *args = cl_l (), *pt = 0;
+  struct node *call;
+  char *tr = 0;
+  long i = 0, p = 0;
+  if (!C->program || !C->treedefs.count || cl_has (&C->fn, name)) return 0;
+  def = cl_tree_def (cl_ffname (name));
+  if (!def || !def->n) return 0;
+  /* (its parameters: the definition's name: children, in order) */
+  while (i < def->n && !cl_ends_colon (cl_txt (def->v[i]))) i++;
+  if (i > 0) tr = cl_rc_tree_rec (def->v[0], def->n > 1 ? def->v[1] : 0);
+  {
+    long a = 1;
+    while (a < n->nk) {
+      struct cs_ex *e = cl_k (n, a);
+      struct cl_list *v = cl_l (), *pr = cl_rc_prog_rec (e->t);
+      char *ptr = 0;
+      cl_arg (e, v);
+      if (i + p < def->n && cl_ends_colon (cl_txt (def->v[i + p])) && def->v[i + p]->count)
+        ptr = cl_rc_tree_rec (def->v[i + p]->kids[0], def->v[i + p]->count > 1 ? def->v[i + p]->kids[1] : 0);
+      if (pr && ptr && !cl_eq (cl_rc_base (cl_join (pr)), cl_rc_base (ptr))) {
+        struct cl_list *tl = cl_l ();
+        cl_push (tl, cl_n (ptr));
+        cl_push (args, cl_rc_copy (v, pr, tl));
+      } else cl_append (args, v);
+      p++;
+      a++;
+    }
+  }
+  call = cl_nl (sn, args);
+  pt = cl_rc_prog_rec (n->t);
+  if (pt && tr && !cl_eq (cl_rc_base (cl_join (pt)), cl_rc_base (tr))) {
+    struct cl_list *v = cl_l (), *tl = cl_l ();
+    cl_push (v, call);
+    cl_push (tl, cl_n (tr));
+    return cl_rc_copy (v, tl, pt);
+  }
+  return call;
+}
 /* a function of no C (an asm function: glibc's .S, s2ff's) whose declaration returns a value that is no integer
    or pointer (a float, a double, a long double, a complex, a struct): C calls an asm function's name as a long
    (rax, a0, x0, r0), so through a pointer of the declaration's type, whose call takes its result where the
@@ -1409,7 +1533,10 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     if (c->d->k == DK_VAR && c->d->global) sn = c->d->global;
     if (!sn) sn = cl_ffname (name);
     if (c->d->k == DK_FUNC && cl_wref (cl_dn (c->d))) cl_push (o, cl_n1 ("weak", cl_call_node (sn, n)));
-    else cl_push (o, cl_call_node (sn, n));
+    else {
+      struct node *rc = c->d->k == DK_FUNC ? cl_rc_call (sn, name, n) : 0;
+      cl_push (o, rc ? rc : cl_call_node (sn, n));
+    }
   }
 }
 

@@ -11,8 +11,10 @@
    d = div (10, 3) took the call as d's first field: stdlib's testdiv). A
    record the program defines under a name of the tree but with other
    fields, struct in6addrinfo here (glibc's own is resolv's), stays the
-   program's own. imaxdiv waits: glibc's is an alias of ldiv, so the tree's
-   call returns ldiv_t into the program's imaxdiv_t (another record).  */
+   program's own. glibc's imaxdiv is an alias of ldiv: the tree's call
+   returns ldiv_t, the program's imaxdiv_t, another record of the same
+   layout, which csema copies through a temporary (where intmax_t is not
+   long, imaxdiv is a function of its own and no copy is made).  */
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
@@ -27,11 +29,12 @@ main (void)
   div_t d = div (10, 3);
   ldiv_t l = ldiv (-10L, 3L);
   lldiv_t ll = lldiv (100LL, 7LL);
+  imaxdiv_t m = imaxdiv (-100, 7);
   struct in_addr a;
   struct in6addrinfo o = { 'x', 42 };
   a.s_addr = htonl (0x7f000001);
-  printf ("div %d %d, ldiv %ld %ld, lldiv %lld %lld, imaxdiv waiting\n",
-          d.quot, d.rem, l.quot, l.rem, ll.quot, ll.rem);
+  printf ("div %d %d, ldiv %ld %ld, lldiv %lld %lld, imaxdiv %jd %jd\n",
+          d.quot, d.rem, l.quot, l.rem, ll.quot, ll.rem, m.quot, m.rem);
   printf ("inet_ntoa %s, own %c %ld\n", inet_ntoa (a), o.c, o.x);
   return 0;
 }

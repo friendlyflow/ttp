@@ -369,6 +369,43 @@ static void cl_rename_nodes (struct node *n, struct cl_map *ren)
   if (r) { n->text = (unsigned char *) r; n->len = cstrlen (r); }
   while (i < n->count) { cl_rename_nodes (n->kids[i], ren); i++; }
 }
+/* (b)'s copies: the program's record and the tree's of each the same layout, their fields' types in order (their
+   names may differ); else csema stops: a copy between them would be wrong */
+static struct node *cl_rc_rec_of (char *nm)
+{
+  long i = 0;
+  struct node *t = cl_get (&C->treerecn, nm);
+  if (t) return t;
+  while (i < C->types.n) { if (cl_eq (cl_no_colon (cl_txt (C->types.v[i])), nm)) return C->types.v[i]; i++; }
+  return 0;
+}
+static int cl_rc_same_layout (struct node *a, struct node *b)
+{
+  long i = 0;
+  struct cl_map none;
+  none.tab = 0; none.count = 0;
+  if (!a || !b || a->count != b->count) return 0;
+  while (i < a->count) {
+    struct node *x = a->kids[i], *y = b->kids[i];
+    long j = 0;
+    if (cl_ends_colon (cl_txt (x)) != cl_ends_colon (cl_txt (y))) return 0;
+    if (!cl_ends_colon (cl_txt (x)) && !cl_eq (cl_txt (x), cl_txt (y))) return 0;
+    if (x->count != y->count) return 0;
+    while (j < x->count) { if (!cl_same_node (x->kids[j], y->kids[j], &none)) return 0; j++; }
+    i++;
+  }
+  return 1;
+}
+static void cl_rc_check (void)
+{
+  long i = 0;
+  while (i + 1 < C->rcpairs.n) {
+    char *a = cl_txt (C->rcpairs.v[i]), *b = cl_txt (C->rcpairs.v[i + 1]);
+    if (!cl_rc_same_layout (cl_rc_rec_of (a), cl_rc_rec_of (b)))
+      cl_fail (cl_cat3 (cl_cat3 ("a record by value between the program and its tree of another layout: ", a, " and "), b, ""), 0);
+    i += 2;
+  }
+}
 static void cl_tree_types (void)
 {
   struct cl_map ren;
@@ -381,13 +418,20 @@ static void cl_tree_types (void)
       struct node *x = C->types.v[i];
       char *nm = cl_no_colon (cl_txt (x)), *base, *cand[2];
       long k = cstrlen (nm), c = 0, j;
-      if (k < 6 || !cl_ends (nm, " prog") || cl_get (&ren, nm)) { i++; continue; }
-      base = cl_copy ((unsigned char *) nm, k - 5);
-      cand[0] = base;
-      /* (and without its kind word: the tree names a typedef's record by the typedef, div_t) */
-      j = cstrlen (base);
-      while (j > 0 && base[j - 1] != ' ') j--;
-      cand[1] = j > 0 && (cl_eq (base + j, "struct") || cl_eq (base + j, "union")) ? cl_copy ((unsigned char *) base, j - 1) : 0;
+      if (cl_get (&ren, nm) || cl_get (&C->treerecn, nm)) { i++; continue; }
+      if (k > 5 && cl_ends (nm, " prog")) {
+        base = cl_copy ((unsigned char *) nm, k - 5);
+        cand[0] = base;
+        /* (and without its kind word: the tree names a typedef's record by the typedef, div_t) */
+        j = cstrlen (base);
+        while (j > 0 && base[j - 1] != ' ') j--;
+        cand[1] = j > 0 && (cl_eq (base + j, "struct") || cl_eq (base + j, "union")) ? cl_copy ((unsigned char *) base, j - 1) : 0;
+      } else {
+        /* (a record the program names plainly, where the tree has it with its kind word: struct in_addr, the tree's
+           in_addr struct (in_addr is a field's name there), inet_ntoa's parameter) */
+        cand[0] = cl_cat (nm, " struct");
+        cand[1] = cl_cat (nm, " union");
+      }
       while (c < 2) {
         struct node *t = cand[c] ? cl_get (&C->treerecn, cand[c]) : 0;
         if (t) {
@@ -763,7 +807,7 @@ void cl_finish (void)
     i++;
   }
   cl_types_all ();
-  if (C->program && C->treedefs.count) cl_tree_types ();
+  if (C->program && C->treedefs.count) { cl_tree_types (); cl_rc_check (); }
   nt = C->types.n;
   nout = C->out.n;
   cl_append (all, &C->types);
