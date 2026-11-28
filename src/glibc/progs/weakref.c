@@ -13,9 +13,13 @@
    weak reference too: _nl_current_LC_MONETARY_used, as uselocale.c declares
    each category's in a block, is 0 (csema wrote it as a plain name, which
    pulled lc-monetary's in: uselocale then stored to the thread locals it
-   left out, tst-ftime_l's SIGILL on aarch64).  */
+   left out, tst-ftime_l's SIGILL on aarch64). An array declared weak that
+   nothing defines, at file scope and in a block, is 0 as a value (ttpc
+   called through it, fault 28; csema kept a block's array a plain name for
+   apply_irel's __rela_iplt_start, which ttpc places itself).  */
 extern char _nl_current_LC_TIME_used __attribute__ ((weak));
 extern char _nl_current_LC_CTYPE_used __attribute__ ((weak));
+extern const char ttp_weakref_gone[] __attribute__ ((weak));
 extern int printf (const char *, ...);
 
 int
@@ -26,6 +30,12 @@ main (void)
     extern char _nl_current_LC_MONETARY_used;
 #pragma weak _nl_current_LC_MONETARY_used
     printf ("LC_MONETARY %d\n", &_nl_current_LC_MONETARY_used != 0);
+  }
+  {
+    extern const char ttp_weakref_none[];
+#pragma weak ttp_weakref_none
+    const char *p = ttp_weakref_none;
+    printf ("arrays %d %d\n", ttp_weakref_gone != 0, p != 0);
   }
   return 0;
 }
