@@ -38,6 +38,10 @@ PKG_CONFIGURE := --disable-shared --disable-nls --disable-doc \
 # -all-static is libtool's word for gcc's -static, at make's time, not
 # configure's, whose gcc knows no such flag)
 PKG_BUILDFLAGS = LDFLAGS='$(PKG_LDFLAGS) -all-static'
+# (the range decoder's portable C, not its x86-64 inline asm, whose asm
+# statements of two register outputs csema has no form for yet: the same for
+# both builds, as the CRC's)
+PKG_DEFINES := -DLZMA_RANGE_DECODER_CONFIG=0
 # the tests of liblzma, made after the build (make check would make them)
 PKG_REFMORE = -C tests create_compress_files $(XZ_TESTS) $(PKG_BUILDFLAGS)
 # the test suite: xz's own (tests/, automake's)
