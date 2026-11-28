@@ -401,7 +401,8 @@ c:
       lr
   comment
     For va_arg_pack and va_arg_pack_len under the AAPCS: a ttpc caller of a variadic function gives the count of the argument words in r12, which the callee keeps (cc_pushl). cc_arg_fp i off: argument register i = [FP + off].
-    cc_callp_fp off: a call to the address at FP + off. cc_vacount cnt next e: r12 = the words kept at FP - cnt, less next, plus e. cc_vapush cnt off next: the extra words (the count at FP - cnt less next) from FP + off on, pushed the last first.
+    cc_callp_fp off: a call to the address at FP + off. cc_vacount cnt next e: r12 = the words kept at FP - cnt, less next, plus e.
+    cc_vapush cnt off next par: the extra words (the count at FP - cnt less next) from FP + off on, pushed the last first, after a word of padding where their count plus par is odd: SP is 8-aligned at the call.
   cc_pushl:
     str.pre
       -4
@@ -448,6 +449,7 @@ c:
     cnt
     off
     next
+    par
     ldr
       sub
         cnt
@@ -460,6 +462,21 @@ c:
       next
       lr
       lr
+    addi
+      0
+      par
+      lr
+      r0
+    tsti
+      0
+      1
+      r0
+    beq
+      0
+    str.pre
+      -4
+      sp
+      r0
     movw
       lo16
         off
