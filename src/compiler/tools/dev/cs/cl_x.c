@@ -1180,14 +1180,25 @@ static int cl_wref (char *nm)
 {
   return C->cu && cl_val (&C->cu->wcand, nm) && !cl_val (&C->cu->wdef, nm);
 }
+/* (a function's type, or a pointer to one) */
+static int cl_fn_or_fnptr (struct cs_ty *t)
+{
+  struct cs_ty *c;
+  if (!t) return 1;
+  c = cs_canon (t);
+  if (c->k == TY_FUNC) return 1;
+  return c->k == TY_PTR && c->to && cs_canon (c->to)->k == TY_FUNC;
+}
 static void cl_call (struct cs_ex *n, struct cl_list *o)
 {
   struct cs_ex *callee = cl_k (n, 0), *c = cl_strip (callee);
   long na = n->nk - 1;
   char *name;
   /* ((*f) (...) calls what f points at; a _Generic's call is of the association it selected) */
+  /* (only where f is a function's pointer or a function: (*addfnptr) (...) of a pointer to a function's pointer,
+     gnulib's exclude.c call_addfn, loads the pointer first: du --exclude-from was a SIGSEGV) */
   for (;;) {
-    while (c->k == E_PAREN || (c->k == E_UN && cl_name_is (c, "*"))) c = cl_strip (cl_k (c, 0));
+    while (c->k == E_PAREN || (c->k == E_UN && cl_name_is (c, "*") && cl_fn_or_fnptr (cl_k (c, 0)->t))) c = cl_strip (cl_k (c, 0));
     if (c->k != E_GENERIC) break;
     c = cl_strip (cl_k (c, c->val + 1));
   }
@@ -1198,7 +1209,7 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     cl_append (o, p);
     return;
   }
-  if (c->k == E_CAST || c->k == E_COND || c->k == E_CALL || c->k == E_BIN) {
+  if (c->k == E_CAST || c->k == E_COND || c->k == E_CALL || c->k == E_BIN || c->k == E_UN) {
     struct cl_list *p = cl_ex (c);
     struct node *h = cl_one (p);
     nd_add (h, cl_n ("."));
