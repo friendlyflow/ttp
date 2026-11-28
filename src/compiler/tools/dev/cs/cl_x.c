@@ -1406,8 +1406,6 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   }
   {
     char *sn = 0;
-    /* (a global function pointer called by its name, int (*gp) (int) = f; gp (40): reached as its value use is) */
-    if (c->d->k == DK_VAR && !c->d->local && !c->d->global) { name = cl_own (name); cl_want (name); }
     if (c->d->k == DK_VAR && c->d->global) sn = c->d->global;
     if (!sn) sn = cl_ffname (name);
     if (c->d->k == DK_FUNC && cl_wref (cl_dn (c->d))) cl_push (o, cl_n1 ("weak", cl_call_node (sn, n)));
