@@ -34,7 +34,7 @@ struct cl_state {
   int target;                  /* 0 riscv64, 1 x86_64, 2 aarch64, 3 arm */
   char *page;
   char *ifile, *glibc_src, *libgcc_src, *shared;
-  struct cl_map fn, var, alias, ifunc, weak, regvar, section;
+  struct cl_map fn, var, alias, ifunc, weak, regvar, section, asml;
   struct cl_map rec, enumd, anon_tag, anon_name, tagname, wanttag, tdone, enumof, enumval, enumref, enumused;
   struct cl_map treefile, treepage;
   struct cl_map extown;         /* a program's external that a name of the tree (a static of glibc's) made take its unit's name: that name in every unit */

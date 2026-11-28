@@ -170,10 +170,13 @@ PCJOBS ?= 3
 GBUILD ?= $(HOME)/.cache/ttp/build/$(notdir $(CURDIR))/glibc
 GLIBC_REF := $(HOME)/.cache/ttp/glibc-gcc16
 PC_SLOT := sh src/compiler/gen/slot.sh -v 8000000 -t 3600
-# (compiler-check a cap of its own, 5400 s: it was at 3132 s before T5 and
+# (compiler-check a cap of its own, 9000 s: it was at 3132 s before T5 and
 # grows with the tools: x86gnu's 30,911 forms, each target's s2ff on
-# x86_64's samples with the 30 MB gnu tree, under qemu 5-7 s a run)
-PC_SLOT_CC := sh src/compiler/gen/slot.sh -v 8000000 -t 5400
+# x86_64's samples with the 30 MB gnu tree, under qemu 5-7 s a run; 5400 s
+# until 2026-11-26, which load alone took it past in three checks: 4811 to
+# 7495 s measured with other lanes running, while the cache shortens it
+# only when the tools and trees are unchanged)
+PC_SLOT_CC := sh src/compiler/gen/slot.sh -v 8000000 -t 9000
 PC_MS := $(shell sed -n 's/^MILESTONES := //p' src/glibc/Makefile)
 # (src/glibc runs the tools the tools step made, this BUILD's: mki, cpp, s2ff,
 # csema; every step that runs src/glibc waits for that step, through
