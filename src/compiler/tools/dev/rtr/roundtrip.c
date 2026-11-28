@@ -56,7 +56,7 @@ static void *xalloc (long n)
   }
   p = a->p[a->at] + a->used;
   a->used += n;
-  for (i = 0; i < n; i++) p[i] = 0;
+  { unsigned long *w = (unsigned long *) p; long nw = n / (long) sizeof (unsigned long); for (i = 0; i < nw; i++) w[i] = 0; }
   return p;
 }
 static struct arena *a_new_arena (void) { return alloc (sizeof (struct arena)); }
@@ -87,8 +87,11 @@ static long jfd = -1;
 static int jeof = 1, jdrop;
 static struct jv *jnull;
 static struct hash *jkeys, *jvals;
-static struct str *jscr;
+static struct str *jscr, *jtok, jview;   /* (jtok: the token read, jscr or a view of the buffer) */
+static struct str *K_kind, *K_inner, *K_name, *K_id, *K_type;
 static struct arena *j_scratch;
+static struct str *key_of (char *k);
+static struct str *key_s (struct str *k);
 #define JBUF (1 << 20)
 static void j_fail (char *m) { struct str *x = s_of ("roundtrip: bad JSON: "); s_cat (x, m); s_cat (x, "\n"); die_s (x); }
 /* at least need bytes from jp where the file has them */
@@ -106,9 +109,28 @@ static void jfill (long need)
   }
 }
 static int jpeek (void) { if (jp >= je) jfill (1); return jp < je ? *jp : -1; }
-static void j_ws (void) { for (;;) { int c = jpeek (); if (c == ' ' || c == '\n' || c == '\t' || c == '\r') jp++; else return; } }
+static void j_ws (void)
+{
+  for (;;) {
+    unsigned char *p = jp, *e = je;
+    while (p < e && (*p == ' ' || *p == '\n' || *p == '\t' || *p == '\r')) p++;
+    jp = p;
+    if (jp < je) return;
+    jfill (1);
+    if (jp >= je) return;
+  }
+}
 static struct jv *jv_new (int t) { struct jv *v = alloc (sizeof (struct jv)); v->t = t; return v; }
-static void jscr_add (unsigned char *p, long n) { perm_begin (); s_add (jscr, p, n); perm_end (); }
+static void jscr_add (unsigned char *p, long n)
+{
+  long i;
+  unsigned char *d;
+  if (jscr->n + n + 1 > jscr->room) { perm_begin (); s_add (jscr, p, n); perm_end (); return; }
+  d = jscr->p + jscr->n;
+  for (i = 0; i < n; i++) d[i] = p[i];
+  jscr->n += n;
+  d[n] = 0;
+}
 static void jscr_chr (int c) { unsigned char b[1]; b[0] = (unsigned char) c; jscr_add (b, 1); }
 static void utf8_add (long c)
 {
@@ -120,9 +142,13 @@ static void utf8_add (long c)
 /* a string into jscr */
 static void j_str (void)
 {
-  unsigned char *a;
-  jscr->n = 0;
+  unsigned char *a, *p, *e;
   jp++;
+  /* (a string all in the buffer, no escape in it: a view of it) */
+  p = jp; e = je;
+  while (p < e && *p != '"' && *p != '\\') p++;
+  if (p < e && *p == '"') { jview.p = jp; jview.n = p - jp; jtok = &jview; jp = p + 1; return; }
+  jtok = jscr; jscr->n = 0;
   for (;;) {
     if (jp >= je) { jfill (1); if (jp >= je) j_fail ("a string that does not end"); }
     a = jp;
@@ -152,30 +178,41 @@ static void j_str (void)
     jp++;
   }
 }
+/* (the interned: a small table in front of the big one, by the same hash, for the many strings met again and again) */
+#define FC 8192
+static struct hent *fc_key[FC], *fc_val[FC];
 static struct str *j_key (void)   /* a key, made once */
 {
   struct hent *e;
+  long i;
   j_str ();
-  e = h_find (jkeys, jscr);
-  if (!e) { perm_begin (); e = h_put (jkeys, s_dup (jscr)); e->pv = e->k; perm_end (); }
+  i = h_of (jtok->p, jtok->n) % FC;
+  e = fc_key[i];
+  if (e && s_eq (e->k, jtok)) return e->pv;
+  e = h_find (jkeys, jtok);
+  if (!e) { perm_begin (); e = h_put (jkeys, s_dup (jtok)); e->pv = e->k; perm_end (); }
+  fc_key[i] = e;
   return e->pv;
 }
-static struct jv *j_scalar (int t, int intern)   /* jscr as a string or a number */
+static struct jv *j_scalar (int t, int intern)   /* jtok as a string or a number */
 {
   struct hent *e;
   struct jv *v;
-  if (intern && jscr->n <= 200) {
-    e = h_find (jvals, jscr);
+  if (intern && jtok->n <= 200) {
+    long i = h_of (jtok->p, jtok->n) % FC;
+    e = fc_val[i];
+    if (!(e && s_eq (e->k, jtok))) { e = h_find (jvals, jtok); if (e) fc_val[i] = e; }
     if (e && ((struct jv *) e->pv)->t == t) return e->pv;
     if (!e) {
       perm_begin ();
-      e = h_put (jvals, s_dup (jscr));
+      e = h_put (jvals, s_dup (jtok));
       v = jv_new (t); v->s = e->k; v->in = 1; e->pv = v;
       perm_end ();
+      fc_val[i] = e;
       return v;
     }
   }
-  v = jv_new (t); v->s = s_dup (jscr);
+  v = jv_new (t); v->s = s_dup (jtok);
   return v;
 }
 static void j_skip (void)
@@ -220,10 +257,10 @@ static struct jv *j_val (int intern)
       j_ws ();
       if (jpeek () != ':') j_fail ("no colon");
       jp++;
-      if (jdrop && (s_is (k, "loc") || (s_is (k, "range") && (jdrop == 2 || (kind && !s_is (kind, "GCCAsmStmt") && !s_is (kind, "AsmLabelAttr")))))) j_skip ();
+      if (jdrop && (k == key_of ("loc") || (k == key_of ("range") && (jdrop == 2 || (kind && !s_is (kind, "GCCAsmStmt") && !s_is (kind, "AsmLabelAttr")))))) j_skip ();
       else {
-        struct jv *x = j_val (!s_is (k, "id"));
-        if (s_is (k, "kind") && x->s) kind = x->s;
+        struct jv *x = j_val (k != K_id);
+        if (k == K_kind && x->s) kind = x->s;
         v_push (v->k, k); v_push (v->v, x);
       }
       j_ws ();
@@ -246,14 +283,14 @@ static struct jv *j_val (int intern)
   }
   if (c == '"') { j_str (); return j_scalar ('s', intern); }
   jfill (64);
-  if (je - jp >= 4 && msame (jp, (unsigned char *) "true", 4)) { jp += 4; jscr->n = 0; jscr_chr ('1'); return j_scalar ('t', 1); }
-  if (je - jp >= 5 && msame (jp, (unsigned char *) "false", 5)) { jp += 5; jscr->n = 0; return j_scalar ('f', 1); }
+  if (je - jp >= 4 && msame (jp, (unsigned char *) "true", 4)) { jp += 4; jscr->n = 0; jscr_chr ('1'); jtok = jscr; return j_scalar ('t', 1); }
+  if (je - jp >= 5 && msame (jp, (unsigned char *) "false", 5)) { jp += 5; jscr->n = 0; jtok = jscr; return j_scalar ('f', 1); }
   if (je - jp >= 4 && msame (jp, (unsigned char *) "null", 4)) { jp += 4; return jnull; }
   {
     unsigned char *a = jp;
     while (jp < je && (is_digit (*jp) || *jp == '-' || *jp == '+' || *jp == '.' || *jp == 'e' || *jp == 'E')) jp++;
     if (jp == a) j_fail ("a value that is none");
-    jscr->n = 0; jscr_add (a, jp - a);
+    jview.p = a; jview.n = jp - a; jtok = &jview;
     return j_scalar ('n', intern);
   }
 }
@@ -263,6 +300,7 @@ static void j_init (void)
   jbuf = alloc (JBUF + 16);
   j_scratch = a_new_arena ();
   jkeys = h_new (); jvals = h_new (); jscr = s_of ("");
+  K_kind = key_s (s_of ("kind")); K_inner = key_s (s_of ("inner")); K_name = key_s (s_of ("name")); K_id = key_s (s_of ("id")); K_type = key_s (s_of ("type"));
   perm_end ();
 }
 /* a file's JSON, opened (Perl's die where it cannot be) */
@@ -316,7 +354,7 @@ static struct vec *j_unit (char *f, int drop, int (*each) (struct jv *, long), l
     if (jpeek () != ':') j_fail ("no colon");
     jp++;
     j_ws ();
-    if (s_is (k, "inner") && jpeek () == '[') {
+    if (k == K_inner && jpeek () == '[') {
       jp++; j_ws ();
       if (jpeek () == ']') jp++;
       else for (;;) {
@@ -343,25 +381,59 @@ static struct vec *j_unit (char *f, int drop, int (*each) (struct jv *, long), l
   return kept;
 }
 /* a key's value of an object, else 0 (Perl's undef: also a null) */
-static struct jv *jget (struct jv *o, char *k)
+/* (every key of an object is made once (j_key, key_of): a key is found by
+   its address; key_of finds a literal's by the literal's address, as
+   rx_get its pattern) */
+#define KC 4096
+static char *kc_lit[KC];
+static struct str *kc_key[KC];
+static struct str *key_s (struct str *k)   /* the key of the text k, made if it is not there */
 {
-  long i, n = slen (k);
-  if (!o || o->t != 'o') return 0;
-  for (i = 0; i < o->k->n; i++) {
-    struct str *x = o->k->v[i];
-    if (x->n == n && msame (x->p, (unsigned char *) k, n)) { struct jv *v = o->v->v[i]; return v == jnull ? 0 : v; }
+  struct hent *e = h_find (jkeys, k);
+  if (!e) { perm_begin (); e = h_put (jkeys, s_dup (k)); e->pv = e->k; perm_end (); }
+  return e->pv;
+}
+static struct str *key_of (char *k)   /* the key of a literal */
+{
+  long h = (long) (((unsigned long) k >> 3) % KC), i;
+  for (i = 0; i < KC; i++) {
+    long j = (h + i) % KC;
+    if (kc_lit[j] == k) return kc_key[j];
+    if (!kc_lit[j]) { struct str *x; perm_begin (); x = key_s (s_of (k)); perm_end (); kc_lit[j] = k; kc_key[j] = x; return x; }
   }
+  { struct str *x; perm_begin (); x = key_s (s_of (k)); perm_end (); return x; }
+}
+static struct jv *jget_k (struct jv *o, struct str *key)
+{
+  long i;
+  if (!o || o->t != 'o' || !key) return 0;
+  for (i = 0; i < o->k->n; i++) if (o->k->v[i] == key) { struct jv *v = o->v->v[i]; return v == jnull ? 0 : v; }
   return 0;
 }
+static struct jv *jget (struct jv *o, char *k) { return jget_k (o, key_of (k)); }
+static struct jv *jget_s (struct jv *o, struct str *k) { struct hent *e = h_find (jkeys, k); return e ? jget_k (o, e->pv) : 0; }
 /* a value as a string (Perl's), else 0 */
 static struct str *jstr (struct jv *o, char *k) { struct jv *v = jget (o, k); return v && v->s ? v->s : 0; }
 static int jis (struct jv *o, char *k, char *w) { struct str *s = jstr (o, k); return s && s_is (s, w); }
+/* a kind among a list of them ("|A|B|"), a text's end */
+static int s_in (struct str *x, char *list)
+{
+  long i = 0, n = slen (list);
+  while (i < n) {
+    long j = i + 1;
+    while (j < n && list[j] != '|') j++;
+    if (j - i - 1 == x->n && msame ((unsigned char *) list + i + 1, x->p, x->n)) return 1;
+    i = j;
+  }
+  return 0;
+}
+static int s_ends (struct str *x, char *w) { long n = slen (w); return x->n >= n && msame (x->p + x->n - n, (unsigned char *) w, n); }
 /* inner, a node's children (Perl's kids) */
 static struct vec *empty_vec;
-static struct vec *jkids (struct jv *n) { struct jv *v = jget (n, "inner"); return v && v->t == 'a' ? v->v : empty_vec; }
+static struct vec *jkids (struct jv *n) { struct jv *v = jget_k (n, K_inner); return v && v->t == 'a' ? v->v : empty_vec; }
 static struct jv *jkid (struct jv *n, long i) { struct vec *k = jkids (n); return i < k->n ? k->v[i] : 0; }
-static struct str *jkind (struct jv *n) { struct str *s = n ? jstr (n, "kind") : 0; return s ? s : s_of (""); }
-static int kind_is (struct jv *n, char *k) { struct str *s = n ? jstr (n, "kind") : 0; return s && s_is (s, k); }
+static struct str *jkind (struct jv *n) { struct jv *v = n ? jget_k (n, K_kind) : 0; return v && v->s ? v->s : s_of (""); }
+static int kind_is (struct jv *n, char *k) { struct jv *v = n ? jget_k (n, K_kind) : 0; return v && v->s && s_is (v->s, k); }
 
 /* ---- big integers (Math::BigInt's, as FFold uses them): magnitude in
    32-bit limbs, least first */
@@ -881,6 +953,7 @@ static struct str *flt (struct str *v)
 /* ---- types */
 static struct hash *tdef, *typeof_, *declty, *constint, *ltype, *cls;
 static long typeof_depth;
+static int side_ff;          /* (our $side eq 'ff') */
 static void cls_init (void)
 {
   static char *c[] = { "char", "char", "signed char", "i8", "unsigned char", "u8", "short", "i16", "unsigned short", "u16",
@@ -958,7 +1031,26 @@ static struct str *typeof_expr (struct str *e)
 static int memchr_nl (struct str *s, long i) { for (; i < s->n; i++) if (s->p[i] == '\n') return 1; return 0; }
 static struct str *vla_norm (struct str *c);
 /* a C type's class, as roundtrip.pl's tstr */
+/* (tstr made once a text while what it reads stays: the tables, the side;
+   the typeof of an expression, below the top, made each time) */
+static struct str *tstr_ (struct str *s);
+static struct hash *tsc, *tsc_tdef, *tsc_typeof, *tsc_declty, *tsc_constint, *tsc_ltype;
+static int tsc_side = -1;
 static struct str *tstr (struct str *s)
+{
+  struct hent *e;
+  struct str *r;
+  if (typeof_depth) return tstr_ (s);
+  if (!tsc || tsc_tdef != tdef || tsc_typeof != typeof_ || tsc_declty != declty || tsc_constint != constint || tsc_ltype != ltype || tsc_side != side_ff) {
+    tsc = h_new (); tsc_tdef = tdef; tsc_typeof = typeof_; tsc_declty = declty; tsc_constint = constint; tsc_ltype = ltype; tsc_side = side_ff;
+  }
+  e = h_find (tsc, s);
+  if (e) return e->pv;
+  r = tstr_ (s);
+  h_setp (tsc, s, r);
+  return r;
+}
+static struct str *tstr_ (struct str *s)
 {
   struct str *x;
   s = noattr (s);
@@ -1039,7 +1131,6 @@ static struct str *tstr (struct str *s)
 }
 
 /* ---- a variable-length array's count, as prefix (vla_norm) */
-static int side_ff;          /* (our $side eq 'ff') */
 static struct hash *orig;    /* names.txt's C name of each name */
 static struct vec *vtok;
 static long vat;
@@ -1185,8 +1276,8 @@ static void constint_of (struct vec *keep)
     init = jstr (d, "init");
     if (!(q && mf (q, "^const (?:(?:unsigned |signed )?(?:char|short|int|long|long long)(?: int)?|unsigned)$", "") && init && s_is (init, "c"))) continue;
     k = jkids (d);
-    for (j = 0; j < k->n; j++) if (!mf (jkind (k->v[j]), "Attr$", "")) { e = k->v[j]; break; }
-    while (e && mf (jkind (e), "^(ImplicitCastExpr|ParenExpr|ConstantExpr)$", "")) e = jkid (e, 0);
+    for (j = 0; j < k->n; j++) if (!s_ends (jkind (k->v[j]), "Attr")) { e = k->v[j]; break; }
+    while (e && s_in (jkind (e), "|ImplicitCastExpr|ParenExpr|ConstantExpr|")) e = jkid (e, 0);
     if (e && kind_is (e, "IntegerLiteral")) h_setp (constint, jstr (d, "name") ? jstr (d, "name") : s_of (""), jstr (e, "value"));
   }
 }

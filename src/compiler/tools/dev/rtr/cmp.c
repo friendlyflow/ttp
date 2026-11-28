@@ -250,7 +250,7 @@ static struct str *cnorm (struct unit *u, char *pre, struct jv *d, int fn)
   struct jv *e, *ask;
   long i;
   if (!u->norm) return fn ? fnorm (d) : gnorm (d);
-  e = jget (u->norm, (char *) cat2 (pre, jsor (d, "id"), "")->p);
+  e = jget_s (u->norm, cat2 (pre, jsor (d, "id"), ""));
   if (e) {
     int ok = 1;
     ask = jget (e, "asked");
@@ -271,7 +271,7 @@ static struct str *cnorm (struct unit *u, char *pre, struct jv *d, int fn)
 struct un { struct str *j; struct hash *want, *gf, *ge, *gs; };
 static int defined_true (struct hash *h, struct str *k) { struct str *v = h_pv (h, k); return v && v->n && !s_is (v, "0"); }
 static struct jv *jobj (void) { struct jv *x = jv_new ('o'); x->k = v_new (); x->v = v_new (); return x; }
-static void jset (struct jv *o, char *k, struct jv *v) { v_push (o->k, s_of (k)); v_push (o->v, v); }
+static void jset (struct jv *o, char *k, struct jv *v) { v_push (o->k, key_of (k)); v_push (o->v, v); }
 static struct jv *jtype (char *q) { struct jv *t = jobj (); jset (t, "qualType", jstrv (q)); return t; }
 static struct jv *jarr1 (struct jv *x) { struct jv *a = jv_new ('a'); a->v = v_new (); v_push (a->v, x); return a; }
 static struct un *unit_norms (struct unit *u)

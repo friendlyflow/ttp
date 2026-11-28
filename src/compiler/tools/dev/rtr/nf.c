@@ -22,22 +22,22 @@ static void v_cat (struct vec *a, struct vec *b) { long i, n = b->n; for (i = 0;
 static struct jv *kid0 (struct jv *n) { return n ? jkid (n, 0) : 0; }
 static struct jv *strip (struct jv *n)
 {
-  while (n && mf (jkind (n), "^(ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$", "")) n = kid0 (n);
+  while (n && s_in (jkind (n), "|ImplicitCastExpr|CStyleCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups|")) n = kid0 (n);
   return n;
 }
 static struct jv *unparen (struct jv *n)
 {
-  while (n && mf (jkind (n), "^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$", "")) n = kid0 (n);
+  while (n && s_in (jkind (n), "|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups|")) n = kid0 (n);
   return n;
 }
 static struct jv *unimplicit (struct jv *n)
 {
-  while (n && mf (jkind (n), "^(ImplicitCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$", "")) n = kid0 (n);
+  while (n && s_in (jkind (n), "|ImplicitCastExpr|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups|")) n = kid0 (n);
   return n;
 }
 static struct jv *unpromote (struct jv *n)
 {
-  while (n && (mf (jkind (n), "^(ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups)$", "")
+  while (n && (s_in (jkind (n), "|ParenExpr|ConstantExpr|FullExpr|ExprWithCleanups|")
                || (kind_is (n, "ImplicitCastExpr") && !mf (jstr (n, "castKind") ? jstr (n, "castKind") : s_of (""), "ToBoolean$", "")))) n = kid0 (n);
   return n;
 }
@@ -52,7 +52,7 @@ static struct jv *first_nonattr (struct jv *n)
 {
   struct vec *k = jkids (n);
   long i;
-  for (i = 0; i < k->n; i++) if (!mf (jkind (k->v[i]), "Attr$", "")) return k->v[i];
+  for (i = 0; i < k->n; i++) if (!s_ends (jkind (k->v[i]), "Attr")) return k->v[i];
   return 0;
 }
 /* the type's qualType (desugared first, else the qualType) */
@@ -161,13 +161,13 @@ static int asm_valued (struct jv *n)
 static int small_literal (struct jv *n)
 {
   struct jv *s = unparen (n);
-  return mf (jkind (s), "^(IntegerLiteral|CharacterLiteral)$", "") && mf (tcls (s), "^[iu]32$", "") && small_val (jstr (s, "value"));
+  return s_in (jkind (s), "|IntegerLiteral|CharacterLiteral|") && mf (tcls (s), "^[iu]32$", "") && small_val (jstr (s, "value"));
 }
-static int is_zero (struct jv *n) { struct jv *s = strip (n); return mf (jkind (s), "^(IntegerLiteral|FloatingLiteral)$", "") && num_zero (jstr (s, "value")); }
+static int is_zero (struct jv *n) { struct jv *s = strip (n); return s_in (jkind (s), "|IntegerLiteral|FloatingLiteral|") && num_zero (jstr (s, "value")); }
 static int is_null (struct jv *n)
 {
   int null = 0;
-  while (n && mf (jkind (n), "^(ImplicitCastExpr|CStyleCastExpr|ParenExpr)$", "")) { if (jis (n, "castKind", "NullToPointer")) null = 1; n = kid0 (n); }
+  while (n && s_in (jkind (n), "|ImplicitCastExpr|CStyleCastExpr|ParenExpr|")) { if (jis (n, "castKind", "NullToPointer")) null = 1; n = kid0 (n); }
   return null && kind_is (n, "IntegerLiteral") && num_zero (jstr (n, "value"));
 }
 static int is_offsetof (struct jv *n)
@@ -175,15 +175,15 @@ static int is_offsetof (struct jv *n)
   struct jv *s = unparen (n);
   if (!(kind_is (s, "UnaryOperator") && jis (s, "opcode", "&"))) return 0;
   s = unparen (kid0 (s));
-  while (s && (mf (jkind (s), "^(MemberExpr|ArraySubscriptExpr)$", "") || (kind_is (s, "ImplicitCastExpr") && jis (s, "castKind", "ArrayToPointerDecay")))) s = unparen (kid0 (s));
-  return s && mf (jkind (s), "CastExpr$", "") && kind_is (strip (s), "IntegerLiteral") && num_zero (jstr (strip (s), "value"));
+  while (s && (s_in (jkind (s), "|MemberExpr|ArraySubscriptExpr|") || (kind_is (s, "ImplicitCastExpr") && jis (s, "castKind", "ArrayToPointerDecay")))) s = unparen (kid0 (s));
+  return s && s_ends (jkind (s), "CastExpr") && kind_is (strip (s), "IntegerLiteral") && num_zero (jstr (strip (s), "value"));
 }
 /* inf or nan where n is a call of gcc's __builtin_huge_val, inf or nan, under floating conversions; else 0 */
 static char *special_float (struct jv *n)
 {
   struct str *name;
   struct jv *d;
-  while (n && (mf (jkind (n), "^(ParenExpr|ConstantExpr)$", "") || (mf (jkind (n), "^(ImplicitCastExpr|CStyleCastExpr)$", "") && mf (jsor (n, "castKind"), "^(FloatingCast|NoOp)$", "")))) n = kid0 (n);
+  while (n && (s_in (jkind (n), "|ParenExpr|ConstantExpr|") || (s_in (jkind (n), "|ImplicitCastExpr|CStyleCastExpr|") && s_in (jsor (n, "castKind"), "|FloatingCast|NoOp|")))) n = kid0 (n);
   if (!(n && kind_is (n, "CallExpr"))) return 0;
   d = rdecl (strip (kid0 (n)));
   if (!d) return 0;
@@ -345,7 +345,7 @@ static int fp_computes (struct jv *n)
   struct vec *c;
   long i;
   if (mf (k, "^(?:BinaryOperator|UnaryOperator)$", "") && mf (q, "^(?:float|double|long double|_Float\\d+x?|__float128)$", "")) return 1;
-  if (mf (k, "CastExpr$", "") && mf (jsor (n, "castKind"), "Floating", "")) return 1;
+  if (s_ends (k, "CastExpr") && mf (jsor (n, "castKind"), "Floating", "")) return 1;
   c = jkids (n);
   for (i = 0; i < c->n; i++) if (fp_computes (c->v[i])) return 1;
   return 0;
@@ -367,7 +367,7 @@ static int asm_barrier (struct jv *n)
   if (t_is ("aarch64") && !a->o->n) {
     struct vec *k = jkids (n);
     long m = 0;
-    for (i = 0; i < k->n; i++) if (!mf (jkind (k->v[i]), "Attr$", "")) { m++; if (!s_is (tcls (k->v[i]), "ldouble")) return 0; }
+    for (i = 0; i < k->n; i++) if (!s_ends (jkind (k->v[i]), "Attr")) { m++; if (!s_is (tcls (k->v[i]), "ldouble")) return 0; }
     return m > 0;
   }
   return 0;
@@ -728,7 +728,7 @@ static struct str *E (struct jv *n)
 static struct vec *vmap_unimplicit (struct vec *a) { struct vec *o = v_new (); long i; for (i = 0; i < a->n; i++) v_push (o, unimplicit (a->v[i])); return o; }
 static struct jv *strip_bitcast (struct jv *a)   /* through Implicit and CStyle casts of BitCast or NoOp */
 {
-  while (a && mf (jkind (a), "^(ImplicitCastExpr|CStyleCastExpr)$", "") && mf (jsor (a, "castKind"), "^(BitCast|NoOp)$", "")) a = kid0 (a);
+  while (a && s_in (jkind (a), "|ImplicitCastExpr|CStyleCastExpr|") && s_in (jsor (a, "castKind"), "|BitCast|NoOp|")) a = kid0 (a);
   return a;
 }
 static struct str *call (struct jv *n)
@@ -756,7 +756,7 @@ static struct str *call (struct jv *n)
           o = s_of ("(cast BitCast ptr(void) (+ (call "); s_app (o, mc);
           for (i = 0; i < args->n; i++) {
             struct jv *a = args->v[i];
-            while (a && mf (jkind (a), "CastExpr$", "") && mf (jsor (a, "castKind"), "^(BitCast|NoOp)$", "")) a = kid0 (a);
+            while (a && s_ends (jkind (a), "CastExpr") && s_in (jsor (a, "castKind"), "|BitCast|NoOp|")) a = kid0 (a);
             s_chr (o, ' '); s_app (o, E (a));
           }
           s_cat (o, ") "); s_app (o, E (n2)); s_cat (o, "))");
@@ -767,7 +767,7 @@ static struct str *call (struct jv *n)
         s_cat (o, ")) "); s_app (o, E (n2)); s_cat (o, "))");
         return o;
       }
-      if (s_is (name, "__builtin_constant_p")) return s_of (mf (jkind (strip (args->n ? args->v[0] : 0)), "^(IntegerLiteral|CharacterLiteral)$", "") ? "(int 1 i32)" : "(int 0 i32)");
+      if (s_is (name, "__builtin_constant_p")) return s_of (s_in (jkind (strip (args->n ? args->v[0] : 0)), "|IntegerLiteral|CharacterLiteral|") ? "(int 1 i32)" : "(int 0 i32)");
     }
     if (s_is (name, "__builtin_va_start")) { struct vec *a = v_new (); if (args->n) v_push (a, args->v[0]); args = a; }
     if (asmfn_of (name)) args = vmap_unimplicit (args);
@@ -781,10 +781,10 @@ static struct str *call (struct jv *n)
           struct jv *x = jv_new ('o'), *in = jv_new ('a');
           x->k = v_new (); x->v = v_new (); in->v = v_new ();
           v_push (in->v, jkid (b, 0));
-          v_push (x->k, s_of ("kind")); v_push (x->v, jstrv ("ImplicitCastExpr"));
-          v_push (x->k, s_of ("castKind")); v_push (x->v, jstrv ("IntegralToBoolean"));
-          v_push (x->k, s_of ("type")); v_push (x->v, jget (b, "type") ? jget (b, "type") : jnull);
-          v_push (x->k, s_of ("inner")); v_push (x->v, in);
+          v_push (x->k, key_of ("kind")); v_push (x->v, jstrv ("ImplicitCastExpr"));
+          v_push (x->k, key_of ("castKind")); v_push (x->v, jstrv ("IntegralToBoolean"));
+          v_push (x->k, key_of ("type")); v_push (x->v, jget (b, "type") ? jget (b, "type") : jnull);
+          v_push (x->k, key_of ("inner")); v_push (x->v, in);
           v_push (a, x);
         } else v_push (a, args->v[i]);
       }
@@ -1229,11 +1229,11 @@ static struct vec *S (struct vec *all)
       struct str *l = h_pv (labels, jsor (n, "declId"));
       struct vec *kk = jkids (n), *na = v_new ();
       v_push (out, cat2 ("(label ", l ? l : jsor (n, "name"), ")"));
-      for (i = 0; i < kk->n; i++) if (!mf (jkind (kk->v[i]), "Attr$", "")) v_push (na, kk->v[i]);
+      for (i = 0; i < kk->n; i++) if (!s_ends (jkind (kk->v[i]), "Attr")) v_push (na, kk->v[i]);
       v_cat (out, S (na));
       continue;
     }
-    if (s_is (k, "AttributedStmt")) { struct vec *kk = jkids (n), *na = v_new (); for (i = 0; i < kk->n; i++) if (!mf (jkind (kk->v[i]), "Attr$", "")) v_push (na, kk->v[i]); v_cat (out, S (na)); continue; }
+    if (s_is (k, "AttributedStmt")) { struct vec *kk = jkids (n), *na = v_new (); for (i = 0; i < kk->n; i++) if (!s_ends (jkind (kk->v[i]), "Attr")) v_push (na, kk->v[i]); v_cat (out, S (na)); continue; }
     if (s_is (k, "NullStmt")) continue;
     if (s_is (k, "ReturnStmt")) { v_push (out, jget (n, "inner") ? cat2 ("(return ", E (kid0 (n)), ")") : s_of ("(return)")); continue; }
     if (s_is (k, "BreakStmt")) { v_push (out, s_of ("(break)")); continue; }
@@ -1360,7 +1360,7 @@ static void const_walk (struct jv *n)
   long j;
   if (kind_is (n, "VarDecl") && jis (n, "storageClass", "static") && jget (n, "type") && mf (sor (jstr (jget (n, "type"), "qualType")), "\\bconst\\b", "")) {
     struct jv *i = first_nonattr (n);
-    while (i && mf (jkind (i), "^(ImplicitCastExpr|ParenExpr|ConstantExpr)$", "")) i = kid0 (i);
+    while (i && s_in (jkind (i), "|ImplicitCastExpr|ParenExpr|ConstantExpr|")) i = kid0 (i);
     if (i && kind_is (i, "IntegerLiteral")) h_setp (constid, jsor (n, "id"), jstr (i, "value"));
   }
   k = jkids (n);
@@ -1370,7 +1370,7 @@ static void locals_walk (struct jv *n, int types)
 {
   struct vec *k;
   long j;
-  if (mf (jkind (n), "^(ParmVarDecl|VarDecl)$", "")) {
+  if (s_in (jkind (n), "|ParmVarDecl|VarDecl|")) {
     if (types) { if (jstr (n, "name") && jget (n, "type")) h_setp (ltype, jstr (n, "name"), jstr (jget (n, "type"), "qualType")); }
     else h_set (locals_, jsor (n, "id"), 1);
   }
@@ -1420,7 +1420,7 @@ static struct str *fnorm (struct jv *fn)
 static long ck_same, ck_differ, ck_died, ck_asked;
 static void ck_one (struct jv *norms, struct str *key, struct str *got)
 {
-  struct jv *e = jget (norms, (char *) key->p), *want, *ask;
+  struct jv *e = jget_s (norms, key), *want, *ask;
   long i;
   if (!e) { o_str ("NOKEY "); o_s (key); o_str ("\n"); ck_differ++; return; }
   if (jget (e, "err")) { ck_died++; return; }
