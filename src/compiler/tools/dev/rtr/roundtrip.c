@@ -8,15 +8,64 @@
    ff: glibc in ff against the C it was made of, clang's AST of what ff2c
    writes back against clang's AST of glibc's .i, both normalized alike.
    The same output and status as the Perl, which stays as a cross-check
-   (make roundtrip-crosscheck). Made a part at a time, each held against
-   the Perl's (roundtrip.pl --parts):
+   (make roundtrip-crosscheck):
+
+     roundtrip [--target t] [--cached | --cached-in DIR] names.txt back.json [unit.json ...]
+
+   as roundtrip.pl (its normal forms in ROUNDTRIP_NORMS's file, a global's
+   in ROUNDTRIP_SHOW's name shown); a unit's cache is roundtrip.pl's
+   (--unit-cache), its stamp roundtrip.pl's bytes (here, or --pl FILE
+   first), FFold.pm's and the target. Without a stat, a cache older than
+   its JSON is taken (make's rule makes it newer). roundtrip.pl's --norm-back,
+   --norm-unit and --join (all of glibc, rtall.sh) and --unit-cache are the
+   Perl's alone. Its parts held against the Perl's:
 
      roundtrip --target t --parts unit.rtn
+     roundtrip --target t --check-cache unit.rtn
 
-   prints each type's class (tstr), each floating constant as FFold.pm
-   folds it and each literal's normal form of a number (flt, ldround), as
-   the Perl does. On s2ff's lib.c, copied from tools/dev/s2ff. */
+   the first prints each type's class (tstr), each floating constant as
+   FFold.pm folds it and each literal's normal form of a number (flt,
+   ldround), as roundtrip.pl --parts does; the second makes each normal
+   form a unit's cache keeps again, and holds it against it. nf.c the
+   normal forms, cmp.c the comparison, md5.c Digest::MD5; on s2ff's lib.c,
+   copied from tools/dev/s2ff. */
 
+/* Arenas (ff2c's temporary chunks): while JSON is read into one (cur), what
+   is allocated is there, in chunks used again once it is reset; else
+   (cur 0, and between perm_begin and perm_end) the runtime's alloc, which
+   never frees. Only the JSON reader and the copies of what it read are
+   made in one: a matcher's pattern and stacks, made as it runs, never are. */
+void *alloc (long n);
+#define CHUNK (1 << 24)
+struct arena { unsigned char **p; long n, at, used; };
+static struct arena *cur, *astk[16];
+static long asp;
+static void *xalloc (long n)
+{
+  unsigned char *p;
+  long i;
+  struct arena *a = cur;
+  if (!a || n > CHUNK / 4) return alloc (n);
+  n = (n + 15) & ~15L;
+  if (a->used + n > CHUNK) { a->at++; a->used = 0; }
+  if (a->at >= a->n) {
+    unsigned char **x = alloc ((a->n + 1) * sizeof (unsigned char *));
+    for (i = 0; i < a->n; i++) x[i] = a->p[i];
+    x[a->n++] = alloc (CHUNK);
+    a->p = x;
+  }
+  p = a->p[a->at] + a->used;
+  a->used += n;
+  for (i = 0; i < n; i++) p[i] = 0;
+  return p;
+}
+static struct arena *a_new_arena (void) { return alloc (sizeof (struct arena)); }
+static void a_push (struct arena *a) { astk[asp++] = cur; cur = a; }
+static void a_pop (void) { cur = astk[--asp]; }
+static void a_reset (struct arena *a) { a->at = 0; a->used = 0; }
+static void perm_begin (void) { a_push (0); }
+static void perm_end (void) { a_pop (); }
+#define alloc xalloc
 #include "lib.c"
 
 static struct str *target;
@@ -25,107 +74,273 @@ static int t_is (char *t) { return s_is (target, t); }
 
 /* ---- JSON (clang's, and the units' caches): a value is an object (its keys
    and values in order), an array, a string, a number (its text), true,
-   false or null */
-struct jv { int t; struct str *s; struct vec *k, *v; };
-static unsigned char *jp, *je;
+   false or null. Read from a file a block at a time (a milestone's AST of
+   the C written back is 800 MB); a TranslationUnitDecl's top declarations
+   one at a time, each made in the temporary chunks and kept (copied) only
+   where a normal form takes it. The keys, and the values but an id, are
+   made once each (interned). Where clang's AST is read, loc (and range,
+   but an asm statement's or an asm label's: asm_text reads the .i there)
+   is read past. */
+struct jv { int t, done, in; struct str *s; struct vec *k, *v; };
+static unsigned char *jp, *je, *jbuf;
+static long jfd = -1;
+static int jeof = 1, jdrop;
 static struct jv *jnull;
+static struct hash *jkeys, *jvals;
+static struct str *jscr;
+static struct arena *j_scratch;
+#define JBUF (1 << 20)
 static void j_fail (char *m) { struct str *x = s_of ("roundtrip: bad JSON: "); s_cat (x, m); s_cat (x, "\n"); die_s (x); }
-static void j_ws (void) { while (jp < je && (*jp == ' ' || *jp == '\n' || *jp == '\t' || *jp == '\r')) jp++; }
-static struct jv *jv_new (int t) { struct jv *v = alloc (sizeof (struct jv)); v->t = t; return v; }
-static void utf8_add (struct str *s, long c)
+/* at least need bytes from jp where the file has them */
+static void jfill (long need)
 {
-  if (c < 0x80) s_chr (s, (int) c);
-  else if (c < 0x800) { s_chr (s, 0xc0 | (int) (c >> 6)); s_chr (s, 0x80 | (int) (c & 63)); }
-  else if (c < 0x10000) { s_chr (s, 0xe0 | (int) (c >> 12)); s_chr (s, 0x80 | (int) ((c >> 6) & 63)); s_chr (s, 0x80 | (int) (c & 63)); }
-  else { s_chr (s, 0xf0 | (int) (c >> 18)); s_chr (s, 0x80 | (int) ((c >> 12) & 63)); s_chr (s, 0x80 | (int) ((c >> 6) & 63)); s_chr (s, 0x80 | (int) (c & 63)); }
+  long have, i, r;
+  if (je - jp >= need || jfd < 0 || jeof) return;
+  have = je - jp;
+  for (i = 0; i < have; i++) jbuf[i] = jp[i];
+  jp = jbuf; je = jbuf + have;
+  while (je - jbuf < JBUF) {
+    r = s2_read (jfd, je, JBUF - (je - jbuf));
+    if (r <= 0) { jeof = 1; break; }
+    je += r;
+  }
 }
-static struct str *j_str (void)
+static int jpeek (void) { if (jp >= je) jfill (1); return jp < je ? *jp : -1; }
+static void j_ws (void) { for (;;) { int c = jpeek (); if (c == ' ' || c == '\n' || c == '\t' || c == '\r') jp++; else return; } }
+static struct jv *jv_new (int t) { struct jv *v = alloc (sizeof (struct jv)); v->t = t; return v; }
+static void jscr_add (unsigned char *p, long n) { perm_begin (); s_add (jscr, p, n); perm_end (); }
+static void jscr_chr (int c) { unsigned char b[1]; b[0] = (unsigned char) c; jscr_add (b, 1); }
+static void utf8_add (long c)
 {
-  struct str *s = s_of ("");
+  if (c < 0x80) jscr_chr ((int) c);
+  else if (c < 0x800) { jscr_chr (0xc0 | (int) (c >> 6)); jscr_chr (0x80 | (int) (c & 63)); }
+  else if (c < 0x10000) { jscr_chr (0xe0 | (int) (c >> 12)); jscr_chr (0x80 | (int) ((c >> 6) & 63)); jscr_chr (0x80 | (int) (c & 63)); }
+  else { jscr_chr (0xf0 | (int) (c >> 18)); jscr_chr (0x80 | (int) ((c >> 12) & 63)); jscr_chr (0x80 | (int) ((c >> 6) & 63)); jscr_chr (0x80 | (int) (c & 63)); }
+}
+/* a string into jscr */
+static void j_str (void)
+{
   unsigned char *a;
+  jscr->n = 0;
   jp++;
   for (;;) {
+    if (jp >= je) { jfill (1); if (jp >= je) j_fail ("a string that does not end"); }
     a = jp;
     while (jp < je && *jp != '"' && *jp != '\\') jp++;
-    if (jp > a) s_add (s, a, jp - a);
-    if (jp >= je) j_fail ("a string that does not end");
-    if (*jp == '"') { jp++; return s; }
+    if (jp > a) jscr_add (a, jp - a);
+    if (jp >= je) continue;
+    if (*jp == '"') { jp++; return; }
+    jfill (6);
     jp++;
     if (jp >= je) j_fail ("an escape that does not end");
     switch (*jp) {
-    case 'n': s_chr (s, '\n'); break;
-    case 't': s_chr (s, '\t'); break;
-    case 'r': s_chr (s, '\r'); break;
-    case 'b': s_chr (s, 8); break;
-    case 'f': s_chr (s, 12); break;
+    case 'n': jscr_chr ('\n'); break;
+    case 't': jscr_chr ('\t'); break;
+    case 'r': jscr_chr ('\r'); break;
+    case 'b': jscr_chr (8); break;
+    case 'f': jscr_chr (12); break;
     case 'u': {
       long c = 0, i;
-      for (i = 1; i <= 4; i++) { int d = jp + i < je ? hexv (jp[i]) : -1; if (d < 0) j_fail ("a bad \\u"); c = c * 16 + d; }
+      for (i = 1; i <= 4; i++) { int d = jp + i < je && is_xdigit (jp[i]) ? hexv (jp[i]) : -1; if (d < 0) j_fail ("a bad \\u"); c = c * 16 + d; }
       jp += 4;
       /* (a byte of Perl's string: below 256 the byte itself, as JSON::XS has it in a string of bytes) */
-      if (c < 256) s_chr (s, (int) c); else utf8_add (s, c);
+      if (c < 256) jscr_chr ((int) c); else utf8_add (c);
       break;
     }
-    default: s_chr (s, *jp); break;
+    default: jscr_chr (*jp); break;
     }
     jp++;
   }
 }
-static struct jv *j_val (void)
+static struct str *j_key (void)   /* a key, made once */
+{
+  struct hent *e;
+  j_str ();
+  e = h_find (jkeys, jscr);
+  if (!e) { perm_begin (); e = h_put (jkeys, s_dup (jscr)); e->pv = e->k; perm_end (); }
+  return e->pv;
+}
+static struct jv *j_scalar (int t, int intern)   /* jscr as a string or a number */
+{
+  struct hent *e;
+  struct jv *v;
+  if (intern && jscr->n <= 200) {
+    e = h_find (jvals, jscr);
+    if (e && ((struct jv *) e->pv)->t == t) return e->pv;
+    if (!e) {
+      perm_begin ();
+      e = h_put (jvals, s_dup (jscr));
+      v = jv_new (t); v->s = e->k; v->in = 1; e->pv = v;
+      perm_end ();
+      return v;
+    }
+  }
+  v = jv_new (t); v->s = s_dup (jscr);
+  return v;
+}
+static void j_skip (void)
+{
+  int c;
+  j_ws ();
+  c = jpeek ();
+  if (c == '{' || c == '[') {
+    int close = c == '{' ? '}' : ']';
+    jp++; j_ws ();
+    if (jpeek () == close) { jp++; return; }
+    for (;;) {
+      if (c == '{') { j_ws (); if (jpeek () != '"') j_fail ("a key that is no string"); j_str (); j_ws (); if (jpeek () != ':') j_fail ("no colon"); jp++; }
+      j_skip (); j_ws ();
+      if (jpeek () == ',') { jp++; continue; }
+      if (jpeek () == close) { jp++; return; }
+      j_fail ("an object or array that does not end");
+    }
+  }
+  if (c == '"') { j_str (); return; }
+  jfill (64);
+  if (jp >= je) j_fail ("no value");
+  while (jp < je && (is_word (*jp) || *jp == '-' || *jp == '+' || *jp == '.')) jp++;
+}
+static struct jv *j_val (int intern)
 {
   struct jv *v;
+  int c;
   j_ws ();
-  if (jp >= je) j_fail ("no value");
-  if (*jp == '{') {
+  c = jpeek ();
+  if (c < 0) j_fail ("no value");
+  if (c == '{') {
+    struct str *kind = 0;
     v = jv_new ('o'); v->k = v_new (); v->v = v_new ();
     jp++; j_ws ();
-    if (jp < je && *jp == '}') { jp++; return v; }
+    if (jpeek () == '}') { jp++; return v; }
     for (;;) {
+      struct str *k;
       j_ws ();
-      if (jp >= je || *jp != '"') j_fail ("a key that is no string");
-      v_push (v->k, j_str ());
+      if (jpeek () != '"') j_fail ("a key that is no string");
+      k = j_key ();
       j_ws ();
-      if (jp >= je || *jp != ':') j_fail ("no colon");
+      if (jpeek () != ':') j_fail ("no colon");
       jp++;
-      v_push (v->v, j_val ());
+      if (jdrop && (s_is (k, "loc") || (s_is (k, "range") && (jdrop == 2 || (kind && !s_is (kind, "GCCAsmStmt") && !s_is (kind, "AsmLabelAttr")))))) j_skip ();
+      else {
+        struct jv *x = j_val (!s_is (k, "id"));
+        if (s_is (k, "kind") && x->s) kind = x->s;
+        v_push (v->k, k); v_push (v->v, x);
+      }
       j_ws ();
-      if (jp < je && *jp == ',') { jp++; continue; }
-      if (jp < je && *jp == '}') { jp++; return v; }
+      if (jpeek () == ',') { jp++; continue; }
+      if (jpeek () == '}') { jp++; return v; }
       j_fail ("an object that does not end");
     }
   }
-  if (*jp == '[') {
+  if (c == '[') {
     v = jv_new ('a'); v->v = v_new ();
     jp++; j_ws ();
-    if (jp < je && *jp == ']') { jp++; return v; }
+    if (jpeek () == ']') { jp++; return v; }
     for (;;) {
-      v_push (v->v, j_val ());
+      v_push (v->v, j_val (intern));
       j_ws ();
-      if (jp < je && *jp == ',') { jp++; continue; }
-      if (jp < je && *jp == ']') { jp++; return v; }
+      if (jpeek () == ',') { jp++; continue; }
+      if (jpeek () == ']') { jp++; return v; }
       j_fail ("an array that does not end");
     }
   }
-  if (*jp == '"') { v = jv_new ('s'); v->s = j_str (); return v; }
-  if (je - jp >= 4 && msame (jp, (unsigned char *) "true", 4)) { jp += 4; v = jv_new ('t'); v->s = s_of ("1"); return v; }
-  if (je - jp >= 5 && msame (jp, (unsigned char *) "false", 5)) { jp += 5; v = jv_new ('f'); v->s = s_of (""); return v; }
+  if (c == '"') { j_str (); return j_scalar ('s', intern); }
+  jfill (64);
+  if (je - jp >= 4 && msame (jp, (unsigned char *) "true", 4)) { jp += 4; jscr->n = 0; jscr_chr ('1'); return j_scalar ('t', 1); }
+  if (je - jp >= 5 && msame (jp, (unsigned char *) "false", 5)) { jp += 5; jscr->n = 0; return j_scalar ('f', 1); }
   if (je - jp >= 4 && msame (jp, (unsigned char *) "null", 4)) { jp += 4; return jnull; }
   {
     unsigned char *a = jp;
     while (jp < je && (is_digit (*jp) || *jp == '-' || *jp == '+' || *jp == '.' || *jp == 'e' || *jp == 'E')) jp++;
     if (jp == a) j_fail ("a value that is none");
-    v = jv_new ('n'); v->s = s_new (a, jp - a);
-    return v;
+    jscr->n = 0; jscr_add (a, jp - a);
+    return j_scalar ('n', intern);
   }
 }
-static struct jv *j_parse (struct str *t)
+static void j_init (void)
+{
+  perm_begin ();
+  jbuf = alloc (JBUF + 16);
+  j_scratch = a_new_arena ();
+  jkeys = h_new (); jvals = h_new (); jscr = s_of ("");
+  perm_end ();
+}
+/* a file's JSON, opened (Perl's die where it cannot be) */
+static void j_open (char *f)
+{
+  jfd = s2_open (f);
+  if (jfd < 0) { struct str *m = s_of ("roundtrip: "); s_cat (m, f); s_cat (m, ": "); s_cat (m, strerror_of (-jfd)); s_cat (m, "\n"); die_status = (int) -jfd; die_s (m); }
+  jeof = 0; jp = je = jbuf;
+}
+static void j_close (void) { s2_close (jfd); jfd = -1; jeof = 1; jp = je = jbuf; }
+static struct jv *j_file (char *f, int drop)   /* a whole file's value */
 {
   struct jv *v;
-  jp = t->p; je = t->p + t->n;
-  v = j_val ();
+  j_open (f); jdrop = drop;
+  v = j_val (1);
   j_ws ();
-  if (jp < je) j_fail ("more after the value");
+  if (jpeek () >= 0) j_fail ("more after the value");
+  j_close (); jdrop = 0;
   return v;
+}
+/* a copy of v where cur is (the interned shared), its vectors of their size */
+static struct jv *jcopy (struct jv *v)
+{
+  struct jv *c;
+  long i, n;
+  if (!v || v == jnull || v->in) return v;
+  c = jv_new (v->t); c->done = v->done;
+  if (v->s) c->s = s_dup (v->s);
+  if (v->k) { n = v->k->n; c->k = alloc (sizeof (struct vec)); c->k->v = alloc ((n ? n : 1) * sizeof (void *)); c->k->room = n ? n : 1; c->k->n = n; for (i = 0; i < n; i++) c->k->v[i] = v->k->v[i]; }
+  if (v->v) { n = v->v->n; c->v = alloc (sizeof (struct vec)); c->v->v = alloc ((n ? n : 1) * sizeof (void *)); c->v->room = n ? n : 1; c->v->n = n; for (i = 0; i < n; i++) c->v->v[i] = jcopy (v->v->v[i]); }
+  return c;
+}
+/* A TranslationUnitDecl's file: each of its top declarations read into the
+   scratch arena and given to each, and those it keeps (each returns 1)
+   copied where cur is, in order. Its other keys are read past. */
+static struct vec *j_unit (char *f, int drop, int (*each) (struct jv *, long), long at)
+{
+  struct vec *kept = v_new ();
+  int c;
+  j_open (f); jdrop = drop;
+  j_ws ();
+  if (jpeek () != '{') j_fail ("no object");
+  jp++; j_ws ();
+  if (jpeek () == '}') { jp++; j_close (); jdrop = 0; return kept; }
+  for (;;) {
+    struct str *k;
+    j_ws ();
+    if (jpeek () != '"') j_fail ("a key that is no string");
+    k = j_key ();
+    j_ws ();
+    if (jpeek () != ':') j_fail ("no colon");
+    jp++;
+    j_ws ();
+    if (s_is (k, "inner") && jpeek () == '[') {
+      jp++; j_ws ();
+      if (jpeek () == ']') jp++;
+      else for (;;) {
+        struct jv *d;
+        a_push (j_scratch); a_reset (j_scratch);
+        d = j_val (1);
+        a_pop ();
+        if (each (d, at++)) v_push (kept, jcopy (d));
+        j_ws ();
+        if (jpeek () == ',') { jp++; continue; }
+        if (jpeek () == ']') { jp++; break; }
+        j_fail ("an array that does not end");
+      }
+    } else j_skip ();
+    j_ws ();
+    c = jpeek ();
+    if (c == ',') { jp++; continue; }
+    if (c == '}') { jp++; break; }
+    j_fail ("an object that does not end");
+  }
+  j_ws ();
+  if (jpeek () >= 0) j_fail ("more after the value");
+  j_close (); jdrop = 0;
+  return kept;
 }
 /* a key's value of an object, else 0 (Perl's undef: also a null) */
 static struct jv *jget (struct jv *o, char *k)
@@ -976,12 +1191,15 @@ static void constint_of (struct vec *keep)
   }
 }
 
+static struct arena *u_arena;   /* a unit's (its cache, or what of its JSON is kept, its tables, its .i) */
 #include "nf.c"
+#include "md5.c"
+#include "cmp.c"
 
 /* --parts unit.rtn */
 static void parts (char *f)
 {
-  struct jv *c = j_parse (slurp_j (f)), *t = jget (c, "tables"), *keep = jget (c, "keep");
+  struct jv *c = j_file (f, 0), *t = jget (c, "tables"), *keep = jget (c, "keep");
   struct hash *ty = h_new ();
   struct vec *q = v_new (), *lines = v_new (), *ks;
   long i, at = 0;
@@ -1023,16 +1241,45 @@ static void parts (char *f)
 
 int roundtrip_main (int argc, char **argv)
 {
-  long a = 1;
+  long a = 1, i;
+  struct vec *args = v_new ();
+  envp_ = argv + argc + 1;
   target = s_of ("");
   empty_vec = v_new ();
   jnull = jv_new ('z');
+  j_init ();
+  u_arena = a_new_arena ();
+  orig = h_new (); asmfn = h_new (); noproto = h_new (); asked = h_new (); x87in_ = h_new ();
+  atomicop = h_words ("exchange load store compare_exchange fetch_add fetch_sub fetch_and fetch_or fetch_xor fetch_nand add_fetch sub_fetch and_fetch or_fetch xor_fetch nand_fetch");
   if (a + 1 < argc && s_is (s_of (argv[a]), "--target")) { target = s_of (argv[a + 1]); a += 2; }
   if (t_is ("x86_64")) ffold_x87 ();
   cls_init ();
+  /* (--pl FILE: roundtrip.pl, whose bytes and FFold.pm's are a unit cache's stamp; roundtrip.pl here else) */
+  if (a + 1 < argc && s_is (s_of (argv[a]), "--pl")) { pl_path = s_of (argv[a + 1]); a += 2; }
   if (a + 1 < argc && s_is (s_of (argv[a]), "--parts")) { parts (argv[a + 1]); return 0; }
   if (a + 1 < argc && s_is (s_of (argv[a]), "--check-cache")) { check_cache (argv[a + 1]); return 0; }
-  e_str ("usage: roundtrip [--target t] --parts unit.rtn\n");
-  cp_exit (255);
-  return 255;
+  if (a < argc && mf (s_of (argv[a]), "^--(norm-back|norm-unit|join|unit-cache)$", "")) {
+    struct str *m = s_of ("roundtrip: "); s_cat (m, argv[a]); s_cat (m, " is roundtrip.pl's alone\n"); die_s (m);
+  }
+  if (a < argc && s_is (s_of (argv[a]), "--cached")) { cached = 1; a++; }
+  else if (a + 1 < argc && s_is (s_of (argv[a]), "--cached-in")) { cachedir = s_of (argv[a + 1]); cached = 1; a += 2; }
+  for (; a < argc; a++) {
+    struct str *x = s_of (argv[a]);
+    if (x->n > 1 && x->p[0] == '@') {
+      struct str *f = s_sub (x, 1, x->n);
+      long fd = s2_open ((char *) f->p);
+      struct lines *ls;
+      if (fd < 0) { struct str *m = s_of ("roundtrip: cannot open "); s_app (m, f); s_cat (m, ": "); s_cat (m, strerror_of (-fd)); s_cat (m, "\n"); die_status = (int) -fd; die_s (m); }
+      s2_close (fd);
+      ls = split_lines (read_all ((char *) f->p));
+      for (i = 0; i < ls->n; i++) { struct str *l = ssub (chomp (ls->l[i]), "^\\s+", "", ""); if (l->n) v_push (args, l); }
+    } else v_push (args, x);
+  }
+  /* (Perl's die there exits 2: $! still holds the ENOENT of its search for its modules) */
+  if (args->n < 2) { die_status = 2; die_c ("usage: roundtrip.pl [--target t] [--cached] names.txt back.json [unit.json ...]\n"); }
+  {
+    int r = round_trip (args);
+    cp_exit (r);
+    return r;
+  }
 }

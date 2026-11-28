@@ -39,17 +39,17 @@ pck_out = $(if $(PCOUT),$(file >$(PCOUT),$(1)),$(error pckey: PCOUT, the file of
 # s2ff's output, whichever tools made it; ff2c reads shared.ff's type
 # words too), clang reads that C (rt.json, RTFLAGS) and each unit's .i (its
 # .json: CLANGFIX and clangvec.pl, libgcc's units clangfix.pl, aarch64.h
-# and LCLANG), roundtrip.pl compares the two ASTs (and reads the .i),
+# and LCLANG), roundtrip compares the two ASTs (and reads the .i),
 # headers.pl the headers against GLIBC_SRC and LIBGCC_SRC (sources nothing
-# writes: by their paths). ff2c and headers are the tools in ff now (FF2CT,
-# HEADERST: by their bytes, as ttpc made them; the Perl beside them their
-# twins). Each unit's cache (roundtrip.pl --unit-cache, $(I)/<unit>.rtn, the
+# writes: by their paths). ff2c, headers and roundtrip are the tools in ff
+# now (FF2CT, HEADERST, ROUNDTRIPT: by their bytes, as ttpc made them; the
+# Perl beside them their twins). Each unit's cache (roundtrip.pl --unit-cache, $(I)/<unit>.rtn, the
 # region rtn) is made of its .json and .i, roundtrip.pl, FFold.pm and
 # GTARGET, all in the key already (the .json by what makes it: its .i, the
 # region json and clang). Regions rt, json, rtn, ljson.
 PCK_RTFILES := roundtrip.pl ../compiler/gen/ff2c.pl ../compiler/gen/headers.pl ../compiler/gen/FF.pm ../compiler/gen/FFold.pm \
 	../compiler/gen/Header.pm ../compiler/gen/Words.pm ../compiler/shared.ff clang-prelude.h clangvec.pl ../libgcc/clangfix.pl ../libgcc/aarch64.h \
-	$(FF2CT) $(HEADERST)
+	$(FF2CT) $(HEADERST) $(ROUNDTRIPT)
 PCK_RTVARS := CTARGET PROGFLAGS C2FF_CLANG CLANGFIX CLANGVEC RTFLAGS_$(GTARGET) LCLANG_$(GTARGET) LCLANGVEC_$(GTARGET) LIBGCC_FIXEDC GLIBC_SRC LIBGCC_SRC
 define pckey_roundtrip
 pckey-$(1)-roundtrip: $$(FF)/$(1).ff $$(OBJS_all_$(1):%=$$(I)/%.i)

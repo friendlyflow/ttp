@@ -16,6 +16,8 @@ static struct hash *asmfn, *noproto, *asked, *x87in_;
 static struct str *unit_i, *itext, *itext_of;
 
 /* ---- the AST */
+static struct jv *jstrv (char *c) { struct jv *v = jv_new ('s'); v->s = s_of (c); return v; }
+static struct hash *atomicop;   /* (in roundtrip_main: h_words) */
 static void v_cat (struct vec *a, struct vec *b) { long i, n = b->n; for (i = 0; i < n; i++) v_push (a, b->v[i]); }
 static struct jv *kid0 (struct jv *n) { return n ? jkid (n, 0) : 0; }
 static struct jv *strip (struct jv *n)
@@ -258,7 +260,8 @@ static int itext_load (void)
 {
   if (!unit_i || !unit_i->n || !f_exists ((char *) unit_i->p)) return 0;
   if (!itext_of || !s_eq (itext_of, unit_i)) {
-    struct str *t = read_all ((char *) unit_i->p);
+    struct str *t;
+    a_push (u_arena); t = read_all ((char *) unit_i->p); a_pop ();
     if (!t) return 0;
     itext = t; itext_of = s_dup (unit_i);
   }
@@ -377,7 +380,7 @@ static struct str *call (struct jv *n);
 static struct str *atomic (struct jv *n);
 static struct str *init (struct jv *n);
 static struct str *text_codes (struct jv *n, struct str *s);
-static struct str *ET (struct jv *c) { return E (c); }   /* (cxlow: ff's side alone) */
+static struct str *ET (struct jv *c);
 static struct str *S3 (char *a, struct str *b, char *c3, struct str *d, char *e) { struct str *s = cat2 (a, b, c3); s_app (s, d); s_cat (s, e); return s; }
 static struct str *seqform (struct vec *i)
 {
@@ -396,6 +399,159 @@ static void seq (struct jv *n, struct vec *o)
   v_push (o, E (n));
 }
 static struct str *tcls_nofp16 (struct jv *n) { return ssub (tcls (n), "__fp16", "", "_Float16"); }
+/* csema's complex arithmetic written back (roundtrip.pl's cxlow): a
+   statement expression of locals __cx_N, then C's operator of them.
+   Its list (form, op, a, b): n 0 where it is none. */
+struct cxr { long n; struct str *form, *op, *a, *b; };
+struct cxt { struct jv *init; int real; };
+struct cxp { int k, sub; struct str *nm, *op; struct jv *a, *b; };   /* k: z zero, r re, i im, v val, n neg (of sub), b bin */
+static struct cxr *cx_none (void) { struct cxr *r = alloc (sizeof (struct cxr)); return r; }
+static struct cxr *cx_res (struct str *op, struct str *a, struct str *b)
+{
+  struct cxr *r = alloc (sizeof (struct cxr));
+  r->form = s_of ("("); s_app (r->form, op); s_chr (r->form, ' '); s_app (r->form, a);
+  if (b) { s_chr (r->form, ' '); s_app (r->form, b); }
+  s_chr (r->form, ')');
+  r->op = op; r->a = a; r->b = b; r->n = b ? 4 : 3;
+  return r;
+}
+static struct cxp *cx_new (int k, struct str *nm) { struct cxp *p = alloc (sizeof (struct cxp)); p->k = k; p->nm = nm ? nm : s_of (""); return p; }
+static struct cxp *cx_part (struct jv *x, struct hash *t)
+{
+  struct jv *u = strip (x);
+  struct cxt *e;
+  if (is_zero (u)) return cx_new ('z', 0);
+  if (kind_is (u, "UnaryOperator") && mf (jsor (u, "opcode"), "^__(real|imag)$", "")) {
+    int re = s_is (g (1), "real");
+    struct jv *r = strip (kid0 (u));
+    struct str *nm = kind_is (r, "DeclRefExpr") ? rd_name (r) : s_of ("");
+    if ((e = h_pv (t, nm)) && !e->real) return cx_new (re ? 'r' : 'i', nm);
+  }
+  if (kind_is (u, "DeclRefExpr") && (e = h_pv (t, rd_name (u))) && e->real) return cx_new ('v', rd_name (u));
+  if (kind_is (u, "UnaryOperator") && jis (u, "opcode", "-")) {
+    struct cxp *q = cx_part (kid0 (u), t);
+    if (q && (q->k == 'r' || q->k == 'i')) { struct cxp *p = cx_new ('n', q->nm); p->sub = q->k; return p; }
+  }
+  if (kind_is (u, "BinaryOperator")) { struct cxp *p = cx_new ('b', 0); p->op = jsor (u, "opcode"); p->a = jkid (u, 0); p->b = jkid (u, 1); return p; }
+  return 0;
+}
+static int cx_is (struct cxp *p, int k, struct str *nm) { return p && p->k == k && (!nm || s_eq (p->nm, nm)); }
+static struct str *cx_opnd (struct hash *t, struct str *nm) { struct cxt *e = h_pv (t, nm); return E (e ? e->init : 0); }
+static struct cxr *cxlow (struct jv *n)
+{
+  struct vec *s;
+  struct hash *t;
+  struct jv *R;
+  struct str *ct;
+  long i = 0;
+  if (!(side_ff && kind_is (n, "StmtExpr"))) return cx_none ();
+  s = jkids (kid0 (n));
+  if (s->n < 2) return cx_none ();
+  t = h_new ();
+  while (i < s->n - 1) {
+    struct jv *st = s->v[i], *v, *init;
+    struct vec *vs;
+    struct cxt *e;
+    if (!kind_is (st, "DeclStmt")) return cx_none ();
+    vs = jkids (st);
+    if (!(vs->n == 1 && kind_is (vs->v[0], "VarDecl") && mf (jsor (vs->v[0], "name"), "^__cx_\\d+$", ""))) return cx_none ();
+    v = vs->v[0];
+    init = first_nonattr (v);
+    if (!init) {
+      struct jv *as, *l;
+      if (!(i + 1 < s->n - 1)) return cx_none ();
+      as = unparen (s->v[i + 1]);
+      if (!(kind_is (as, "BinaryOperator") && jis (as, "opcode", "="))) return cx_none ();
+      l = strip (jkid (as, 0));
+      if (!(kind_is (l, "DeclRefExpr") && s_eq (rd_name (l), jsor (v, "name")))) return cx_none ();
+      init = jkid (as, 1);
+      i++;
+    }
+    e = alloc (sizeof (struct cxt)); e->init = init; e->real = !mf (tcls (v), "_Complex", "");
+    h_setp (t, jsor (v, "name"), e);
+    i++;
+  }
+  ct = tcls (n);
+  R = strip (s->v[s->n - 1]);
+  if (kind_is (R, "CallExpr")) {
+    struct vec *rk = jkids (R), *a = v_new ();
+    struct str *fn;
+    for (i = 1; i < rk->n; i++) v_push (a, rk->v[i]);
+    fn = rd_name (strip (kid0 (R)));
+    if (mf (fn, "^__(mul|div)[sdxt]c3$", "") && a->n == 4) {
+      struct str *op = s_of (s_is (g (1), "mul") ? "*" : "/"), *o[2];
+      struct cxp *p[4];
+      long j;
+      for (j = 0; j < 4; j++) p[j] = cx_part (a->v[j], t);
+      for (j = 0; j < 4; j += 2) {
+        if (cx_is (p[j], 'r', 0) && cx_is (p[j + 1], 'i', p[j]->nm)) o[j / 2] = cx_opnd (t, p[j]->nm);
+        else if (cx_is (p[j], 'v', 0) && cx_is (p[j + 1], 'z', 0)) o[j / 2] = cx_opnd (t, p[j]->nm);
+        else return cx_none ();
+      }
+      return cx_res (op, o[0], o[1]);
+    }
+    if (s_is (fn, "__builtin_complex") && a->n == 2) {
+      struct cxp *x = cx_part (a->v[0], t), *y = cx_part (a->v[1], t), *l, *r, *yb0 = 0, *yb1 = 0;
+      struct str *op;
+      int yb;
+      if (!(x && y)) return cx_none ();
+      if (x->k == 'n' && y->k == 'n' && x->sub == 'r' && y->sub == 'i' && s_eq (x->nm, y->nm)) return cx_res (s_of ("u-"), cx_opnd (t, x->nm), 0);
+      if (x->k == 'r' && y->k == 'i' && s_eq (x->nm, y->nm)) {
+        struct cxr *c = cx_none ();
+        c->n = 1; c->form = s_of ("(cast FloatingComplexCast "); s_app (c->form, ct); s_chr (c->form, ' '); s_app (c->form, cx_opnd (t, x->nm)); s_chr (c->form, ')');
+        return c;
+      }
+      if (!(x->k == 'b' && mf (x->op, "^[-+*/]$", ""))) return cx_none ();
+      op = x->op;
+      l = cx_part (x->a, t); r = cx_part (x->b, t);
+      if (!(l && r)) return cx_none ();
+      yb = y->k == 'b' && s_eq (y->op, op);
+      if (yb) { yb0 = cx_part (y->a, t); yb1 = cx_part (y->b, t); }
+      if (cx_is (l, 'r', 0) && cx_is (r, 'r', 0)) {
+        if (mf (op, "^[-+]$", "") && yb && cx_is (yb0, 'i', l->nm) && cx_is (yb1, 'i', r->nm)) return cx_res (op, cx_opnd (t, l->nm), cx_opnd (t, r->nm));
+        return cx_none ();
+      }
+      if (cx_is (l, 'r', 0) && cx_is (r, 'v', 0)) {
+        if ((mf (op, "^[-+]$", "") && cx_is (y, 'i', l->nm)) || (mf (op, "^[*/]$", "") && yb && cx_is (yb0, 'i', l->nm) && cx_is (yb1, 'v', r->nm))) return cx_res (op, cx_opnd (t, l->nm), cx_opnd (t, r->nm));
+        return cx_none ();
+      }
+      if (cx_is (l, 'v', 0) && cx_is (r, 'r', 0)) {
+        if ((s_is (op, "+") && cx_is (y, 'i', r->nm)) || (s_is (op, "-") && y->k == 'n' && y->sub == 'i' && s_eq (y->nm, r->nm))
+            || (s_is (op, "*") && yb && cx_is (yb0, 'v', l->nm) && cx_is (yb1, 'i', r->nm))) return cx_res (op, cx_opnd (t, l->nm), cx_opnd (t, r->nm));
+        return cx_none ();
+      }
+      return cx_none ();
+    }
+    return cx_none ();
+  }
+  if (kind_is (R, "BinaryOperator") && mf (jsor (R, "opcode"), "^(&&|\\|\\|)$", "")) {
+    struct cxp *x = cx_part (jkid (R, 0), t), *y = cx_part (jkid (R, 1), t), *pa1, *pb1, *pa2, *pb2;
+    struct str *op, *an = 0, *bn = 0;
+    if (!(x && y && x->k == 'b' && y->k == 'b' && s_eq (x->op, y->op))) return cx_none ();
+    op = x->op;
+    if (!((s_is (op, "==") && jis (R, "opcode", "&&")) || (s_is (op, "!=") && jis (R, "opcode", "||")))) return cx_none ();
+    pa1 = cx_part (x->a, t); pb1 = cx_part (x->b, t); pa2 = cx_part (y->a, t); pb2 = cx_part (y->b, t);
+    if (!(pa1 && pb1 && pa2 && pb2)) return cx_none ();
+    if (s_is (op, "!=") && cx_is (pa1, 'r', 0) && cx_is (pb1, 'z', 0) && cx_is (pa2, 'i', pa1->nm) && cx_is (pb2, 'z', 0)) {
+      struct cxt *e = h_pv (t, pa1->nm);
+      struct str *v = E (unimplicit (e->init));
+      struct cxr *c = cx_none ();
+      c->n = 3; c->form = cat2 ("(tobool ", v, ")"); c->op = s_of ("tobool"); c->a = v;
+      return c;
+    }
+    if (cx_is (pa1, 'r', 0) && cx_is (pa2, 'i', pa1->nm)) an = pa1->nm; else if (cx_is (pa1, 'v', 0) && cx_is (pa2, 'z', 0)) an = pa1->nm;
+    if (cx_is (pb1, 'r', 0) && cx_is (pb2, 'i', pb1->nm)) bn = pb1->nm; else if (cx_is (pb1, 'v', 0) && cx_is (pb2, 'z', 0)) bn = pb1->nm;
+    if (!(an && bn)) return cx_none ();
+    return cx_res (op, cx_opnd (t, an), cx_opnd (t, bn));
+  }
+  return cx_none ();
+}
+/* a value tested for truth: csema's test of a complex one by its parts (cxlow's tobool) */
+static struct str *ET (struct jv *c)
+{
+  if (c) { struct cxr *x = cxlow (unparen (strip (c))); if (x->n >= 2 && s_is (x->op, "tobool")) return x->a; }
+  return E (c);
+}
 static struct str *E (struct jv *n)
 {
   struct str *k;
@@ -519,6 +675,13 @@ static struct str *E (struct jv *n)
     if (is_asmfncall (unimplicit (l))) r = unimplicit (r);
     if (is_asmfncall (unimplicit (r))) l = unimplicit (l);
     if (s_is (tcls (unimplicit (l)), "enum") || s_is (tcls (unimplicit (r)), "enum")) { l = unimplicit (l); r = unimplicit (r); }
+    if (side_ff && s_is (op, "=")) {
+      struct cxr *x = cxlow (unparen (r));
+      if (x->n > 2) {
+        struct str *el = E (l);
+        if (mf (x->op, "^[-+*/]$", "") && s_eq (x->a, el)) { struct str *o2 = s_of ("("); s_app (o2, x->op); s_cat (o2, "= "); s_app (o2, el); s_chr (o2, ' '); s_app (o2, x->b ? x->b : s_of ("")); s_chr (o2, ')'); return o2; }
+      }
+    }
     o = s_of ("("); s_app (o, op); s_chr (o, ' ');
     if (mf (op, "^(&&|\\|\\|)$", "")) { s_app (o, ET (l)); s_chr (o, ' '); s_app (o, ET (r)); }
     else { s_app (o, E (l)); s_chr (o, ' '); s_app (o, E (r)); }
@@ -549,6 +712,7 @@ static struct str *E (struct jv *n)
   }
   if (s_is (k, "StmtExpr")) {
     struct jv *cs = kid0 (n);
+    { struct cxr *x = cxlow (n); if (x->n) return x->form; }
     if (!side_ff) { struct str *s = syscall_idiom (cs); if (s) return s; }
     return seqform (S (jkids (cs)));
   }
@@ -608,9 +772,32 @@ static struct str *call (struct jv *n)
     if (s_is (name, "__builtin_va_start")) { struct vec *a = v_new (); if (args->n) v_push (a, args->v[0]); args = a; }
     if (asmfn_of (name)) args = vmap_unimplicit (args);
     if (noproto_of (name)) { struct vec *a = v_new (); for (i = 0; i < args->n; i++) v_push (a, unpromote (args->v[i])); args = a; }
-    if (side_ff && noproto_of (name)) { /* (ff's x != 0 for a bool: not on glibc's side) */ }
+    /* (and ff's x != 0 for it, which a parameter's bool made (tobool x)) */
+    if (side_ff && noproto_of (name)) {
+      struct vec *a = v_new ();
+      for (i = 0; i < args->n; i++) {
+        struct jv *b = unparen (args->v[i]);
+        if (kind_is (b, "BinaryOperator") && jis (b, "opcode", "!=") && is_zero (jkid (b, 1))) {
+          struct jv *x = jv_new ('o'), *in = jv_new ('a');
+          x->k = v_new (); x->v = v_new (); in->v = v_new ();
+          v_push (in->v, jkid (b, 0));
+          v_push (x->k, s_of ("kind")); v_push (x->v, jstrv ("ImplicitCastExpr"));
+          v_push (x->k, s_of ("castKind")); v_push (x->v, jstrv ("IntegralToBoolean"));
+          v_push (x->k, s_of ("type")); v_push (x->v, jget (b, "type") ? jget (b, "type") : jnull);
+          v_push (x->k, s_of ("inner")); v_push (x->v, in);
+          v_push (a, x);
+        } else v_push (a, args->v[i]);
+      }
+      args = a;
+    }
     if (asmfn_of (name)) { struct vec *a = v_new (); for (i = 0; i < args->n; i++) v_push (a, strip_bitcast (args->v[i])); args = a; }
     if (mf (name, "^_+asm_", "")) return s_of ("(asm)");
+    if (side_ff && mf (name, "^__atomic_(\\w+)_\\d+$", "") && h_has (atomicop, g (1))) {
+      o = s_of ("(atomic "); s_app (o, g (1));
+      for (i = 0; i < args->n; i++) { s_chr (o, ' '); s_app (o, E (strip (args->v[i]))); }
+      s_chr (o, ')');
+      return o;
+    }
     if (s_is (name, "__ff_syscall")) { o = s_of ("(syscall"); for (i = 0; i < args->n; i++) { s_chr (o, ' '); s_app (o, E (strip (args->v[i]))); } s_chr (o, ')'); return o; }
     if (asmfn_of (name)) {
       o = s_of ("(call "); s_app (o, name);
@@ -920,6 +1107,7 @@ static struct str *syscall_arm (struct jv *cs)
 
 /* ---- statements: a list of tokens (statements, and { } around a block) */
 static struct vec *xstmt (struct jv *n);
+static struct jv *x87in (struct jv *a);
 static struct vec *brace (struct vec *s);
 static struct vec *body (struct jv *b);
 static struct str *effect (struct jv *n);
@@ -940,8 +1128,49 @@ static struct vec *S (struct vec *all)
     struct jv *n = all->v[ix];
     struct str *k;
     if (!n || !jstr (n, "kind")) continue;
+    if (n->done) continue;
     k = jkind (n);
-    if (s_is (k, "CompoundStmt")) { v_cat (out, brace (S (jkids (n)))); continue; }
+    /* (csema's local of a struct, union or complex type whose value would be
+       written as a lone : or several items, which after it are its items:
+       declared, then assigned it; its complex arithmetic, a statement
+       expression, ?: or a comma) */
+    if (side_ff && s_is (k, "DeclStmt") && jkids (n)->n == 1 && kind_is (jkid (n, 0), "VarDecl") && !first_nonattr (jkid (n, 0))) {
+      struct jv *d = jkid (n, 0), *as = ix < all->n - 1 ? unparen (all->v[ix + 1]) : 0;
+      struct str *q = sor (qtype (d)), *dn = jstr (d, "name");
+      if (mf (q, "^(?:(?:const |volatile )*(?:struct|union) |.*_Complex)", "") && !mf (q, "[*\\[(]", "") && as && kind_is (as, "BinaryOperator") && jis (as, "opcode", "=")
+          && s_eq (rd_name (strip (jkid (as, 0))), dn ? dn : s_of ("-"))) {
+        struct jv *r = unparen (jkid (as, 1));
+        struct str *rk = jkind (r);
+        if (cxlow (r)->n || mf (rk, "^(StmtExpr|ConditionalOperator|BinaryConditionalOperator)$", "") || (s_is (rk, "BinaryOperator") && jis (r, "opcode", ","))) {
+          struct str *o = s_of ("(var "); s_app (o, ssub (jsor (d, "name"), "'$", "", "")); s_chr (o, ' '); s_app (o, tcls (d)); s_chr (o, ' '); s_app (o, E (jkid (as, 1))); s_chr (o, ')');
+          v_push (out, o);
+          ((struct jv *) all->v[ix + 1])->done = 1;
+          continue;
+        }
+      }
+    }
+    if (s_is (k, "CompoundStmt")) {
+      /* (c2ff's x = setjmp (...) through a local of its own, returns twice, is that assignment) */
+      struct vec *c = jkids (n);
+      struct jv *v = c->n == 2 && kind_is (c->v[0], "DeclStmt") ? jkid (c->v[0], 0) : 0, *as = c->n == 2 ? unparen (c->v[1]) : 0;
+      if (side_ff && v && mf (jsor (v, "name"), "^returns_?twice$", "") && kind_is (as, "BinaryOperator") && jis (as, "opcode", "=")) {
+        struct jv *init = first_nonattr (v), *rr = strip (jkid (as, 1));
+        if (init && kind_is (rr, "DeclRefExpr") && s_eq (rd_name (rr), jsor (v, "name"))) {
+          struct str *o = s_of ("(= "); s_app (o, E (jkid (as, 0))); s_chr (o, ' '); s_app (o, E (init)); s_chr (o, ')');
+          v_push (out, o);
+          continue;
+        }
+      }
+      v_cat (out, brace (S (c)));
+      continue;
+    }
+    /* (csema's local of an x87 asm input that is a value, __x87_1 ..., is that asm statement's operand) */
+    if (s_is (k, "DeclStmt") && side_ff && jkids (n)->n) {
+      struct vec *ds = jkids (n);
+      int all87 = 1;
+      for (i = 0; i < ds->n; i++) if (!kind_is (ds->v[i], "VarDecl") || !mf (jsor (ds->v[i], "name"), "^__x87_\\d+$", "")) all87 = 0;
+      if (all87) { for (i = 0; i < ds->n; i++) h_setp (x87in_, jsor (ds->v[i], "name"), first_nonattr (ds->v[i])); continue; }
+    }
     if (s_is (k, "DeclStmt")) {
       struct vec *ds = jkids (n);
       for (i = 0; i < ds->n; i++) {
@@ -1030,9 +1259,33 @@ static struct vec *S (struct vec *all)
       v_push (out, s_of ("(asm)"));
       continue;
     }
+    /* (an empty asm of inputs alone, math_force_eval's: csema's call of its
+       asm function, _asm___x (v) or of x87 inputs _asm___f_l (&__x87_1),
+       is glibc's barrier: what an input computes in floating point) */
+    if (side_ff && t_is ("x86_64") && kind_is (unimplicit (n), "CallExpr")) {
+      struct jv *c = unimplicit (n), *fd = rdecl (strip (kid0 (c)));
+      if (fd && mf (name_of (fd), "^_asm___", "")) {
+        struct vec *kk = jkids (c);
+        for (i = 1; i < kk->n; i++) {
+          struct jv *a = x87in (kk->v[i]);
+          if (fp_computes (a)) v_push (out, cat2 ("(cast ToVoid void ", E (a), ")"));
+        }
+        continue;
+      }
+    }
     v_cat (out, xstmt (n));
   }
   return out;
+}
+/* an asm function's argument: the value of csema's x87 local whose address it is */
+static struct jv *x87in (struct jv *a)
+{
+  struct jv *u = unimplicit (a), *r;
+  struct hent *e;
+  if (!(kind_is (u, "UnaryOperator") && jis (u, "opcode", "&"))) return u;
+  r = strip (kid0 (u));
+  e = h_find (x87in_, kind_is (r, "DeclRefExpr") ? rd_name (r) : s_of (""));
+  return e ? e->pv : u;
 }
 static struct vec *xstmt (struct jv *n)
 {
@@ -1194,7 +1447,7 @@ static void ck_one (struct jv *norms, struct str *key, struct str *got)
 }
 static void check_cache (char *f)
 {
-  struct jv *c = j_parse (slurp_j (f)), *t = jget (c, "tables"), *keep = jget (c, "keep"), *norms = jget (c, "norm");
+  struct jv *c = j_file (f, 0), *t = jget (c, "tables"), *keep = jget (c, "keep"), *norms = jget (c, "norm");
   struct vec *kp = keep ? keep->v : empty_vec;
   struct str *j = jsor (c, "j");
   long i;

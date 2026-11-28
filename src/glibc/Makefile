@@ -200,11 +200,15 @@ HEADERS_PL := perl ../compiler/gen/headers.pl
 FF2CT := $(CPTOOLS)/ff2c
 FF2C = $(CPRUN) $(abspath $(FF2CT)) --shared $(abspath ../compiler/shared.ff)
 FF2C_PL := perl ../compiler/gen/ff2c.pl
-# roundtrip.pl in ff (../compiler/tools/roundtrip.ff, made as csema), made a
-# part at a time: roundtrip-crosscheck holds each part against the Perl's
-# (roundtrip.pl --parts) on every unit cache of the BUILD
+# roundtrip.pl in ff (../compiler/tools/roundtrip.ff, made as csema): a
+# round trip, glibc in ff against the C it was made of, through the units'
+# caches roundtrip.pl makes (their stamp: roundtrip.pl's bytes, FFold.pm's
+# and the target); roundtrip-crosscheck holds it against the Perl, its twin,
+# and each part (roundtrip.pl --parts) on every unit cache. A milestone in
+# 1 to 2 GB, as the Perl
 ROUNDTRIPT := $(CPTOOLS)/roundtrip
 ROUNDTRIP = $(CPRUN) $(abspath $(ROUNDTRIPT))
+ROUNDTRIP_PL := perl roundtrip.pl
 CSFLAGS = -t $(GTARGET) -s "$(GLIBC_SRC)" -g "$(LIBGCC_SRC)" -S ../compiler/shared.ff
 CSHEAP_arm_gccrt := 64
 CSHEAP_arm_libgcc := 64
@@ -1132,9 +1136,9 @@ $(FF)/%.rt.json: $(FF)/%.rt.c
 
 # (each unit through its cache, $(I)/<unit>.rtn, beside its .json)
 define roundtrip
-$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.rtn) | $$(HEADERST)
+$(1)-roundtrip: $$(FF)/$(1).rt.json $$(FF)/$(1).rt.names roundtrip.pl $$(OBJS_all_$(1):%=$$(I)/%.rtn) | $$(HEADERST) $$(ROUNDTRIPT)
 	$$(file >$$(FF)/$(1).jsons,$$(foreach o,$$(OBJS_all_$(1)),$$(I)/$$(o).json$$(nl)))
-	$$(RUN) -t 900 perl roundtrip.pl --target $$(GTARGET) --cached $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json @$$(FF)/$(1).jsons
+	$$(RUN) -t 900 $$(ROUNDTRIP) --target $$(GTARGET) --cached $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json @$$(FF)/$(1).jsons
 	$$(RUN) -n -t 300 $$(HEADERS) $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
@@ -1336,21 +1340,33 @@ ff2c-crosscheck: | $(FF2CT)
 	test $$n -gt 0 || { echo "ff2c-crosscheck: no round trip in $(FF)"; exit 1; }; \
 	echo "ff2c-crosscheck: ff2c as ff2c.pl on the trees of the $$n round trips of $(FF), and on each split by unit"
 .PHONY: ff2c-crosscheck
-# roundtrip-crosscheck: roundtrip in ff (ROUNDTRIP), made a part at a time,
-# against roundtrip.pl: on every unit cache of this BUILD ($(I)/<unit>.rtn)
-# --parts of both (each type's class, each floating constant FFold folds,
-# each literal's number), output and exit status byte for byte. Run it
-# before ports goes into main, with the other cross-checks.
+# roundtrip-crosscheck: roundtrip in ff (ROUNDTRIP) against roundtrip.pl:
+# each round trip of this BUILD whose inputs are there (a milestone's through
+# the units' caches, a program's, units-check's) by both, their messages,
+# exit status and normal forms (ROUNDTRIP_NORMS) byte for byte; and on every
+# unit cache ($(I)/<unit>.rtn) --parts of both (each type's class, each
+# floating constant FFold folds, each literal's number). Run it before
+# ports goes into main, with the other cross-checks.
 RTX := $(BUILD)/roundtrip-crosscheck
+RTXCMP = : > $$d/p.norms; : > $$d/f.norms; \
+	s=0; $(RUN) -t 900 env ROUNDTRIP_NORMS=$$d/p.norms $(ROUNDTRIP_PL) $(1) > $$d/p.out 2>&1 || s=$$?; echo "exit $$s" >> $$d/p.out; \
+	s=0; $(RUN) -t 900 env ROUNDTRIP_NORMS=$$d/f.norms $(ROUNDTRIP) $(1) > $$d/f.out 2>&1 || s=$$?; echo "exit $$s" >> $$d/f.out
 roundtrip-crosscheck: | $(ROUNDTRIPT)
-	@set -e; mkdir -p $(RTX); d=$(RTX); n=0; \
+	@set -e; mkdir -p $(RTX); d=$(RTX); n=0; m=0; \
+	for x in $$(ls $(FF)/*.rt.names $(FF)/units/back.names 2> /dev/null | sort); do \
+	    case $$x in */units/back.names) a="$$x $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)" ;; \
+	    *) b=$${x%.rt.names}; test -e $$b.rt.json || continue; \
+	       if test -e $$b.jsons; then a="--cached $$x $$b.rt.json @$$b.jsons"; elif test -e $$b-prog.json; then a="$$x $$b.rt.json $$b-prog.json"; else continue; fi ;; esac; \
+	    $(call RTXCMP,--target $(GTARGET) $$a); \
+	    cmp -s $$d/p.out $$d/f.out && cmp -s $$d/p.norms $$d/f.norms || { echo "roundtrip-crosscheck: roundtrip $$a is not roundtrip.pl's ($$d)"; exit 1; }; \
+	    m=$$((m + 1)); done; \
 	for c in $$(find $(I)/ -name '*.rtn' | sort); do \
-	    s=0; $(RUN) -n -t 300 perl roundtrip.pl --target $(GTARGET) --parts $$c > $$d/p.out 2>&1 || s=$$?; echo "exit $$s" >> $$d/p.out; \
+	    s=0; $(RUN) -n -t 300 $(ROUNDTRIP_PL) --target $(GTARGET) --parts $$c > $$d/p.out 2>&1 || s=$$?; echo "exit $$s" >> $$d/p.out; \
 	    s=0; $(RUN) -n -t 300 $(ROUNDTRIP) --target $(GTARGET) --parts $$c > $$d/f.out 2>&1 || s=$$?; echo "exit $$s" >> $$d/f.out; \
 	    cmp -s $$d/p.out $$d/f.out || { echo "roundtrip-crosscheck: roundtrip --parts $$c is not roundtrip.pl's ($$d)"; exit 1; }; \
 	    n=$$((n + 1)); done; \
 	test $$n -gt 0 || { echo "roundtrip-crosscheck: no unit cache in $(I)"; exit 1; }; \
-	echo "roundtrip-crosscheck: roundtrip's parts (types, floating constants, numbers) as roundtrip.pl's on the $$n unit caches of $(I)"
+	echo "roundtrip-crosscheck: roundtrip as roundtrip.pl on the $$m round trips of $(FF), and its parts (types, floating constants, numbers) on the $$n unit caches of $(I)"
 .PHONY: roundtrip-crosscheck
 
 # ---- the C parser in ff (T3a) -----------------------------------------------
@@ -1594,7 +1610,7 @@ c2ff-glibc: all-passes $(FF)/glibc.ff
 # progs/units-a.c and -b.c, which define one name otherwise (each file's head):
 # through csema -l, and round-tripped (units-crosscheck: c2ff.pl's the same).
 UNITS2 := units-a units-c units-b
-units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl $(CSEMA) clang-prelude.h | $(FFSPLITT) $(FF2CT)
+units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl $(CSEMA) clang-prelude.h | $(FFSPLITT) $(FF2CT) $(ROUNDTRIPT)
 	@mkdir -p $(FF)/units
 	@for u in $(UNITS2); do \
 	    $(RUN) -t 60 $(CPRUN) $(CPP) --predef=$(PREDEF) -E $(PROGFLAGS) $(abspath progs)/$$u.c -o $(FF)/units/$$u.i && \
@@ -1604,7 +1620,7 @@ units-check: $(UNITS2:%=progs/%.c) progs/skeleton.h roundtrip.pl $(CSEMA) clang-
 	@$(RUN) -n -t 60 $(FF2C) --target $(GTARGET) $(FF)/units/page.ff.txt $(FF)/units/back.c $(FF)/units/back.names
 	@$(RUN) -t 60 $(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$(CTARGET) $(PROGFLAGS) $(RTFLAGS_$(GTARGET)) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $(FF)/units/back.c > $(FF)/units/back.json
-	@$(RUN) -t 60 perl roundtrip.pl --target $(GTARGET) $(FF)/units/back.names $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)
+	@$(RUN) -t 60 $(ROUNDTRIP) --target $(GTARGET) $(FF)/units/back.names $(FF)/units/back.json $(UNITS2:%=$(FF)/units/%.json)
 	@grep -q 'blist u header' $(FF)/units/page.ff.txt && grep -q 'clist u header' $(FF)/units/page.ff.txt && grep -q '^ *holder .*units-b' $(FF)/units/page.ff.txt && grep -q '^ *both .*units-a:' $(FF)/units/page.ff.txt && grep -q '^ *both:' $(FF)/units/page.ff.txt
 	@# (a program's external definition of a name that is a static in its tree: a name of its own)
 	@rm -rf $(FF)/units/tree; $(FFSPLIT) $(FF)/units/page.ff.txt $(FF)/units/tree > /dev/null
@@ -1653,12 +1669,12 @@ $(eval $(call check,globsize))
 GENERIC_FNS := main levels second add2 via_comma two_paths vla_size label_attr count arrlit arrlit_op const_counts leaf tag_names many many_sum specials_bad text_ptr back_to ret_addr_bad frame_bad
 # (the round trip of a program of its own: progs/textcount.c's on every target)
 define progrt
-$(1)-roundtrip: $$(FF)/$(1)-prog.ff $$(FF)/$(1)-prog.json roundtrip.pl | $$(HEADERST) $$(FF2CT)
+$(1)-roundtrip: $$(FF)/$(1)-prog.ff $$(FF)/$(1)-prog.json roundtrip.pl | $$(HEADERST) $$(FF2CT) $$(ROUNDTRIPT)
 	$$(RUN) -v 9000000 -t 120 $$(CPRUN) $$(CSEMA) -l $$(CSFLAGS) -n $$(FF)/$(1)-prog.i $$(FF)/$(1)-prog.i $(2) > $$(FF)/$(1)-unit.ff.txt
 	$$(RUN) -n -t 120 $$(FF2C) --target $$(GTARGET) $$(FF)/$(1)-unit.ff.txt $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 	$$(RUN) -t 120 $$(C2FF_CLANG) -x c -include clang-prelude.h -Xclang -ast-dump=json -fsyntax-only --target=$$(CTARGET) $$(PROGFLAGS) -std=gnu11 -w \
 	    -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion $$(FF)/$(1).rt.c > $$(FF)/$(1).rt.json
-	$$(RUN) -t 300 perl roundtrip.pl --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(FF)/$(1)-prog.json
+	$$(RUN) -t 300 $$(ROUNDTRIP) --target $$(GTARGET) $$(FF)/$(1).rt.names $$(FF)/$(1).rt.json $$(FF)/$(1)-prog.json
 	$$(RUN) -n -t 120 $$(HEADERS) $$(FF)/$(1).rt.c $$(FF)/$(1).rt.names
 .PHONY: $(1)-roundtrip
 endef
