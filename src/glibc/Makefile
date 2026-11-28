@@ -2273,9 +2273,10 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
 #           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
 #
-#   asmlabel a function defined under an asm label (gnulib's printf
-#           __asm__ ("rpl_printf")), the label on its header's declaration:
-#           the other unit calls it by the label, which csema follows to it
+#   asmlabel a function and a variable defined under an asm label (gnulib's
+#           printf __asm__ ("rpl_printf"), optarg as rpl_optarg beside glibc's
+#           optarg), the label on the header's declaration: the other unit
+#           uses them by the label, which csema follows to them
 #
 #   ifuncglob an ifunc's address in global items (a pointer, a table as
 #           glibc's string tests have): its IRELATIVE relocation, on arm
