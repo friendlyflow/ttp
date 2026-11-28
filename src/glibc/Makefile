@@ -2275,17 +2275,28 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
 #           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
 #
-#   asmlabel a function defined under an asm label (gnulib's printf
-#           __asm__ ("rpl_printf")), the label on its header's declaration:
-#           the other unit calls it by the label, which csema follows to it
+#   asmlabel a function and a variable defined under an asm label (gnulib's
+#           printf __asm__ ("rpl_printf"), optarg as rpl_optarg beside glibc's
+#           optarg), the label on the header's declaration: the other unit
+#           uses them by the label, which csema follows to them
+#
+#   ifuncglob an ifunc's address in global items (a pointer, a table as
+#           glibc's string tests have): its IRELATIVE relocation, on arm
+#           an Elf32_Rel with the resolver in the word
+#
+#   regnames globals named as some target's registers (gp, sp, tp, ra, fp,
+#           lr, pc, zero, x5, r12): function pointers called by their names,
+#           which csema reached only as values (fault 37), and plain ints
 #
 #   structval a struct by value between the program and glibc (div, ldiv,
 #           lldiv, imaxdiv, inet_ntoa): the program's record from glibc's
 #           headers is the tree's own type; one of its own under a name of
 #           the tree stays prog (stdlib's testdiv)
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check structval-check
-ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel structval
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check ifuncglob-check regnames-check structval-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel ifuncglob regnames structval
+ALLPROG_regnames := regnames
+ALLPROG_ifuncglob := ifuncglob
 ALLPROG_asmlabel := asmlabel-a asmlabel-b
 ALLPROG_agginit := agginit
 ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
