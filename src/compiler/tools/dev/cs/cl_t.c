@@ -110,6 +110,21 @@ static int cl_enum_more (struct cs_rec *o, struct cs_rec *d)
   return 1;
 }
 static char *cl_rname (struct cs_rec *r) { if (r->tag) return cl_copy (r->tag, r->tlen); if (r->td) return cl_copy (r->td, r->tdlen); return 0; }
+/* (two enums of the same constants, of the same values) */
+static int cl_same_enum (struct cs_rec *a, struct cs_rec *b)
+{
+  long i = 0;
+  if (a == b) return 1;
+  if (a->nenums != b->nenums) return 0;
+  while (i < a->nenums) {
+    if (a->enums[i]->val != b->enums[i]->val || a->enums[i]->nlen != b->enums[i]->nlen) return 0;
+    if (!same (a->enums[i]->name, a->enums[i]->nlen, cl_copy (b->enums[i]->name, b->enums[i]->nlen))) return 0;
+    i++;
+  }
+  return 1;
+}
+static void cl_index_enum (struct cs_rec *d);
+static char *cl_unit_name (void);
 static void cl_anon_fields (struct cs_rec *r, char *rname)
 {
   struct cs_inner *i = r->in_first;
@@ -146,6 +161,17 @@ static void cl_anon_fields (struct cs_rec *r, char *rname)
         /* (the same place defined otherwise, a skeleton included for another type: by the record it is in) */
         char *atag = cl_get (&C->anon_tag, key);
         struct cs_rec *first = atag ? cl_get (&C->rec, atag) : 0;
+        /* (an anonymous enum of a field, another unit's of that name otherwise (liblzma's stream coders, each its
+           own typedef struct { enum { SEQ_STREAM_HEADER, ... } sequence; ... } lzma_stream_coder, of other
+           constants and values): this unit's, named with it, its constants too where another unit has them of
+           other values (index_enum); each constant of the enum is that enum's, as a typedef's enum's) */
+        if (last->k == TY_ENUM && C->cu) {
+          struct cs_rec *oe = cl_get (&C->enumd, cl_cat ("enum ", name));
+          long q = 0;
+          if (oe && oe != last && !cl_same_enum (oe, last)) name = cl_cat3 (name, " ", cl_unit_name ());
+          cl_index_enum (last);
+          while (q < last->nenums) { cl_put (&C->enumof, cl_dn (last->enums[q]), cl_cat ("enum ", name)); q++; }
+        }
         if (last->k != TY_ENUM && first && first != last && !cl_same_def (last, first))
           cl_put (&C->anonin, cl_cat3 (cl_cat3 (cl_rec_kind (r), " ", rname), "|", key), cl_cat3 (kind, " ", name));
         else {
