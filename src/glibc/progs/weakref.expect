@@ -1,3 +1,4 @@
 exit 0
 LC_TIME 0, LC_CTYPE 1
 LC_MONETARY 0
+arrays 0 0

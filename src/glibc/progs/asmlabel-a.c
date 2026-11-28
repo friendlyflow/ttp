@@ -8,11 +8,18 @@
    ("rpl_printf"), found by progs3): its header gives the label, the
    definition here has none of its own, and asmlabel-b.c calls it by its C
    name, so by the label. csema followed only the C name: the other unit's
-   call of rpl_show reached nothing ("unknown function: rpl_show"). */
+   call of rpl_show reached nothing ("unknown function: rpl_show"). A
+   variable under a label (count, rpl_count) the same way. */
 #include <stdarg.h>
 #include <stdio.h>
 extern int show (const char *, ...) __asm__ ("rpl_show");
 extern int twice (int) __asm__ ("rpl_twice");
+extern int count __asm__ ("rpl_count");
+int count = 40;
+/* (as gnulib's optarg under rpl_optarg: glibc has an optarg of its own, which getopt sets) */
+extern char *optarg __asm__ ("rpl_optarg");
+char *optarg = "mine";
+const char *mine (void) { return optarg; }
 int show (const char *f, ...)
 {
   va_list ap;

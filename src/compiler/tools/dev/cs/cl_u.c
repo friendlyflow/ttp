@@ -23,6 +23,7 @@ struct cl_unit {
   struct cl_map wcand, wdef;   /* its names declared weak (attribute or #pragma weak), its definitions: a weak reference is the first without the second */
   struct cl_list absnames;     /* its top-level asm's absolute symbols (cl_asm_absdefs): every definition of it has them under with */
   struct cl_list wcl;          /* its wcand, in order */
+  struct cl_list asmglobl;     /* the names its top-level asm makes .globl (cl_asm_absdefs): what it does not define itself, a strong reference (pthread_cancel.c's PTHREAD_STATIC_FN_REQUIRE), under with */
   struct cl_list used;         /* its definitions of the used attribute (libio_static_fn_required's statics): under with of the others, as they stay in its object */
   struct cl_list wwith; int wdone;   /* what its definitions have under with (cl_unit_with), once worked out */
   struct cl_list ctors;        /* its constructors and destructors */

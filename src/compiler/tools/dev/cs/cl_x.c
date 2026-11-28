@@ -604,9 +604,22 @@ static void cl_string_bytes (unsigned char *p, long n, struct cl_list *o)
       C->ntext = C->ntext + 1;
       nm = cl_cat ("text ", cl_num (C->ntext));
       cl_put (&C->text_item, key, nm);
+      /* (over 255 bytes its items are text leaves where it has no NUL, is UTF-8 and no piece reads as a word, as an array char's in a global, the rest 0;
+         else its bytes: stdio-common's bug28 has a 557110-byte format, 2185 groups of bytes, past a node's 255) */
+      pc = 0;
+      if (!hasnul && n > 255) pc = cl_pieces (p, n, 1);
       i = 0;
-      while (i < n) { cl_push (c, cl_num_node (p[i])); i++; }
-      cl_push (c, cl_n ("0"));
+      while (pc && i < pc->n) {
+        char *w = (char *) pc->v[i]->text;
+        if (cl_isop (w) || cl_eq (w, "?") || cl_eq (w, ":") || cl_eq (w, ".") || cl_eq (w, "...") || cl_val (&C->reserved, w)) pc = 0;
+        i++;
+      }
+      if (pc) cl_append (c, pc);
+      else {
+        i = 0;
+        while (i < n) { cl_push (c, cl_num_node (p[i])); i++; }
+        cl_push (c, cl_n ("0"));
+      }
       cl_push (x, cl_n ("array"));
       cl_push (x, cl_n ("char"));
       cl_push (x, cl_num_node (n + 1));
@@ -1414,8 +1427,9 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
     return;
   }
   if (c->d->k == DK_FUNC) { name = cl_own (name); cl_want (name); }
-  /* (a call through a global's pointer, gawk's make_number = r_make_number: the global wanted, as any use of it) */
-  else if (c->d->k == DK_VAR && !c->d->local && !c->d->global && na) { name = cl_own (name); cl_want (name); }
+  /* (a call through a global pointer, with arguments: its own name, wanted, as its value's E_REF; string's
+     tester calls memset through static __typeof (memset) *volatile memset_indirect, which was left out) */
+  else if (na && c->d->k == DK_VAR && !c->d->local && !c->d->global && !cl_has (&C->regvar, name)) { name = cl_own (name); cl_want (name); }
   else if (!na) {
     struct cl_list *v = cl_ex (c);
     nd_add (v->v[0], cl_n ("."));
@@ -1424,6 +1438,8 @@ static void cl_call (struct cs_ex *n, struct cl_list *o)
   }
   {
     char *sn = 0;
+    /* (a global function pointer called by its name, int (*gp) (int) = f; gp (40): reached as its value use is) */
+    if (c->d->k == DK_VAR && !c->d->local && !c->d->global) { name = cl_own (name); cl_want (name); }
     if (c->d->k == DK_VAR && c->d->global) sn = c->d->global;
     if (!sn) sn = cl_ffname (name);
     if (c->d->k == DK_FUNC && cl_wref (cl_dn (c->d))) cl_push (o, cl_n1 ("weak", cl_call_node (sn, n)));
@@ -2227,8 +2243,9 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
       return;
     }
     /* (a block's extern the unit declares weak and does not define is a weak reference too: uselocale's _nl_current_LC_COLLATE_used;
-       not an array, apply_irel's __rela_iplt_start and __rela_iplt_end, which ttpc places itself by their plain names) */
-    if (d->k == DK_VAR && d->sc == SC_EXTERN && cs_kind (d->t) != TY_ARRAY && cl_wref (nm)) { cl_push (o, cl_n1 ("weak", cl_n (cl_ffname (nm)))); return; }
+       also an array, apply_irel's __rela_iplt_start and __rela_iplt_end: ttpc's weak / name of an array is its address, where
+       ttpc places it, else 0, fault 28) */
+    if (d->k == DK_VAR && d->sc == SC_EXTERN && cl_wref (nm)) { cl_push (o, cl_n1 ("weak", cl_n (cl_ffname (nm)))); return; }
     cl_push (o, cl_n (cl_ffname (nm)));
     return;
   }

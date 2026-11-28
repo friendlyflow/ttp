@@ -613,7 +613,7 @@ static void cl_asm_absdefs (char *s)
     /* (the asm's text as written: its \\n two bytes) */
     while (s[e] && s[e] != '\n' && s[e] != ';' && !(s[e] == '\\' && s[e + 1] == 'n')) e++;
     w = cl_asm_word (s, &p);
-    if (cl_eq (w, ".globl") || cl_eq (w, ".global")) { char *g = cl_asm_word (s, &p); if (g[0]) cl_set (&globl, g); }
+    if (cl_eq (w, ".globl") || cl_eq (w, ".global")) { char *g = cl_asm_word (s, &p); if (g[0]) cl_set (&globl, g); if (g[0] && C->cu) cl_push (&C->cu->asmglobl, cl_n (g)); }
     else if (cl_eq (w, ".set") || cl_eq (w, ".equ")) {
       nm = cl_asm_word (s, &p);
       while (s[p] == ' ' || s[p] == '\t') p++;
@@ -765,7 +765,7 @@ static void cl_static_ctor (struct cl_unit *v, char *name, char *ok)
 static int cl_extern_inline (struct cs_decl *d) { return (d->inl || (d->sp && d->sp->inl)) && d->sc == SC_EXTERN; }
 static int cl_tree_type (char *n) { char *f = cl_get (&C->treefile, n); return f && cl_eq (f, "types.ff"); }
 /* the name a static takes that another unit defines otherwise: its own, named with the unit (own_name) */
-/* the name a program's function goes by: its asm label (__asm__ ("rpl_printf")) where it has one of its own, else its C name (as cl_pass's own map) */
+/* the name a program's function or variable goes by: its asm label (__asm__ ("rpl_printf")) where it has one of its own, else its C name (as cl_pass's own map) */
 static char *cl_own_asm (char *name, struct cs_decl *d)
 {
   char *a;
@@ -1048,7 +1048,7 @@ static void cl_pass_one (struct cs_top *t)
     }
   }
   /* a program's function C names by another asm name: the unit's calls are of that name (not glibc's __GI_ names) */
-  if (t->k == TOP_FN && C->program && d->sp && d->sp->asmlabel && !cl_eq (d->sp->asmlabel, name) && !cl_starts (d->sp->asmlabel, "__GI_")) { cl_put (&C->own, name, d->sp->asmlabel); if (d->sc != SC_STATIC) cl_put (&C->asml, name, d->sp->asmlabel); }
+  if ((t->k == TOP_FN || (t->k == TOP_VAR && d->k == DK_VAR && d->sc != SC_REGISTER)) && C->program && d->sp && d->sp->asmlabel && !cl_eq (d->sp->asmlabel, name) && !cl_starts (d->sp->asmlabel, "__GI_")) { cl_put (&C->own, name, d->sp->asmlabel); if (d->sc != SC_STATIC) cl_put (&C->asml, name, d->sp->asmlabel); }
   if (d->sc == SC_REGISTER && d->sp && d->sp->asmlabel) { cl_put (&C->regvar, name, d->sp->asmlabel); return; }
   if ((d->k == DK_VAR || d->k == DK_FUNC) && ((d->sp && (d->sp->weak || d->sp->err)) || cl_val (&C->pragma_weak, name) || cl_val (&C->forceweak, name))) cl_put_new (&C->weak, name, d);
   /* (a weak reference: a name the unit declares weak and does not define, cl_wref) */
@@ -1084,7 +1084,7 @@ static void cl_pass_one (struct cs_top *t)
     }
   }
   if (d->sc != SC_EXTERN || cl_val (&C->zero, name)) {
-    char *k = cl_own_name (&C->var, name, d);
+    char *k = cl_own_name (&C->var, cl_own_asm (name, d), d);
     if (d->sp && d->sp->used && C->cu) cl_push (&C->cu->used, cl_n (k));
     if (!cl_has (&C->var, k) && d->sp && d->sp->section && cl_section_name_ok (d->sp->section)) {
       /* (a global of a named section: reached with the section's bounds) */

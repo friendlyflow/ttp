@@ -38,6 +38,19 @@
       x0
     ret
   comment
+    __ff_plt___strlen: what an asm branch to the ifunc __strlen reaches (s2ff --plt; rawmemchr.S's b __strlen), as ld's stub in gcc's static program: the function in its slot, whose label __strlen is.
+  __ff_plt___strlen:
+    asm
+    la
+      __strlen
+      x16
+    ldr
+      0
+      x16
+      x16
+    br
+      x16
+  comment
     __ff_fp: the frame pointer of the function that calls it (C's frame in ttpc, which builtins.ff.txt's __builtin_return_address and __builtin_frame_address read), x29.
   __ff_fp:
     asm

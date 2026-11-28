@@ -278,6 +278,7 @@ ff, the language ttpc compiles
       char and short, signed or not, become int first
       then both operands get one type: of 8 bytes if either is (unsigned if an 8-byte one is), else unsigned int if either is one, else int
       a shift has the type of its left operand; a comparison and ! are int
+      a floating value as a condition (if, while, for, ?:, &&, ||, !) is value != 0: -0.0 is false, a NaN true
       a value is as wide as its type: an int or an unsigned int wraps at 32 bits; what is stored, the value of = += -= ++ --, and a conversion are cut to their type
       = and a local's value (a declaration's, an item of a local struct or array) convert to the left side's type as a cast does, an integer from a floating value toward zero (the user's choice A)
       the compound ones (-= += *= /= ...) work in the usual arithmetic conversion's type and convert the result back the same way: C's long long y; y -= 0.5 is y = (long long) (y - 0.5)
@@ -334,6 +335,7 @@ ff, the language ttpc compiles
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       weak / name, then & address (or as a value), and weak / (f / args), a call, is a weak reference: it pulls nothing in, as ld with an archive member (the user's rule, 2026-11-18)
       its address is the definition's if something else in the program reaches it, else 0 (its value read there, a call through it); csema writes it for every reference C declares weak, also on the page that defines the name
+      a weak declaration is no definition, also on a program's page: only ttpc's own placing (apply_irel's __rela_iplt_start) gives it an address; as a value an array is its address (C's decay), a scalar is read there (fault 28)
       with / names, first under a definition's name (before align, thread local, weak), places those names wherever the definition is placed, as ld's object member brings all its symbols
       csema writes it only where a unit defines what is otherwise only weakly referenced: each definition of a unit whose asm defines glibc's _NL_CURRENT_DEFINE flags (_nl_current_LC_CTYPE_used) has them under with
       base pcs, first under a function's name and before its type, gives it arm's base procedure call standard (C's pcs ("aapcs")): its floats and doubles in core registers and on the stack, as a variadic function's

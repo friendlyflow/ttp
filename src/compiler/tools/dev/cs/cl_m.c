@@ -83,8 +83,9 @@ static void cl_leave_out (char *name)
    attribute (stdio.c's _IO_file_doallocate_p, which keeps filedoalloc.o in
    a static link) and what it defines that some unit references weakly
    (malloc.c's __ptmalloc_init, which libc_early_init.c calls only if
-   linked): placing any of its definitions places these too, as ld's object
-   member brings all its symbols */
+   linked), and what its top-level asm makes .globl that another unit defines
+   (an undefined reference of its object): placing any of its definitions
+   places these too, as ld's object member brings all its symbols */
 static struct cl_list *cl_unit_with (struct cl_unit *u)
 {
   long i = 0;
@@ -93,6 +94,22 @@ static struct cl_list *cl_unit_with (struct cl_unit *u)
   while (i < u->absnames.n) { cl_push (&u->wwith, u->absnames.v[i]); i++; }
   i = 0;
   while (i < u->used.n) { cl_push (&u->wwith, u->used.v[i]); i++; }
+  /* (a name its top-level asm makes .globl that another unit defines: ld's undefined reference, which pulls that
+     member in; pthread_cancel.c's .globl ___pthread_unwind_next brings unwind.o, so __pthread_unwind, which
+     __do_cancel references weakly: else the cancelled thread called 0, tst-setvbuf2) */
+  i = 0;
+  while (i < u->asmglobl.n) {
+    char *nm = (char *) u->asmglobl.v[i]->text;
+    struct cs_decl *d = cl_get (&C->fn, nm);
+    struct cl_unit *du = 0;
+    int known = 1;
+    if (!d) d = cl_get (&C->var, nm);
+    if (d) du = d->unit;
+    else if (cl_get (&C->alias, nm)) du = cl_get (&C->aliasunit, nm);
+    else known = 0;
+    if (known && du != u && !cl_get (&C->absdef, nm)) cl_push (&u->wwith, u->asmglobl.v[i]);
+    i++;
+  }
   i = 0;
   while (i < C->wrl.n) {
     char *nm = (char *) C->wrl.v[i]->text;

@@ -1009,6 +1009,7 @@ int s2ff_main (int argc, char **argv)
     aplt = h_new ();
     while (i < argc) {
       char *a = argv[i++];
+      if (is_opt (a, "--plt")) { h_set (aplt, i < argc ? s_of (argv[i++]) : s_of (""), 1); continue; }
       if (is_opt (a, "--page")) { page = i < argc ? s_of (argv[i++]) : s_of (""); continue; }
       if (is_opt (a, "--size")) { o_size = 1; continue; }
       if (is_opt (a, "--items")) { o_items = 1; continue; }

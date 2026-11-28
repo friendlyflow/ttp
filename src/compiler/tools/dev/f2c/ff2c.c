@@ -862,7 +862,8 @@ static struct str *operand (struct node *n, struct ty **t)
     if (k->n == 1 && mf (fw, "^text \\d+$", "") && f->count == 1 && is (f->kids[0], "0")) {
       struct vec *b = global_items (fw);
       struct str *by = s_of ("");
-      for (i = 0; i < b->n; i++) s_chr (by, (int) num_of (K (b, i)));
+      /* (its items bytes, or text leaves over 255 bytes: csema's, stdio-common's bug28) */
+      for (i = 0; i < b->n; i++) { struct str *iw = c (K (b, i)); if (mf (iw, "^\\d+$", "")) s_chr (by, (int) num_of (K (b, i))); else s_app (by, iw); }
       if (b->n && is (K (b, b->n - 1), "0")) by->n--;
       *t = ty_ptr (ty_sc ("char"));
       return cstring (by);
