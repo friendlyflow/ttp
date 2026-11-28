@@ -1,0 +1,358 @@
+# glibc's string tests: each built by csema -l + ttpc against all of glibc in ff, and by gcc against libc.a, run alike (qemu; x86_64 natively) and compared: equal, differ, not yet.
+# The tests4 lane (2026-11-25/26), tree 553c81c (ports 6e4748f merged; fault 28, the csema, s2ff and gthumb fixes below), the tests not equal before rerun with it; src/glibc make tests-ref AREA=string TESTS_PATTERN='t*'. The reasons last.
+
+tests-ref string (riscv64): 80 tests, 73 equal, 7 differ, 0 not yet
+  test-bcopy                   equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-bzero                   equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-endian-file-scope       equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-endian-sign-conversion  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-endian-types            equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-explicit_bzero          equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-ffs                     equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memccpy                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memchr                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memcmp                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memcmpeq                equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memcpy                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memcpy-large            equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memmem                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memmove                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-mempcpy                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memrchr                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memset                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memset_explicit         equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-memswap                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-rawmemchr               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-sig_np                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-stpcpy                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-stpncpy                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strcasecmp              differ: ttpc's on rv64: exit 124, gcc's 0; ttpc's on rv64,v=false: exit 124, gcc's 0
+  test-strcasestr              equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strcat                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strchr                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strchrnul               equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strcmp                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strcpy                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strcspn                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strdup                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strerror-errno          equal: exit 139 (FAIL, signal 11), on rv64 and rv64,v=false
+  test-strlen                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strncasecmp             differ: ttpc's on rv64: exit 124, gcc's 0; ttpc's on rv64,v=false: exit 124, gcc's 0
+  test-strncat                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strncmp                 differ: ttpc's on rv64: exit 124, gcc's 0; ttpc's on rv64,v=false: exit 124, gcc's 0
+  test-strncmp-nonarray        differ: ttpc's on rv64: exit 124, gcc's 0; ttpc's on rv64,v=false: exit 124, gcc's 0
+  test-strncpy                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strndup                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strnlen                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strnlen-nonarray        equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strpbrk                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strrchr                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strspn                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  test-strstr                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  testcopy                     equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tester                       equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-bswap                    equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-cmp                      differ: ttpc's on rv64: exit 124, gcc's 0; ttpc's on rv64,v=false: exit 124, gcc's 0
+  tst-const                    equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-endian                   equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-inlcall                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-memmove-overflow         equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-sigabbrev_np-strings     equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strcoll-overflow         equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strerror                 equal: exit 1 (FAIL), on rv64 and rv64,v=false
+  tst-strerror-fail            equal: exit 139 (FAIL, signal 11), on rv64 and rv64,v=false
+  tst-strerror-strings         equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strerror_l-strings       equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strerror_r-strings       equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strerrordesc_np-strings  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strfry                   equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strlcat                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strlcat2                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strlcpy                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strlcpy2                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strlen                   equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strsignal                equal: exit 1 (FAIL), on rv64 and rv64,v=false
+  tst-strsignal-strings        equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strtok                   equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strtok_r                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strxfrm                  equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-strxfrm2                 equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-svc                      equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-svc2                     equal: exit 0 (PASS), on rv64 and rv64,v=false
+  tst-xbzero-opt               differ: ttpc's on rv64: other output; ttpc's on rv64,v=false: other output
+  tst-xmemset-opt              differ: ttpc's on rv64: other output; ttpc's on rv64,v=false: other output
+  tst-xsi-strerror_r-strings   equal: exit 0 (PASS), on rv64 and rv64,v=false
+
+tests-ref string (x86_64): 97 tests, 94 equal, 2 differ, 1 not yet
+  test-as-const-locale-defines  not yet: c2ff: mki: string/test-as-const-locale-defines.o: the compiler failed
+  test-bcopy                    equal: exit 0 (PASS)
+  test-bzero                    equal: exit 0 (PASS)
+  test-endian-file-scope        equal: exit 0 (PASS)
+  test-endian-sign-conversion   equal: exit 0 (PASS)
+  test-endian-types             equal: exit 0 (PASS)
+  test-explicit_bzero           equal: exit 0 (PASS)
+  test-ffs                      equal: exit 0 (PASS)
+  test-memccpy                  equal: exit 0 (PASS)
+  test-memchr                   equal: exit 0 (PASS)
+  test-memcmp                   equal: exit 0 (PASS)
+  test-memcmpeq                 equal: exit 0 (PASS)
+  test-memcpy                   equal: exit 0 (PASS)
+  test-memcpy-large             equal: exit 0 (PASS)
+  test-memmem                   equal: exit 0 (PASS)
+  test-memmove                  equal: exit 0 (PASS)
+  test-mempcpy                  equal: exit 0 (PASS)
+  test-memrchr                  equal: exit 0 (PASS)
+  test-memset                   equal: exit 0 (PASS)
+  test-memset_explicit          equal: exit 0 (PASS)
+  test-memswap                  equal: exit 0 (PASS)
+  test-rawmemchr                equal: exit 0 (PASS)
+  test-sig_np                   equal: exit 0 (PASS)
+  test-stpcpy                   equal: exit 0 (PASS)
+  test-stpncpy                  equal: exit 0 (PASS)
+  test-strcasecmp               equal: exit 0 (PASS)
+  test-strcasestr               equal: exit 0 (PASS)
+  test-strcat                   equal: exit 0 (PASS)
+  test-strchr                   equal: exit 0 (PASS)
+  test-strchrnul                equal: exit 0 (PASS)
+  test-strcmp                   equal: exit 0 (PASS)
+  test-strcpy                   equal: exit 0 (PASS)
+  test-strcspn                  equal: exit 0 (PASS)
+  test-strdup                   equal: exit 0 (PASS)
+  test-strerror-errno           equal: exit 139 (FAIL, signal 11)
+  test-strlen                   equal: exit 0 (PASS)
+  test-strncasecmp              equal: exit 0 (PASS)
+  test-strncat                  equal: exit 0 (PASS)
+  test-strncmp                  equal: exit 0 (PASS)
+  test-strncmp-nonarray         equal: exit 0 (PASS)
+  test-strncpy                  equal: exit 0 (PASS)
+  test-strndup                  equal: exit 0 (PASS)
+  test-strnlen                  equal: exit 0 (PASS)
+  test-strnlen-nonarray         equal: exit 0 (PASS)
+  test-strpbrk                  equal: exit 0 (PASS)
+  test-strrchr                  equal: exit 0 (PASS)
+  test-strspn                   equal: exit 0 (PASS)
+  test-strstr                   equal: exit 0 (PASS)
+  testcopy                      equal: exit 0 (PASS)
+  tester                        equal: exit 0 (PASS)
+  tst-bswap                     equal: exit 0 (PASS)
+  tst-cmp                       equal: exit 0 (PASS)
+  tst-const                     equal: exit 0 (PASS)
+  tst-endian                    equal: exit 0 (PASS)
+  tst-inlcall                   equal: exit 0 (PASS)
+  tst-memchr-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-memcmp-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-memmove-overflow          equal: exit 0 (PASS)
+  tst-memmove-rtm               equal: exit 77 (UNSUPPORTED)
+  tst-memrchr-rtm               equal: exit 77 (UNSUPPORTED)
+  tst-memset-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-rsi-strlen                equal: exit 0 (PASS)
+  tst-sigabbrev_np-strings      equal: exit 0 (PASS)
+  tst-strcasecmp-rtm            equal: exit 77 (UNSUPPORTED)
+  tst-strchr-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-strcmp-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-strcoll-overflow          equal: exit 0 (PASS)
+  tst-strcpy-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-strerror                  equal: exit 1 (FAIL)
+  tst-strerror-fail             equal: exit 139 (FAIL, signal 11)
+  tst-strerror-strings          equal: exit 0 (PASS)
+  tst-strerror_l-strings        equal: exit 0 (PASS)
+  tst-strerror_r-strings        equal: exit 0 (PASS)
+  tst-strerrordesc_np-strings   equal: exit 0 (PASS)
+  tst-strfry                    equal: exit 0 (PASS)
+  tst-strlcat                   equal: exit 0 (PASS)
+  tst-strlcat2                  equal: exit 0 (PASS)
+  tst-strlcpy                   equal: exit 0 (PASS)
+  tst-strlcpy2                  equal: exit 0 (PASS)
+  tst-strlen                    equal: exit 0 (PASS)
+  tst-strlen-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-strncasecmp-rtm           equal: exit 77 (UNSUPPORTED)
+  tst-strncmp-rtm               equal: exit 77 (UNSUPPORTED)
+  tst-strrchr-rtm               equal: exit 77 (UNSUPPORTED)
+  tst-strsignal                 equal: exit 1 (FAIL)
+  tst-strsignal-strings         equal: exit 0 (PASS)
+  tst-strtok                    equal: exit 0 (PASS)
+  tst-strtok_r                  equal: exit 0 (PASS)
+  tst-strxfrm                   equal: exit 0 (PASS)
+  tst-strxfrm2                  equal: exit 0 (PASS)
+  tst-svc                       equal: exit 0 (PASS)
+  tst-svc2                      equal: exit 0 (PASS)
+  tst-wcscmp-rtm                equal: exit 77 (UNSUPPORTED)
+  tst-wcsncmp-rtm               equal: exit 77 (UNSUPPORTED)
+  tst-xbzero-opt                differ: ttpc's on native: other output
+  tst-xmemset-opt               differ: ttpc's on native: other output
+  tst-xsi-strerror_r-strings    equal: exit 0 (PASS)
+
+tests-ref string (aarch64): 80 tests, 76 equal, 4 differ, 0 not yet
+  test-bcopy                   equal: exit 0 (PASS), on max and cortex-a57
+  test-bzero                   equal: exit 0 (PASS), on max and cortex-a57
+  test-endian-file-scope       equal: exit 0 (PASS), on max and cortex-a57
+  test-endian-sign-conversion  equal: exit 0 (PASS), on max and cortex-a57
+  test-endian-types            equal: exit 0 (PASS), on max and cortex-a57
+  test-explicit_bzero          equal: exit 0 (PASS), on max and cortex-a57
+  test-ffs                     equal: exit 0 (PASS), on max and cortex-a57
+  test-memccpy                 equal: exit 0 (PASS), on max and cortex-a57
+  test-memchr                  equal: exit 0 (PASS), on max and cortex-a57
+  test-memcmp                  equal: exit 0 (PASS), on max and cortex-a57
+  test-memcmpeq                equal: exit 0 (PASS), on max and cortex-a57
+  test-memcpy                  equal: exit 0 (PASS), on max and cortex-a57
+  test-memcpy-large            equal: exit 0 (PASS), on max and cortex-a57
+  test-memmem                  equal: exit 0 (PASS), on max and cortex-a57
+  test-memmove                 equal: exit 0 (PASS), on max and cortex-a57
+  test-mempcpy                 equal: exit 0 (PASS), on max and cortex-a57
+  test-memrchr                 equal: exit 0 (PASS), on max and cortex-a57
+  test-memset                  equal: exit 0 (PASS), on max and cortex-a57
+  test-memset_explicit         equal: exit 0 (PASS), on max and cortex-a57
+  test-memswap                 equal: exit 0 (PASS), on max and cortex-a57
+  test-rawmemchr               equal: exit 0 (PASS), on max and cortex-a57
+  test-sig_np                  equal: exit 0 (PASS), on max and cortex-a57
+  test-stpcpy                  equal: exit 0 (PASS), on max and cortex-a57
+  test-stpncpy                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strcasecmp              differ: ttpc's on max: exit 124, gcc's 0; ttpc's on cortex-a57: exit 124, gcc's 0
+  test-strcasestr              equal: exit 0 (PASS), on max and cortex-a57
+  test-strcat                  equal: exit 0 (PASS), on max and cortex-a57
+  test-strchr                  equal: exit 0 (PASS), on max and cortex-a57
+  test-strchrnul               equal: exit 0 (PASS), on max and cortex-a57
+  test-strcmp                  equal: exit 0 (PASS), on max and cortex-a57
+  test-strcpy                  equal: exit 0 (PASS), on max and cortex-a57
+  test-strcspn                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strdup                  equal: exit 0 (PASS), on max and cortex-a57
+  test-strerror-errno          equal: exit 139 (FAIL, signal 11), on max and cortex-a57
+  test-strlen                  equal: exit 0 (PASS), on max and cortex-a57
+  test-strncasecmp             differ: ttpc's on max: exit 124, gcc's 0; ttpc's on cortex-a57: exit 124, gcc's 0
+  test-strncat                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strncmp                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strncmp-nonarray        equal: exit 0 (PASS), on max and cortex-a57
+  test-strncpy                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strndup                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strnlen                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strnlen-nonarray        equal: exit 0 (PASS), on max and cortex-a57
+  test-strpbrk                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strrchr                 equal: exit 0 (PASS), on max and cortex-a57
+  test-strspn                  equal: exit 0 (PASS), on max and cortex-a57
+  test-strstr                  equal: exit 0 (PASS), on max and cortex-a57
+  testcopy                     equal: exit 0 (PASS), on max and cortex-a57
+  tester                       equal: exit 0 (PASS), on max and cortex-a57
+  tst-bswap                    equal: exit 0 (PASS), on max and cortex-a57
+  tst-cmp                      equal: exit 0 (PASS), on max and cortex-a57
+  tst-const                    equal: exit 0 (PASS), on max and cortex-a57
+  tst-endian                   equal: exit 0 (PASS), on max and cortex-a57
+  tst-inlcall                  equal: exit 0 (PASS), on max and cortex-a57
+  tst-memmove-overflow         equal: exit 0 (PASS), on max and cortex-a57
+  tst-sigabbrev_np-strings     equal: exit 0 (PASS), on max and cortex-a57
+  tst-strcoll-overflow         equal: exit 0 (PASS), on max and cortex-a57
+  tst-strerror                 equal: exit 1 (FAIL), on max and cortex-a57
+  tst-strerror-fail            equal: exit 139 (FAIL, signal 11), on max and cortex-a57
+  tst-strerror-strings         equal: exit 0 (PASS), on max and cortex-a57
+  tst-strerror_l-strings       equal: exit 0 (PASS), on max and cortex-a57
+  tst-strerror_r-strings       equal: exit 0 (PASS), on max and cortex-a57
+  tst-strerrordesc_np-strings  equal: exit 0 (PASS), on max and cortex-a57
+  tst-strfry                   equal: exit 0 (PASS), on max and cortex-a57
+  tst-strlcat                  equal: exit 0 (PASS), on max and cortex-a57
+  tst-strlcat2                 equal: exit 0 (PASS), on max and cortex-a57
+  tst-strlcpy                  equal: exit 0 (PASS), on max and cortex-a57
+  tst-strlcpy2                 equal: exit 0 (PASS), on max and cortex-a57
+  tst-strlen                   equal: exit 0 (PASS), on max and cortex-a57
+  tst-strsignal                equal: exit 1 (FAIL), on max and cortex-a57
+  tst-strsignal-strings        equal: exit 0 (PASS), on max and cortex-a57
+  tst-strtok                   equal: exit 0 (PASS), on max and cortex-a57
+  tst-strtok_r                 equal: exit 0 (PASS), on max and cortex-a57
+  tst-strxfrm                  equal: exit 0 (PASS), on max and cortex-a57
+  tst-strxfrm2                 equal: exit 0 (PASS), on max and cortex-a57
+  tst-svc                      equal: exit 0 (PASS), on max and cortex-a57
+  tst-svc2                     equal: exit 0 (PASS), on max and cortex-a57
+  tst-xbzero-opt               differ: ttpc's on max: other output; ttpc's on cortex-a57: other output
+  tst-xmemset-opt              differ: ttpc's on max: other output; ttpc's on cortex-a57: other output
+  tst-xsi-strerror_r-strings   equal: exit 0 (PASS), on max and cortex-a57
+
+tests-ref string (arm): 80 tests, 73 equal, 4 differ, 3 not yet
+  test-bcopy                   equal: exit 0 (PASS), on max and cortex-a15
+  test-bzero                   equal: exit 0 (PASS), on max and cortex-a15
+  test-endian-file-scope       equal: exit 0 (PASS), on max and cortex-a15
+  test-endian-sign-conversion  equal: exit 0 (PASS), on max and cortex-a15
+  test-endian-types            equal: exit 0 (PASS), on max and cortex-a15
+  test-explicit_bzero          equal: exit 0 (PASS), on max and cortex-a15
+  test-ffs                     equal: exit 0 (PASS), on max and cortex-a15
+  test-memccpy                 equal: exit 0 (PASS), on max and cortex-a15
+  test-memchr                  not yet: ttpc: ttpc: not on this target: memchr
+  test-memcmp                  equal: exit 0 (PASS), on max and cortex-a15
+  test-memcmpeq                equal: exit 0 (PASS), on max and cortex-a15
+  test-memcpy                  not yet: ttpc: ttpc: not on this target: memcpy
+  test-memcpy-large            not yet: ttpc: ttpc: not on this target: memcpy
+  test-memmem                  equal: exit 0 (PASS), on max and cortex-a15
+  test-memmove                 equal: exit 0 (PASS), on max and cortex-a15
+  test-mempcpy                 equal: exit 0 (PASS), on max and cortex-a15
+  test-memrchr                 equal: exit 0 (PASS), on max and cortex-a15
+  test-memset                  equal: exit 0 (PASS), on max and cortex-a15
+  test-memset_explicit         equal: exit 0 (PASS), on max and cortex-a15
+  test-memswap                 equal: exit 0 (PASS), on max and cortex-a15
+  test-rawmemchr               equal: exit 0 (PASS), on max and cortex-a15
+  test-sig_np                  equal: exit 0 (PASS), on max and cortex-a15
+  test-stpcpy                  equal: exit 0 (PASS), on max and cortex-a15
+  test-stpncpy                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strcasecmp              equal: exit 124 (FAIL), on max and cortex-a15
+  test-strcasestr              equal: exit 0 (PASS), on max and cortex-a15
+  test-strcat                  equal: exit 0 (PASS), on max and cortex-a15
+  test-strchr                  equal: exit 0 (PASS), on max and cortex-a15
+  test-strchrnul               equal: exit 0 (PASS), on max and cortex-a15
+  test-strcmp                  equal: exit 0 (PASS), on max and cortex-a15
+  test-strcpy                  equal: exit 0 (PASS), on max and cortex-a15
+  test-strcspn                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strdup                  equal: exit 0 (PASS), on max and cortex-a15
+  test-strerror-errno          equal: exit 139 (FAIL, signal 11), on max and cortex-a15
+  test-strlen                  equal: exit 0 (PASS), on max and cortex-a15
+  test-strncasecmp             equal: exit 124 (FAIL), on max and cortex-a15
+  test-strncat                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strncmp                 equal: exit 124 (FAIL), on max and cortex-a15
+  test-strncmp-nonarray        differ: ttpc's on max: exit 124, gcc's 0; ttpc's on cortex-a15: exit 124, gcc's 0
+  test-strncpy                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strndup                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strnlen                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strnlen-nonarray        equal: exit 0 (PASS), on max and cortex-a15
+  test-strpbrk                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strrchr                 equal: exit 0 (PASS), on max and cortex-a15
+  test-strspn                  equal: exit 0 (PASS), on max and cortex-a15
+  test-strstr                  equal: exit 0 (PASS), on max and cortex-a15
+  testcopy                     equal: exit 0 (PASS), on max and cortex-a15
+  tester                       equal: exit 0 (PASS), on max and cortex-a15
+  tst-bswap                    equal: exit 0 (PASS), on max and cortex-a15
+  tst-cmp                      differ: ttpc's on max: exit 124, gcc's 0; ttpc's on cortex-a15: exit 124, gcc's 0
+  tst-const                    equal: exit 0 (PASS), on max and cortex-a15
+  tst-endian                   equal: exit 0 (PASS), on max and cortex-a15
+  tst-inlcall                  equal: exit 0 (PASS), on max and cortex-a15
+  tst-memmove-overflow         equal: exit 0 (PASS), on max and cortex-a15
+  tst-sigabbrev_np-strings     equal: exit 0 (PASS), on max and cortex-a15
+  tst-strcoll-overflow         equal: exit 0 (PASS), on max and cortex-a15
+  tst-strerror                 equal: exit 1 (FAIL), on max and cortex-a15
+  tst-strerror-fail            equal: exit 139 (FAIL, signal 11), on max and cortex-a15
+  tst-strerror-strings         equal: exit 0 (PASS), on max and cortex-a15
+  tst-strerror_l-strings       equal: exit 0 (PASS), on max and cortex-a15
+  tst-strerror_r-strings       equal: exit 0 (PASS), on max and cortex-a15
+  tst-strerrordesc_np-strings  equal: exit 0 (PASS), on max and cortex-a15
+  tst-strfry                   equal: exit 0 (PASS), on max and cortex-a15
+  tst-strlcat                  equal: exit 0 (PASS), on max and cortex-a15
+  tst-strlcat2                 equal: exit 0 (PASS), on max and cortex-a15
+  tst-strlcpy                  equal: exit 0 (PASS), on max and cortex-a15
+  tst-strlcpy2                 equal: exit 0 (PASS), on max and cortex-a15
+  tst-strlen                   equal: exit 0 (PASS), on max and cortex-a15
+  tst-strsignal                equal: exit 1 (FAIL), on max and cortex-a15
+  tst-strsignal-strings        equal: exit 0 (PASS), on max and cortex-a15
+  tst-strtok                   equal: exit 0 (PASS), on max and cortex-a15
+  tst-strtok_r                 equal: exit 0 (PASS), on max and cortex-a15
+  tst-strxfrm                  equal: exit 0 (PASS), on max and cortex-a15
+  tst-strxfrm2                 equal: exit 0 (PASS), on max and cortex-a15
+  tst-svc                      equal: exit 0 (PASS), on max and cortex-a15
+  tst-svc2                     equal: exit 0 (PASS), on max and cortex-a15
+  tst-xbzero-opt               differ: ttpc's on max: other output; ttpc's on cortex-a15: other output
+  tst-xmemset-opt              differ: ttpc's on max: other output; ttpc's on cortex-a15: other output
+  tst-xsi-strerror_r-strings   equal: exit 0 (PASS), on max and cortex-a15
+
+# reasons of what is not equal
+#   test-strcasecmp (aarch64), test-strncasecmp (riscv64, aarch64), test-strncmp (riscv64), test-strncmp-nonarray, tst-cmp (riscv64, arm): differ: timeout (exit 124): ttpc's program is much slower than gcc's -O2 one, under qemu past the 600 s limit; equal natively (x86_64), as wcsmbs's test-wcsncmp-nonarray
+#   tst-xbzero-opt, tst-xmemset-opt (4 targets): differ: an INFO line: gcc -O2 removes the ordinary case's dead memset (found 32 patterns), ttpc keeps it (found 0, memset not eliminated); both PASS, the explicit_bzero and memset_explicit cases alike
+#   test-as-const-locale-defines (x86_64): not yet: no test, a build step's program (mki: the compiler failed), as the pattern * takes every program the area's log links
+#   test-memchr, test-memcpy, test-memcpy-large (arm): not yet: ttpc: not on this target: an ifunc's address in a global's item (the impls table's memchr, memcpy) needs an IRELATIVE relocation of that data word, which ttpc writes on the 64-bit targets only: fault 35, open
+#   fixed in this round (tests4, 2026-11-26), now equal:
+#     tester (4 targets): csema wrote a call through static __typeof (memset) *volatile memset_indirect by its name without wanting the global (3d7c417)
+#     test-rawmemchr (aarch64): rawmemchr.S's b __strlen, the ifunc, ran its slot's bytes (SIGILL): s2ff --plt __strlen, through builtins-aarch64's __ff_plt___strlen as ld's stub (553c81c)
+#     test-strlen, test-strcmp (arm): a global's item of a Thumb function's address (strlen, strcmp in the impls table) lacked bit 0, the call ran Thumb code as ARM (SIGILL, SIGSEGV): gen/patches/gthumb.pl (31c48eb); arm's test-strcasecmp, test-strncasecmp equal too since
+#   the area's programs t* (test-*, tst-*, tester; its .mk of 2026-11-18): its bug-* tests are not run yet (the next round)

@@ -335,6 +335,7 @@ ff, the language ttpc compiles
       weak, first under a name and before its type, declares a global that may stay undefined (C's #pragma weak): its address is 0; weak / function / type is a function, called through 0
       weak / name, then & address (or as a value), and weak / (f / args), a call, is a weak reference: it pulls nothing in, as ld with an archive member (the user's rule, 2026-11-18)
       its address is the definition's if something else in the program reaches it, else 0 (its value read there, a call through it); csema writes it for every reference C declares weak, also on the page that defines the name
+      a weak declaration is no definition, also on a program's page: only ttpc's own placing (apply_irel's __rela_iplt_start) gives it an address; as a value an array is its address (C's decay), a scalar is read there (fault 28)
       with / names, first under a definition's name (before align, thread local, weak), places those names wherever the definition is placed, as ld's object member brings all its symbols
       csema writes it only where a unit defines what is otherwise only weakly referenced: each definition of a unit whose asm defines glibc's _NL_CURRENT_DEFINE flags (_nl_current_LC_CTYPE_used) has them under with
       base pcs, first under a function's name and before its type, gives it arm's base procedure call standard (C's pcs ("aapcs")): its floats and doubles in core registers and on the stack, as a variadic function's

@@ -1,7 +1,7 @@
 # glibc's posix tests: each built by csema -l + ttpc against all of glibc in ff, and by gcc against libc.a, run alike (qemu; x86_64 natively) and compared: equal, differ, not yet.
 # The tests2 lane, HEAD bed2c24 (ports 9379f75 merged) for the build, 2026-11-22; src/glibc make tests-ref AREA=posix. The reasons last.
 
-tests-ref posix (riscv64): 50 tests, 47 equal, 3 differ, 0 not yet
+tests-ref posix (riscv64): 50 tests, 48 equal, 2 differ, 0 not yet
   tst-affinity               equal: exit 0 (PASS)
   tst-affinity-pid           equal: exit 0 (PASS)
   tst-affinity-static        equal: exit 0 (PASS)
@@ -19,7 +19,7 @@ tests-ref posix (riscv64): 50 tests, 47 equal, 3 differ, 0 not yet
   tst-fnmatch6               equal: exit 0 (PASS)
   tst-fnmatch7               equal: exit 0 (PASS)
   tst-gai_strerror           equal: exit 0 (PASS)
-  tst-getopt-cancel          differ: ttpc's on rv64: exit 1, gcc's 0
+  tst-getopt-cancel          equal: exit 0 (PASS)
   tst-getopt_long1           equal: exit 0 (PASS)
   tst-glob-bz30635           equal: exit 0 (PASS)
   tst-glob-tilde             equal: exit 0 (PASS)
@@ -53,7 +53,7 @@ tests-ref posix (riscv64): 50 tests, 47 equal, 3 differ, 0 not yet
   tst-wordexp-reuse          equal: exit 0 (PASS)
   tst-wordexp-tilde          equal: exit 0 (PASS) (round 6, 2026-11-23: gtextoff.pl)
 
-tests-ref posix (x86_64): 50 tests, 47 equal, 3 differ, 0 not yet
+tests-ref posix (x86_64): 50 tests, 48 equal, 2 differ, 0 not yet
   tst-affinity               equal: exit 0 (PASS)
   tst-affinity-pid           equal: exit 0 (PASS)
   tst-affinity-static        equal: exit 0 (PASS)
@@ -71,7 +71,7 @@ tests-ref posix (x86_64): 50 tests, 47 equal, 3 differ, 0 not yet
   tst-fnmatch6               equal: exit 0 (PASS)
   tst-fnmatch7               equal: exit 0 (PASS)
   tst-gai_strerror           equal: exit 0 (PASS)
-  tst-getopt-cancel          differ: ttpc's on native: exit 1, gcc's 0
+  tst-getopt-cancel          equal: exit 0 (PASS)
   tst-getopt_long1           equal: exit 0 (PASS)
   tst-glob-bz30635           equal: exit 0 (PASS)
   tst-glob-tilde             equal: exit 0 (PASS)
@@ -105,7 +105,7 @@ tests-ref posix (x86_64): 50 tests, 47 equal, 3 differ, 0 not yet
   tst-wordexp-reuse          equal: exit 0 (PASS)
   tst-wordexp-tilde          equal: exit 0 (PASS) (round 6, 2026-11-23: gtextoff.pl)
 
-tests-ref posix (aarch64): 50 tests, 47 equal, 3 differ, 0 not yet
+tests-ref posix (aarch64): 50 tests, 48 equal, 2 differ, 0 not yet
   tst-affinity               equal: exit 0 (PASS)
   tst-affinity-pid           equal: exit 0 (PASS)
   tst-affinity-static        equal: exit 0 (PASS)
@@ -123,7 +123,7 @@ tests-ref posix (aarch64): 50 tests, 47 equal, 3 differ, 0 not yet
   tst-fnmatch6               equal: exit 0 (PASS)
   tst-fnmatch7               equal: exit 0 (PASS)
   tst-gai_strerror           equal: exit 0 (PASS)
-  tst-getopt-cancel          differ: ttpc's on max: exit 1, gcc's 0
+  tst-getopt-cancel          equal: exit 0 (PASS)
   tst-getopt_long1           equal: exit 0 (PASS)
   tst-glob-bz30635           equal: exit 0 (PASS)
   tst-glob-tilde             equal: exit 0 (PASS)
@@ -157,7 +157,7 @@ tests-ref posix (aarch64): 50 tests, 47 equal, 3 differ, 0 not yet
   tst-wordexp-reuse          equal: exit 0 (PASS)
   tst-wordexp-tilde          equal: exit 0 (PASS) (round 6, 2026-11-23: gtextoff.pl)
 
-tests-ref posix (arm): 50 tests, 47 equal, 3 differ, 0 not yet
+tests-ref posix (arm): 50 tests, 48 equal, 2 differ, 0 not yet
   tst-affinity               equal: exit 0 (PASS)
   tst-affinity-pid           equal: exit 0 (PASS)
   tst-affinity-static        equal: exit 0 (PASS)
@@ -175,7 +175,7 @@ tests-ref posix (arm): 50 tests, 47 equal, 3 differ, 0 not yet
   tst-fnmatch6               equal: exit 0 (PASS)
   tst-fnmatch7               equal: exit 0 (PASS)
   tst-gai_strerror           equal: exit 0 (PASS)
-  tst-getopt-cancel          differ: ttpc's on max: exit 1, gcc's 0
+  tst-getopt-cancel          equal: exit 0 (PASS)
   tst-getopt_long1           equal: exit 0 (PASS)
   tst-glob-bz30635           equal: exit 0 (PASS)
   tst-glob-tilde             equal: exit 0 (PASS)
@@ -212,4 +212,4 @@ tests-ref posix (arm): 50 tests, 47 equal, 3 differ, 0 not yet
 # reasons of what is not equal
 #   tst-wordexp-append, tst-regcomp-bracket-free: differ: interposition: the test defines realloc (malloc) to count calls; in gcc's static link libc's own calls reach it, in ttpc's they bind to glibc's own (13 allocations against 19); symbol fidelity, reported
 #   tst-wordexp-tilde: was differ (SIGSEGV in getpwnam's NSS module name, nss_module.c's __nss_shlib_revision = &"libnss_files.so.2"[sizeof (...) - 1]: ttpc took a global's address + sizeof to its compile-time run); fixed by gtextoff.pl (3a5db4f), equal on 4 targets in round 6
-#   tst-getopt-cancel: differ: exit 1: thread cancellation, as stdio-common's tst-freopen7: unwinding through cleanups (exception tables), the EH lane's
+#   tst-getopt-cancel: equal since tests4 (cf8e279, rerun 2026-11-26 on 4 targets): the cancelled thread called 0, __pthread_unwind left out (pthread_cancel.c's asm .globl ___pthread_unwind_next was no reference in ff)

@@ -554,7 +554,7 @@ static void cl_asm_absdefs (char *s)
     /* (the asm's text as written: its \\n two bytes) */
     while (s[e] && s[e] != '\n' && s[e] != ';' && !(s[e] == '\\' && s[e + 1] == 'n')) e++;
     w = cl_asm_word (s, &p);
-    if (cl_eq (w, ".globl") || cl_eq (w, ".global")) { char *g = cl_asm_word (s, &p); if (g[0]) cl_set (&globl, g); }
+    if (cl_eq (w, ".globl") || cl_eq (w, ".global")) { char *g = cl_asm_word (s, &p); if (g[0]) cl_set (&globl, g); if (g[0] && C->cu) cl_push (&C->cu->asmglobl, cl_n (g)); }
     else if (cl_eq (w, ".set") || cl_eq (w, ".equ")) {
       nm = cl_asm_word (s, &p);
       while (s[p] == ' ' || s[p] == '\t') p++;

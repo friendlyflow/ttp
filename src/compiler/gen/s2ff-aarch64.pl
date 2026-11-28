@@ -74,7 +74,7 @@ sub rn { S2ffRes::name('aarch64', $_[0]) }
 
 my $page = 'glibc asm';
 my @files;
-my ($size, $items, $locals, $skipopt, $facts, @then, %zeroed);
+my ($size, $items, $locals, $skipopt, $facts, @then, %zeroed, %plt);
 while (@ARGV) {
     my $a = shift @ARGV;
     if ($a eq '--page') { $page = shift @ARGV; next }
@@ -86,6 +86,8 @@ while (@ARGV) {
     if ($a eq '--facts') { $facts = shift @ARGV; next }
     if ($a eq '--then') { @then = splice @ARGV, 0, 2; next }
     if ($a eq '--zero') { $zeroed{ shift @ARGV } = 1; next }
+    # (--plt name: a branch to name, an ifunc, goes through __ff_plt_name, builtins-aarch64.ff.txt's stub)
+    if ($a eq '--plt') { $plt{ shift @ARGV } = 1; next }
     push @files, $a;
 }
 my $src = $files[0] // die "usage: s2ff-aarch64.pl [--page name | --items | --size] file.s file.dump | --locals file.s\n";
@@ -516,6 +518,7 @@ sub emit {
             # (a branch to a weak name nothing defines, crti's b __gmon_start__
             # after its cbz: to a trap the function carries, .Lweak name)
             if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/ && $weakref{$rs} && ($sect{$rs} // '') eq '*UND*') { $weakb{$rs} = 1; push @ops, node('rel', leaf(".Lweak $rs")); next }
+            if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/ && $plt{$rs}) { push @ops, node('rel', leaf("__ff_plt_$rs")); next }
             if ($rt && $rt =~ /^R_AARCH64_(CALL26|JUMP26|CONDBR19|TSTBR14)$/) { push @ops, node('rel', leaf(ffname($rs))); next }
             if ($rt && $rt eq 'R_AARCH64_ADR_PREL_PG_HI21') { push @ops, node('pagerel', leaf(ffname($rs))); next }
             if ($rt && $rt eq 'R_AARCH64_ADR_GOT_PAGE') { $got{$rs} = 1; push @ops, node('pagerel', leaf(".Lgot $rs")); next }

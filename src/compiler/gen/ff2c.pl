@@ -607,7 +607,8 @@ sub operand {
         if (@k == 1 && c($f) =~ /^text \d+$/ && kids($f) == 1 && c((kids($f))[0]) eq '0') {
             my @b = map { c($_) } global_items(c($f));
             pop @b if @b && $b[-1] eq '0';
-            return (cstring(pack 'C*', @b), [ptr => [scalar => 'char']]);
+            # (its items bytes, or text leaves over 255 bytes: csema's, stdio-common's bug28)
+            return (cstring(join '', map { /^\d+$/ ? chr($_) : $_ } @b), [ptr => [scalar => 'char']]);
         }
         if (@k == 1 && c($f) =~ /^wide text \d+$/ && kids($f) == 1 && c((kids($f))[0]) eq '0') {
             my $t = gtype(c($f));
