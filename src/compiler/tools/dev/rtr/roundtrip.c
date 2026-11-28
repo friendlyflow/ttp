@@ -976,6 +976,8 @@ static void constint_of (struct vec *keep)
   }
 }
 
+#include "nf.c"
+
 /* --parts unit.rtn */
 static void parts (char *f)
 {
@@ -1029,6 +1031,7 @@ int roundtrip_main (int argc, char **argv)
   if (t_is ("x86_64")) ffold_x87 ();
   cls_init ();
   if (a + 1 < argc && s_is (s_of (argv[a]), "--parts")) { parts (argv[a + 1]); return 0; }
+  if (a + 1 < argc && s_is (s_of (argv[a]), "--check-cache")) { check_cache (argv[a + 1]); return 0; }
   e_str ("usage: roundtrip [--target t] --parts unit.rtn\n");
   cp_exit (255);
   return 255;
