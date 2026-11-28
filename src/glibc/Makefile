@@ -2291,12 +2291,23 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           _nl_current_LC_TIME_used 0, _nl_current_LC_CTYPE_used not, which
 #           lc-ctype.c's unit brings with printf's _nl_current_LC_CTYPE (with)
 #
-#   asmlabel a function defined under an asm label (gnulib's printf
-#           __asm__ ("rpl_printf")), the label on its header's declaration:
-#           the other unit calls it by the label, which csema follows to it
+#   asmlabel a function and a variable defined under an asm label (gnulib's
+#           printf __asm__ ("rpl_printf"), optarg as rpl_optarg beside glibc's
+#           optarg), the label on the header's declaration: the other unit
+#           uses them by the label, which csema follows to them
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check
-ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel
+#   ifuncglob an ifunc's address in global items (a pointer, a table as
+#           glibc's string tests have): its IRELATIVE relocation, on arm
+#           an Elf32_Rel with the resolver in the word
+#
+#   regnames globals named as some target's registers (gp, sp, tp, ra, fp,
+#           lr, pc, zero, x5, r12): function pointers called by their names,
+#           which csema reached only as values (fault 37), and plain ints
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check ifuncglob-check regnames-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel ifuncglob regnames
+ALLPROG_regnames := regnames
+ALLPROG_ifuncglob := ifuncglob
 ALLPROG_asmlabel := asmlabel-a asmlabel-b
 ALLPROG_agginit := agginit
 ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
