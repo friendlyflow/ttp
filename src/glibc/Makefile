@@ -2277,8 +2277,13 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           __asm__ ("rpl_printf")), the label on its header's declaration:
 #           the other unit calls it by the label, which csema follows to it
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check
-ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel
+#   ifuncglob an ifunc's address in global items (a pointer, a table as
+#           glibc's string tests have): its IRELATIVE relocation, on arm
+#           an Elf32_Rel with the resolver in the word
+#
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check statics-check anonrec-check x87math-check sincosf-check cxops-check fltinc-check insnames-check agginit-check weakref-check asmlabel-check ifuncglob-check
+ALLPROGS := locale enums statics anonrec x87math sincosf cxops fltinc insnames agginit weakref asmlabel ifuncglob
+ALLPROG_ifuncglob := ifuncglob
 ALLPROG_asmlabel := asmlabel-a asmlabel-b
 ALLPROG_agginit := agginit
 ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
