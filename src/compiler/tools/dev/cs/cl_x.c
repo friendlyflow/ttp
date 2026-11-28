@@ -2052,7 +2052,18 @@ static void cl_expr (struct cs_ex *n, struct cl_list *o)
     struct cs_ex *s = cl_strip (cl_k (n, 0));
     if (s->k == E_MEM || s->k == E_IDX) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
   }
-  if (k == E_ICE && n->op == CK_FUNCTIONTOPOINTERDECAY) { cl_push (o, cl_nl ("address", cl_ex (cl_k (n, 0)))); return; }
+  /* (of the function itself, not of its parentheses: make's FT_ENTRY's { (_func) }, a : group's address, which ttpc
+     cannot compile in a global's item) */
+  if (k == E_ICE && n->op == CK_FUNCTIONTOPOINTERDECAY) {
+    struct cs_ex *f = cl_k (n, 0);
+    int pp;
+    while (f->k == E_PAREN && f->nk) f = cl_k (f, 0);
+    pp = f->paren;
+    if (f->k == E_REF) f->paren = 0;
+    cl_push (o, cl_nl ("address", cl_ex (f)));
+    f->paren = pp;
+    return;
+  }
   /* (an extern array that no C defines, cast to an integer: its address; it may be a label of asm, and a name of asm alone is a call in ff) */
   if (k == E_CAST && n->op == CK_POINTERTOINTEGRAL) {
     struct cs_ex *i = cl_k (n, 0);

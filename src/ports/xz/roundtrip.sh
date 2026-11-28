@@ -56,6 +56,6 @@ for f in in/*; do
             cat a.g a.f > m.xz
             { run "$F" -d -c < m.xz > m.f && cat "$f" "$f" | cmp -s - m.f; } || why="$why,ffstreams"
         fi
-        echo "$b-$n ${why:+FAIL:${why#,}}${why:-PASS}"
+        echo "$b-$n $(test -n "$why" && echo "FAIL:${why#,}" || echo PASS)"
     done
 done

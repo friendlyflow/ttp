@@ -2381,6 +2381,12 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #   fnptrptr a call through a pointer to a function's pointer, (*pp) (...)
 #           (gnulib's exclude.c call_addfn): the pointer loaded first
 #
+#   fnparen a function's address in parentheses in a global's item (make's
+#           FT_ENTRY): the function's address
+#
+#   tentdef a static const struct declared before its definition (tar's
+#           sparse.c optabs): the definition's value
+#
 #   agginit a struct's, union's or complex local's value written as a lone :
 #           or several items, (x), ?:, ({ ... }), (a, b): assigned after its
 #           declaration (glibc's math_check_force_underflow_complex)
@@ -2393,8 +2399,8 @@ tests-ref: $(if $(AREA),$(TBUILD)/$(AREA).mk)
 #           __asm__ ("rpl_printf")), the label on its header's declaration:
 #           the other unit calls it by the label, which csema follows to it
 #
-#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check cxops-check fltinc-check insnames-check ffwords-check duff-check textcolon-check varfixed-check innerenum-check extmember-check fnptrptr-check agginit-check weakref-check chararr-check ifuncjmp-check asmlabel-check
-ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr ifuncjmp gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf cxops fltinc insnames ffwords duff textcolon varfixed innerenum extmember fnptrptr agginit weakref asmlabel
+#   make GTARGET=x86_64 BUILD=... locale-check enums-check tagenum-check nss-check typename-check ovf-check extown-check typefn-check fnptr-check charenum-check gencond-check gsizeof-check structlit-check condchain-check statkind-check enumown-check statics-check anonrec-check structitem-check structcall-check localtag-check ptrsum-check x87math-check sincosf-check cxops-check fltinc-check insnames-check ffwords-check duff-check textcolon-check varfixed-check innerenum-check extmember-check fnptrptr-check fnparen-check tentdef-check agginit-check weakref-check chararr-check ifuncjmp-check asmlabel-check
+ALLPROGS := locale enums tagenum nss typename ovf extown typefn fnptr charenum chararr ifuncjmp gencond gsizeof structlit condchain statkind enumown statics anonrec structitem structcall localtag ptrsum x87math sincosf cxops fltinc insnames ffwords duff textcolon varfixed innerenum extmember fnptrptr fnparen tentdef agginit weakref asmlabel
 ALLPROG_asmlabel := asmlabel-a asmlabel-b
 ALLPROG_agginit := agginit
 ALLPROGLIBS_agginit = $(OBJ)/math/libm.a
@@ -2408,6 +2414,8 @@ ALLPROG_innerenum := innerenum-a innerenum-b
 ALLPROG_extmember := extmember
 ALLPROGAR_extmember := extmember-b extmember-c
 ALLPROG_fnptrptr := fnptrptr
+ALLPROG_fnparen := fnparen
+ALLPROG_tentdef := tentdef
 ALLPROG_ptrsum := ptrsum
 ALLPROG_fltinc := fltinc
 ALLPROG_weakref := weakref

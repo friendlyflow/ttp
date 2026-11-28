@@ -1093,6 +1093,12 @@ static void cl_pass_one (struct cs_top *t)
       cl_push (l, cl_n (k));
     }
     cl_put_new (&C->var, k, d);
+    /* (a tentative definition, then the definition with its value, in one unit: the second's (tar's sparse.c,
+       static struct tar_sparse_optab const oldgnu_optab; before its = { ... }: the optab was zeros, an empty archive)) */
+    {
+      struct cs_decl *o = cl_get (&C->var, k);
+      if (o && o != d && !o->init && d->init && o->unit == d->unit) cl_put (&C->var, k, d);
+    }
   }
 }
 /* the unit's weak references (a name it declares weak and does not define)

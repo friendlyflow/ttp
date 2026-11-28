@@ -37,7 +37,7 @@ for f in in/*; do
         cmp -s l.g l.f || why="$why,list"
         cat a.g a.f > m.gz
         { run "$F" -d -c < m.gz > m.f && cat "$f" "$f" | cmp -s - m.f; } || why="$why,ffmembers"
-        echo "$b$o ${why:+FAIL:${why#,}}${why:-PASS}"
+        echo "$b$o $(test -n "$why" && echo "FAIL:${why#,}" || echo PASS)"
     done
     why=
     rm -rf ng nf; mkdir ng nf; cp "$f" ng/"$b"; cp "$f" nf/"$b"; touch -d @1000000000 ng/"$b" nf/"$b"
@@ -46,5 +46,5 @@ for f in in/*; do
     (cd ng && run "$F" -d -N "$b".gz) && cmp -s ng/"$b" "$f" || why="$why,ffreads"
     (cd nf && run "$G" -d -N "$b".gz) && cmp -s nf/"$b" "$f" || why="$why,gccreads"
     test "$(stat -c %Y ng/"$b")" = "$(stat -c %Y nf/"$b")" || why="$why,time"
-    echo "$b-byname ${why:+FAIL:${why#,}}${why:-PASS}"
+    echo "$b-byname $(test -n "$why" && echo "FAIL:${why#,}" || echo PASS)"
 done

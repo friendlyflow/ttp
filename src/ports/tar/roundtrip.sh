@@ -67,5 +67,5 @@ for fmt in gnu oldgnu ustar posix posix1 v7; do
         run "$G" --delete -f k.g t/src/tar.c; run "$F" --delete -f k.f t/src/tar.c
         cmp -s k.g k.f || why="$why,delete" ;;
     esac
-    echo "$fmt ${why:+FAIL:${why#,}}${why:-PASS}"
+    echo "$fmt $(test -n "$why" && echo "FAIL:${why#,}" || echo PASS)"
 done
